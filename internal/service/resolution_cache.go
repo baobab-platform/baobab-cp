@@ -52,7 +52,7 @@ func cacheDimensionsFor(req ResolutionRequest) CacheDimensions {
 		DeploymentRegion: req.Context.DeploymentRegion,
 		IsolationProfile: req.Context.IsolationProfileID,
 		Capability:       req.CapabilityKey,
-		CanonicalEntity: req.CanonicalEntityID,
+		CanonicalEntity:  req.CanonicalEntityID,
 	}
 }
 
