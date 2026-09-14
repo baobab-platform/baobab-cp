@@ -27,7 +27,7 @@ func TestCapabilityResolveBatchHandlerResolvesEachEntityIndependently(t *testing
 	// "tenant-123" resolves (seeded fixture); "unknown-entity" does not --
 	// per ADR-BCP-003 §70, one failing item must not hide the other's
 	// success or abort the batch.
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_ids":["tenant-123","unknown-entity"]}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_ids":["tenant-123","unknown-entity"]}`)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()
@@ -37,6 +37,9 @@ func TestCapabilityResolveBatchHandlerResolvesEachEntityIndependently(t *testing
 		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
 	body := w.Body.String()
+	if !strings.Contains(body, `"capability_key":"commerce.order.create"`) {
+		t.Fatalf("expected response to echo requested capability_key, got %s", body)
+	}
 	if !strings.Contains(body, `"canonical_entity_id":"tenant-123","status":"RESOLVED"`) {
 		t.Fatalf("expected tenant-123 to resolve, got %s", body)
 	}
@@ -47,7 +50,7 @@ func TestCapabilityResolveBatchHandlerResolvesEachEntityIndependently(t *testing
 
 func TestCapabilityResolveBatchHandlerRejectsEmptyList(t *testing.T) {
 	handler := CapabilityResolveBatchHandler{Contexts: repository.NewInMemoryRepository(), Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_ids":[]}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_ids":[]}`)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()
@@ -64,7 +67,7 @@ func TestCapabilityResolveBatchHandlerRejectsOversizedBatch(t *testing.T) {
 	for i := range ids {
 		ids[i] = `"entity"`
 	}
-	body := `{"context_id":"context-1","canonical_entity_ids":[` + strings.Join(ids, ",") + `]}`
+	body := `{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_ids":[` + strings.Join(ids, ",") + `]}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(body)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
@@ -78,7 +81,7 @@ func TestCapabilityResolveBatchHandlerRejectsOversizedBatch(t *testing.T) {
 
 func TestCapabilityResolveBatchHandlerRejectsUnauthenticated(t *testing.T) {
 	handler := CapabilityResolveBatchHandler{Contexts: repository.NewInMemoryRepository(), Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_ids":["entity-1"]}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_ids":["entity-1"]}`)))
 	w := httptest.NewRecorder()
 
 	handler.Resolve(w, req)
@@ -92,7 +95,7 @@ func TestCapabilityResolveBatchHandlerRejectsCrossTenantContext(t *testing.T) {
 	seedResolvedContext(t, repo, "context-1", "tenant-victim")
 
 	handler := CapabilityResolveBatchHandler{Contexts: repo, Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_ids":["entity-1"]}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_ids":["entity-1"]}`)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: "tenant-attacker", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()
@@ -105,7 +108,7 @@ func TestCapabilityResolveBatchHandlerRejectsCrossTenantContext(t *testing.T) {
 
 func TestCapabilityResolveBatchHandlerFailsClosedWhenContextStoreUnavailable(t *testing.T) {
 	handler := CapabilityResolveBatchHandler{Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_ids":["entity-1"]}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_ids":["entity-1"]}`)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()

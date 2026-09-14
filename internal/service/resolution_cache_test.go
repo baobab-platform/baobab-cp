@@ -24,6 +24,7 @@ func baseCachingRequest() ResolutionRequest {
 	return ResolutionRequest{
 		TenantID:          "tenant-123",
 		CanonicalEntityID: "entity-abc",
+		CapabilityKey:     "commerce.order.create",
 		Context: resolver.Context{
 			PrincipalID:   "principal-abc",
 			TenantID:      "tenant-123",
@@ -83,6 +84,26 @@ func TestCachingResolutionServiceMissesOnDifferingDimension(t *testing.T) {
 	}
 	if inner.calls != 2 {
 		t.Fatalf("expected a differing security-relevant dimension to miss the cache, got %d calls", inner.calls)
+	}
+}
+
+func TestCachingResolutionServiceDoesNotShareAcrossCapabilities(t *testing.T) {
+	inner := &fakeResolver{result: ResolutionResult{}}
+	cache := &InMemoryResolutionCache{}
+	svc := CachingResolutionService{Inner: inner, Cache: cache, TTL: time.Minute}
+
+	first := baseCachingRequest()
+	if _, err := svc.Resolve(context.Background(), first); err != nil {
+		t.Fatalf("first resolve failed: %v", err)
+	}
+
+	second := baseCachingRequest()
+	second.CapabilityKey = "commercial.quotation.manage"
+	if _, err := svc.Resolve(context.Background(), second); err != nil {
+		t.Fatalf("second resolve failed: %v", err)
+	}
+	if inner.calls != 2 {
+		t.Fatalf("expected a different capability to miss the cache, got %d calls", inner.calls)
 	}
 }
 

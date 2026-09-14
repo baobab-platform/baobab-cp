@@ -32,8 +32,8 @@ func seedCapabilityResolveFixture(t *testing.T, repo *repository.Repository, ten
 		ResolutionPriority:      50,
 		EffectiveFrom:           "2025-01-01T00:00:00Z",
 	}}
-	repo.Bindings["baobab_trade"] = []resolver.CapabilityBinding{{
-		CapabilityKey:    "baobab_trade",
+	repo.Bindings["commerce.order.create"] = []resolver.CapabilityBinding{{
+		CapabilityKey:    "commerce.order.create",
 		EngineID:         "engine-1",
 		EngineInstanceID: "instance-1",
 		BindingMode:      "PRIMARY",
@@ -81,7 +81,7 @@ func TestCapabilityResolveHandlerRedeemsContextAndResolves(t *testing.T) {
 		Service:  service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}, Repository: repo},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"tenant-123"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"tenant-123"}`)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()
@@ -92,6 +92,9 @@ func TestCapabilityResolveHandlerRedeemsContextAndResolves(t *testing.T) {
 	}
 	if !bytes.Contains(w.Body.Bytes(), []byte(`"context_id":"context-1"`)) {
 		t.Fatalf("expected response to echo context_id, got %s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"capability_key":"commerce.order.create"`)) {
+		t.Fatalf("expected response to echo requested capability_key, got %s", w.Body.String())
 	}
 	if !bytes.Contains(w.Body.Bytes(), []byte(`"engine_instance_id":"instance-1"`)) {
 		t.Fatalf("expected a resolved engine instance, got %s", w.Body.String())
@@ -114,7 +117,7 @@ func TestCapabilityResolveHandlerAcceptsRequestWhenClaimEmpty(t *testing.T) {
 		Service:  service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}, Repository: repo},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"tenant-123"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"tenant-123"}`)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()
@@ -140,7 +143,7 @@ func TestCapabilityResolveHandlerRejectsMissingFields(t *testing.T) {
 
 func TestCapabilityResolveHandlerRejectsUnauthenticated(t *testing.T) {
 	handler := CapabilityResolveHandler{Contexts: repository.NewInMemoryRepository(), Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"tenant-123"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"tenant-123"}`)))
 	w := httptest.NewRecorder()
 
 	handler.Resolve(w, req)
@@ -151,7 +154,7 @@ func TestCapabilityResolveHandlerRejectsUnauthenticated(t *testing.T) {
 
 func TestCapabilityResolveHandlerRejectsUnknownContextID(t *testing.T) {
 	handler := CapabilityResolveHandler{Contexts: repository.NewInMemoryRepository(), Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"missing-context","canonical_entity_id":"tenant-123"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"missing-context","capability_key":"commerce.order.create","canonical_entity_id":"tenant-123"}`)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()
@@ -171,7 +174,7 @@ func TestCapabilityResolveHandlerRejectsCrossTenantContext(t *testing.T) {
 	seedResolvedContext(t, repo, "context-1", "tenant-victim")
 
 	handler := CapabilityResolveHandler{Contexts: repo, Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"tenant-victim"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"tenant-victim"}`)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: "tenant-attacker", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()
@@ -184,7 +187,7 @@ func TestCapabilityResolveHandlerRejectsCrossTenantContext(t *testing.T) {
 
 func TestCapabilityResolveHandlerFailsClosedWhenContextStoreUnavailable(t *testing.T) {
 	handler := CapabilityResolveHandler{Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"tenant-123"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"tenant-123"}`)))
 	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()

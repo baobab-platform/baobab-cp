@@ -23,6 +23,7 @@ type CapabilityResolveHandler struct {
 type capabilityResolveRequest struct {
 	ContextID         string `json:"context_id"`
 	CanonicalEntityID string `json:"canonical_entity_id"`
+	CapabilityKey     string `json:"capability_key"`
 }
 
 func (h CapabilityResolveHandler) Resolve(w http.ResponseWriter, r *http.Request) {
@@ -37,8 +38,8 @@ func (h CapabilityResolveHandler) Resolve(w http.ResponseWriter, r *http.Request
 		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", err.Error(), false)
 		return
 	}
-	if req.ContextID == "" || req.CanonicalEntityID == "" {
-		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "context_id and canonical_entity_id are required", false)
+	if req.ContextID == "" || req.CanonicalEntityID == "" || req.CapabilityKey == "" {
+		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "context_id, canonical_entity_id and capability_key are required", false)
 		return
 	}
 	principal, ok := auth.PrincipalFromContext(r.Context())
@@ -77,6 +78,7 @@ func (h CapabilityResolveHandler) Resolve(w http.ResponseWriter, r *http.Request
 	result, err := h.Service.Resolve(r.Context(), service.ResolutionRequest{
 		TenantID:          trustedContext.TenantID,
 		CanonicalEntityID: req.CanonicalEntityID,
+		CapabilityKey:     req.CapabilityKey,
 		Context:           trustedContext,
 	})
 	if err != nil {
@@ -89,8 +91,9 @@ func (h CapabilityResolveHandler) Resolve(w http.ResponseWriter, r *http.Request
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"context_id": trustedContext.ID,
-		"tenant_id":  result.Context.TenantID,
+		"context_id":     trustedContext.ID,
+		"tenant_id":      result.Context.TenantID,
+		"capability_key": req.CapabilityKey,
 		"mapping": map[string]any{
 			"id":     result.Mapping.Mapping.ID,
 			"status": result.Mapping.Mapping.Status,

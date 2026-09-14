@@ -20,6 +20,7 @@ import (
 type ResolutionRequest struct {
 	TenantID          string
 	CanonicalEntityID string
+	CapabilityKey     string
 	Context           Context
 	Candidates        []domain.Mapping
 	Bindings          []CapabilityBinding
@@ -54,7 +55,7 @@ type ResolutionResult struct {
 type ResolutionPipeline struct{}
 
 func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (ResolutionResult, error) {
-	trace := ResolutionTrace{CorrelationID: req.Context.CorrelationID, TenantID: req.Context.TenantID, CapabilityKey: "baobab_trade"}
+	trace := ResolutionTrace{CorrelationID: req.Context.CorrelationID, TenantID: req.Context.TenantID, CapabilityKey: req.CapabilityKey}
 	if req.TenantID == "" && req.Context.TenantID == "" {
 		return ResolutionResult{}, resolutionFailure(trace, errors.New("tenant context required"))
 	}
@@ -65,6 +66,9 @@ func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (R
 
 	if req.CanonicalEntityID == "" {
 		return ResolutionResult{}, resolutionFailure(trace, errors.New("canonical_entity_id is required"))
+	}
+	if req.CapabilityKey == "" {
+		return ResolutionResult{}, resolutionFailure(trace, errors.New("capability_key is required"))
 	}
 
 	if req.Context.Provenance == nil {
@@ -92,7 +96,7 @@ func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (R
 
 	if req.Grants != nil {
 		entitlementResult, err := EntitlementResolverImpl{}.Resolve(ctx, EntitlementResolutionQuery{
-			CapabilityKey: "baobab_trade",
+			CapabilityKey: req.CapabilityKey,
 			Context:       req.Context,
 			Grants:        req.Grants,
 			Scopes:        req.Scopes,
@@ -107,7 +111,7 @@ func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (R
 	}
 
 	capabilityResult, err := CapabilityResolverImpl{}.Resolve(ctx, CapabilityResolutionQuery{
-		CapabilityKey: "baobab_trade",
+		CapabilityKey: req.CapabilityKey,
 		Context:       req.Context,
 		Bindings:      req.Bindings,
 		Capability:    req.Capability,

@@ -20,6 +20,7 @@ import (
 type ResolutionRequest struct {
 	TenantID          string
 	CanonicalEntityID string
+	CapabilityKey     string
 	Context           resolver.Context
 	Mappings          []domain.Mapping
 	Bindings          []resolver.CapabilityBinding
@@ -44,14 +45,13 @@ type ResolutionService struct {
 	// and lifecycle-eligibility gates (ADR-BCP-003 §9/§6, resolver.
 	// EntitlementResolverImpl and Capability.IsResolvable) for real
 	// traffic. False by default: no rollout/backfill of
-	// capability.capability_grant or capability.capability exists yet for
-	// the "baobab_trade" placeholder capability key this service resolves
-	// against, so turning this on unconditionally would fail every
-	// resolution rather than merely skip a check. Existing callers that
-	// never set this field (every caller today) see no behavior change at
-	// all -- Grants/Capability are only fetched, and the resolver.
-	// ResolutionRequest.Grants/.Capability fields only populated, when
-	// this is explicitly true. Grants and Scopes are read separately from
+	// capability.capability_grant exists yet for every canonical capability,
+	// so turning this on unconditionally would fail every
+	// resolution rather than merely skip a check. Grants and capability
+	// lifecycle state are only fetched when this rollout switch is enabled;
+	// requested capability selection itself is always authoritative.
+	// ResolutionRequest.Grants/.Capability are only populated when this is
+	// explicitly true. Grants and Scopes are read separately from
 	// Repository so enabling this doesn't also require reconstructing the
 	// service's existing Repository wiring.
 	EnforceEntitlement bool
@@ -73,12 +73,15 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 	if req.CanonicalEntityID == "" {
 		return ResolutionResult{}, errors.New("canonical_entity_id is required")
 	}
+	if !capabilitydomain.ValidCapabilityKey(req.CapabilityKey) {
+		return ResolutionResult{}, errors.New("capability_key is invalid")
+	}
 	if s.Repository != nil {
 		mappings, err := s.Repository.ListMappings(ctx, req.CanonicalEntityID)
 		if err != nil {
 			return ResolutionResult{}, fmt.Errorf("load mappings: %w", err)
 		}
-		bindings, err := s.Repository.ListBindings(ctx, "baobab_trade")
+		bindings, err := s.Repository.ListBindings(ctx, req.CapabilityKey)
 		if err != nil {
 			return ResolutionResult{}, fmt.Errorf("load capability bindings: %w", err)
 		}
@@ -95,6 +98,7 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 	pipelineReq := resolver.ResolutionRequest{
 		TenantID:          req.TenantID,
 		CanonicalEntityID: req.CanonicalEntityID,
+		CapabilityKey:     req.CapabilityKey,
 		Context:           req.Context,
 		Candidates:        req.Mappings,
 		Bindings:          req.Bindings,
@@ -103,7 +107,7 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 
 	if s.EnforceEntitlement {
 		if s.Grants != nil {
-			grants, err := s.Grants.ListGrants(ctx, req.Context.TenantID, "baobab_trade")
+			grants, err := s.Grants.ListGrants(ctx, req.Context.TenantID, req.CapabilityKey)
 			if err != nil {
 				return ResolutionResult{}, fmt.Errorf("load capability grants: %w", err)
 			}
@@ -133,12 +137,12 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 				pipelineReq.Scopes = scopes
 			}
 		}
-		// A capability absent from the registry does not fail resolution
+		// A requested capability absent from the registry does not fail resolution
 		// closed here -- capability registration (ADR-BCP-003 §4) is a
 		// separate, still-incomplete rollout of its own; only a capability
 		// the registry actually knows about gets its lifecycle checked.
 		if s.CapabilityRegistry != nil {
-			if capability, err := s.CapabilityRegistry.GetCapability(ctx, "baobab_trade"); err == nil {
+			if capability, err := s.CapabilityRegistry.GetCapability(ctx, req.CapabilityKey); err == nil {
 				pipelineReq.Capability = &capability
 			}
 		}

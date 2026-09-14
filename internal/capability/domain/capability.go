@@ -22,6 +22,12 @@ import (
 
 var capabilityKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$`)
 
+// ValidCapabilityKey reports whether key follows Shared's implementation-
+// neutral, dot/hyphen-segmented capability grammar.
+func ValidCapabilityKey(key string) bool {
+	return capabilityKeyPattern.MatchString(key)
+}
+
 // CapabilityLifecycle is a Capability's (or CapabilityProvider's, or
 // CapabilityBinding's) operational lifecycle -- distinct from maturity: a
 // capability can be maturity=SUPPORTED and lifecycle=SUSPENDED
@@ -79,7 +85,7 @@ type Capability struct {
 }
 
 func (c Capability) Validate() error {
-	if !capabilityKeyPattern.MatchString(c.Key) || strings.TrimSpace(c.Name) == "" {
+	if !ValidCapabilityKey(c.Key) || strings.TrimSpace(c.Name) == "" {
 		return errors.New("capability requires an implementation-neutral key and name")
 	}
 	if strings.TrimSpace(c.DomainKey) == "" {
