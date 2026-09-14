@@ -61,6 +61,7 @@ func resilientResolutionRequest() ResolutionRequest {
 	return ResolutionRequest{
 		TenantID:          "tn_zuribeans",
 		CanonicalEntityID: "entity-1",
+		CapabilityKey:     "commerce.order.create",
 		Context:           Context{TenantID: "tn_zuribeans", CountryCode: "ZA", ResolvedAt: now},
 		Candidates: []domain.Mapping{{
 			ID: "mapping-1", MappingType: "IDENTITY", TenantID: "tn_zuribeans", CanonicalEntityID: "entity-1",
@@ -69,7 +70,7 @@ func resilientResolutionRequest() ResolutionRequest {
 			EffectiveFrom: "2025-01-01T00:00:00Z",
 		}},
 		Bindings: []CapabilityBinding{{
-			ID: "binding-1", CapabilityKey: "baobab_trade", EngineID: "trade", EngineInstanceID: "instance-1",
+			ID: "binding-1", CapabilityKey: "commerce.order.create", EngineID: "trade", EngineInstanceID: "instance-1",
 			BindingMode: "PRIMARY", Priority: 100, Status: "ACTIVE", ContractVersion: "1.0.0", EffectiveFrom: now.Add(-time.Hour),
 		}},
 		EngineInstances: []EngineInstance{{

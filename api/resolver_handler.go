@@ -19,6 +19,7 @@ type ResolverHandler struct {
 type resolverRequest struct {
 	TenantID          string `json:"tenant_id"`
 	CanonicalEntityID string `json:"canonical_entity_id"`
+	CapabilityKey     string `json:"capability_key"`
 }
 
 func (h ResolverHandler) Resolve(w http.ResponseWriter, r *http.Request) {
@@ -49,8 +50,8 @@ func (h ResolverHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 	// repository just never accepted it (docs/governance/gate-iam-0-
 	// discovery.md R-3), so nothing downstream could resolve an actual
 	// entity, only the tenant itself.
-	if req.CanonicalEntityID == "" {
-		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "canonical_entity_id is required", false)
+	if req.CanonicalEntityID == "" || req.CapabilityKey == "" {
+		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "canonical_entity_id and capability_key are required", false)
 		return
 	}
 	// ADR-BCP-004 §52: resolve identity -> resolve tenant -> validate
@@ -73,6 +74,7 @@ func (h ResolverHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 	result, err := h.Service.Resolve(operationCtx, service.ResolutionRequest{
 		TenantID:          trustedContext.TenantID,
 		CanonicalEntityID: req.CanonicalEntityID,
+		CapabilityKey:     req.CapabilityKey,
 		Context:           trustedContext,
 	})
 	if err != nil {
@@ -91,7 +93,8 @@ func (h ResolverHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"tenant_id": result.Context.TenantID,
+		"tenant_id":      result.Context.TenantID,
+		"capability_key": req.CapabilityKey,
 		"mapping": map[string]any{
 			"id":     result.Mapping.Mapping.ID,
 			"status": result.Mapping.Mapping.Status,

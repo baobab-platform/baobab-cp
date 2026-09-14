@@ -29,6 +29,7 @@ func TestResolutionServiceRepositoryFailureFailsClosed(t *testing.T) {
 	_, err := service.Resolve(context.Background(), ResolutionRequest{
 		TenantID:          "tn_zuribeans",
 		CanonicalEntityID: "entity-1",
+		CapabilityKey:     "commerce.order.create",
 		Context:           resolver.Context{TenantID: "tn_zuribeans"},
 		Mappings:          []domain.Mapping{{ID: "request-supplied-state"}},
 	})

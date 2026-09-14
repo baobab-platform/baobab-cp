@@ -14,6 +14,7 @@ func TestResolutionPipelineBuildsFinalDecision(t *testing.T) {
 	result, err := pipeline.Resolve(context.Background(), ResolutionRequest{
 		TenantID:          "tenant-123",
 		CanonicalEntityID: "entity-abc",
+		CapabilityKey:     "commerce.order.create",
 		Context: Context{
 			TenantID:      "tenant-123",
 			LegalEntityID: "legal-456",
@@ -38,7 +39,7 @@ func TestResolutionPipelineBuildsFinalDecision(t *testing.T) {
 			EffectiveFrom:           "2025-01-01T00:00:00Z",
 		}},
 		Bindings: []CapabilityBinding{{
-			CapabilityKey:    "baobab_trade",
+			CapabilityKey:    "commerce.order.create",
 			EngineID:         "engine-1",
 			EngineInstanceID: "instance-1",
 			BindingMode:      "PRIMARY",
@@ -100,6 +101,18 @@ func TestResolutionPipelineRejectsMissingCanonicalEntity(t *testing.T) {
 	}
 }
 
+func TestResolutionPipelineRejectsMissingCapability(t *testing.T) {
+	pipeline := ResolutionPipeline{}
+	_, err := pipeline.Resolve(context.Background(), ResolutionRequest{
+		TenantID:          "tenant-123",
+		CanonicalEntityID: "entity-abc",
+		Context:           Context{TenantID: "tenant-123"},
+	})
+	if err == nil {
+		t.Fatal("expected missing capability_key rejection")
+	}
+}
+
 // TestResolutionPipelineRejectsCrossTenantMapping proves the fix for R-3
 // actually enforces tenant isolation, not just field naming: a candidate
 // mapping whose own TenantID differs from the requesting tenant must never
@@ -111,6 +124,7 @@ func TestResolutionPipelineRejectsCrossTenantMapping(t *testing.T) {
 	_, err := pipeline.Resolve(context.Background(), ResolutionRequest{
 		TenantID:          "tenant-123",
 		CanonicalEntityID: "entity-abc",
+		CapabilityKey:     "commerce.order.create",
 		Context:           Context{TenantID: "tenant-123"},
 		Candidates: []domain.Mapping{{
 			ID:                      "mapping-other-tenant",
@@ -139,6 +153,7 @@ func baseSuccessfulRequest() ResolutionRequest {
 	return ResolutionRequest{
 		TenantID:          "tenant-123",
 		CanonicalEntityID: "entity-abc",
+		CapabilityKey:     "commerce.order.create",
 		Context: Context{
 			TenantID:      "tenant-123",
 			LegalEntityID: "legal-456",
@@ -163,7 +178,7 @@ func baseSuccessfulRequest() ResolutionRequest {
 			EffectiveFrom:           "2025-01-01T00:00:00Z",
 		}},
 		Bindings: []CapabilityBinding{{
-			CapabilityKey:    "baobab_trade",
+			CapabilityKey:    "commerce.order.create",
 			EngineID:         "engine-1",
 			EngineInstanceID: "instance-1",
 			BindingMode:      "PRIMARY",
@@ -212,7 +227,7 @@ func TestResolutionPipelineRoutesThroughEffectiveGrant(t *testing.T) {
 	pipeline := ResolutionPipeline{}
 	req := baseSuccessfulRequest()
 	req.Grants = []capabilitydomain.CapabilityGrant{
-		{ID: "grant-1", CapabilityKey: "baobab_trade", ScopeID: "scope-1", Source: capabilitydomain.GrantSourcePlatformBaseline, Status: capabilitydomain.GrantStatusActive, EffectiveFrom: time.Now().UTC().Add(-time.Hour)},
+		{ID: "grant-1", CapabilityKey: "commerce.order.create", ScopeID: "scope-1", Source: capabilitydomain.GrantSourcePlatformBaseline, Status: capabilitydomain.GrantStatusActive, EffectiveFrom: time.Now().UTC().Add(-time.Hour)},
 	}
 	req.Scopes = map[string]capabilitydomain.CapabilityScope{
 		"scope-1": {TenantID: "tenant-123"},
@@ -229,13 +244,13 @@ func TestResolutionPipelineRoutesThroughEffectiveGrant(t *testing.T) {
 func TestResolutionPipelineEnforcesCapabilityLifecycleWhenPopulated(t *testing.T) {
 	pipeline := ResolutionPipeline{}
 	req := baseSuccessfulRequest()
-	suspended := capabilitydomain.Capability{Key: "baobab_trade", Lifecycle: capabilitydomain.CapabilityLifecycleSuspended}
+	suspended := capabilitydomain.Capability{Key: "commerce.order.create", Lifecycle: capabilitydomain.CapabilityLifecycleSuspended}
 	req.Capability = &suspended
 	if _, err := pipeline.Resolve(context.Background(), req); err == nil {
 		t.Fatal("expected a SUSPENDED capability to fail resolution closed")
 	}
 
-	active := capabilitydomain.Capability{Key: "baobab_trade", Lifecycle: capabilitydomain.CapabilityLifecycleActive}
+	active := capabilitydomain.Capability{Key: "commerce.order.create", Lifecycle: capabilitydomain.CapabilityLifecycleActive}
 	req.Capability = &active
 	if _, err := pipeline.Resolve(context.Background(), req); err != nil {
 		t.Fatalf("expected an ACTIVE capability to resolve, got: %v", err)

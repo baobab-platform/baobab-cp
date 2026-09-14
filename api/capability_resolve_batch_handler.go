@@ -20,18 +20,9 @@ const maxBatchResolveEntities = 50
 // receive an independent decision") atop an already-resolved Context,
 // redeemed by context_id exactly as CapabilityResolveHandler does.
 //
-// ADR-BCP-003 §70's own example batches multiple distinct capability keys
-// for one context ("commerce.order.create", "inventory.availability.read",
-// "payment.authorize"). That axis does not exist yet in this codebase:
-// resolver.ResolutionPipeline and CapabilityResolverImpl resolve against a
-// single hardcoded capability key ("baobab_trade") everywhere, not a
-// registry-selected one per request -- generalizing that is a separate,
-// larger refactor of already-live resolution code, not something to fold
-// into an API-layer batch endpoint. The batching axis this handler
-// implements instead is the one degree of freedom the pipeline already
-// supports per context: multiple canonical_entity_ids resolved
-// independently under the same redeemed Context, matching §70's "SHALL NOT
-// hide per-item failures" requirement for whichever items a batch contains.
+// This endpoint resolves one explicitly requested capability independently
+// for each canonical entity. It never substitutes a provider or product key
+// for the canonical capability requested by the consumer.
 type CapabilityResolveBatchHandler struct {
 	Contexts repository.ContextRepository
 	Service  service.ResolutionService
@@ -39,6 +30,7 @@ type CapabilityResolveBatchHandler struct {
 
 type capabilityResolveBatchRequest struct {
 	ContextID          string   `json:"context_id"`
+	CapabilityKey      string   `json:"capability_key"`
 	CanonicalEntityIDs []string `json:"canonical_entity_ids"`
 }
 
@@ -63,8 +55,8 @@ func (h CapabilityResolveBatchHandler) Resolve(w http.ResponseWriter, r *http.Re
 		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", err.Error(), false)
 		return
 	}
-	if req.ContextID == "" || len(req.CanonicalEntityIDs) == 0 {
-		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "context_id and at least one canonical_entity_id are required", false)
+	if req.ContextID == "" || req.CapabilityKey == "" || len(req.CanonicalEntityIDs) == 0 {
+		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "context_id, capability_key and at least one canonical_entity_id are required", false)
 		return
 	}
 	if len(req.CanonicalEntityIDs) > maxBatchResolveEntities {
@@ -108,6 +100,7 @@ func (h CapabilityResolveBatchHandler) Resolve(w http.ResponseWriter, r *http.Re
 		result, err := h.Service.Resolve(r.Context(), service.ResolutionRequest{
 			TenantID:          trustedContext.TenantID,
 			CanonicalEntityID: canonicalEntityID,
+			CapabilityKey:     req.CapabilityKey,
 			Context:           trustedContext,
 		})
 		if err != nil {
@@ -140,8 +133,9 @@ func (h CapabilityResolveBatchHandler) Resolve(w http.ResponseWriter, r *http.Re
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"context_id": trustedContext.ID,
-		"tenant_id":  trustedContext.TenantID,
-		"results":    results,
+		"context_id":     trustedContext.ID,
+		"tenant_id":      trustedContext.TenantID,
+		"capability_key": req.CapabilityKey,
+		"results":        results,
 	})
 }

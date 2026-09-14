@@ -28,7 +28,7 @@ func TestCapabilityExplainHandlerExplainsSuccessfulResolution(t *testing.T) {
 		Service:  service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}, Repository: repo},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"tenant-123"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"tenant-123"}`)))
 	req = req.WithContext(auth.WithPrincipal(context.Background(), explainAdminPrincipal()))
 	w := httptest.NewRecorder()
 
@@ -37,6 +37,9 @@ func TestCapabilityExplainHandlerExplainsSuccessfulResolution(t *testing.T) {
 		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
 	body := w.Body.String()
+	if !strings.Contains(body, `"capability_key":"commerce.order.create"`) {
+		t.Fatalf("expected explanation to identify requested capability_key, got %s", body)
+	}
 	if !strings.Contains(body, `"outcome":"ROUTED"`) {
 		t.Fatalf("expected ROUTED outcome, got %s", body)
 	}
@@ -56,7 +59,7 @@ func TestCapabilityExplainHandlerExplainsFailedResolution(t *testing.T) {
 
 	// No mappings seeded for "unknown-entity" -- the explanation should
 	// surface the FAILED outcome and its reason rather than a generic error.
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"unknown-entity"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"unknown-entity"}`)))
 	req = req.WithContext(auth.WithPrincipal(context.Background(), explainAdminPrincipal()))
 	w := httptest.NewRecorder()
 
@@ -87,7 +90,7 @@ func TestCapabilityExplainHandlerRejectsMissingFields(t *testing.T) {
 
 func TestCapabilityExplainHandlerRejectsNonAdmin(t *testing.T) {
 	handler := CapabilityExplainHandler{Contexts: repository.NewInMemoryRepository(), Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"entity-1"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"entity-1"}`)))
 	// A workload principal -- even with a context:resolve scope -- must not
 	// be able to reach privileged diagnostics meant for admin operators.
 	principal := auth.Principal{Subject: "workload-1", ActorType: "workload", TenantID: "tenant-123", Scopes: map[string]struct{}{"context:resolve": {}}}
@@ -102,7 +105,7 @@ func TestCapabilityExplainHandlerRejectsNonAdmin(t *testing.T) {
 
 func TestCapabilityExplainHandlerRejectsAdminWithoutExplainScope(t *testing.T) {
 	handler := CapabilityExplainHandler{Contexts: repository.NewInMemoryRepository(), Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"entity-1"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"entity-1"}`)))
 	principal := auth.Principal{Subject: "admin-1", ActorType: "human", Scopes: map[string]struct{}{"tenant:read": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()
@@ -127,7 +130,7 @@ func TestCapabilityExplainHandlerAllowsCrossTenantAdmin(t *testing.T) {
 	// admin explaining a context is deliberately not restricted to their
 	// own tenant -- there is no principal.TenantID to compare against, and
 	// cross-tenant diagnostics are exactly this endpoint's purpose.
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"tenant-victim"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"tenant-victim"}`)))
 	req = req.WithContext(auth.WithPrincipal(context.Background(), explainAdminPrincipal()))
 	w := httptest.NewRecorder()
 
@@ -139,7 +142,7 @@ func TestCapabilityExplainHandlerAllowsCrossTenantAdmin(t *testing.T) {
 
 func TestCapabilityExplainHandlerReturnsContextNotFound(t *testing.T) {
 	handler := CapabilityExplainHandler{Contexts: repository.NewInMemoryRepository(), Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"missing","canonical_entity_id":"entity-1"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"missing","capability_key":"commerce.order.create","canonical_entity_id":"entity-1"}`)))
 	req = req.WithContext(auth.WithPrincipal(context.Background(), explainAdminPrincipal()))
 	w := httptest.NewRecorder()
 
@@ -151,7 +154,7 @@ func TestCapabilityExplainHandlerReturnsContextNotFound(t *testing.T) {
 
 func TestCapabilityExplainHandlerFailsClosedWhenContextStoreUnavailable(t *testing.T) {
 	handler := CapabilityExplainHandler{Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","canonical_entity_id":"entity-1"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"entity-1"}`)))
 	req = req.WithContext(auth.WithPrincipal(context.Background(), explainAdminPrincipal()))
 	w := httptest.NewRecorder()
 

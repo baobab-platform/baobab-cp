@@ -144,7 +144,7 @@ func TestResolverHandlerDoesNotLeakInternalDenialReason(t *testing.T) {
 			Tenants:  &fakeStore{},
 		},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/v1/resolve", bytes.NewReader([]byte(`{"tenant_id":"tenant-123","canonical_entity_id":"entity-abc"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/resolve", bytes.NewReader([]byte(`{"tenant_id":"tenant-123","capability_key":"commerce.order.create","canonical_entity_id":"entity-abc"}`)))
 	principal := auth.Principal{Subject: "baobab-trade", Issuer: "https://iam.nabhold.com/realms/baobab", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	requestContext := context.WithValue(context.Background(), correlationKey{}, "00000000-0000-4000-8000-000000000002")
 	req = req.WithContext(auth.WithPrincipal(requestContext, principal))
@@ -198,7 +198,7 @@ func TestResolverHandlerRejectsUnresolvableIdentity(t *testing.T) {
 			Tenants:  &fakeStore{},
 		},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/v1/resolve", bytes.NewReader([]byte(`{"tenant_id":"tenant-123","canonical_entity_id":"entity-abc"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/resolve", bytes.NewReader([]byte(`{"tenant_id":"tenant-123","capability_key":"commerce.order.create","canonical_entity_id":"entity-abc"}`)))
 	principal := auth.Principal{Subject: "baobab-trade", Issuer: "https://iam.nabhold.com/realms/baobab", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
 	w := httptest.NewRecorder()
@@ -231,7 +231,7 @@ func TestResolverHandlerAcceptsRequestSuppliedTenantWhenClaimEmpty(t *testing.T)
 			Tenants:  &fakeStore{tenant: active},
 		},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/v1/resolve", bytes.NewReader([]byte(`{"tenant_id":"tenant-123","canonical_entity_id":"entity-abc"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/resolve", bytes.NewReader([]byte(`{"tenant_id":"tenant-123","capability_key":"commerce.order.create","canonical_entity_id":"entity-abc"}`)))
 	principal := auth.Principal{Subject: "baobab-trade", Issuer: "https://iam.nabhold.com/realms/baobab", ActorType: "workload", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	requestContext := context.WithValue(context.Background(), correlationKey{}, "00000000-0000-4000-8000-000000000006")
 	req = req.WithContext(auth.WithPrincipal(requestContext, principal))
@@ -274,7 +274,7 @@ func TestResolverHandlerRejectsInactiveTenant(t *testing.T) {
 			Tenants:  &fakeStore{tenant: suspended},
 		},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/v1/resolve", bytes.NewReader([]byte(`{"tenant_id":"tenant-123","canonical_entity_id":"entity-abc"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/resolve", bytes.NewReader([]byte(`{"tenant_id":"tenant-123","capability_key":"commerce.order.create","canonical_entity_id":"entity-abc"}`)))
 	principal := auth.Principal{Subject: "baobab-trade", Issuer: "https://iam.nabhold.com/realms/baobab", ActorType: "workload", TenantID: "tenant-123", ClientID: "baobab-trade", TokenID: "token-123", Scopes: map[string]struct{}{"context:resolve": {}}}
 	requestContext := context.WithValue(context.Background(), correlationKey{}, "00000000-0000-4000-8000-000000000005")
 	req = req.WithContext(auth.WithPrincipal(requestContext, principal))

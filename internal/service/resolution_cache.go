@@ -51,12 +51,8 @@ func cacheDimensionsFor(req ResolutionRequest) CacheDimensions {
 		Environment:      req.Context.Environment,
 		DeploymentRegion: req.Context.DeploymentRegion,
 		IsolationProfile: req.Context.IsolationProfileID,
-		// "baobab_trade" mirrors the same hardcoded placeholder capability
-		// key used throughout resolver.ResolutionPipeline and
-		// ResolutionService today (capability registration is a separate,
-		// still-incomplete rollout -- see ResolutionService.Resolve).
-		Capability:      "baobab_trade",
-		CanonicalEntity: req.CanonicalEntityID,
+		Capability:       req.CapabilityKey,
+		CanonicalEntity:  req.CanonicalEntityID,
 	}
 }
 

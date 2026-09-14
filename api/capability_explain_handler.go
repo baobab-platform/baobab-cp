@@ -46,6 +46,7 @@ type CapabilityExplainHandler struct {
 type capabilityExplainRequest struct {
 	ContextID         string `json:"context_id"`
 	CanonicalEntityID string `json:"canonical_entity_id"`
+	CapabilityKey     string `json:"capability_key"`
 }
 
 func (h CapabilityExplainHandler) Explain(w http.ResponseWriter, r *http.Request) {
@@ -60,8 +61,8 @@ func (h CapabilityExplainHandler) Explain(w http.ResponseWriter, r *http.Request
 		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", err.Error(), false)
 		return
 	}
-	if req.ContextID == "" || req.CanonicalEntityID == "" {
-		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "context_id and canonical_entity_id are required", false)
+	if req.ContextID == "" || req.CanonicalEntityID == "" || req.CapabilityKey == "" {
+		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "context_id, canonical_entity_id and capability_key are required", false)
 		return
 	}
 	principal, ok := auth.PrincipalFromContext(r.Context())
@@ -86,6 +87,7 @@ func (h CapabilityExplainHandler) Explain(w http.ResponseWriter, r *http.Request
 	result, resolveErr := h.Service.Resolve(r.Context(), service.ResolutionRequest{
 		TenantID:          trustedContext.TenantID,
 		CanonicalEntityID: req.CanonicalEntityID,
+		CapabilityKey:     req.CapabilityKey,
 		Context:           trustedContext,
 	})
 
@@ -113,6 +115,7 @@ func (h CapabilityExplainHandler) Explain(w http.ResponseWriter, r *http.Request
 		"context_id":          trustedContext.ID,
 		"tenant_id":           trustedContext.TenantID,
 		"canonical_entity_id": req.CanonicalEntityID,
+		"capability_key":       req.CapabilityKey,
 	}
 	response["outcome"] = trace.Outcome
 	response["reason"] = trace.Reason
