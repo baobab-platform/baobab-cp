@@ -117,7 +117,7 @@ func TestTenantLifecycleEndToEnd(t *testing.T) {
 	if _, err := store.pool.Exec(ctx, `UPDATE tenants SET observed_state='active' WHERE tenant_id=$1`, tenantID); err != nil {
 		t.Fatalf("mark tenant observed active: %v", err)
 	}
-	if _, err := store.pool.Exec(ctx, `UPDATE product_subscriptions SET status='active' WHERE tenant_id=$1 AND product_id='baobab-trade'`, tenantID); err != nil {
+	if _, err := store.pool.Exec(ctx, `UPDATE product.product_subscription SET status='ACTIVE' WHERE tenant_id=$1 AND product_id='baobab-trade'`, tenantID); err != nil {
 		t.Fatalf("mark product subscription active: %v", err)
 	}
 
