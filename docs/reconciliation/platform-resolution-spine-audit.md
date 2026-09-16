@@ -130,9 +130,9 @@ formatting drift in `api/capability_explain_handler.go` noted, unrelated to this
 and not fixed here), and `go test ./... -count=1` all pass against a real local PostgreSQL 16
 and a real `nabhold/shared` checkout (`SHARED_CONTRACTS_DIR`).
 
-**What remains genuinely open**, not covered by this record: Gate P0's own classification
-(`docs/reconciliation/phase-0-architecture-inventory-and-lock.md`) already tracks
-`CapabilityBinding.scope_id` still pointing at `mapping.mapping_scope` rather than
-`capability.capability_scope` (`#74`), and the legacy `capability.tenant_capability` table
-coexisting with real `CapabilityGrant` (`#72`). Neither was in this document's original
-10-item list and neither is resolved by the remediation above.
+**Update**: both items Gate P0's own classification
+(`docs/reconciliation/phase-0-architecture-inventory-and-lock.md`) tracked as open here are
+now resolved: `CapabilityBinding.scope_id` is repointed at `capability.capability_scope`
+(`000034`, `#74`), and the legacy `capability.tenant_capability` table is dropped
+(`000035`, `#72`). Neither was in this document's original 10-item list; both are recorded
+here for continuity since this document previously cited them as open.
