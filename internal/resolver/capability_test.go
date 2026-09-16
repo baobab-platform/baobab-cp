@@ -6,7 +6,6 @@ import (
 	"time"
 
 	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
 )
 
 func TestCapabilityResolverResolveUsesHighestPriorityBinding(t *testing.T) {
@@ -112,7 +111,7 @@ func TestCapabilityResolverUsesScopeBeforePriority(t *testing.T) {
 	query := CapabilityResolutionQuery{
 		CapabilityKey: "erp.receivables",
 		Context:       Context{TenantID: "tn_zuribeans", MarketID: "market-za"},
-		Scopes: map[string]domain.MappingScope{
+		Scopes: map[string]capabilitydomain.CapabilityScope{
 			"global": {},
 			"tenant": {TenantID: "tn_zuribeans", MarketID: "market-za"},
 		},

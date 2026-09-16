@@ -128,7 +128,12 @@ func repositoryBackedFixture() *repository.Repository {
 		TargetCanonicalEntityID: "entity-1", ScopeID: "tenant-123", Direction: "BIDIRECTIONAL", Cardinality: "ONE_TO_ONE",
 		Authority: "baobab", Confidence: "CONFIRMED", Status: "ACTIVE", EffectiveFrom: "2025-01-01T00:00:00Z",
 	}}
-	repo.Bindings["commerce.order.create"] = []resolver.CapabilityBinding{{CapabilityKey: "commerce.order.create", EngineID: "engine-1", EngineInstanceID: "instance-1", BindingMode: "PRIMARY", Status: "ACTIVE", ContractVersion: "v1"}}
+	// ScopeID must match the capability.capability_scope the entitlement
+	// tests below create ("scope-1") -- now that ResolutionService actually
+	// forwards Scopes into capability resolution (previously dropped by
+	// pipeline.go, see Gate P0's tracked #74), a binding whose scope isn't
+	// in the caller's Scopes map is correctly excluded as a candidate.
+	repo.Bindings["commerce.order.create"] = []resolver.CapabilityBinding{{CapabilityKey: "commerce.order.create", EngineID: "engine-1", EngineInstanceID: "instance-1", ScopeID: "scope-1", BindingMode: "PRIMARY", Status: "ACTIVE", ContractVersion: "v1"}}
 	repo.EngineInstances["engine-1"] = []resolver.EngineInstance{{ID: "instance-1", EngineID: "engine-1", Environment: "production", Status: "ACTIVE"}}
 	return repo
 }
