@@ -1,0 +1,74 @@
+# Programme Gate P0 — Architecture Inventory and Lock
+
+**Gate status:** PASSED
+**Date:** 2026-09-13
+**Authority:** `nabhold/baobab-cp` Tenant Onboarding & Provisioning Technical Specification (BCP-TS-ONBOARDING-001) §4–5, 87
+**Method:** Direct inspection of `internal/store/postgres/migrations/000001`–`000032`, `internal/domain/*.go`, `internal/repository/postgres.go`, `internal/events/envelope.go`, cross-referenced against `docs/reconciliation/canonical-contract-matrix.md`, `shared-control-plane-audit.md`, `platform-resolution-spine-audit.md`, and `shared` ADR-SHARED-008. Nothing below is asserted from ADR prose alone where the migration or Go source could be read directly.
+
+---
+
+## 1. Why this document exists
+
+The Technical Specification requires exactly one central Phase-0 Gate before any further schema work: a current-state inventory, a KEEP/REMODEL/SPLIT/MERGE/REMOVE classification for the 15 named platform objects, and five specific locks/decisions (§87). Three companion documents in `docs/reconciliation/` already did most of this inventory work as bug audits (dated 2026-09-08, predating the Technical Specification itself) and, in several cases, already **remediated** what they found against real PostgreSQL and a real `nabhold/shared` checkout — not just documented it. This document is the missing piece: it recasts those findings into the Technical Specification's own §5 deliverable format, extends coverage to the objects those audits did not examine (`CapabilityScope`, `CapabilityProvider`, `CapabilityGrant`, `MarketParticipation`, `ProvisioningState`, `ReadinessSnapshot`, `Drift` — all added to the schema after those audits were written), and formally closes the five-item Phase-0 checklist.
+
+No object below is reclassified without a migration file or Go source citation. Where an existing reconciliation doc already established a finding, this document cites it rather than re-deriving it.
+
+---
+
+## 2. Phase-0 Classification Deliverable
+
+| Object | Existing State | Target State | Classification | Migration Action |
+|---|---|---|---|---|
+| **Capability** | `capability.capability` (`000008`), extended with `status`/`domain_key`/`maturity` (`000024`, `000030`) | CapabilityDefinition runtime projection (ADR-BCP-003) | **KEEP** | None required. `domain_key` exists but is not yet validated against `shared`'s `namespace-registry.yaml` enum at write time — tracked as follow-up, not a P0 blocker. |
+| **CapabilityBinding** | `capability.capability_binding` (`000012`), binding_mode locked to the canonical 5-value set and `provider_id` added (`000028`) | capability → provider → instance, per Technical Spec §16 | **REMODEL** (in progress) | Two items open, both already tracked (`#74`, `#76`/`#82`), neither blocks P0: (1) `provider_id` is nullable pending a provider-registration backfill workflow; (2) `scope_id` still references `mapping.mapping_scope`, not the new `capability.capability_scope` (`000029`) — Technical Spec §16's `capability_scope_id` field is not yet wired. |
+| **Engine** | `topology.engine` (`000005`) | runtime technology family | **KEEP** | None. |
+| **EngineInstance** | `topology.engine_instance` (`000005`) | concrete topology runtime | **KEEP** | None. |
+| **Context** | `domain.ResolveContextRequest`/`ResolvedContext` (`internal/domain/context.go`); live `/v1/context/resolve` now runs end-to-end against a migrated schema (`shared-control-plane-audit.md` §12, `TestTenantLifecycleEndToEnd`) | resolved immutable context (ADR-BCP-004) | **REMODEL** (P0 runtime defect already fixed; richer model still open) | The P0 "non-functional against its own migrations" defect from `shared-control-plane-audit.md` §2.1 is fixed and verified. Still missing, per `platform-resolution-spine-audit.md` finding 6: Principal, Digital Estate, property/channel, deployment region, environment, isolation profile, authorization decision, immutable resolution time. Not a P0 blocker — resolution works and fails closed; it is materially incomplete for Programme Gate P5. |
+| **MappingScope** | `mapping.mapping_scope` (`000009`) — 4 columns (`tenant_id`, `market_id`, `entity_type`, `scope_type`) | mapping-specific scope, ~18 dimensions per `canonical-mapping.schema.json` | **KEEP** (table identity), columns REMODEL | Expand columns before building real scope-precedence resolution — already flagged as P2 in `canonical-contract-matrix.md`. |
+| **CapabilityScope** | `capability.capability_scope` (`000029`) — full dimension set (tenant, legal entity, organisation, business unit, digital estate/property, channel, market, jurisdiction, currency, customer segment, catalogue, operating/geographic region, deployment region, environment, isolation profile, include/exclude countries) | dedicated entitlement/binding scope, distinct from MappingScope (ADR-SHARED-007 §25) | **ADD — done** | None for the table itself. Not yet referenced by `capability_binding` or `tenant_capability` (deliberately deferred, `#74` — a real backfill/compatibility plan is needed before repointing). |
+| **ProductSubscription** | `product.product_subscription` (`000033`) — `product_version_id`, `subscription_profiles[]`, `source`/`source_reference`, `effective_from`/`effective_to`, `cancelled_at`/`cancellation_reason`, matching `shared` `contracts/product/v1/subscription.schema.json` (ADR-SHARED-009) | product-version subscription with `ProductVersion`/`CapabilityComposition` linkage, `SubscriptionProfile`, `EntitlementProjection` (Technical Spec §91) | **REMODEL — done** | `product.product`/`product.product_version` registry tables also added (`000033`), but deliberately unpopulated and not FK-enforced from `product_subscription.product_id` — no master-data or version-selection workflow exists yet. `product_version_id` is therefore nullable, same precedent as `capability_binding.provider_id` in `000028`. Building that workflow (and `EntitlementProjection` materialisation) remains Programme Gate P4 scope. |
+| **CapabilityProvider** | `capability.capability_provider` + `capability.provider_capability_support` (`000028`) | first-class provider (ADR-BCP-002 §5.3, ADR-BCP-006) | **ADD — done** | None. |
+| **CapabilityGrant** | `capability.capability_grant` (`000029`) — provenance (`source`/`source_reference`), status, effective dating, revocation fields, matching `shared`'s `capabilityGrantSource`/`capabilityGrantStatus` enums | explicit entitlement (ADR-BCP-003 §9-19) | **ADD — done** | Additive: the legacy `capability.tenant_capability` boolean-enablement table (`000008`, still referenced by `000024`) is not yet retired. Migrating real entitlement onto `CapabilityGrant` and dropping `tenant_capability` is tracked separately (`#72`) and does not block P0. |
+| **DigitalEstate** | `estate.digital_estate` (`000007`) — schema only, no Go code reads or writes it | capability consumer; per `shared` ADR-0001, estate ownership/metadata belongs to the estate's own repository, not `baobab-cp` | **KEEP** (as reference-only) | Confirm intended scope with an explicit ADR before building beyond a reference column — already flagged as P3 in `canonical-contract-matrix.md`. Do not build full estate metadata here. |
+| **MarketParticipation** | `market.market_assignment` (`000006`) — `tenant_id` + `market_id` + effective dating only, **no capability dimension** | explicit footprint model: per-market `SOURCING`/`PROCUREMENT`/`SELLING`/`IMPORTING`/`EXPORTING`/`WAREHOUSING`/`DISTRIBUTION`/`FULFILMENT` flags (ADR-BCP-011, corrected per ADR-BCP-015 CR-006) | **REMODEL** | `market_assignment` proves a tenant may participate in a market at all, but cannot yet represent *what* it may do there — the entire point of ADR-BCP-011. Needs either new columns or a child table carrying the capability flags, keyed against the now-registered `market.*` capability domain (`shared` ADR-SHARED-008). Programme Gate P2/P3 scope. |
+| **ProvisioningState** | `provisioning_operations` (`000019`) — `operation_id`, `tenant_id`, `idempotency_key`, `request_hash`, `state`, `revision` only | `TenantProvisioning` process aggregate: `product_requests[]`, `estate_requests[]`, `market_requests[]`, `current_phase`, `blocking_reasons[]`, `desired_state_version`/`observed_state_version` (Technical Spec §21-22) | **REMODEL** | `provisioning_operations` is an idempotency/replay-detection record, not a provisioning-orchestration aggregate. It should very likely become one of the inputs to the real `TenantProvisioning` table (Programme Gate P7), not be discarded — its idempotency-key uniqueness constraint is exactly the mechanism Technical Spec §108 requires. |
+| **ReadinessSnapshot** | absent | readiness projection (hierarchical: Provider/Capability/Product/Estate/Tenant) | **ADD** | Not started. Programme Gate P10 scope. Not a P0 blocker — no other object depends on its existence yet. |
+| **Drift** | absent | reconciliation drift (desired vs. observed state comparison) | **ADD** | Not started. Programme Gate P10 scope. Not a P0 blocker. Note: `tenants.desired_state`/`observed_state` (`000019`) are a primitive precursor at the tenant level only — real `Drift` needs to operate per-object, not just per-tenant. |
+
+No object above is reclassified without evidence already cited. No later phase may silently reclassify one of these without an explicit architecture amendment, per Technical Specification §5.
+
+---
+
+## 3. Phase-0 Checklist — Five Required Locks/Decisions
+
+### 3.1 Binding enum lock
+
+**LOCKED — done.** `capability.capability_binding.binding_mode` is constrained to exactly `PRIMARY`, `FALLBACK`, `SHADOW`, `MIGRATION`, `DISABLED` (migration `000028`, `capability_binding_binding_mode_check`), with the superseded `SECONDARY`/`READ_ONLY`/`MIGRATION_SOURCE`/`MIGRATION_TARGET` values defensively remapped rather than assumed absent. This is CR-002 already implemented in the database, not merely decided in prose.
+
+### 3.2 Binding model lock
+
+**LOCKED — partially implemented.** `capability_binding.provider_id` exists (migration `000028`), giving the CR-005 shape (`Capability → CapabilityBinding → {provider_id → CapabilityProvider, engine_instance_id → EngineInstance}`) a real column on both sides. It is nullable pending a provider-registration backfill workflow (`#76`, `#82`) — this is a tracked, deliberate interim state, not an unlocked decision. The lock itself (both fields required in the target model) is not in question; only the backfill timeline is open.
+
+### 3.3 Event vocabulary lock
+
+**LOCKED — corrected.** The canonical event-type format is `com.nabhold.<context>.<...>.v<N>` (`nabhold/shared`'s `contracts/events/v1/envelope.schema.json`), which `internal/events` already constructs and which `TestRegisterTenantOutboxEventMatchesSharedSchema` verifies round-trips through real PostgreSQL and the real shared schema (`shared-control-plane-audit.md` §12). This repository's own Technical Specification (CR-003) had independently declared a different, incompatible format (`baobab.<bounded-context>.<aggregate>.<event>.v<major>`) that **no code in this repository ever actually implements** — the running system was already correct; only the Technical Specification's prose and the downstream ADR-BCP-015 were wrong. See `shared` ADR-SHARED-008 for the full resolution and the erratum recorded against the Technical Specification and ADR-BCP-015.
+
+### 3.4 BCP-001 migration-count erratum
+
+**RECORDED.** The Technical Specification's CR-004 already documents the erratum (17 vs. 18 migrations in ADR-BCP-001's original count). The point is moot in practice: the canonical migration set has since grown to 32 files (`000001`–`000032`), all correctly registered in `canonicalMigrationNames` — implementation tooling relies on the actual migration files, as CR-004 instructs, not on any prose count. This entry closes the checklist item; see §4 for where it is now durably logged.
+
+### 3.5 Migration strategy decision
+
+**DECIDED — extend forward, do not rewrite.** Technical Specification §19 left this an open choice pending repository state. In practice, every remediation applied since the `shared-control-plane-audit.md` baseline (migrations `000019`–`000032`) has extended the canonical sequence forward rather than rewriting `000001`–`000018`, consistent with `shared-control-plane-audit.md` §10 item 1's explicit choice of "the minimal-risk version of (a)." This document makes that de facto practice the formal Phase-0 decision: **`baobab-cp` extends its migration sequence forward; it does not rewrite already-applied canonical migrations**, for the remainder of the pre-production period Technical Specification §55 describes.
+
+---
+
+## 4. Governance record
+
+These five decisions are logged in `docs/governance/decision_log.md` as of this document's acceptance, since the Technical Specification explicitly calls for the Phase-0 checklist to be recorded there and that file was previously empty.
+
+---
+
+## 5. Gate exit
+
+Per Technical Specification §87, "No schema work proceeds before P0 passes." All five checklist items are locked or formally decided (§3), and every one of the 15 named objects has a real, evidenced classification (§2) with no unresolved KEEP/REMODEL/SPLIT/MERGE/REMOVE ambiguity — REMODEL and ADD items are legitimate, tracked future-phase work (Programme Gates P2–P10), not open P0 questions. **Gate P0 is PASSED.** Programme Gate P1 (Shared Contract Foundation) and beyond may proceed.

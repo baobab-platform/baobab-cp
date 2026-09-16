@@ -73,7 +73,15 @@ func (s *Store) GetTenant(ctx context.Context, tenantID string) (domain.Tenant, 
 }
 func (s *Store) GetEntitlement(ctx context.Context, tenantID, productID string) (domain.Entitlement, error) {
 	var e domain.Entitlement
-	if err := s.pool.QueryRow(ctx, `SELECT tenant_id, product_id, status, coalesce(tier, 'standard') FROM product_subscriptions WHERE tenant_id=$1 AND product_id=$2`, tenantID, productID).Scan(&e.TenantID, &e.ProductID, &e.Status, &e.Tier); err != nil {
+	// product.product_subscription (migration 000033) has no tier column,
+	// same as the table it replaced - the previous query's
+	// `coalesce(tier, 'standard')` referenced a column that has never
+	// existed in any migration and would fail against a real database the
+	// first time this path was hit. Tier is not part of the new
+	// contracts/product/v1 canonical model either, so it is fixed to
+	// "standard" here rather than queried.
+	e.Tier = "standard"
+	if err := s.pool.QueryRow(ctx, `SELECT tenant_id, product_id, status FROM product.product_subscription WHERE tenant_id=$1 AND product_id=$2`, tenantID, productID).Scan(&e.TenantID, &e.ProductID, &e.Status); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Entitlement{}, domain.NotFoundError("product entitlement not found")
 		}
@@ -141,7 +149,12 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 		return domain.Operation{}, err
 	}
 	for _, product := range c.RequestedProducts {
-		if _, err = tx.Exec(ctx, `INSERT INTO product_subscriptions(tenant_id,product_id)VALUES($1,$2)`, c.TenantID, product); err != nil {
+		// product_version_id is left unset (NULL): RegisterTenant's command
+		// surface only carries a product_id, with no version-selection
+		// workflow yet (Programme Gate P4) to resolve one - see migration
+		// 000033's comment. source='ONBOARDING' needs no source_reference
+		// per product.product_subscription's own CHECK constraint.
+		if _, err = tx.Exec(ctx, `INSERT INTO product.product_subscription(tenant_id,product_id,status,source)VALUES($1,$2,'PENDING','ONBOARDING')`, c.TenantID, product); err != nil {
 			return domain.Operation{}, err
 		}
 	}
@@ -195,7 +208,7 @@ func (s *Store) ResolveContext(ctx context.Context, metadata basestore.RequestMe
 	err = tx.QueryRow(ctx, `
 		SELECT t.legal_entity_id,t.desired_state,t.observed_state,COALESCE(ps.status,'')
 		FROM tenants t
-		LEFT JOIN product_subscriptions ps ON ps.tenant_id=t.tenant_id AND ps.product_id=$2
+		LEFT JOIN product.product_subscription ps ON ps.tenant_id=t.tenant_id AND ps.product_id=$2
 		WHERE t.tenant_id=$1`, tenantID, productID).Scan(&legalEntityID, &desiredState, &observedState, &subscriptionStatus)
 
 	found := true
@@ -245,7 +258,13 @@ func contextPolicyDecision(found bool, desiredState, observedState, subscription
 	if desiredState != "active" || observedState != "active" {
 		return "denied", "tenant_not_active"
 	}
-	if subscriptionStatus != "active" {
+	// product.product_subscription.status (migration 000033) uses the
+	// uppercase enum contracts/product/v1/domain.schema.json#/$defs/subscriptionStatus
+	// defines (DRAFT/PENDING/ACTIVE/SUSPENDED/CANCELLED/EXPIRED), unlike
+	// tenants.desired_state/observed_state above, which remain the
+	// lowercase values migration 000019 already shipped and this migration
+	// does not touch.
+	if subscriptionStatus != "ACTIVE" {
 		return "denied", "product_not_entitled"
 	}
 	return "allowed", "context_allowed"

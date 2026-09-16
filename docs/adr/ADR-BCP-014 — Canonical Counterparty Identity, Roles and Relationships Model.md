@@ -1,6 +1,6 @@
 # ADR-BCP-014 — Canonical Counterparty Identity, Roles and Relationships Model
 
-**Status:** Proposed — Normative Platform Architecture  
+**Status:** Accepted — Normative Platform Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Primary Repository:** `nabhold/baobab-cp`  

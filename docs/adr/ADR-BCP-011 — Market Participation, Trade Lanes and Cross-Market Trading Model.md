@@ -1,6 +1,6 @@
 # ADR-BCP-011 — Market Participation, Trade Lanes and Cross-Market Trading Model
 
-**Status:** Proposed — Normative Platform Architecture  
+**Status:** Accepted — Normative Platform Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `nabhold/baobab-cp`  

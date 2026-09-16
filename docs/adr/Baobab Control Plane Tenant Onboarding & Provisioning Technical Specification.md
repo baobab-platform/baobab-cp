@@ -489,6 +489,8 @@ reason-code vocabulary
 
 No runtime repository SHALL invent independent canonical event names.
 
+**ERRATUM (`shared` ADR-SHARED-008, Gate ZB-01):** CR-003 above specified the canonical event-type format as `baobab.<bounded-context>.<aggregate>.<event>.v<major>`. This repository is not the event-vocabulary authority — §13 says so in the same breath — and `nabhold/shared` had already shipped and enforced a different format, `com.nabhold.<context>.<...>.v<N>` (`contracts/events/v1/envelope.schema.json`), across every real identity/ERP/supplier-onboarding event before this specification was written. CR-003's format is superseded; `com.nabhold.*` is canonical. See ADR-SHARED-008 for the full resolution and `baobab-cp` ADR-BCP-015 for the downstream correction to ADR-BCP-011/012/013/014 and `baobab-trade` ADR-0019/0020/0021/0022.
+
 ---
 
 # 14. Conflict Resolution CR-004 — BCP-001 Migration Count Bug
