@@ -2,17 +2,18 @@
 package integration
 
 /*
-Compose the existing repositories instead of creating duplicate persistence:
+Add the orchestration persistence contract without replacing the existing
+RegisterTenant idempotency path:
 
-type ContextAuthorityRepository interface {
-    GetTenant(ctx context.Context, tenantID string) (domain.Tenant, error)
-    GetMarket(ctx context.Context, marketID string) (domain.Market, error)
-    ListMarketAssignments(ctx context.Context, tenantID string) ([]domain.MarketAssignment, error)
-    GetDigitalEstate(ctx context.Context, estateID string) (domain.DigitalEstate, error)
-    GetIsolationProfile(ctx context.Context, profileID string) (domain.IsolationProfile, error)
+type TenantProvisioningRepository interface {
+    GetTenantProvisioning(ctx context.Context, id string) (provisioningdomain.TenantProvisioning, error)
+    GetTenantProvisioningByIdempotencyKey(ctx context.Context, tenantID, key string) (provisioningdomain.TenantProvisioning, error)
+    CreateTenantProvisioning(ctx context.Context, operation provisioningdomain.TenantProvisioning) error
+    UpdateTenantProvisioning(ctx context.Context, operation provisioningdomain.TenantProvisioning, expectedVersion int64) error
 }
 
-Adapt method names only where the repository already exposes equivalent
-canonical reads. Do not add a context table merely to make resolution work:
-domain.Context is an immutable operation scope, not configuration authority.
+UpdateTenantProvisioning MUST use:
+    WHERE tenant_provisioning_id=$id AND version=$expectedVersion
+and MUST fail if RowsAffected()!=1. Never permit two workers to advance the
+same orchestration record concurrently without optimistic-lock detection.
 */
