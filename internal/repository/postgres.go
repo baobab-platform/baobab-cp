@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
 	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/nabhold/baobab-cp/internal/events"
 	productdomain "github.com/nabhold/baobab-cp/internal/product/domain"
 	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
 	"github.com/nabhold/baobab-cp/internal/resolver"
@@ -37,6 +38,9 @@ var ErrExternalIdentityAlreadyLinked = errors.New("external identity already lin
 // PostgresRepository is the PostgreSQL-backed repository implementation for mapping, capability, and topology data.
 type PostgresRepository struct {
 	pool *pgxpool.Pool
+	// EventSource overrides defaultEventSource (outbox.go) when set;
+	// production callers normally leave this at its zero value.
+	EventSource string
 }
 
 var _ MappingRepository = (*PostgresRepository)(nil)
@@ -1669,7 +1673,46 @@ func (r *PostgresRepository) UpdateTenantProvisioning(ctx context.Context, provi
 	if err != nil {
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
-	result, err := r.pool.Exec(ctx, `
+
+	// READY/ACTIVE/FAILED are this aggregate's meaningful domain
+	// transitions (spec: "do not introduce events merely for
+	// completeness") -- PLAN/APPLY/RECONCILE/CANCELLED advance the state
+	// machine but are not milestones worth a platform event.
+	var eventType, eventSchema string
+	switch provisioning.Status {
+	case provisioningdomain.ProvisioningStatusReady:
+		eventType, eventSchema = eventTypeTenantProvisioningReady, schemaTenantProvisioningReady
+	case provisioningdomain.ProvisioningStatusActive:
+		eventType, eventSchema = eventTypeTenantProvisioningActive, schemaTenantProvisioningActive
+	case provisioningdomain.ProvisioningStatusFailed:
+		eventType, eventSchema = eventTypeTenantProvisioningFailed, schemaTenantProvisioningFailed
+	}
+
+	if eventType == "" {
+		result, err := r.pool.Exec(ctx, `
+			UPDATE provisioning.tenant_provisioning
+			SET status=$3, observed_state_version=$4, blocking_reasons=$5, attempt_count=$6,
+			    last_error=NULLIF($7, ''), completed_at=$8, version=version+1, metadata=$9, updated_at=now()
+			WHERE tenant_provisioning_id=$1::uuid AND version=$2`,
+			provisioning.ID, expectedVersion, string(provisioning.Status), provisioning.ObservedStateVersion,
+			blockingReasons, provisioning.AttemptCount, provisioning.LastError, provisioning.CompletedAt, metadata,
+		)
+		if err != nil {
+			return err
+		}
+		if result.RowsAffected() == 0 {
+			return ErrTenantProvisioningVersionConflict
+		}
+		return nil
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(ctx, `
 		UPDATE provisioning.tenant_provisioning
 		SET status=$3, observed_state_version=$4, blocking_reasons=$5, attempt_count=$6,
 		    last_error=NULLIF($7, ''), completed_at=$8, version=version+1, metadata=$9, updated_at=now()
@@ -1683,7 +1726,22 @@ func (r *PostgresRepository) UpdateTenantProvisioning(ctx context.Context, provi
 	if result.RowsAffected() == 0 {
 		return ErrTenantProvisioningVersionConflict
 	}
-	return nil
+	env, err := events.New(events.Params{
+		Type: eventType, Source: r.eventSource(), Subject: provisioning.ID,
+		DataSchema: eventSchema, CorrelationID: provisioning.ID, TenantID: provisioning.TenantID,
+		Data: map[string]any{
+			"tenant_provisioning_id": provisioning.ID, "tenant_id": provisioning.TenantID,
+			"status": string(provisioning.Status), "desired_state_version": provisioning.DesiredStateVersion,
+			"observed_state_version": provisioning.ObservedStateVersion,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("construct %s event: %w", eventType, err)
+	}
+	if err := r.insertOutboxEvent(ctx, tx, "tenant_provisioning", provisioning.ID, expectedVersion+1, env); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *PostgresRepository) GetCapability(ctx context.Context, capabilityKey string) (capabilitydomain.Capability, error) {
@@ -2178,6 +2236,20 @@ func (r *PostgresRepository) CreateMarketAssignment(ctx context.Context, assignm
 			return err
 		}
 	}
+	env, err := events.New(events.Params{
+		Type: eventTypeMarketParticipationCreated, Source: r.eventSource(), Subject: assignment.ID,
+		DataSchema: schemaMarketParticipationCreated, CorrelationID: assignment.ID, TenantID: assignment.TenantID,
+		Data: map[string]any{
+			"market_assignment_id": assignment.ID, "tenant_id": assignment.TenantID, "market_id": assignment.MarketID,
+			"status": string(assignment.Status), "source": string(assignment.Source),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("construct market-participation-created event: %w", err)
+	}
+	if err := r.insertOutboxEvent(ctx, tx, "market_assignment", assignment.ID, 1, env); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
@@ -2188,7 +2260,13 @@ func (r *PostgresRepository) UpdateMarketAssignmentGovernance(ctx context.Contex
 	if err := domain.ValidateMarketParticipationGovernance(assignment); err != nil {
 		return err
 	}
-	result, err := r.pool.Exec(ctx, `
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(ctx, `
 		UPDATE market.market_assignment
 		SET status = $2,
 		    source = $3,
@@ -2204,7 +2282,21 @@ func (r *PostgresRepository) UpdateMarketAssignmentGovernance(ctx context.Contex
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("market assignment %s not found", assignment.ID)
 	}
-	return nil
+	env, err := events.New(events.Params{
+		Type: eventTypeMarketParticipationUpdated, Source: r.eventSource(), Subject: assignment.ID,
+		DataSchema: schemaMarketParticipationUpdated, CorrelationID: assignment.ID, TenantID: assignment.TenantID,
+		Data: map[string]any{
+			"market_assignment_id": assignment.ID, "tenant_id": assignment.TenantID,
+			"status": string(assignment.Status), "source": string(assignment.Source),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("construct market-participation-updated event: %w", err)
+	}
+	if err := r.insertOutboxEvent(ctx, tx, "market_assignment", assignment.ID, 1, env); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *PostgresRepository) GetTradeLane(ctx context.Context, tenantID, tradeLaneID string) (domain.TradeLane, error) {
@@ -2256,15 +2348,54 @@ func (r *PostgresRepository) SaveTradeLane(ctx context.Context, lane domain.Trad
 	if createdAt.IsZero() {
 		createdAt = lane.UpdatedAt
 	}
-	_, err := r.pool.Exec(ctx, query,
+	if lane.Status != domain.TradeLaneActive {
+		// Only activation is a meaningful domain transition worth an event
+		// (spec: "do not introduce events merely for completeness");
+		// SUSPENDED/RETIRED saves need no outbox write, so a plain (non-tx)
+		// Exec is sufficient here.
+		if _, err := r.pool.Exec(ctx, query,
+			lane.ID, lane.TenantID, lane.OriginMarketID, lane.DestinationMarketID,
+			lane.Direction, lane.Status, lane.PermittedCapabilityKeys,
+			createdAt, lane.UpdatedAt,
+		); err != nil {
+			return fmt.Errorf("save trade lane: %w", err)
+		}
+		return nil
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, query,
 		lane.ID, lane.TenantID, lane.OriginMarketID, lane.DestinationMarketID,
 		lane.Direction, lane.Status, lane.PermittedCapabilityKeys,
 		createdAt, lane.UpdatedAt,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("save trade lane: %w", err)
 	}
-	return nil
+	env, err := events.New(events.Params{
+		// CorrelationID must be a UUID (ADR-0004); TradeLane.ID is a
+		// "tlane_"-prefixed deterministic slug (domain.TradeLane, matching
+		// Shared's contract), not a UUID, so it cannot double as one the
+		// way MarketAssignment/TenantProvisioning's UUIDv7 IDs can.
+		Type: eventTypeTradeLaneActivated, Source: r.eventSource(), Subject: lane.ID,
+		DataSchema: schemaTradeLaneActivated, CorrelationID: domain.NewUUIDv7(), TenantID: lane.TenantID,
+		Data: map[string]any{
+			"trade_lane_id": lane.ID, "tenant_id": lane.TenantID,
+			"origin_market_id": lane.OriginMarketID, "destination_market_id": lane.DestinationMarketID,
+			"direction": string(lane.Direction),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("construct trade-lane-activated event: %w", err)
+	}
+	if err := r.insertOutboxEvent(ctx, tx, "trade_lane", lane.ID, 1, env); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ListMarketAssignmentsForTenant returns every MarketAssignment record for

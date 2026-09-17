@@ -48,9 +48,13 @@ func TestPostgresTenantProvisioningConcurrentUpdatesOnlyOneWins(t *testing.T) {
 	}
 
 	const provisioningID = "90000000-0000-0000-0000-0000000000c1"
-	const tenantID = "tn_provisioning_concurrency_test"
+	// tn_[a-z0-9]+ is the canonical tenant ID pattern (domain.ValidTenantID,
+	// ADR-0004) -- no underscore after the prefix, enforced by the outbox
+	// event envelope this test's READY transition now produces.
+	const tenantID = "tn_provisioningconcurrencytest"
 
 	cleanup := func() {
+		admin.Exec(ctx, `DELETE FROM messaging.outbox WHERE tenant_id = $1`, tenantID)
 		admin.Exec(ctx, `DELETE FROM provisioning.tenant_provisioning WHERE tenant_id = $1`, tenantID)
 	}
 	cleanup()

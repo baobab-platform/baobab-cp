@@ -55,7 +55,11 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 	defer repo.Close()
 
 	const (
-		tenantID      = "tn_zuribeans_zb02_e2e"
+		// tn_[a-z0-9]+ is the canonical tenant ID pattern
+		// (domain.ValidTenantID, ADR-0004) -- no underscore after the
+		// prefix, enforced by the outbox event envelope this test's writes
+		// now produce.
+		tenantID      = "tn_zuribeanszb02e2e"
 		legalEntityID = "ZURIBEANS-EA-ZB02-E2E"
 		capabilityKey = "trade.settlement"
 	)
@@ -66,6 +70,7 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 	instanceID := domain.NewUUIDv7()
 
 	cleanup := func() {
+		admin.Exec(ctx, `DELETE FROM messaging.outbox WHERE tenant_id = $1`, tenantID)
 		admin.Exec(ctx, `DELETE FROM market.trade_lane WHERE tenant_id = $1`, tenantID)
 		admin.Exec(ctx, `DELETE FROM market.market_participation_capability WHERE market_assignment_id IN (SELECT market_assignment_id FROM market.market_assignment WHERE tenant_id = $1)`, tenantID)
 		admin.Exec(ctx, `DELETE FROM market.market_assignment WHERE tenant_id = $1`, tenantID)
@@ -232,5 +237,38 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 	}
 	if !foundActiveGrant {
 		t.Fatalf("expected an ACTIVE capability grant for %s, got %+v", capabilityKey, grants)
+	}
+
+	// Outbox events for this run's meaningful domain transitions
+	// (market-participation-created x2, trade-lane-activated x2,
+	// tenant-provisioning-ready, tenant-provisioning-active) must have
+	// committed atomically with the writes that produced them.
+	rows, err := admin.Query(ctx, `SELECT event_type FROM messaging.outbox WHERE tenant_id = $1 ORDER BY occurred_at`, tenantID)
+	if err != nil {
+		t.Fatalf("query outbox: %v", err)
+	}
+	defer rows.Close()
+	var eventTypes []string
+	for rows.Next() {
+		var eventType string
+		if err := rows.Scan(&eventType); err != nil {
+			t.Fatalf("scan outbox event_type: %v", err)
+		}
+		eventTypes = append(eventTypes, eventType)
+	}
+	expected := map[string]int{
+		"com.nabhold.control-plane.market-participation-created.v1": 2,
+		"com.nabhold.control-plane.trade-lane-activated.v1":         2,
+		"com.nabhold.control-plane.tenant-provisioning-ready.v1":    1,
+		"com.nabhold.control-plane.tenant-provisioning-active.v1":   1,
+	}
+	got := map[string]int{}
+	for _, eventType := range eventTypes {
+		got[eventType]++
+	}
+	for eventType, count := range expected {
+		if got[eventType] != count {
+			t.Fatalf("expected %d %s outbox event(s), got %d (all events: %v)", count, eventType, got[eventType], eventTypes)
+		}
 	}
 }
