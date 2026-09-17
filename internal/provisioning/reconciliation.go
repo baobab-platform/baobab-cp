@@ -114,9 +114,10 @@ func (r DesiredObservedReconciler) Report(
 }
 
 // logDrift emits one structured, secret-free log line per drifted resource
-// (ADR-BCP-010 §47's "resource_type/id" dimension) -- Drift.Reason is a
-// fixed, non-user-controlled string (see the Drift constructions in
-// reconciliation_resource.go), never provider/request payload content.
+// (ADR-BCP-010 §31's "reconciliation state" observability requirement) --
+// Drift.Reason is a fixed, non-user-controlled string (see the Drift
+// constructions in reconciliation_resource.go), never provider/request
+// payload content.
 func logDrift(ctx context.Context, op provisioningdomain.TenantProvisioning, drift []Drift) {
 	for _, d := range drift {
 		slog.WarnContext(ctx, "provisioning resource drift detected",

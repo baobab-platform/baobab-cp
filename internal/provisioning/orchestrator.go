@@ -159,8 +159,10 @@ func (o *Orchestrator) fail(ctx context.Context, op provisioningdomain.TenantPro
 }
 
 // logPhaseOutcome emits one structured, secret-free log line per completed
-// orchestration phase (ADR-BCP-010 §47's dimensions: tenant, operation,
-// phase, state-version convergence, attempt count, duration, outcome).
+// orchestration phase (ADR-BCP-010 §31 requires structured logs and
+// correlation/resolution identifiers from the Observability module;
+// tenant, operation, phase, state-version convergence, attempt count,
+// duration and outcome are this module's own instance of those).
 // correlation_id mirrors provisioning_id deliberately: it is the same
 // UUIDv7 internal/repository's outbox wiring uses as the CorrelationID on
 // this operation's milestone events, so orchestration logs and emitted
