@@ -49,7 +49,9 @@ func (o *Orchestrator) Run(ctx context.Context, operationID string) (provisionin
 	}
 	for {
 		op, err := o.store.GetTenantProvisioning(ctx, operationID)
-		if err != nil { return provisioningdomain.TenantProvisioning{}, err }
+		if err != nil {
+			return provisioningdomain.TenantProvisioning{}, err
+		}
 
 		switch op.Status {
 		case provisioningdomain.ProvisioningStatusPlan:
@@ -58,19 +60,27 @@ func (o *Orchestrator) Run(ctx context.Context, operationID string) (provisionin
 			}
 		case provisioningdomain.ProvisioningStatusApply:
 			result, runErr := o.apply.Run(ctx, op)
-			if runErr != nil { return o.fail(ctx, op, "APPLY", runErr) }
+			if runErr != nil {
+				return o.fail(ctx, op, "APPLY", runErr)
+			}
 			op.ObservedStateVersion = max64(op.ObservedStateVersion, result.ObservedStateVersion)
 			op.BlockingReasons = append([]string(nil), result.BlockingReasons...)
-			if err := o.save(ctx, op); err != nil { return op, err }
+			if op, err = o.save(ctx, op); err != nil {
+				return op, err
+			}
 			if op, err = o.advance(ctx, op, provisioningdomain.ProvisioningStatusReconcile, ""); err != nil {
 				return op, err
 			}
 		case provisioningdomain.ProvisioningStatusReconcile:
 			result, runErr := o.reconcile.Run(ctx, op)
-			if runErr != nil { return o.fail(ctx, op, "RECONCILE", runErr) }
+			if runErr != nil {
+				return o.fail(ctx, op, "RECONCILE", runErr)
+			}
 			op.ObservedStateVersion = result.ObservedStateVersion
 			op.BlockingReasons = append([]string(nil), result.BlockingReasons...)
-			if err := o.save(ctx, op); err != nil { return op, err }
+			if op, err = o.save(ctx, op); err != nil {
+				return op, err
+			}
 			if op.ObservedStateVersion != op.DesiredStateVersion || len(op.BlockingReasons) != 0 {
 				// Remain in RECONCILE. A later invocation can retry after
 				// providers/resources converge; never manufacture readiness.
@@ -81,11 +91,15 @@ func (o *Orchestrator) Run(ctx context.Context, operationID string) (provisionin
 			}
 		case provisioningdomain.ProvisioningStatusReady:
 			result, runErr := o.readiness.Run(ctx, op)
-			if runErr != nil { return o.fail(ctx, op, "READY", runErr) }
+			if runErr != nil {
+				return o.fail(ctx, op, "READY", runErr)
+			}
 			if result.ObservedStateVersion != op.DesiredStateVersion || len(result.BlockingReasons) != 0 {
 				op.ObservedStateVersion = result.ObservedStateVersion
 				op.BlockingReasons = append([]string(nil), result.BlockingReasons...)
-				if err := o.save(ctx, op); err != nil { return op, err }
+				if op, err = o.save(ctx, op); err != nil {
+					return op, err
+				}
 				return op, nil
 			}
 			return o.advance(ctx, op, provisioningdomain.ProvisioningStatusActive, "")
@@ -102,7 +116,9 @@ func (o *Orchestrator) Run(ctx context.Context, operationID string) (provisionin
 
 func (o *Orchestrator) Retry(ctx context.Context, operationID string) (provisioningdomain.TenantProvisioning, error) {
 	op, err := o.store.GetTenantProvisioning(ctx, operationID)
-	if err != nil { return op, err }
+	if err != nil {
+		return op, err
+	}
 	if op.Status != provisioningdomain.ProvisioningStatusFailed {
 		return op, errors.New("only FAILED provisioning can be retried")
 	}
@@ -114,22 +130,36 @@ func (o *Orchestrator) Retry(ctx context.Context, operationID string) (provision
 
 func (o *Orchestrator) fail(ctx context.Context, op provisioningdomain.TenantProvisioning, phase string, cause error) (provisioningdomain.TenantProvisioning, error) {
 	failed, err := o.advance(ctx, op, provisioningdomain.ProvisioningStatusFailed, phase+": "+cause.Error())
-	if err != nil { return op, errors.Join(cause, err) }
+	if err != nil {
+		return op, errors.Join(cause, err)
+	}
 	return failed, cause
 }
 
 func (o *Orchestrator) advance(ctx context.Context, op provisioningdomain.TenantProvisioning, to provisioningdomain.ProvisioningStatus, reason string) (provisioningdomain.TenantProvisioning, error) {
 	expected := op.Version
 	next, err := op.Advance(to, reason)
-	if err != nil { return op, err }
-	if err := o.store.UpdateTenantProvisioning(ctx, next, expected); err != nil { return op, err }
+	if err != nil {
+		return op, err
+	}
+	if err := o.store.UpdateTenantProvisioning(ctx, next, expected); err != nil {
+		return op, err
+	}
 	return next, nil
 }
 
-func (o *Orchestrator) save(ctx context.Context, op provisioningdomain.TenantProvisioning) error {
+func (o *Orchestrator) save(ctx context.Context, op provisioningdomain.TenantProvisioning) (provisioningdomain.TenantProvisioning, error) {
 	expected := op.Version
 	op.Version++
-	return o.store.UpdateTenantProvisioning(ctx, op, expected)
+	if err := o.store.UpdateTenantProvisioning(ctx, op, expected); err != nil {
+		return op, err
+	}
+	return op, nil
 }
 
-func max64(a,b int64) int64 { if a>b { return a }; return b }
+func max64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}

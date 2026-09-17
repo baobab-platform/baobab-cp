@@ -63,6 +63,7 @@ var _ DigitalEstateRepository = (*PostgresRepository)(nil)
 var _ DigitalEstateWriter = (*PostgresRepository)(nil)
 var _ MarketRepository = (*PostgresRepository)(nil)
 var _ MarketWriter = (*PostgresRepository)(nil)
+var _ TradeLaneRepository = (*PostgresRepository)(nil)
 var _ IsolationProfileRepository = (*PostgresRepository)(nil)
 var _ IsolationProfileWriter = (*PostgresRepository)(nil)
 var _ CompositionRepository = (*PostgresRepository)(nil)
@@ -2034,7 +2035,107 @@ func (r *PostgresRepository) GetMarketByCode(ctx context.Context, code string) (
 // surfaced as ErrMarketAssignmentOverlap, mirroring how CreateMapping
 // already surfaces ErrMappingOverlap for the analogous
 // canonical_mapping_source_type_active_excl violation.
+// AssignMarketToTenant delegates to CreateMarketAssignment (see MarketWriter's
+// doc comment); kept so existing callers using this name are unaffected.
 func (r *PostgresRepository) AssignMarketToTenant(ctx context.Context, assignment domain.MarketAssignment) error {
+	return r.CreateMarketAssignment(ctx, assignment)
+}
+
+const marketAssignmentSelectColumns = `
+	ma.market_assignment_id::text,
+	ma.tenant_id,
+	COALESCE(ma.legal_entity_id, ''),
+	ma.market_id::text,
+	ma.effective_from,
+	ma.effective_to,
+	ma.status,
+	ma.source,
+	COALESCE(ma.source_reference, ''),
+	ma.policy_version`
+
+// scanMarketAssignmentWithCapabilities centralizes capability loading for
+// every MarketAssignment read path so the header row and its
+// market.market_participation_capability children are always assembled the
+// same way.
+func (r *PostgresRepository) scanMarketAssignmentWithCapabilities(
+	ctx context.Context,
+	row interface{ Scan(dest ...any) error },
+) (domain.MarketAssignment, error) {
+	var a domain.MarketAssignment
+	var status, source string
+	if err := row.Scan(
+		&a.ID, &a.TenantID, &a.LegalEntityID, &a.MarketID,
+		&a.EffectiveFrom, &a.EffectiveTo,
+		&status, &source, &a.SourceReference, &a.PolicyVersion,
+	); err != nil {
+		return domain.MarketAssignment{}, err
+	}
+	a.Status = domain.MarketParticipationStatus(status)
+	a.Source = domain.MarketParticipationSource(source)
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT capability
+		FROM market.market_participation_capability
+		WHERE market_assignment_id = $1::uuid
+		ORDER BY capability`, a.ID)
+	if err != nil {
+		return domain.MarketAssignment{}, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var capability string
+		if err := rows.Scan(&capability); err != nil {
+			return domain.MarketAssignment{}, err
+		}
+		a.Capabilities = append(a.Capabilities, domain.MarketParticipationCapability(capability))
+	}
+	if err := rows.Err(); err != nil {
+		return domain.MarketAssignment{}, err
+	}
+	return a, nil
+}
+
+func (r *PostgresRepository) GetMarketAssignment(ctx context.Context, assignmentID string) (domain.MarketAssignment, error) {
+	if r == nil || r.pool == nil {
+		return domain.MarketAssignment{}, errors.New("repository is not initialized")
+	}
+	row := r.pool.QueryRow(ctx, `
+		SELECT `+marketAssignmentSelectColumns+`
+		FROM market.market_assignment ma
+		WHERE ma.market_assignment_id = $1::uuid`, assignmentID)
+	a, err := r.scanMarketAssignmentWithCapabilities(ctx, row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.MarketAssignment{}, fmt.Errorf("market assignment %s not found", assignmentID)
+	}
+	return a, err
+}
+
+// GetEffectiveMarketAssignment returns the one MarketAssignment covering at
+// for tenantID/marketID. EffectiveTo is exclusive, preserving the
+// database's [effective_from, effective_to) model; the exclusion constraint
+// on market.market_assignment already guarantees at most one row can match.
+func (r *PostgresRepository) GetEffectiveMarketAssignment(ctx context.Context, tenantID, marketID string, at time.Time) (domain.MarketAssignment, error) {
+	if r == nil || r.pool == nil {
+		return domain.MarketAssignment{}, errors.New("repository is not initialized")
+	}
+	row := r.pool.QueryRow(ctx, `
+		SELECT `+marketAssignmentSelectColumns+`
+		FROM market.market_assignment ma
+		WHERE ma.tenant_id = $1
+		  AND ma.market_id = $2::uuid
+		  AND ma.effective_from <= $3
+		  AND (ma.effective_to IS NULL OR $3 < ma.effective_to)
+		ORDER BY ma.effective_from DESC
+		LIMIT 1`, tenantID, marketID, at)
+	a, err := r.scanMarketAssignmentWithCapabilities(ctx, row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.MarketAssignment{}, fmt.Errorf("no effective market assignment for tenant %s market %s", tenantID, marketID)
+	}
+	return a, err
+}
+
+func (r *PostgresRepository) CreateMarketAssignment(ctx context.Context, assignment domain.MarketAssignment) error {
 	if r == nil || r.pool == nil {
 		return errors.New("repository is not initialized")
 	}
@@ -2048,9 +2149,18 @@ func (r *PostgresRepository) AssignMarketToTenant(ctx context.Context, assignmen
 	defer tx.Rollback(ctx)
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO market.market_assignment(market_assignment_id, tenant_id, legal_entity_id, market_id, effective_from, effective_to)
-		VALUES ($1::uuid, $2, NULLIF($3, ''), $4::uuid, $5, $6)`,
-		assignment.ID, assignment.TenantID, assignment.LegalEntityID, assignment.MarketID, assignment.EffectiveFrom, assignment.EffectiveTo,
+		INSERT INTO market.market_assignment(
+			market_assignment_id, tenant_id, legal_entity_id, market_id,
+			effective_from, effective_to, status, source, source_reference,
+			policy_version
+		)
+		VALUES (
+			$1::uuid, $2, NULLIF($3, ''), $4::uuid,
+			$5, $6, $7, $8, NULLIF($9, ''), $10
+		)`,
+		assignment.ID, assignment.TenantID, assignment.LegalEntityID, assignment.MarketID,
+		assignment.EffectiveFrom, assignment.EffectiveTo, string(assignment.Status), string(assignment.Source),
+		assignment.SourceReference, assignment.PolicyVersion,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -2071,6 +2181,92 @@ func (r *PostgresRepository) AssignMarketToTenant(ctx context.Context, assignmen
 	return tx.Commit(ctx)
 }
 
+func (r *PostgresRepository) UpdateMarketAssignmentGovernance(ctx context.Context, assignment domain.MarketAssignment) error {
+	if r == nil || r.pool == nil {
+		return errors.New("repository is not initialized")
+	}
+	if err := domain.ValidateMarketParticipationGovernance(assignment); err != nil {
+		return err
+	}
+	result, err := r.pool.Exec(ctx, `
+		UPDATE market.market_assignment
+		SET status = $2,
+		    source = $3,
+		    source_reference = NULLIF($4, ''),
+		    policy_version = $5,
+		    updated_at = now()
+		WHERE market_assignment_id = $1::uuid`,
+		assignment.ID, string(assignment.Status), string(assignment.Source),
+		assignment.SourceReference, assignment.PolicyVersion)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("market assignment %s not found", assignment.ID)
+	}
+	return nil
+}
+
+func (r *PostgresRepository) GetTradeLane(ctx context.Context, tenantID, tradeLaneID string) (domain.TradeLane, error) {
+	if r == nil || r.pool == nil {
+		return domain.TradeLane{}, errors.New("repository is not initialized")
+	}
+	const query = `
+		SELECT trade_lane_id, tenant_id, origin_market_id::text, destination_market_id::text,
+		       direction, status, permitted_capability_keys, created_at, updated_at
+		  FROM market.trade_lane
+		 WHERE tenant_id = $1
+		   AND trade_lane_id = $2`
+
+	var lane domain.TradeLane
+	err := r.pool.QueryRow(ctx, query, tenantID, tradeLaneID).Scan(
+		&lane.ID, &lane.TenantID, &lane.OriginMarketID, &lane.DestinationMarketID,
+		&lane.Direction, &lane.Status, &lane.PermittedCapabilityKeys,
+		&lane.CreatedAt, &lane.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.TradeLane{}, fmt.Errorf("trade lane %s not found for tenant %s", tradeLaneID, tenantID)
+	}
+	if err != nil {
+		return domain.TradeLane{}, fmt.Errorf("get trade lane: %w", err)
+	}
+	return lane, nil
+}
+
+func (r *PostgresRepository) SaveTradeLane(ctx context.Context, lane domain.TradeLane) error {
+	if r == nil || r.pool == nil {
+		return errors.New("repository is not initialized")
+	}
+	if err := lane.Validate(); err != nil {
+		return fmt.Errorf("validate trade lane: %w", err)
+	}
+	const query = `
+		INSERT INTO market.trade_lane (
+			trade_lane_id, tenant_id, origin_market_id, destination_market_id,
+			direction, status, permitted_capability_keys, created_at, updated_at
+		) VALUES ($1,$2,$3::uuid,$4::uuid,$5,$6,$7,$8,$9)
+		ON CONFLICT (trade_lane_id) DO UPDATE SET
+			direction = EXCLUDED.direction,
+			status = EXCLUDED.status,
+			permitted_capability_keys = EXCLUDED.permitted_capability_keys,
+			updated_at = EXCLUDED.updated_at
+		WHERE market.trade_lane.tenant_id = EXCLUDED.tenant_id`
+
+	createdAt := lane.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = lane.UpdatedAt
+	}
+	_, err := r.pool.Exec(ctx, query,
+		lane.ID, lane.TenantID, lane.OriginMarketID, lane.DestinationMarketID,
+		lane.Direction, lane.Status, lane.PermittedCapabilityKeys,
+		createdAt, lane.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("save trade lane: %w", err)
+	}
+	return nil
+}
+
 // ListMarketAssignmentsForTenant returns every MarketAssignment record for
 // tenantID with Capabilities populated (ADR-BCP-011 §6, Gate P0's
 // market-participation capability-flag remodel) -- unlike
@@ -2081,10 +2277,10 @@ func (r *PostgresRepository) ListMarketAssignmentsForTenant(ctx context.Context,
 		return nil, errors.New("repository is not initialized")
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT market_assignment_id::text, tenant_id, COALESCE(legal_entity_id, ''), market_id::text, effective_from, effective_to
-		FROM market.market_assignment
-		WHERE tenant_id = $1
-		ORDER BY effective_from`, tenantID)
+		SELECT `+marketAssignmentSelectColumns+`
+		FROM market.market_assignment ma
+		WHERE ma.tenant_id = $1
+		ORDER BY ma.effective_from`, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -2093,9 +2289,16 @@ func (r *PostgresRepository) ListMarketAssignmentsForTenant(ctx context.Context,
 	var out []domain.MarketAssignment
 	for rows.Next() {
 		var a domain.MarketAssignment
-		if err := rows.Scan(&a.ID, &a.TenantID, &a.LegalEntityID, &a.MarketID, &a.EffectiveFrom, &a.EffectiveTo); err != nil {
+		var status, source string
+		if err := rows.Scan(
+			&a.ID, &a.TenantID, &a.LegalEntityID, &a.MarketID,
+			&a.EffectiveFrom, &a.EffectiveTo,
+			&status, &source, &a.SourceReference, &a.PolicyVersion,
+		); err != nil {
 			return nil, err
 		}
+		a.Status = domain.MarketParticipationStatus(status)
+		a.Source = domain.MarketParticipationSource(source)
 		out = append(out, a)
 	}
 	if err := rows.Err(); err != nil {

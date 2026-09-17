@@ -13,12 +13,12 @@ func TestCrossMarketLaneRequiresExportAndImport(t *testing.T) {
 
 	origin := MarketAssignment{
 		TenantID: "tenant-zuribeans", MarketID: "market-ug",
-		Capabilities: []MarketParticipationCapability{MarketParticipationExporting},
+		Capabilities:  []MarketParticipationCapability{MarketParticipationExporting},
 		EffectiveFrom: now.Add(-time.Hour),
 	}
 	destination := MarketAssignment{
 		TenantID: "tenant-zuribeans", MarketID: "market-za",
-		Capabilities: []MarketParticipationCapability{MarketParticipationImporting},
+		Capabilities:  []MarketParticipationCapability{MarketParticipationImporting},
 		EffectiveFrom: now.Add(-time.Hour),
 	}
 
@@ -38,12 +38,12 @@ func TestTradeLaneRejectsCrossTenantParticipation(t *testing.T) {
 	lane := validTradeLane()
 	origin := MarketAssignment{
 		TenantID: "another-tenant", MarketID: lane.OriginMarketID,
-		Capabilities: []MarketParticipationCapability{MarketParticipationExporting},
+		Capabilities:  []MarketParticipationCapability{MarketParticipationExporting},
 		EffectiveFrom: now.Add(-time.Hour),
 	}
 	destination := MarketAssignment{
 		TenantID: lane.TenantID, MarketID: lane.DestinationMarketID,
-		Capabilities: []MarketParticipationCapability{MarketParticipationImporting},
+		Capabilities:  []MarketParticipationCapability{MarketParticipationImporting},
 		EffectiveFrom: now.Add(-time.Hour),
 	}
 	if err := ValidateTradeLaneParticipation(lane, origin, destination, now); err == nil {

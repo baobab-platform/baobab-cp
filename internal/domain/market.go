@@ -100,6 +100,16 @@ type MarketAssignment struct {
 	Capabilities  []MarketParticipationCapability `json:"capabilities"`
 	EffectiveFrom time.Time                       `json:"effective_from"`
 	EffectiveTo   *time.Time                      `json:"effective_to,omitempty"`
+
+	// Status, Source, SourceReference and PolicyVersion are the governance/
+	// provenance fields §5 always intended but Gate P0 explicitly deferred to
+	// Programme Gate P7 (see the doc comment above). Gate ZB-02 is that point:
+	// migration 000039 backfills existing rows with MIGRATION/PENDING/'1' so
+	// this remains a additive, non-breaking column set.
+	Status          MarketParticipationStatus `json:"status"`
+	Source          MarketParticipationSource `json:"source"`
+	SourceReference string                    `json:"source_reference,omitempty"`
+	PolicyVersion   string                    `json:"policy_version"`
 }
 
 func (a MarketAssignment) Validate() error {
@@ -127,6 +137,9 @@ func (a MarketAssignment) Validate() error {
 	}
 	if a.EffectiveTo != nil && !a.EffectiveTo.After(a.EffectiveFrom) {
 		return errors.New("effective_to must be after effective_from")
+	}
+	if err := ValidateMarketParticipationGovernance(a); err != nil {
+		return err
 	}
 	return nil
 }

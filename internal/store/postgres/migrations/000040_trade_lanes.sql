@@ -1,19 +1,21 @@
--- Target path: internal/store/postgres/migrations/000039_trade_lanes.sql
+-- Target path: internal/store/postgres/migrations/000040_trade_lanes.sql
 --
 -- TradeLane persistence for ADR-BCP-011 / Gate ZB-02.
 -- Shared remains the contract authority; this table is baobab-cp's storage.
 --
--- IMPORTANT:
--- Existing market.market IDs and tenant IDs must be checked against the
--- actual schema before adding FKs. This migration intentionally avoids
--- guessing FK column types from outside the running repository. Add FKs
--- only after confirming the existing migration definitions.
+-- market.market.market_id is uuid (migration 000006), so origin/destination
+-- reference it directly. tenant_id is NOT a uuid anywhere else in this
+-- schema -- market.market_assignment.tenant_id and tenants.tenant_id
+-- (migration 000006/000019) are both text/varchar, since tenant IDs are
+-- caller-assigned slugs (e.g. "tn_zuribeans"), not database-generated
+-- UUIDs. This table follows that same convention rather than the uuid this
+-- file originally sketched before checking the real schema.
 
 CREATE TABLE market.trade_lane (
     trade_lane_id VARCHAR(63) PRIMARY KEY,
-    tenant_id UUID NOT NULL,
-    origin_market_id UUID NOT NULL,
-    destination_market_id UUID NOT NULL,
+    tenant_id text NOT NULL,
+    origin_market_id UUID NOT NULL REFERENCES market.market(market_id),
+    destination_market_id UUID NOT NULL REFERENCES market.market(market_id),
     direction VARCHAR(32) NOT NULL,
     status VARCHAR(32) NOT NULL,
     permitted_capability_keys TEXT[] NOT NULL DEFAULT '{}',
