@@ -175,14 +175,27 @@ func sameGrantIdentity(g capabilitydomain.CapabilityGrant, d DesiredCapabilityGr
 		g.SourceReference == d.SourceReference
 }
 
+// timeEqualAtDBPrecision compares two timestamps at PostgreSQL's timestamptz
+// precision (microseconds), not Go's native nanosecond precision. A desired
+// value computed freshly in Go (e.g. from time.Now().UTC()) and the same
+// value read back after a round trip through a timestamptz column are
+// never exactly Equal() -- Postgres silently truncates sub-microsecond
+// digits on write. Comparing at ns precision made a second, idempotent
+// APPLY of the very same desired grant report "drift" against its own
+// prior write, purely from storage precision loss, not any real change
+// (surfaced by a crash/restart-recovery test re-running APPLY twice).
+func timeEqualAtDBPrecision(a, b time.Time) bool {
+	return a.Truncate(time.Microsecond).Equal(b.Truncate(time.Microsecond))
+}
+
 func sameGrantWindow(g capabilitydomain.CapabilityGrant, d DesiredCapabilityGrant) bool {
-	if !d.EffectiveFrom.IsZero() && !g.EffectiveFrom.Equal(d.EffectiveFrom) {
+	if !d.EffectiveFrom.IsZero() && !timeEqualAtDBPrecision(g.EffectiveFrom, d.EffectiveFrom) {
 		return false
 	}
 	if (g.EffectiveTo == nil) != (d.EffectiveTo == nil) {
 		return false
 	}
-	return g.EffectiveTo == nil || g.EffectiveTo.Equal(*d.EffectiveTo)
+	return g.EffectiveTo == nil || timeEqualAtDBPrecision(*g.EffectiveTo, *d.EffectiveTo)
 }
 
 func grantDesiredKey(d DesiredCapabilityGrant) string {
