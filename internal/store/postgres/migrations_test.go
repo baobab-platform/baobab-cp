@@ -44,6 +44,7 @@ func TestCanonicalMigrationFilesExist(t *testing.T) {
 		{name: "000032_workforce_membership.sql", needle: "CREATE TABLE IF NOT EXISTS identity.workforce_membership", context: "workforce membership migration"},
 		{name: "000033_product_registry_and_subscription.sql", needle: "CREATE TABLE IF NOT EXISTS product.product_subscription", context: "product registry and subscription migration"},
 		{name: "000034_capability_binding_scope_rewire.sql", needle: "REFERENCES capability.capability_scope(scope_id)", context: "capability binding scope rewire migration"},
+		{name: "000035_retire_tenant_capability.sql", needle: "DROP TABLE IF EXISTS capability.tenant_capability", context: "tenant capability retirement migration"},
 	}
 
 	for _, tc := range checks {
