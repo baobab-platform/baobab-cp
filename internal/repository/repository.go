@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
 	"github.com/nabhold/baobab-cp/internal/domain"
+	productdomain "github.com/nabhold/baobab-cp/internal/product/domain"
 	"github.com/nabhold/baobab-cp/internal/resolver"
 )
 
@@ -95,6 +98,42 @@ type CapabilityGrantRepository interface {
 type CapabilityGrantWriter interface {
 	CreateGrant(ctx context.Context, grant capabilitydomain.CapabilityGrant) error
 	RevokeGrant(ctx context.Context, grantID, revokedBy, reason string, expectedVersion int64) error
+}
+
+// CompositionRepository is the read/write contract for CapabilityComposition
+// (ADR-BCP-005, capability.capability_composition -- migration 000036,
+// Programme Gate P4 "Product and Composition Engine").
+type CompositionRepository interface {
+	CreateComposition(ctx context.Context, composition capabilitydomain.CapabilityComposition) error
+	// GetActiveComposition returns the highest-semver ACTIVE composition
+	// registered under compositionKey. service.CompositionExpansionService
+	// fails closed through this method exactly as
+	// CapabilityRegistryRepository.GetCapability fails closed for an
+	// unknown/non-ACTIVE capability.
+	GetActiveComposition(ctx context.Context, compositionKey string) (capabilitydomain.CapabilityComposition, error)
+}
+
+// ProductRepository is the read/write contract for Product and
+// ProductVersion (Technical Specification §31, product.product /
+// product.product_version -- migration 000033, Programme Gate P4). Deliberately
+// Create+Get only for this Gate's "basics" cut -- List/Update and a real
+// version-selection workflow remain future Gate P4 work (see migration
+// 000033's own comment).
+type ProductRepository interface {
+	CreateProduct(ctx context.Context, product productdomain.Product) error
+	GetProduct(ctx context.Context, productID string) (productdomain.Product, error)
+	CreateProductVersion(ctx context.Context, version productdomain.ProductVersion) error
+	GetProductVersion(ctx context.Context, productVersionID string) (productdomain.ProductVersion, error)
+}
+
+// EntitlementProjectionRepository is the read/write contract for the audit
+// trail service.CompositionExpansionService writes as it expands a
+// ProductSubscription's composition members into CapabilityGrant records
+// (Technical Specification §91, product.entitlement_projection -- migration
+// 000036).
+type EntitlementProjectionRepository interface {
+	CreateEntitlementProjection(ctx context.Context, projection productdomain.EntitlementProjection) error
+	ListEntitlementProjections(ctx context.Context, subscriptionID string) ([]productdomain.EntitlementProjection, error)
 }
 
 // ErrContextNotFound is returned by GetContext when no resolved Context
@@ -446,6 +485,16 @@ type Repository struct {
 	UnlinkAudit []UnlinkAuditRecord
 	// MergeAudit is LinkAudit's counterpart for MergePrincipalsAudited.
 	MergeAudit []MergeAuditRecord
+	// Compositions is keyed by CompositionKey, holding every registered
+	// version -- GetActiveComposition scans for the highest-semver ACTIVE
+	// entry, mirroring how the real table has no "current version" column
+	// either.
+	Compositions    map[string][]capabilitydomain.CapabilityComposition
+	Products        map[string]productdomain.Product        // keyed by ProductID
+	ProductVersions map[string]productdomain.ProductVersion // keyed by ProductVersionID
+	// EntitlementProjections is keyed by SubscriptionID, mirroring
+	// ListEntitlementProjections' own lookup key.
+	EntitlementProjections map[string][]productdomain.EntitlementProjection
 }
 
 // LinkAuditRecord is the in-memory equivalent of the audit_events row
@@ -517,6 +566,9 @@ var _ MarketRepository = (*Repository)(nil)
 var _ MarketWriter = (*Repository)(nil)
 var _ IsolationProfileRepository = (*Repository)(nil)
 var _ IsolationProfileWriter = (*Repository)(nil)
+var _ CompositionRepository = (*Repository)(nil)
+var _ ProductRepository = (*Repository)(nil)
+var _ EntitlementProjectionRepository = (*Repository)(nil)
 
 func NewInMemoryRepository() *Repository {
 	return &Repository{
@@ -538,6 +590,10 @@ func NewInMemoryRepository() *Repository {
 		IsolationProfiles:       map[string]domain.IsolationProfile{},
 		TenantIsolationProfiles: map[string]domain.TenantIsolationProfileAssignment{},
 		WorkforceMemberships:    map[string]domain.WorkforceMembership{},
+		Compositions:            map[string][]capabilitydomain.CapabilityComposition{},
+		Products:                map[string]productdomain.Product{},
+		ProductVersions:         map[string]productdomain.ProductVersion{},
+		EntitlementProjections:  map[string][]productdomain.EntitlementProjection{},
 	}
 }
 
@@ -733,6 +789,135 @@ func (r *Repository) RevokeGrant(_ context.Context, grantID, revokedBy, reason s
 	grant.Version = grant.Version + 1
 	r.Grants[grantID] = grant
 	return nil
+}
+
+func (r *Repository) CreateComposition(_ context.Context, composition capabilitydomain.CapabilityComposition) error {
+	if r == nil {
+		return errors.New("repository is nil")
+	}
+	if err := composition.Validate(); err != nil {
+		return fmt.Errorf("validate capability composition: %w", err)
+	}
+	r.Compositions[composition.CompositionKey] = append(r.Compositions[composition.CompositionKey], composition)
+	return nil
+}
+
+// GetActiveComposition returns the highest-semver ACTIVE composition
+// registered under compositionKey, failing closed (an error, never a zero
+// value) when none is found -- mirroring CapabilityRegistryRepository's
+// fail-closed contract for an unknown or non-resolvable capability.
+func (r *Repository) GetActiveComposition(_ context.Context, compositionKey string) (capabilitydomain.CapabilityComposition, error) {
+	if r == nil {
+		return capabilitydomain.CapabilityComposition{}, errors.New("repository is nil")
+	}
+	var best capabilitydomain.CapabilityComposition
+	found := false
+	for _, candidate := range r.Compositions[compositionKey] {
+		if !candidate.IsResolvable() {
+			continue
+		}
+		if !found || compareSemver(candidate.Version, best.Version) > 0 {
+			best = candidate
+			found = true
+		}
+	}
+	if !found {
+		return capabilitydomain.CapabilityComposition{}, fmt.Errorf("no ACTIVE composition registered for %q", compositionKey)
+	}
+	return best, nil
+}
+
+func (r *Repository) CreateProduct(_ context.Context, product productdomain.Product) error {
+	if r == nil {
+		return errors.New("repository is nil")
+	}
+	if err := product.Validate(); err != nil {
+		return fmt.Errorf("validate product: %w", err)
+	}
+	if _, exists := r.Products[product.ID]; exists {
+		return fmt.Errorf("product %s already exists", product.ID)
+	}
+	r.Products[product.ID] = product
+	return nil
+}
+
+func (r *Repository) GetProduct(_ context.Context, productID string) (productdomain.Product, error) {
+	if r == nil {
+		return productdomain.Product{}, errors.New("repository is nil")
+	}
+	product, ok := r.Products[productID]
+	if !ok {
+		return productdomain.Product{}, fmt.Errorf("product %s not found", productID)
+	}
+	return product, nil
+}
+
+func (r *Repository) CreateProductVersion(_ context.Context, version productdomain.ProductVersion) error {
+	if r == nil {
+		return errors.New("repository is nil")
+	}
+	if err := version.Validate(); err != nil {
+		return fmt.Errorf("validate product version: %w", err)
+	}
+	if _, exists := r.ProductVersions[version.ID]; exists {
+		return fmt.Errorf("product version %s already exists", version.ID)
+	}
+	r.ProductVersions[version.ID] = version
+	return nil
+}
+
+func (r *Repository) GetProductVersion(_ context.Context, productVersionID string) (productdomain.ProductVersion, error) {
+	if r == nil {
+		return productdomain.ProductVersion{}, errors.New("repository is nil")
+	}
+	version, ok := r.ProductVersions[productVersionID]
+	if !ok {
+		return productdomain.ProductVersion{}, fmt.Errorf("product version %s not found", productVersionID)
+	}
+	return version, nil
+}
+
+func (r *Repository) CreateEntitlementProjection(_ context.Context, projection productdomain.EntitlementProjection) error {
+	if r == nil {
+		return errors.New("repository is nil")
+	}
+	if err := projection.Validate(); err != nil {
+		return fmt.Errorf("validate entitlement projection: %w", err)
+	}
+	r.EntitlementProjections[projection.SubscriptionID] = append(r.EntitlementProjections[projection.SubscriptionID], projection)
+	return nil
+}
+
+func (r *Repository) ListEntitlementProjections(_ context.Context, subscriptionID string) ([]productdomain.EntitlementProjection, error) {
+	if r == nil {
+		return nil, errors.New("repository is nil")
+	}
+	return r.EntitlementProjections[subscriptionID], nil
+}
+
+// compareSemver compares two "major.minor.patch" version strings
+// numerically (not lexicographically, so "10.0.0" correctly orders after
+// "9.0.0"), returning <0, 0 or >0. A malformed segment compares as 0 rather
+// than erroring -- both GetActiveComposition callers (in-memory and
+// Postgres) already constrain input to Validate()-passed compositions, whose
+// Version field is regex-checked as \d+\.\d+\.\d+ before it can ever reach
+// storage, so a malformed value here would indicate a storage-layer bug, not
+// a valid input this function needs to reject itself.
+func compareSemver(a, b string) int {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < 3; i++ {
+		var av, bv int
+		if i < len(as) {
+			av, _ = strconv.Atoi(as[i])
+		}
+		if i < len(bs) {
+			bv, _ = strconv.Atoi(bs[i])
+		}
+		if av != bv {
+			return av - bv
+		}
+	}
+	return 0
 }
 
 func (r *Repository) GetCapability(_ context.Context, capabilityKey string) (capabilitydomain.Capability, error) {
