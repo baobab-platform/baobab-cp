@@ -35,7 +35,11 @@ type zb02Fixture struct {
 func seedZB02Fixture(t *testing.T, ctx context.Context, admin *pgxpool.Pool, repo *repository.PostgresRepository, tenantSuffix string) zb02Fixture {
 	t.Helper()
 	f := zb02Fixture{
-		TenantID:      "tn_zb02_" + tenantSuffix,
+		// tn_[a-z0-9]+ is the canonical tenant ID pattern (domain.ValidTenantID,
+		// enforced by the outbox event envelope this fixture's writes now
+		// produce, ADR-0004) -- no underscore is allowed after the prefix,
+		// so tenantSuffix is appended directly rather than joined with "_".
+		TenantID:      "tn_zb02" + strings.ToLower(tenantSuffix),
 		LegalEntityID: "ZB02-LE-" + tenantSuffix,
 		// capability.capability.code is globally unique (like
 		// market.market.code), so this must be suffixed the same way.
@@ -48,6 +52,7 @@ func seedZB02Fixture(t *testing.T, ctx context.Context, admin *pgxpool.Pool, rep
 	}
 
 	cleanup := func() {
+		admin.Exec(ctx, `DELETE FROM messaging.outbox WHERE tenant_id = $1`, f.TenantID)
 		admin.Exec(ctx, `DELETE FROM market.trade_lane WHERE tenant_id = $1`, f.TenantID)
 		admin.Exec(ctx, `DELETE FROM market.market_participation_capability WHERE market_assignment_id IN (SELECT market_assignment_id FROM market.market_assignment WHERE tenant_id = $1)`, f.TenantID)
 		admin.Exec(ctx, `DELETE FROM market.market_assignment WHERE tenant_id = $1`, f.TenantID)
@@ -123,9 +128,9 @@ func (f zb02Fixture) manifest() TenantManifest {
 }
 
 // suffix recovers the tenantSuffix seedZB02Fixture was called with, since
-// TenantID is "tn_zb02_"+suffix and market codes need the same suffix.
+// TenantID is "tn_zb02"+suffix and market codes need the same suffix.
 func (f zb02Fixture) suffix() string {
-	const prefix = "tn_zb02_"
+	const prefix = "tn_zb02"
 	if len(f.TenantID) > len(prefix) {
 		return f.TenantID[len(prefix):]
 	}
