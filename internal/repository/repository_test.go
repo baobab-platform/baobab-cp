@@ -8,6 +8,7 @@ import (
 
 	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
 	"github.com/nabhold/baobab-cp/internal/domain"
+	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
 	"github.com/nabhold/baobab-cp/internal/resolver"
 )
 
@@ -1042,5 +1043,55 @@ func TestInMemoryRepositoryMergeTransfersAndReconcilesWorkforceMemberships(t *te
 	}
 	if len(memberships) != 1 || memberships[0].ID != conflictingSource.ID || memberships[0].Status != "DISABLED" {
 		t.Fatalf("expected the conflicting source membership to remain, disabled, on the archived source, got %+v", memberships)
+	}
+}
+
+func TestInMemoryTenantProvisioningLifecycleAndOptimisticLocking(t *testing.T) {
+	repo := NewInMemoryRepository()
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	provisioning := provisioningdomain.TenantProvisioning{
+		ID: "prov-1", TenantID: "tn_zuribeans", IdempotencyKey: "idem-1", RequestHash: "hash-1",
+		Status: provisioningdomain.ProvisioningStatusPlan, StartedAt: now,
+	}
+	if err := repo.CreateTenantProvisioning(ctx, provisioning); err != nil {
+		t.Fatalf("create tenant provisioning failed: %v", err)
+	}
+	duplicate := provisioning
+	duplicate.ID = "prov-2"
+	if err := repo.CreateTenantProvisioning(ctx, duplicate); !errors.Is(err, ErrTenantProvisioningAlreadyExists) {
+		t.Fatalf("expected ErrTenantProvisioningAlreadyExists for a duplicate idempotency key, got %v", err)
+	}
+
+	byKey, err := repo.GetTenantProvisioningByIdempotencyKey(ctx, "tn_zuribeans", "idem-1")
+	if err != nil || byKey.ID != "prov-1" {
+		t.Fatalf("get by idempotency key: %v, %+v", err, byKey)
+	}
+
+	applied := provisioning
+	applied.Status = provisioningdomain.ProvisioningStatusApply
+	if err := repo.UpdateTenantProvisioning(ctx, applied, 1); err != nil {
+		t.Fatalf("update tenant provisioning failed: %v", err)
+	}
+	stored, err := repo.GetTenantProvisioning(ctx, "prov-1")
+	if err != nil {
+		t.Fatalf("get tenant provisioning failed: %v", err)
+	}
+	if stored.Status != provisioningdomain.ProvisioningStatusApply || stored.Version != 2 {
+		t.Fatalf("unexpected stored state after update: %+v", stored)
+	}
+
+	// expectedVersion=1 is now stale (the stored row is version 2) --
+	// version is server-assigned, mirroring RevokeGrant's identical
+	// existing.Version+1 contract, so a second update against the same
+	// stale expectedVersion must be rejected.
+	reconciled := applied
+	reconciled.Status = provisioningdomain.ProvisioningStatusReconcile
+	if err := repo.UpdateTenantProvisioning(ctx, reconciled, 1); err == nil {
+		t.Fatal("expected a stale expectedVersion to be rejected")
+	}
+	if err := repo.UpdateTenantProvisioning(ctx, reconciled, 2); err != nil {
+		t.Fatalf("expected the correct expectedVersion to succeed: %v", err)
 	}
 }

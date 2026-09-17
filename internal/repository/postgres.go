@@ -13,6 +13,7 @@ import (
 	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
 	"github.com/nabhold/baobab-cp/internal/domain"
 	productdomain "github.com/nabhold/baobab-cp/internal/product/domain"
+	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
 	"github.com/nabhold/baobab-cp/internal/resolver"
 )
 
@@ -67,6 +68,7 @@ var _ IsolationProfileWriter = (*PostgresRepository)(nil)
 var _ CompositionRepository = (*PostgresRepository)(nil)
 var _ ProductRepository = (*PostgresRepository)(nil)
 var _ EntitlementProjectionRepository = (*PostgresRepository)(nil)
+var _ TenantProvisioningRepository = (*PostgresRepository)(nil)
 
 func Open(ctx context.Context, url string) (*PostgresRepository, error) {
 	pool, err := pgxpool.New(ctx, url)
@@ -1508,6 +1510,179 @@ func (r *PostgresRepository) ListEntitlementProjections(ctx context.Context, sub
 		return nil, err
 	}
 	return out, nil
+}
+
+const tenantProvisioningSelectColumns = `
+	tenant_provisioning_id::text, tenant_id, idempotency_key, request_hash, status,
+	desired_state_version, observed_state_version, product_requests, market_requests,
+	COALESCE(isolation_requirement, ''), COALESCE(residency_requirement, ''), blocking_reasons,
+	attempt_count, COALESCE(last_error, ''), started_at, completed_at, version, metadata`
+
+func scanTenantProvisioning(row interface {
+	Scan(dest ...any) error
+}) (provisioningdomain.TenantProvisioning, error) {
+	var p provisioningdomain.TenantProvisioning
+	var status string
+	var productRequests, marketRequests, blockingReasons, metadata []byte
+	err := row.Scan(
+		&p.ID, &p.TenantID, &p.IdempotencyKey, &p.RequestHash, &status,
+		&p.DesiredStateVersion, &p.ObservedStateVersion, &productRequests, &marketRequests,
+		&p.IsolationRequirement, &p.ResidencyRequirement, &blockingReasons,
+		&p.AttemptCount, &p.LastError, &p.StartedAt, &p.CompletedAt, &p.Version, &metadata,
+	)
+	if err != nil {
+		return provisioningdomain.TenantProvisioning{}, err
+	}
+	p.Status = provisioningdomain.ProvisioningStatus(status)
+	if err := json.Unmarshal(productRequests, &p.ProductRequests); err != nil {
+		return provisioningdomain.TenantProvisioning{}, fmt.Errorf("unmarshal product_requests: %w", err)
+	}
+	if err := json.Unmarshal(marketRequests, &p.MarketRequests); err != nil {
+		return provisioningdomain.TenantProvisioning{}, fmt.Errorf("unmarshal market_requests: %w", err)
+	}
+	if err := json.Unmarshal(blockingReasons, &p.BlockingReasons); err != nil {
+		return provisioningdomain.TenantProvisioning{}, fmt.Errorf("unmarshal blocking_reasons: %w", err)
+	}
+	if len(metadata) > 0 {
+		if err := json.Unmarshal(metadata, &p.Metadata); err != nil {
+			return provisioningdomain.TenantProvisioning{}, fmt.Errorf("unmarshal metadata: %w", err)
+		}
+	}
+	return p, nil
+}
+
+// CreateTenantProvisioning inserts a TenantProvisioning row. A pre-existing
+// row for the same (tenant_id, idempotency_key) pair is rejected by the
+// UNIQUE constraint (migration 000038) and surfaced as
+// ErrTenantProvisioningAlreadyExists, mirroring how CreateGrant/
+// CreateComposition already fail closed on their own conflicts.
+func (r *PostgresRepository) CreateTenantProvisioning(ctx context.Context, provisioning provisioningdomain.TenantProvisioning) error {
+	if r == nil || r.pool == nil {
+		return errors.New("repository is not initialized")
+	}
+	if err := provisioning.Validate(); err != nil {
+		return fmt.Errorf("validate tenant provisioning: %w", err)
+	}
+	productRequests, err := json.Marshal(provisioning.ProductRequests)
+	if err != nil {
+		return fmt.Errorf("marshal product_requests: %w", err)
+	}
+	marketRequests, err := json.Marshal(provisioning.MarketRequests)
+	if err != nil {
+		return fmt.Errorf("marshal market_requests: %w", err)
+	}
+	blockingReasons, err := json.Marshal(provisioning.BlockingReasons)
+	if err != nil {
+		return fmt.Errorf("marshal blocking_reasons: %w", err)
+	}
+	metadata, err := json.Marshal(provisioning.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, `
+		INSERT INTO provisioning.tenant_provisioning(
+			tenant_provisioning_id, tenant_id, idempotency_key, request_hash, status,
+			desired_state_version, observed_state_version, product_requests, market_requests,
+			isolation_requirement, residency_requirement, blocking_reasons,
+			attempt_count, last_error, started_at, completed_at, version, metadata
+		)
+		VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), NULLIF($11, ''), $12, $13, NULLIF($14, ''), $15, $16, $17, $18)`,
+		provisioning.ID, provisioning.TenantID, provisioning.IdempotencyKey, provisioning.RequestHash, string(provisioning.Status),
+		provisioning.DesiredStateVersion, provisioning.ObservedStateVersion, productRequests, marketRequests,
+		provisioning.IsolationRequirement, provisioning.ResidencyRequirement, blockingReasons,
+		provisioning.AttemptCount, provisioning.LastError, provisioning.StartedAt, provisioning.CompletedAt, provisioning.Version, metadata,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrTenantProvisioningAlreadyExists
+		}
+		return err
+	}
+	return nil
+}
+
+func (r *PostgresRepository) GetTenantProvisioning(ctx context.Context, id string) (provisioningdomain.TenantProvisioning, error) {
+	if r == nil || r.pool == nil {
+		return provisioningdomain.TenantProvisioning{}, errors.New("repository is not initialized")
+	}
+	row := r.pool.QueryRow(ctx, `SELECT `+tenantProvisioningSelectColumns+` FROM provisioning.tenant_provisioning WHERE tenant_provisioning_id = $1::uuid`, id)
+	p, err := scanTenantProvisioning(row)
+	if err != nil {
+		return provisioningdomain.TenantProvisioning{}, fmt.Errorf("get tenant provisioning %s: %w", id, err)
+	}
+	return p, nil
+}
+
+func (r *PostgresRepository) GetTenantProvisioningByIdempotencyKey(ctx context.Context, tenantID, idempotencyKey string) (provisioningdomain.TenantProvisioning, error) {
+	if r == nil || r.pool == nil {
+		return provisioningdomain.TenantProvisioning{}, errors.New("repository is not initialized")
+	}
+	row := r.pool.QueryRow(ctx, `SELECT `+tenantProvisioningSelectColumns+` FROM provisioning.tenant_provisioning WHERE tenant_id = $1 AND idempotency_key = $2`, tenantID, idempotencyKey)
+	p, err := scanTenantProvisioning(row)
+	if err != nil {
+		return provisioningdomain.TenantProvisioning{}, fmt.Errorf("get tenant provisioning for tenant %s, idempotency key %s: %w", tenantID, idempotencyKey, err)
+	}
+	return p, nil
+}
+
+func (r *PostgresRepository) ListTenantProvisioningsForTenant(ctx context.Context, tenantID string) ([]provisioningdomain.TenantProvisioning, error) {
+	if r == nil || r.pool == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	rows, err := r.pool.Query(ctx, `SELECT `+tenantProvisioningSelectColumns+` FROM provisioning.tenant_provisioning WHERE tenant_id = $1 ORDER BY created_at`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []provisioningdomain.TenantProvisioning
+	for rows.Next() {
+		p, err := scanTenantProvisioning(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UpdateTenantProvisioning persists provisioning's new state, optimistically
+// locked on expectedVersion -- the same WHERE version=$N pattern
+// RevokeGrant uses for capability.capability_grant.
+func (r *PostgresRepository) UpdateTenantProvisioning(ctx context.Context, provisioning provisioningdomain.TenantProvisioning, expectedVersion int64) error {
+	if r == nil || r.pool == nil {
+		return errors.New("repository is not initialized")
+	}
+	if err := provisioning.Validate(); err != nil {
+		return fmt.Errorf("validate tenant provisioning: %w", err)
+	}
+	blockingReasons, err := json.Marshal(provisioning.BlockingReasons)
+	if err != nil {
+		return fmt.Errorf("marshal blocking_reasons: %w", err)
+	}
+	metadata, err := json.Marshal(provisioning.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+	result, err := r.pool.Exec(ctx, `
+		UPDATE provisioning.tenant_provisioning
+		SET status=$3, observed_state_version=$4, blocking_reasons=$5, attempt_count=$6,
+		    last_error=NULLIF($7, ''), completed_at=$8, version=version+1, metadata=$9, updated_at=now()
+		WHERE tenant_provisioning_id=$1::uuid AND version=$2`,
+		provisioning.ID, expectedVersion, string(provisioning.Status), provisioning.ObservedStateVersion,
+		blockingReasons, provisioning.AttemptCount, provisioning.LastError, provisioning.CompletedAt, metadata,
+	)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return ErrTenantProvisioningVersionConflict
+	}
+	return nil
 }
 
 func (r *PostgresRepository) GetCapability(ctx context.Context, capabilityKey string) (capabilitydomain.Capability, error) {
