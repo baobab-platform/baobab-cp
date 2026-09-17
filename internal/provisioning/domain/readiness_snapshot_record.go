@@ -13,12 +13,12 @@ import "time"
 // distinct resource_id in internal/provisioning/reconciliation.go's
 // logDrift).
 type ReadinessCheckRecord struct {
-	CheckKey          string
-	ResourceType      string
-	Status            string
-	Reason            string
-	EvidenceReference string
-	EvaluatedAt       time.Time
+	CheckKey          string    `json:"check_key"`
+	ResourceType      string    `json:"resource_type"`
+	Status            string    `json:"status"`
+	Reason            string    `json:"reason,omitempty"`
+	EvidenceReference string    `json:"evidence_reference,omitempty"`
+	EvaluatedAt       time.Time `json:"evaluated_at"`
 }
 
 // ReadinessSnapshotRecord is the persisted, immutable evidence record for
@@ -30,14 +30,14 @@ type ReadinessCheckRecord struct {
 // READY at a given point in time. A later evaluation produces a new
 // snapshot; existing snapshots are never updated in place.
 type ReadinessSnapshotRecord struct {
-	ID                   string
-	TenantProvisioningID string
-	TenantID             string
-	DesiredStateVersion  int64
-	ObservedStateVersion int64
-	OverallReady         bool
-	BlockingReasons      []string
-	EvaluatedAt          time.Time
-	Checks               []ReadinessCheckRecord
-	CreatedAt            time.Time
+	ID                   string                 `json:"id,omitempty"`
+	TenantProvisioningID string                 `json:"tenant_provisioning_id"`
+	TenantID             string                 `json:"tenant_id"`
+	DesiredStateVersion  int64                  `json:"desired_state_version"`
+	ObservedStateVersion int64                  `json:"observed_state_version"`
+	OverallReady         bool                   `json:"overall_ready"`
+	BlockingReasons      []string               `json:"blocking_reasons,omitempty"`
+	EvaluatedAt          time.Time              `json:"evaluated_at"`
+	Checks               []ReadinessCheckRecord `json:"checks,omitempty"`
+	CreatedAt            time.Time              `json:"created_at,omitempty"`
 }

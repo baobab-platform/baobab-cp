@@ -53,6 +53,11 @@ type Dependencies struct {
 	// tenant this request targets (ADR-0009 §27/§122). Nil is a valid zero
 	// value, matching Identities above.
 	Memberships repository.WorkforceMembershipRepository
+	// Provisioning backs the /v1/tenants/{tenantID}/provisioning routes
+	// (Gate ZB-03.1). Nil disables those routes (New skips registering
+	// them) rather than registering handlers that would panic -- every
+	// other route in this file is unaffected either way.
+	Provisioning ProvisioningRepository
 }
 type API struct {
 	store            store.TenantStore
@@ -106,6 +111,17 @@ func New(dependencies Dependencies) http.Handler {
 	r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/canonical-entities/{entityID}", canonical.get)
 	for _, action := range []string{"validate", "activate", "suspend", "retire"} {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/"+action, canonical.lifecycle(action))
+	}
+	if dependencies.Provisioning != nil {
+		prov := provisioningHandler{tenants: dependencies.Store, repo: dependencies.Provisioning}
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning", prov.create)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning", prov.list)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}", prov.get)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/apply", prov.apply)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/retry", prov.retry)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/cancel", prov.cancel)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/readiness", prov.readiness)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/drift", prov.drift)
 	}
 	return r
 }
