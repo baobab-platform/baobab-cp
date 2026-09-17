@@ -120,9 +120,14 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 		Spec: TenantManifestSpec{
 			LegalEntityID: legalEntityID,
 			DigitalEstate: "estate-zuribeans",
+			// Both markets carry EXPORTING and IMPORTING (not just one
+			// direction each) to prove ZB-02 does not hard-code UG as a
+			// permanent "export market" or ZA as a permanent "import
+			// market" (spec §41): a market's capabilities are an
+			// authorised set, independent of any other market's.
 			Markets: []ManifestMarket{
-				{MarketCode: "UG", Capabilities: []string{"EXPORTING", "SELLING"}},
-				{MarketCode: "ZA", Capabilities: []string{"IMPORTING", "SELLING"}},
+				{MarketCode: "UG", Capabilities: []string{"EXPORTING", "IMPORTING", "SELLING"}},
+				{MarketCode: "ZA", Capabilities: []string{"EXPORTING", "IMPORTING", "SELLING"}},
 			},
 			CapabilityGrants: []ManifestCapabilityGrant{
 				{CapabilityKey: capabilityKey, Source: "PLATFORM_BASELINE"},
@@ -132,6 +137,7 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 			},
 			TradeLanes: []ManifestTradeLane{
 				{OriginMarket: "UG", DestinationMarket: "ZA", Direction: "CROSS_MARKET", PermittedCapabilityKeys: []string{capabilityKey}},
+				{OriginMarket: "ZA", DestinationMarket: "UG", Direction: "CROSS_MARKET", PermittedCapabilityKeys: []string{capabilityKey}},
 			},
 		},
 	}
@@ -197,10 +203,22 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 	if err != nil || !ugAssignment.IsOperationalAt(now) {
 		t.Fatalf("expected an operational UG market participation, got %+v, err=%v", ugAssignment, err)
 	}
-	laneID := deterministicTradeLaneID(tenantID, marketUGID, marketZAID, domain.TradeLaneCrossMarket)
-	lane, err := repo.GetTradeLane(ctx, tenantID, laneID)
-	if err != nil || !lane.IsUsable() {
-		t.Fatalf("expected an ACTIVE UG->ZA trade lane, got %+v, err=%v", lane, err)
+	zaAssignment, err := repo.GetEffectiveMarketAssignment(ctx, tenantID, marketZAID, now)
+	if err != nil || !zaAssignment.IsOperationalAt(now) {
+		t.Fatalf("expected an operational ZA market participation, got %+v, err=%v", zaAssignment, err)
+	}
+
+	// Both directions must be provisioned and usable -- neither market is
+	// hard-coded as a permanent exporter or importer (spec §41).
+	ugToZALaneID := deterministicTradeLaneID(tenantID, marketUGID, marketZAID, domain.TradeLaneCrossMarket)
+	ugToZALane, err := repo.GetTradeLane(ctx, tenantID, ugToZALaneID)
+	if err != nil || !ugToZALane.IsUsable() {
+		t.Fatalf("expected an ACTIVE UG->ZA trade lane, got %+v, err=%v", ugToZALane, err)
+	}
+	zaToUGLaneID := deterministicTradeLaneID(tenantID, marketZAID, marketUGID, domain.TradeLaneCrossMarket)
+	zaToUGLane, err := repo.GetTradeLane(ctx, tenantID, zaToUGLaneID)
+	if err != nil || !zaToUGLane.IsUsable() {
+		t.Fatalf("expected an ACTIVE ZA->UG trade lane, got %+v, err=%v", zaToUGLane, err)
 	}
 	grants, err := repo.ListGrants(ctx, tenantID, capabilityKey)
 	if err != nil {
