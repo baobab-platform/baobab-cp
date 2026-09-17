@@ -226,6 +226,11 @@ func TestResolutionPipelineEnforcesEntitlementWhenGrantsPopulated(t *testing.T) 
 func TestResolutionPipelineRoutesThroughEffectiveGrant(t *testing.T) {
 	pipeline := ResolutionPipeline{}
 	req := baseSuccessfulRequest()
+	// req.Scopes now actually reaches CapabilityResolverImpl (see Gate P0's
+	// tracked #74 -- pipeline.go previously dropped it on the floor), so
+	// the binding under test must carry the same ScopeID as the grant it's
+	// meant to satisfy.
+	req.Bindings[0].ScopeID = "scope-1"
 	req.Grants = []capabilitydomain.CapabilityGrant{
 		{ID: "grant-1", CapabilityKey: "commerce.order.create", ScopeID: "scope-1", Source: capabilitydomain.GrantSourcePlatformBaseline, Status: capabilitydomain.GrantStatusActive, EffectiveFrom: time.Now().UTC().Add(-time.Hour)},
 	}

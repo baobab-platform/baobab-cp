@@ -114,6 +114,7 @@ func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (R
 		CapabilityKey: req.CapabilityKey,
 		Context:       req.Context,
 		Bindings:      req.Bindings,
+		Scopes:        req.Scopes,
 		Capability:    req.Capability,
 	})
 	if err != nil {

@@ -98,3 +98,41 @@ Proceed gate-by-gate. Do not expose or integrate the current composed `/v1/resol
 behaviour as a production contract until Gates 1–7 pass. Each gate must include code,
 negative tests, contract/migration evidence where applicable, and an updated conformance
 record. A green unit-test suite alone is insufficient evidence of readiness.
+
+---
+
+## Remediation record (2026-09-16)
+
+**Status update:** all 10 "Confirmed Control Plane defects" listed above are resolved on
+`main` as of this date, verified by direct inspection of `internal/resolver/pipeline.go`,
+`capability.go`, `topology.go`, `mapping.go`, `trace.go`, `internal/domain/resolution.go`
+and `api/capability_resolve_handler.go` — not asserted from a changelog. Left as originally
+written above as the record of what was found; this section is the record of what has
+since changed. Most of this landed in a single commit, `2e4b706 fix(resolution): resolve
+requested capability keys (#105)`, between this audit's baseline and the check performed
+here (confirmed via `git log 597cac2..main -- internal/resolver/ internal/repository/`).
+
+| # | Original defect | Current state |
+|---|---|---|
+| 1 | `internal/resolver/pipeline.go` hard-codes capability key `baobab_trade` | Fixed — `ResolutionPipeline.Resolve` uses `req.CapabilityKey` throughout; only remaining `"baobab_trade"` occurrences repo-wide are test fixture values. |
+| 2 | Pipeline passes `req.TenantID` as `CanonicalEntityID` | Fixed — the two remain distinct fields end-to-end; `pipeline.go`'s own header comment now documents this as a fixed historical defect. |
+| 3 | Equal-precedence bindings silently pick one instead of failing closed | Fixed — `CapabilityResolverImpl.Resolve` explicitly detects a tie (same specificity, same binding-mode rank, same priority) after sorting and returns `"capability binding is ambiguous"` rather than returning `active[0]`. |
+| 4 | `CapabilityBinding` has no effective interval evaluated | Fixed — `EffectiveFrom`/`EffectiveTo` are checked against `at` before a binding is considered a candidate. |
+| 5 | Topology resolver returns any active instance, not the one the binding selected; no health/residency/isolation eligibility | Fixed — `TopologyResolverImpl.Resolve` requires an exact match on `SelectedEngineInstanceID` and additionally checks `Status`, `HealthStatus`, effective interval, `Environment`, `DeploymentRegion`/`Region`, `IsolationProfileID` and `ResidencyRegion`. |
+| 6 | Context omits Principal, Digital Estate, property/channel, deployment region, environment, isolation profile, resolution time | Fixed — `domain.Context` (`internal/domain/resolution.go`) carries all of these (`PrincipalID`, `DigitalEstateID`, `DigitalPropertyID`, `ChannelID`, `DeploymentRegion`, `Environment`, `IsolationProfileID`, `ResolvedAt`, plus `ExpiresAt`/`Provenance`). Authorization decision remains separate (`ResolutionResult.Policy`), which is a reasonable separation of concerns rather than an omission. |
+| 7 | Handler accepts mappings/bindings/instances in the request payload | Fixed — `CapabilityResolveHandler`'s request shape is `{context_id, canonical_entity_id, capability_key}` only; it redeems a server-resolved `Context` by `context_id` (with a tenant-mismatch check) rather than accepting any inline routing state. |
+| 8 | Forward mapping scope inferred from one `scope_id` string, not the multi-dimensional `MappingScope` record | Fixed (opt-in) — `resolveMapping` calls `DefaultScopeMatcher{}.Match` against real `domain.MappingScope` records when a caller supplies `Scopes`; `legacyScopeSpecificity`'s string comparison remains only as the fallback when no scope map is supplied, mirroring the same nil-means-skip rollout pattern already used for `Grants`/`Capability`. |
+| 9 | No reverse-mapping/quarantine path | Fixed — `MappingResolverImpl.ResolveReverse` exists, returns a `QuarantineDecision` on failure, backed by `ErrReverseMappingUnresolved`. |
+| 10 | Resolver errors are plain strings | Fixed — `resolutionFailure` returns a structured `*ResolutionError` carrying the full `ResolutionTrace` (correlation/tenant/capability/mapping/grant/binding/instance IDs, outcome, reason) and supports `errors.Unwrap()`. |
+
+Verified together: `go build ./...`, `go vet ./...`, `gofmt -l cmd internal api` (pre-existing
+formatting drift in `api/capability_explain_handler.go` noted, unrelated to this remediation
+and not fixed here), and `go test ./... -count=1` all pass against a real local PostgreSQL 16
+and a real `nabhold/shared` checkout (`SHARED_CONTRACTS_DIR`).
+
+**What remains genuinely open**, not covered by this record: Gate P0's own classification
+(`docs/reconciliation/phase-0-architecture-inventory-and-lock.md`) already tracks
+`CapabilityBinding.scope_id` still pointing at `mapping.mapping_scope` rather than
+`capability.capability_scope` (`#74`), and the legacy `capability.tenant_capability` table
+coexisting with real `CapabilityGrant` (`#72`). Neither was in this document's original
+10-item list and neither is resolved by the remediation above.

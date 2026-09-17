@@ -7,7 +7,6 @@ import (
 	"time"
 
 	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
 )
 
 // CapabilityBinding represents the effective binding between a capability and a runtime engine instance.
@@ -18,8 +17,18 @@ type CapabilityResolutionQuery struct {
 	CapabilityKey string
 	Context       Context
 	Bindings      []CapabilityBinding
-	Scopes        map[string]domain.MappingScope
-	At            time.Time
+	// Scopes is keyed by CapabilityBinding.ScopeID and evaluated by
+	// CapabilityScopeMatcher, not DefaultScopeMatcher -- CapabilityScope is
+	// deliberately distinct from domain.MappingScope (ADR-SHARED-007 §25,
+	// mirrored in capabilitydomain.CapabilityScope's own doc comment): the
+	// two share dimension vocabulary but are evaluated by different
+	// resolvers for different purposes. Gate P0's classification
+	// (docs/reconciliation/phase-0-architecture-inventory-and-lock.md,
+	// tracked as #74) found capability_binding.scope_id still pointing at
+	// mapping.mapping_scope in the database and this query still typed
+	// against domain.MappingScope in Go -- both corrected together.
+	Scopes map[string]capabilitydomain.CapabilityScope
+	At     time.Time
 	// Capability, when supplied, gates resolution on the capability's own
 	// lifecycle eligibility (ADR-BCP-003 §6: only ACTIVE capabilities
 	// SHALL resolve by default). Nil by default and skipped when nil --
@@ -87,7 +96,7 @@ func (CapabilityResolverImpl) Resolve(_ context.Context, q CapabilityResolutionQ
 			if !ok {
 				continue
 			}
-			match := DefaultScopeMatcher{}.Match(q.Context, scope)
+			match := CapabilityScopeMatcher{}.Match(q.Context, scope)
 			if !match.Compatible {
 				continue
 			}

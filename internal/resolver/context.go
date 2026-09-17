@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
 	"github.com/nabhold/baobab-cp/internal/domain"
 )
 
@@ -161,6 +162,116 @@ func (DefaultScopeMatcher) Match(ctx Context, scope domain.MappingScope) ScopeMa
 	if compatible && len(matched) == 0 && len(inherited) == 0 {
 		compatibility := ScopeMatch{Compatible: true, Specificity: 0, Matched: matched, Inherited: inherited, RejectedBy: rejectedBy}
 		return compatibility
+	}
+
+	sort.Strings(matched)
+	sort.Strings(inherited)
+	sort.Strings(rejectedBy)
+
+	return ScopeMatch{Compatible: compatible, Specificity: specificity, Matched: matched, Inherited: inherited, RejectedBy: rejectedBy}
+}
+
+// CapabilityScopeMatcher is the deterministic scope matcher for
+// CapabilityBinding resolution. It is a distinct type from
+// DefaultScopeMatcher, not an overload of it: capabilitydomain.CapabilityScope
+// is deliberately not domain.MappingScope (ADR-SHARED-007 §25) -- the two
+// share dimension vocabulary but are evaluated by different resolvers for
+// different purposes, and merging them back into one matcher would
+// reintroduce the conflation the ADR exists to prevent.
+type CapabilityScopeMatcher struct{}
+
+// Match compares a Context against a capabilitydomain.CapabilityScope.
+// Dimensions CapabilityScope carries that Context has no corresponding
+// field for yet (CustomerSegmentID, CatalogueID, OperatingRegionID,
+// GeographicRegionID) are treated the same as any other value Context
+// cannot currently supply: "inherited", not rejected -- consistent with
+// every other unset-context-value case below, not a special case invented
+// for this matcher.
+func (CapabilityScopeMatcher) Match(ctx Context, scope capabilitydomain.CapabilityScope) ScopeMatch {
+	matched := []string{}
+	inherited := []string{}
+	rejectedBy := []string{}
+	specificity := 0
+
+	matchChecks := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "tenant", value: ctx.TenantID, want: scope.TenantID},
+		{name: "legal_entity", value: ctx.LegalEntityID, want: scope.LegalEntityID},
+		{name: "organisation", value: ctx.OrganisationID, want: scope.OrganisationID},
+		{name: "business_unit", value: ctx.BusinessUnitID, want: scope.BusinessUnitID},
+		{name: "digital_estate", value: ctx.DigitalEstateID, want: scope.DigitalEstateID},
+		{name: "digital_property", value: ctx.DigitalPropertyID, want: scope.DigitalPropertyID},
+		{name: "channel", value: ctx.ChannelID, want: scope.ChannelID},
+		{name: "market", value: ctx.MarketID, want: scope.MarketID},
+		{name: "jurisdiction", value: ctx.Jurisdiction, want: scope.Jurisdiction},
+		{name: "currency", value: ctx.CurrencyCode, want: scope.CurrencyCode},
+		{name: "customer_segment", value: "", want: scope.CustomerSegmentID},
+		{name: "catalogue", value: "", want: scope.CatalogueID},
+		{name: "operating_region", value: "", want: scope.OperatingRegionID},
+		{name: "geographic_region", value: "", want: scope.GeographicRegionID},
+		{name: "deployment_region", value: ctx.DeploymentRegion, want: scope.DeploymentRegion},
+		{name: "environment", value: ctx.Environment, want: scope.Environment},
+		{name: "isolation_profile", value: ctx.IsolationProfileID, want: scope.IsolationProfileID},
+	}
+
+	for _, check := range matchChecks {
+		if check.want == "" {
+			continue
+		}
+		if check.value == check.want {
+			matched = append(matched, check.name)
+			specificity++
+			continue
+		}
+		if check.value != "" && check.value != check.want {
+			rejectedBy = append(rejectedBy, check.name)
+			continue
+		}
+		inherited = append(inherited, check.name)
+	}
+
+	// §15 (mirrored in CapabilityScope.Validate): exclusion always takes
+	// precedence over inclusion. A country Context does carry evidence for
+	// (ctx.CountryCode set) is rejected if excluded, or if an inclusion
+	// list exists and does not name it. An unset ctx.CountryCode cannot
+	// violate either list -- there is nothing to check it against -- so it
+	// is treated as "inherited", the same as any other dimension Context
+	// has no value for.
+	if ctx.CountryCode != "" {
+		excluded := false
+		for _, country := range scope.ExcludeCountries {
+			if country == ctx.CountryCode {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
+			rejectedBy = append(rejectedBy, "country")
+		} else if len(scope.IncludeCountries) > 0 {
+			included := false
+			for _, country := range scope.IncludeCountries {
+				if country == ctx.CountryCode {
+					included = true
+					break
+				}
+			}
+			if included {
+				matched = append(matched, "country")
+				specificity++
+			} else {
+				rejectedBy = append(rejectedBy, "country")
+			}
+		}
+	} else if len(scope.IncludeCountries) > 0 || len(scope.ExcludeCountries) > 0 {
+		inherited = append(inherited, "country")
+	}
+
+	compatible := len(rejectedBy) == 0
+	if compatible && len(matched) == 0 && len(inherited) == 0 {
+		return ScopeMatch{Compatible: true, Specificity: 0, Matched: matched, Inherited: inherited, RejectedBy: rejectedBy}
 	}
 
 	sort.Strings(matched)

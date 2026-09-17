@@ -12,7 +12,7 @@ import (
 func TestCapabilityExtractionKeepsConsumerContractStable(t *testing.T) {
 	now := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
 	ctx := Context{TenantID: "tn_zuribeans", Environment: "production", DeploymentRegion: "af-south-1", ResolvedAt: now}
-	scope := map[string]domain.MappingScope{"zuribeans-production": {ScopeID: "zuribeans-production", TenantID: "tn_zuribeans", Environment: "production"}}
+	scope := map[string]capabilitydomain.CapabilityScope{"zuribeans-production": {ScopeID: "zuribeans-production", TenantID: "tn_zuribeans", Environment: "production"}}
 
 	before := resolveExtractedCapability(t, ctx, scope, capabilitydomain.CapabilityBinding{
 		ID: "binding-idempiere", CapabilityKey: "warehouse.execution", EngineID: "idempiere",
@@ -34,7 +34,7 @@ func TestCapabilityExtractionKeepsConsumerContractStable(t *testing.T) {
 	}
 }
 
-func resolveExtractedCapability(t *testing.T, ctx Context, scopes map[string]domain.MappingScope, binding capabilitydomain.CapabilityBinding, instance domain.EngineInstance) ResolvedCapability {
+func resolveExtractedCapability(t *testing.T, ctx Context, scopes map[string]capabilitydomain.CapabilityScope, binding capabilitydomain.CapabilityBinding, instance domain.EngineInstance) ResolvedCapability {
 	t.Helper()
 	resolved, err := (CapabilityResolverImpl{}).Resolve(context.Background(), CapabilityResolutionQuery{
 		CapabilityKey: "warehouse.execution", Context: ctx, Bindings: []capabilitydomain.CapabilityBinding{binding}, Scopes: scopes, At: ctx.ResolvedAt,
