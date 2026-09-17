@@ -2,27 +2,17 @@
 package integration
 
 /*
-No new resolver repository abstraction is required for the basic ZB-02 slice:
-the existing CapabilityRepository already exposes:
-    ListBindings(ctx, capabilityKey)
-    ListActiveInstances(ctx, engineID)
+Compose the existing repositories instead of creating duplicate persistence:
 
-and CapabilityWriter already exposes:
-    CreateBinding(...)
-    SaveBinding(...)
-
-The provisioning service composes those accepted interfaces with:
-    CapabilityRegistryRepository
-    CapabilityScopeWriter
-
-If desired, define a convenience interface only:
-
-type CapabilityBindingProvisioningRepository interface {
-    CapabilityRepository
-    CapabilityWriter
-    CapabilityRegistryRepository
-    CapabilityScopeWriter
+type ContextAuthorityRepository interface {
+    GetTenant(ctx context.Context, tenantID string) (domain.Tenant, error)
+    GetMarket(ctx context.Context, marketID string) (domain.Market, error)
+    ListMarketAssignments(ctx context.Context, tenantID string) ([]domain.MarketAssignment, error)
+    GetDigitalEstate(ctx context.Context, estateID string) (domain.DigitalEstate, error)
+    GetIsolationProfile(ctx context.Context, profileID string) (domain.IsolationProfile, error)
 }
 
-Do not duplicate repository methods under new names.
+Adapt method names only where the repository already exposes equivalent
+canonical reads. Do not add a context table merely to make resolution work:
+domain.Context is an immutable operation scope, not configuration authority.
 */
