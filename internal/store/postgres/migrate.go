@@ -71,6 +71,7 @@ var canonicalMigrationNames = []string{
 	"000034_capability_binding_scope_rewire.sql",
 	"000035_retire_tenant_capability.sql",
 	"000036_capability_composition_and_entitlement_projection.sql",
+	"000037_market_participation_capabilities.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
