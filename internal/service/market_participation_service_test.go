@@ -36,7 +36,7 @@ func TestRequireOperationalMarketParticipation(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
 	store := &fakeMarketParticipationStore{assignment: domain.MarketAssignment{
-		ID: "11111111-1111-7111-8111-111111111111",
+		ID:       "11111111-1111-7111-8111-111111111111",
 		TenantID: "zuribeans",
 		MarketID: "market-ug",
 		Capabilities: []domain.MarketParticipationCapability{
@@ -44,8 +44,8 @@ func TestRequireOperationalMarketParticipation(t *testing.T) {
 			domain.MarketParticipationExporting,
 		},
 		EffectiveFrom: now.Add(-time.Hour),
-		Status: domain.MarketParticipationActive,
-		Source: domain.MarketParticipationSourceProvisioning,
+		Status:        domain.MarketParticipationActive,
+		Source:        domain.MarketParticipationSourceProvisioning,
 		PolicyVersion: "1",
 	}}
 	svc := NewMarketParticipationService(store)

@@ -87,12 +87,17 @@ func TestPostgresMarketRoundTrip(t *testing.T) {
 		ID: assignmentID, TenantID: tenantID, LegalEntityID: "ZURIBEANS-ZA", MarketID: marketID,
 		Capabilities:  []domain.MarketParticipationCapability{domain.MarketParticipationSelling, domain.MarketParticipationImporting},
 		EffectiveFrom: now.Add(-time.Hour),
+		Status:        domain.MarketParticipationActive, Source: domain.MarketParticipationSourceProvisioning, PolicyVersion: "1",
 	}
 	if err := repo.AssignMarketToTenant(ctx, assignment); err != nil {
 		t.Fatalf("assign market: %v", err)
 	}
 
-	overlapping := domain.MarketAssignment{ID: overlapAssignmentID, TenantID: tenantID, MarketID: marketID, Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationSelling}, EffectiveFrom: now}
+	overlapping := domain.MarketAssignment{
+		ID: overlapAssignmentID, TenantID: tenantID, MarketID: marketID,
+		Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationSelling}, EffectiveFrom: now,
+		Status: domain.MarketParticipationActive, Source: domain.MarketParticipationSourceProvisioning, PolicyVersion: "1",
+	}
 	if err := repo.AssignMarketToTenant(ctx, overlapping); !errors.Is(err, ErrMarketAssignmentOverlap) {
 		t.Fatalf("expected ErrMarketAssignmentOverlap for an overlapping assignment, got %v", err)
 	}

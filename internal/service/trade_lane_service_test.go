@@ -47,12 +47,12 @@ func TestTradeLaneServiceActivate(t *testing.T) {
 		assignments: map[string]domain.MarketAssignment{
 			"market-ug": {
 				TenantID: lane.TenantID, MarketID: "market-ug",
-				Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationExporting},
+				Capabilities:  []domain.MarketParticipationCapability{domain.MarketParticipationExporting},
 				EffectiveFrom: now.Add(-time.Hour),
 			},
 			"market-za": {
 				TenantID: lane.TenantID, MarketID: "market-za",
-				Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationImporting},
+				Capabilities:  []domain.MarketParticipationCapability{domain.MarketParticipationImporting},
 				EffectiveFrom: now.Add(-time.Hour),
 			},
 		},

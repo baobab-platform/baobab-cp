@@ -22,11 +22,11 @@ const (
 )
 
 type ReadinessEvidence struct {
-	Check       string
-	Status      ReadinessStatus
-	Reason      string
-	Reference   string
-	ObservedAt  time.Time
+	Check      string
+	Status     ReadinessStatus
+	Reason     string
+	Reference  string
+	ObservedAt time.Time
 }
 
 type ReadinessReport struct {
@@ -53,7 +53,7 @@ type ReadinessEvaluatorImpl struct {
 func NewReadinessEvaluator(checks ...ReadinessCheck) *ReadinessEvaluatorImpl {
 	return &ReadinessEvaluatorImpl{
 		Checks: checks,
-		now: func() time.Time { return time.Now().UTC() },
+		now:    func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -81,11 +81,11 @@ func (r *ReadinessEvaluatorImpl) Report(
 		return ReadinessReport{}, errors.New("at least one readiness check is required")
 	}
 	report := ReadinessReport{
-		TenantID: op.TenantID,
-		ProvisioningID: op.ID,
-		DesiredStateVersion: op.DesiredStateVersion,
+		TenantID:             op.TenantID,
+		ProvisioningID:       op.ID,
+		DesiredStateVersion:  op.DesiredStateVersion,
 		ObservedStateVersion: op.ObservedStateVersion,
-		EvaluatedAt: r.now(),
+		EvaluatedAt:          r.now(),
 	}
 
 	seen := map[string]struct{}{}

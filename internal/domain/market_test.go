@@ -42,7 +42,11 @@ func TestMarketValidate(t *testing.T) {
 
 func TestMarketAssignmentValidate(t *testing.T) {
 	now := time.Now().UTC()
-	valid := MarketAssignment{TenantID: "tn_zuribeans", MarketID: "market-1", Capabilities: []MarketParticipationCapability{MarketParticipationSelling}, EffectiveFrom: now}
+	valid := MarketAssignment{
+		TenantID: "tn_zuribeans", MarketID: "market-1",
+		Capabilities: []MarketParticipationCapability{MarketParticipationSelling}, EffectiveFrom: now,
+		Status: MarketParticipationActive, Source: MarketParticipationSourceProvisioning, PolicyVersion: "1",
+	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid market assignment rejected: %v", err)
 	}

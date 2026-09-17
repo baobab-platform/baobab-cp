@@ -10,12 +10,12 @@ func TestMarketParticipationOperationalRequiresActiveAndEffective(t *testing.T) 
 	t.Parallel()
 	now := time.Date(2026, 9, 17, 8, 0, 0, 0, time.UTC)
 	a := MarketAssignment{
-		TenantID: "tenant-zuribeans",
-		MarketID: "market-ug",
-		Capabilities: []MarketParticipationCapability{MarketParticipationExporting},
+		TenantID:      "tenant-zuribeans",
+		MarketID:      "market-ug",
+		Capabilities:  []MarketParticipationCapability{MarketParticipationExporting},
 		EffectiveFrom: now.Add(-time.Hour),
-		Status: MarketParticipationActive,
-		Source: MarketParticipationSourceProvisioning,
+		Status:        MarketParticipationActive,
+		Source:        MarketParticipationSourceProvisioning,
 		PolicyVersion: "1",
 	}
 	if !a.IsOperationalAt(now) {
@@ -47,8 +47,8 @@ func TestRetiredMarketParticipationIsTerminal(t *testing.T) {
 func TestMarketParticipationGovernanceValidation(t *testing.T) {
 	t.Parallel()
 	a := MarketAssignment{
-		Status: MarketParticipationActive,
-		Source: MarketParticipationSourceProvisioning,
+		Status:        MarketParticipationActive,
+		Source:        MarketParticipationSourceProvisioning,
 		PolicyVersion: "1",
 	}
 	if err := ValidateMarketParticipationGovernance(a); err != nil {

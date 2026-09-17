@@ -771,19 +771,31 @@ func TestInMemoryRepositoryMarketsAndAssignments(t *testing.T) {
 		t.Fatal("expected an unknown market code lookup to fail")
 	}
 
-	assignment := domain.MarketAssignment{ID: "assignment-1", TenantID: "tn_zuribeans", MarketID: "market-za", Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationSelling}, EffectiveFrom: now.Add(-time.Hour)}
+	assignment := domain.MarketAssignment{
+		ID: "assignment-1", TenantID: "tn_zuribeans", MarketID: "market-za",
+		Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationSelling}, EffectiveFrom: now.Add(-time.Hour),
+		Status: domain.MarketParticipationActive, Source: domain.MarketParticipationSourceProvisioning, PolicyVersion: "1",
+	}
 	if err := repo.AssignMarketToTenant(ctx, assignment); err != nil {
 		t.Fatalf("assign market failed: %v", err)
 	}
 
 	// Same tenant/market, overlapping (unbounded) period -> rejected.
-	overlapping := domain.MarketAssignment{ID: "assignment-2", TenantID: "tn_zuribeans", MarketID: "market-za", Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationSelling}, EffectiveFrom: now}
+	overlapping := domain.MarketAssignment{
+		ID: "assignment-2", TenantID: "tn_zuribeans", MarketID: "market-za",
+		Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationSelling}, EffectiveFrom: now,
+		Status: domain.MarketParticipationActive, Source: domain.MarketParticipationSourceProvisioning, PolicyVersion: "1",
+	}
 	if err := repo.AssignMarketToTenant(ctx, overlapping); !errors.Is(err, ErrMarketAssignmentOverlap) {
 		t.Fatalf("expected ErrMarketAssignmentOverlap, got %v", err)
 	}
 
 	// Same tenant, different market -> allowed to coexist.
-	otherMarket := domain.MarketAssignment{ID: "assignment-3", TenantID: "tn_zuribeans", MarketID: "market-ke", Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationExporting}, EffectiveFrom: now.Add(-time.Hour)}
+	otherMarket := domain.MarketAssignment{
+		ID: "assignment-3", TenantID: "tn_zuribeans", MarketID: "market-ke",
+		Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationExporting}, EffectiveFrom: now.Add(-time.Hour),
+		Status: domain.MarketParticipationActive, Source: domain.MarketParticipationSourceProvisioning, PolicyVersion: "1",
+	}
 	if err := repo.AssignMarketToTenant(ctx, otherMarket); err != nil {
 		t.Fatalf("assign second market failed: %v", err)
 	}

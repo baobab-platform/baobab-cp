@@ -21,7 +21,7 @@ import (
 type ContextAuthority interface {
 	GetTenant(ctx context.Context, tenantID string) (domain.Tenant, error)
 	GetMarket(ctx context.Context, marketID string) (domain.Market, error)
-	ListMarketAssignments(ctx context.Context, tenantID string) ([]domain.MarketAssignment, error)
+	ListMarketAssignmentsForTenant(ctx context.Context, tenantID string) ([]domain.MarketAssignment, error)
 	GetDigitalEstate(ctx context.Context, estateID string) (domain.DigitalEstate, error)
 	GetIsolationProfile(ctx context.Context, profileID string) (domain.IsolationProfile, error)
 }
@@ -29,16 +29,16 @@ type ContextAuthority interface {
 // ContextResolutionRequest carries caller identity plus identifiers whose
 // authority must be verified by CP before entering Platform Context.
 type ContextResolutionRequest struct {
-	PrincipalID       string
-	TenantID          string
-	LegalEntityID     string
-	MarketID          string
-	DigitalEstateID   string
-	DeploymentRegion  string
-	Environment       string
+	PrincipalID        string
+	TenantID           string
+	LegalEntityID      string
+	MarketID           string
+	DigitalEstateID    string
+	DeploymentRegion   string
+	Environment        string
 	IsolationProfileID string
-	CorrelationID     string
-	TTL               time.Duration
+	CorrelationID      string
+	TTL                time.Duration
 }
 
 // AuthoritativeContextResolver composes a trusted Context from CP resources.
@@ -66,7 +66,7 @@ func (r *AuthoritativeContextResolver) Resolve(ctx context.Context, req ContextR
 	if err != nil {
 		return resolver.Context{}, fmt.Errorf("resolve tenant: %w", err)
 	}
-	if tenant.ID != req.TenantID {
+	if tenant.TenantID != req.TenantID {
 		return resolver.Context{}, errors.New("tenant authority returned a different tenant")
 	}
 
@@ -180,7 +180,7 @@ func (r *AuthoritativeContextResolver) requireMarketParticipation(
 	req ContextResolutionRequest,
 	at time.Time,
 ) error {
-	assignments, err := r.authority.ListMarketAssignments(ctx, req.TenantID)
+	assignments, err := r.authority.ListMarketAssignmentsForTenant(ctx, req.TenantID)
 	if err != nil {
 		return fmt.Errorf("list market participation: %w", err)
 	}

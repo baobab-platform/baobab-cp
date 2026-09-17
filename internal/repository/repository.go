@@ -243,12 +243,35 @@ type MarketRepository interface {
 	// assignment to (ADR-BCP-011 §6, Gate P0's market-participation
 	// capability-flag remodel).
 	ListMarketAssignmentsForTenant(ctx context.Context, tenantID string) ([]domain.MarketAssignment, error)
+	// GetMarketAssignment and GetEffectiveMarketAssignment are Gate ZB-02's
+	// ADR-BCP-011 governance reads: the former by primary key (used by
+	// MarketParticipationService.Transition), the latter by the temporal
+	// [effective_from, effective_to) window a caller actually needs (used by
+	// TradeLaneService and provisioning context resolution).
+	GetMarketAssignment(ctx context.Context, assignmentID string) (domain.MarketAssignment, error)
+	GetEffectiveMarketAssignment(ctx context.Context, tenantID, marketID string, at time.Time) (domain.MarketAssignment, error)
 }
 
 // MarketWriter is the mutable market/market-assignment contract.
 type MarketWriter interface {
 	CreateMarket(ctx context.Context, market domain.Market) error
+	// AssignMarketToTenant is kept for existing callers; it delegates to
+	// CreateMarketAssignment (ADR-BCP-011 governance fields required as of
+	// Gate ZB-02) rather than being removed outright, avoiding an
+	// unnecessary cross-repository breaking change.
 	AssignMarketToTenant(ctx context.Context, assignment domain.MarketAssignment) error
+	CreateMarketAssignment(ctx context.Context, assignment domain.MarketAssignment) error
+	UpdateMarketAssignmentGovernance(ctx context.Context, assignment domain.MarketAssignment) error
+}
+
+// TradeLaneRepository is the persistence contract for TradeLane
+// (ADR-BCP-011, Gate ZB-02; internal/domain/trade_lane.go). Shared owns the
+// cross-repository contracts/trade-lane/v1 contract; this repository owns
+// baobab-cp's own lifecycle/persistence, per the module-boundary note on
+// domain.TradeLane's own doc comment.
+type TradeLaneRepository interface {
+	GetTradeLane(ctx context.Context, tenantID, tradeLaneID string) (domain.TradeLane, error)
+	SaveTradeLane(ctx context.Context, lane domain.TradeLane) error
 }
 
 // ErrTenantIsolationProfileOverlap is returned when an
@@ -506,6 +529,7 @@ type Repository struct {
 	DigitalEstates         map[string]domain.DigitalEstate                    // keyed by ID
 	Markets                map[string]domain.Market                           // keyed by ID
 	MarketAssignments      map[string]domain.MarketAssignment                 // keyed by ID
+	TradeLanes             map[string]domain.TradeLane                        // keyed by "tenant_id\x00trade_lane_id"
 	IsolationProfiles      map[string]domain.IsolationProfile                 // keyed by ID
 	// TenantIsolationProfiles has no synthetic ID (mirroring the real
 	// table's PRIMARY KEY (tenant_id, isolation_profile_id, effective_from));
@@ -607,6 +631,7 @@ var _ DigitalEstateRepository = (*Repository)(nil)
 var _ DigitalEstateWriter = (*Repository)(nil)
 var _ MarketRepository = (*Repository)(nil)
 var _ MarketWriter = (*Repository)(nil)
+var _ TradeLaneRepository = (*Repository)(nil)
 var _ IsolationProfileRepository = (*Repository)(nil)
 var _ IsolationProfileWriter = (*Repository)(nil)
 var _ CompositionRepository = (*Repository)(nil)
@@ -631,6 +656,7 @@ func NewInMemoryRepository() *Repository {
 		DigitalEstates:          map[string]domain.DigitalEstate{},
 		Markets:                 map[string]domain.Market{},
 		MarketAssignments:       map[string]domain.MarketAssignment{},
+		TradeLanes:              map[string]domain.TradeLane{},
 		IsolationProfiles:       map[string]domain.IsolationProfile{},
 		TenantIsolationProfiles: map[string]domain.TenantIsolationProfileAssignment{},
 		WorkforceMemberships:    map[string]domain.WorkforceMembership{},
@@ -1657,7 +1683,13 @@ func marketAssignmentPeriodsOverlap(a, b domain.MarketAssignment) bool {
 	return !aEndsBeforeBStarts && !bEndsBeforeAStarts
 }
 
-func (r *Repository) AssignMarketToTenant(_ context.Context, assignment domain.MarketAssignment) error {
+// AssignMarketToTenant delegates to CreateMarketAssignment (see MarketWriter's
+// doc comment); kept so existing callers using this name are unaffected.
+func (r *Repository) AssignMarketToTenant(ctx context.Context, assignment domain.MarketAssignment) error {
+	return r.CreateMarketAssignment(ctx, assignment)
+}
+
+func (r *Repository) CreateMarketAssignment(_ context.Context, assignment domain.MarketAssignment) error {
 	if r == nil {
 		return errors.New("repository is nil")
 	}
@@ -1676,6 +1708,82 @@ func (r *Repository) AssignMarketToTenant(_ context.Context, assignment domain.M
 		}
 	}
 	r.MarketAssignments[assignment.ID] = assignment
+	return nil
+}
+
+func (r *Repository) GetMarketAssignment(_ context.Context, assignmentID string) (domain.MarketAssignment, error) {
+	if r == nil {
+		return domain.MarketAssignment{}, errors.New("repository is nil")
+	}
+	a, ok := r.MarketAssignments[assignmentID]
+	if !ok {
+		return domain.MarketAssignment{}, fmt.Errorf("market assignment %s not found", assignmentID)
+	}
+	return a, nil
+}
+
+// GetEffectiveMarketAssignment returns the one MarketAssignment covering at
+// for tenantID/marketID. The database's exclusion constraint (see
+// MarketAssignment's doc comment) already guarantees at most one such
+// assignment exists; this mirrors that invariant rather than picking
+// "latest" among several.
+func (r *Repository) GetEffectiveMarketAssignment(_ context.Context, tenantID, marketID string, at time.Time) (domain.MarketAssignment, error) {
+	if r == nil {
+		return domain.MarketAssignment{}, errors.New("repository is nil")
+	}
+	for _, a := range r.MarketAssignments {
+		if a.TenantID != tenantID || a.MarketID != marketID {
+			continue
+		}
+		if a.EffectiveFrom.After(at) {
+			continue
+		}
+		if a.EffectiveTo != nil && !a.EffectiveTo.After(at) {
+			continue
+		}
+		return a, nil
+	}
+	return domain.MarketAssignment{}, fmt.Errorf("no effective market assignment for tenant %s market %s", tenantID, marketID)
+}
+
+func (r *Repository) UpdateMarketAssignmentGovernance(_ context.Context, assignment domain.MarketAssignment) error {
+	if r == nil {
+		return errors.New("repository is nil")
+	}
+	if err := domain.ValidateMarketParticipationGovernance(assignment); err != nil {
+		return err
+	}
+	existing, ok := r.MarketAssignments[assignment.ID]
+	if !ok {
+		return fmt.Errorf("market assignment %s not found", assignment.ID)
+	}
+	existing.Status = assignment.Status
+	existing.Source = assignment.Source
+	existing.SourceReference = assignment.SourceReference
+	existing.PolicyVersion = assignment.PolicyVersion
+	r.MarketAssignments[assignment.ID] = existing
+	return nil
+}
+
+func (r *Repository) GetTradeLane(_ context.Context, tenantID, tradeLaneID string) (domain.TradeLane, error) {
+	if r == nil {
+		return domain.TradeLane{}, errors.New("repository is nil")
+	}
+	lane, ok := r.TradeLanes[tenantID+"\x00"+tradeLaneID]
+	if !ok {
+		return domain.TradeLane{}, fmt.Errorf("trade lane %s not found for tenant %s", tradeLaneID, tenantID)
+	}
+	return lane, nil
+}
+
+func (r *Repository) SaveTradeLane(_ context.Context, lane domain.TradeLane) error {
+	if r == nil {
+		return errors.New("repository is nil")
+	}
+	if err := lane.Validate(); err != nil {
+		return fmt.Errorf("validate trade lane: %w", err)
+	}
+	r.TradeLanes[lane.TenantID+"\x00"+lane.ID] = lane
 	return nil
 }
 
