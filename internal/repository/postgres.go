@@ -74,6 +74,7 @@ var _ CompositionRepository = (*PostgresRepository)(nil)
 var _ ProductRepository = (*PostgresRepository)(nil)
 var _ EntitlementProjectionRepository = (*PostgresRepository)(nil)
 var _ TenantProvisioningRepository = (*PostgresRepository)(nil)
+var _ TenantManifestRepository = (*PostgresRepository)(nil)
 
 func Open(ctx context.Context, url string) (*PostgresRepository, error) {
 	pool, err := pgxpool.New(ctx, url)
@@ -1565,6 +1566,28 @@ func (r *PostgresRepository) CreateTenantProvisioning(ctx context.Context, provi
 	if r == nil || r.pool == nil {
 		return errors.New("repository is not initialized")
 	}
+	return execInsertTenantProvisioning(ctx, r.pool, provisioning)
+}
+
+const insertTenantProvisioningSQL = `
+	INSERT INTO provisioning.tenant_provisioning(
+		tenant_provisioning_id, tenant_id, idempotency_key, request_hash, status,
+		desired_state_version, observed_state_version, product_requests, market_requests,
+		isolation_requirement, residency_requirement, blocking_reasons,
+		attempt_count, last_error, started_at, completed_at, version, metadata
+	)
+	VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), NULLIF($11, ''), $12, $13, NULLIF($14, ''), $15, $16, $17, $18)`
+
+// pgxExecer is the subset of *pgxpool.Pool and pgx.Tx that inserting a
+// TenantProvisioning row needs -- lets CreateTenantProvisioning and
+// CreateTenantProvisioningWithManifest share one INSERT (Exec) without
+// duplicating the SQL, whether run directly against the pool or inside a
+// transaction.
+type pgxExecer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+func execInsertTenantProvisioning(ctx context.Context, execer pgxExecer, provisioning provisioningdomain.TenantProvisioning) error {
 	if err := provisioning.Validate(); err != nil {
 		return fmt.Errorf("validate tenant provisioning: %w", err)
 	}
@@ -1584,20 +1607,12 @@ func (r *PostgresRepository) CreateTenantProvisioning(ctx context.Context, provi
 	if err != nil {
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
-	_, err = r.pool.Exec(ctx, `
-		INSERT INTO provisioning.tenant_provisioning(
-			tenant_provisioning_id, tenant_id, idempotency_key, request_hash, status,
-			desired_state_version, observed_state_version, product_requests, market_requests,
-			isolation_requirement, residency_requirement, blocking_reasons,
-			attempt_count, last_error, started_at, completed_at, version, metadata
-		)
-		VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), NULLIF($11, ''), $12, $13, NULLIF($14, ''), $15, $16, $17, $18)`,
+	if _, err := execer.Exec(ctx, insertTenantProvisioningSQL,
 		provisioning.ID, provisioning.TenantID, provisioning.IdempotencyKey, provisioning.RequestHash, string(provisioning.Status),
 		provisioning.DesiredStateVersion, provisioning.ObservedStateVersion, productRequests, marketRequests,
 		provisioning.IsolationRequirement, provisioning.ResidencyRequirement, blockingReasons,
 		provisioning.AttemptCount, provisioning.LastError, provisioning.StartedAt, provisioning.CompletedAt, provisioning.Version, metadata,
-	)
-	if err != nil {
+	); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return ErrTenantProvisioningAlreadyExists
@@ -1605,6 +1620,58 @@ func (r *PostgresRepository) CreateTenantProvisioning(ctx context.Context, provi
 		return err
 	}
 	return nil
+}
+
+// CreateTenantProvisioningWithManifest atomically inserts provisioning and
+// its manifest snapshot (migration 000042) in one transaction -- a caller
+// must never observe one without the other. If provisioning already
+// exists for (tenant_id, idempotency_key), the whole transaction rolls
+// back and no manifest row is created either.
+func (r *PostgresRepository) CreateTenantProvisioningWithManifest(ctx context.Context, provisioning provisioningdomain.TenantProvisioning, manifest provisioningdomain.TenantManifestRecord) error {
+	if r == nil || r.pool == nil {
+		return errors.New("repository is not initialized")
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := execInsertTenantProvisioning(ctx, tx, provisioning); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO provisioning.tenant_manifest(
+			tenant_provisioning_id, tenant_id, schema_version, manifest_hash,
+			desired_state_version, source, raw_manifest, resolved_manifest
+		) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)`,
+		provisioning.ID, manifest.TenantID, manifest.SchemaVersion, manifest.ManifestHash,
+		manifest.DesiredStateVersion, manifest.Source, manifest.RawManifest, manifest.ResolvedManifest,
+	); err != nil {
+		return fmt.Errorf("insert tenant manifest: %w", err)
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostgresRepository) GetTenantManifest(ctx context.Context, provisioningID string) (provisioningdomain.TenantManifestRecord, error) {
+	if r == nil || r.pool == nil {
+		return provisioningdomain.TenantManifestRecord{}, errors.New("repository is not initialized")
+	}
+	var m provisioningdomain.TenantManifestRecord
+	err := r.pool.QueryRow(ctx, `
+		SELECT tenant_manifest_id, tenant_provisioning_id, tenant_id, schema_version, manifest_hash,
+			desired_state_version, source, raw_manifest, resolved_manifest, created_at
+		FROM provisioning.tenant_manifest
+		WHERE tenant_provisioning_id = $1::uuid`, provisioningID,
+	).Scan(&m.ID, &m.TenantProvisioningID, &m.TenantID, &m.SchemaVersion, &m.ManifestHash,
+		&m.DesiredStateVersion, &m.Source, &m.RawManifest, &m.ResolvedManifest, &m.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return provisioningdomain.TenantManifestRecord{}, ErrTenantManifestNotFound
+		}
+		return provisioningdomain.TenantManifestRecord{}, err
+	}
+	return m, nil
 }
 
 func (r *PostgresRepository) GetTenantProvisioning(ctx context.Context, id string) (provisioningdomain.TenantProvisioning, error) {
