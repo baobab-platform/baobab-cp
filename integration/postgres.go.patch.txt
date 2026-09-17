@@ -1,0 +1,209 @@
+// Target path: internal/repository/postgres.go
+//
+// MERGE PATCH — do not replace the existing file.
+//
+// These methods use r.pool, matching the current PostgresRepository.
+//
+// IMPORTANT:
+// The existing AssignMarketToTenant/ListMarketAssignmentsForTenant methods
+// should be updated to scan/write the new governance columns too. Do not leave
+// two SQL paths with different representations of the same aggregate.
+
+const marketAssignmentSelectColumns = `
+    ma.market_assignment_id::text,
+    ma.tenant_id,
+    COALESCE(ma.legal_entity_id, ''),
+    ma.market_id::text,
+    ma.effective_from,
+    ma.effective_to,
+    ma.status,
+    ma.source,
+    COALESCE(ma.source_reference, ''),
+    ma.policy_version`
+
+func (r *PostgresRepository) GetMarketAssignment(
+    ctx context.Context,
+    assignmentID string,
+) (domain.MarketAssignment, error) {
+    if r == nil || r.pool == nil {
+        return domain.MarketAssignment{}, errors.New("repository is not initialized")
+    }
+
+    row := r.pool.QueryRow(ctx, `
+        SELECT `+marketAssignmentSelectColumns+`
+        FROM market.market_assignment ma
+        WHERE ma.market_assignment_id = $1::uuid`, assignmentID)
+
+    return r.scanMarketAssignmentWithCapabilities(ctx, row)
+}
+
+func (r *PostgresRepository) GetEffectiveMarketAssignment(
+    ctx context.Context,
+    tenantID, marketID string,
+    at time.Time,
+) (domain.MarketAssignment, error) {
+    if r == nil || r.pool == nil {
+        return domain.MarketAssignment{}, errors.New("repository is not initialized")
+    }
+
+    // EffectiveTo is exclusive, preserving the database's [from,to) model.
+    row := r.pool.QueryRow(ctx, `
+        SELECT `+marketAssignmentSelectColumns+`
+        FROM market.market_assignment ma
+        WHERE ma.tenant_id = $1
+          AND ma.market_id = $2::uuid
+          AND ma.effective_from <= $3
+          AND (ma.effective_to IS NULL OR $3 < ma.effective_to)
+        ORDER BY ma.effective_from DESC
+        LIMIT 1`, tenantID, marketID, at)
+
+    return r.scanMarketAssignmentWithCapabilities(ctx, row)
+}
+
+// scanMarketAssignmentWithCapabilities keeps capability loading centralized.
+// If the existing repository already has an equivalent helper, extend that
+// helper instead of adding this duplicate.
+func (r *PostgresRepository) scanMarketAssignmentWithCapabilities(
+    ctx context.Context,
+    row interface{ Scan(dest ...any) error },
+) (domain.MarketAssignment, error) {
+    var a domain.MarketAssignment
+    var status, source string
+    if err := row.Scan(
+        &a.ID, &a.TenantID, &a.LegalEntityID, &a.MarketID,
+        &a.EffectiveFrom, &a.EffectiveTo,
+        &status, &source, &a.SourceReference, &a.PolicyVersion,
+    ); err != nil {
+        return domain.MarketAssignment{}, err
+    }
+    a.Status = domain.MarketParticipationStatus(status)
+    a.Source = domain.MarketParticipationSource(source)
+
+    rows, err := r.pool.Query(ctx, `
+        SELECT capability
+        FROM market.market_participation_capability
+        WHERE market_assignment_id = $1::uuid
+        ORDER BY capability`, a.ID)
+    if err != nil {
+        return domain.MarketAssignment{}, err
+    }
+    defer rows.Close()
+
+    for rows.Next() {
+        var capability string
+        if err := rows.Scan(&capability); err != nil {
+            return domain.MarketAssignment{}, err
+        }
+        a.Capabilities = append(
+            a.Capabilities,
+            domain.MarketParticipationCapability(capability),
+        )
+    }
+    if err := rows.Err(); err != nil {
+        return domain.MarketAssignment{}, err
+    }
+    return a, nil
+}
+
+func (r *PostgresRepository) CreateMarketAssignment(
+    ctx context.Context,
+    a domain.MarketAssignment,
+) error {
+    if r == nil || r.pool == nil {
+        return errors.New("repository is not initialized")
+    }
+    if err := a.Validate(); err != nil {
+        return fmt.Errorf("validate market participation: %w", err)
+    }
+    if a.ID == "" {
+        return errors.New("market assignment id is required")
+    }
+
+    // Header and normalized capability rows form one aggregate and therefore
+    // MUST commit atomically.
+    tx, err := r.pool.Begin(ctx)
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback(ctx)
+
+    _, err = tx.Exec(ctx, `
+        INSERT INTO market.market_assignment(
+            market_assignment_id, tenant_id, legal_entity_id, market_id,
+            effective_from, effective_to, status, source, source_reference,
+            policy_version
+        )
+        VALUES (
+            $1::uuid, $2, NULLIF($3, ''), $4::uuid,
+            $5, $6, $7, $8, NULLIF($9, ''), $10
+        )`,
+        a.ID, a.TenantID, a.LegalEntityID, a.MarketID,
+        a.EffectiveFrom, a.EffectiveTo, string(a.Status), string(a.Source),
+        a.SourceReference, a.PolicyVersion,
+    )
+    if err != nil {
+        var pgErr *pgconn.PgError
+        if errors.As(err, &pgErr) && pgErr.Code == "23P01" {
+            return fmt.Errorf("%w: tenant %s market %s",
+                ErrMarketAssignmentOverlap, a.TenantID, a.MarketID)
+        }
+        return err
+    }
+
+    for _, capability := range a.Capabilities {
+        if _, err := tx.Exec(ctx, `
+            INSERT INTO market.market_participation_capability(
+                market_assignment_id, capability
+            ) VALUES ($1::uuid, $2)`, a.ID, string(capability)); err != nil {
+            return err
+        }
+    }
+    return tx.Commit(ctx)
+}
+
+// AssignMarketToTenant compatibility implementation:
+//
+// func (r *PostgresRepository) AssignMarketToTenant(
+//     ctx context.Context,
+//     assignment domain.MarketAssignment,
+// ) error {
+//     return r.CreateMarketAssignment(ctx, assignment)
+// }
+//
+// Keep this adapter until callers migrate to the clearer ZB-02 method name.
+
+func (r *PostgresRepository) UpdateMarketAssignmentGovernance(
+    ctx context.Context,
+    a domain.MarketAssignment,
+) error {
+    if r == nil || r.pool == nil {
+        return errors.New("repository is not initialized")
+    }
+    if err := ValidateMarketParticipationGovernance(a); err != nil {
+        return err
+    }
+
+    result, err := r.pool.Exec(ctx, `
+        UPDATE market.market_assignment
+        SET status = $2,
+            source = $3,
+            source_reference = NULLIF($4, ''),
+            policy_version = $5,
+            updated_at = now()
+        WHERE market_assignment_id = $1::uuid`,
+        a.ID, string(a.Status), string(a.Source),
+        a.SourceReference, a.PolicyVersion)
+    if err != nil {
+        return err
+    }
+    if result.RowsAffected() == 0 {
+        return fmt.Errorf("market participation %s not found", a.ID)
+    }
+    return nil
+}
+
+// NOTE: in repository package, the governance validation call above must be:
+//
+//     domain.ValidateMarketParticipationGovernance(a)
+//
+// if this snippet is pasted literally.
