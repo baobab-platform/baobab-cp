@@ -192,6 +192,18 @@ type TenantManifestRepository interface {
 // manifest snapshot was ever recorded for the given provisioning ID.
 var ErrTenantManifestNotFound = errors.New("tenant manifest not found")
 
+// ReadinessSnapshotRepository persists immutable readiness-evaluation
+// evidence for a TenantProvisioning run (Gate ZB-03.1, migration 000043).
+type ReadinessSnapshotRepository interface {
+	// SaveReadinessSnapshot inserts a new, immutable snapshot (and its
+	// check rows) and returns the generated snapshot ID. It never updates
+	// an existing snapshot -- a later evaluation always produces a new one.
+	SaveReadinessSnapshot(ctx context.Context, snapshot provisioningdomain.ReadinessSnapshotRecord) (string, error)
+	// ListReadinessSnapshots returns provisioningID's snapshots, most
+	// recent (by evaluated_at) first.
+	ListReadinessSnapshots(ctx context.Context, provisioningID string) ([]provisioningdomain.ReadinessSnapshotRecord, error)
+}
+
 // ErrContextNotFound is returned by GetContext when no resolved Context
 // exists for the given context_id, or exists but is expired (ADR-BCP-004
 // §72: a caller must not be able to distinguish "never existed" from
@@ -589,6 +601,10 @@ type Repository struct {
 	// TenantProvisionings), mirroring provisioning.tenant_manifest's
 	// UNIQUE(tenant_provisioning_id).
 	TenantManifests map[string]provisioningdomain.TenantManifestRecord
+	// ReadinessSnapshots is keyed by TenantProvisioningID, multi-valued
+	// (append-only, matching the real table's immutable-evidence design):
+	// each evaluation appends a new snapshot rather than replacing one.
+	ReadinessSnapshots map[string][]provisioningdomain.ReadinessSnapshotRecord
 }
 
 // LinkAuditRecord is the in-memory equivalent of the audit_events row
@@ -666,6 +682,7 @@ var _ ProductRepository = (*Repository)(nil)
 var _ EntitlementProjectionRepository = (*Repository)(nil)
 var _ TenantProvisioningRepository = (*Repository)(nil)
 var _ TenantManifestRepository = (*Repository)(nil)
+var _ ReadinessSnapshotRepository = (*Repository)(nil)
 
 func NewInMemoryRepository() *Repository {
 	return &Repository{
@@ -694,6 +711,7 @@ func NewInMemoryRepository() *Repository {
 		EntitlementProjections:  map[string][]productdomain.EntitlementProjection{},
 		TenantProvisionings:     map[string]provisioningdomain.TenantProvisioning{},
 		TenantManifests:         map[string]provisioningdomain.TenantManifestRecord{},
+		ReadinessSnapshots:      map[string][]provisioningdomain.ReadinessSnapshotRecord{},
 	}
 }
 
@@ -1044,6 +1062,34 @@ func (r *Repository) GetTenantManifest(_ context.Context, provisioningID string)
 		return provisioningdomain.TenantManifestRecord{}, ErrTenantManifestNotFound
 	}
 	return m, nil
+}
+
+func (r *Repository) SaveReadinessSnapshot(_ context.Context, snapshot provisioningdomain.ReadinessSnapshotRecord) (string, error) {
+	if r == nil {
+		return "", errors.New("repository is nil")
+	}
+	if snapshot.ID == "" {
+		snapshot.ID = domain.NewUUIDv7()
+	}
+	if snapshot.CreatedAt.IsZero() {
+		snapshot.CreatedAt = snapshot.EvaluatedAt
+	}
+	r.ReadinessSnapshots[snapshot.TenantProvisioningID] = append(r.ReadinessSnapshots[snapshot.TenantProvisioningID], snapshot)
+	return snapshot.ID, nil
+}
+
+func (r *Repository) ListReadinessSnapshots(_ context.Context, provisioningID string) ([]provisioningdomain.ReadinessSnapshotRecord, error) {
+	if r == nil {
+		return nil, errors.New("repository is nil")
+	}
+	snapshots := r.ReadinessSnapshots[provisioningID]
+	out := make([]provisioningdomain.ReadinessSnapshotRecord, len(snapshots))
+	for i, s := range snapshots {
+		// Most-recent-first, matching PostgresRepository's ORDER BY
+		// evaluated_at DESC.
+		out[len(snapshots)-1-i] = s
+	}
+	return out, nil
 }
 
 func (r *Repository) GetTenantProvisioning(_ context.Context, id string) (provisioningdomain.TenantProvisioning, error) {

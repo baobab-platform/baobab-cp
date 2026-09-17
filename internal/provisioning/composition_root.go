@@ -88,6 +88,7 @@ type ZB02Repository interface {
 	CreateMarketAssignment(ctx context.Context, assignment domain.MarketAssignment) error
 	GetTradeLane(ctx context.Context, tenantID, tradeLaneID string) (domain.TradeLane, error)
 	SaveTradeLane(ctx context.Context, lane domain.TradeLane) error
+	ReadinessSnapshotStore
 }
 
 // ZB02Dependencies is the wiring BuildZB02Pipeline needs. Now defaults to
@@ -208,7 +209,7 @@ func BuildZB02Pipeline(deps ZB02Dependencies, manifest ResolvedManifest, scopeID
 		NewProbeCheck("context-resolution", contextResolutionProbe{resolver: contextResolver, manifest: manifest}),
 		NewProbeCheck("trade-lanes", tradeLanesProbe{repo: deps.Repo, manifest: manifest}),
 		NewProbeCheck("isolation-and-residency", isolationResidencyProbe{repo: deps.Repo, manifest: manifest}),
-	)}
+	), Snapshots: deps.Repo}
 
 	return NewOrchestrator(deps.Provisioning, applyWorker, reconcileWorker, readinessWorker), nil
 }

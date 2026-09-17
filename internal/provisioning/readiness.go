@@ -57,22 +57,8 @@ func NewReadinessEvaluator(checks ...ReadinessCheck) *ReadinessEvaluatorImpl {
 	}
 }
 
-// Evaluate satisfies the ReadinessEvaluator consumed by ReadinessWorker.
-func (r *ReadinessEvaluatorImpl) Evaluate(
-	ctx context.Context,
-	op provisioningdomain.TenantProvisioning,
-) (int64, []string, map[string]string, error) {
-	report, err := r.Report(ctx, op)
-	if err != nil {
-		return op.ObservedStateVersion, nil, nil, err
-	}
-	evidence := make(map[string]string, len(report.Evidence))
-	for _, item := range report.Evidence {
-		evidence[item.Check] = item.Reference
-	}
-	return report.ObservedStateVersion, report.BlockingReasons, evidence, nil
-}
-
+// Report satisfies the ReadinessEvaluator interface consumed by
+// ReadinessWorker.
 func (r *ReadinessEvaluatorImpl) Report(
 	ctx context.Context,
 	op provisioningdomain.TenantProvisioning,
