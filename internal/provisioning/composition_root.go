@@ -45,6 +45,9 @@ type ContextAuthorityRepo interface {
 	ListMarketAssignmentsForTenant(ctx context.Context, tenantID string) ([]domain.MarketAssignment, error)
 	GetDigitalEstate(ctx context.Context, id string) (domain.DigitalEstate, error)
 	GetIsolationProfile(ctx context.Context, id string) (domain.IsolationProfile, error)
+	// GetCanonicalEntity backs the OrganisationID resolution stage
+	// (ADR-BCP-016).
+	GetCanonicalEntity(ctx context.Context, id string) (domain.CanonicalEntity, error)
 }
 
 // ContextAuthorityAdapter composes store.TenantStore with
@@ -71,6 +74,9 @@ func (a ContextAuthorityAdapter) GetDigitalEstate(ctx context.Context, estateID 
 }
 func (a ContextAuthorityAdapter) GetIsolationProfile(ctx context.Context, profileID string) (domain.IsolationProfile, error) {
 	return a.Repo.GetIsolationProfile(ctx, profileID)
+}
+func (a ContextAuthorityAdapter) GetCanonicalEntity(ctx context.Context, id string) (domain.CanonicalEntity, error) {
+	return a.Repo.GetCanonicalEntity(ctx, id)
 }
 
 var _ ContextAuthority = ContextAuthorityAdapter{}

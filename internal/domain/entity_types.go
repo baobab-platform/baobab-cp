@@ -14,11 +14,28 @@ const (
 	// EntityTypeSupplierOrganisation is the canonical entity kind for a
 	// prospective or approved supplier organisation, e.g. canonical_key
 	// "supplier:<estate>:<estate-local-application-id>" (see ADR-0006).
-	// It is registered here as a name only: this package does not create,
-	// resolve, or map any SUPPLIER_ORGANISATION entity, and no other
-	// control-plane code branches on this constant. Registration happens
-	// exclusively through the existing entity-type-agnostic
+	// Registration happens through the existing entity-type-agnostic
 	// CanonicalEntityService.Create API once a hosting estate is ready to
 	// call it.
 	EntityTypeSupplierOrganisation = "SUPPLIER_ORGANISATION"
+
+	// EntityTypeBuyerOrganisation is the canonical entity kind for a
+	// buyer organisation, e.g. canonical_key "buyer:<estate>:<estate-
+	// local-organisation-id>" (see ADR-BCP-016, which registers this
+	// constant following ADR-0006's identical precedent and reconciles it
+	// with ADR-BCP-014's broader Organisation/Counterparty model).
+	// Registration happens through the same CanonicalEntityService.Create
+	// API as EntityTypeSupplierOrganisation.
+	EntityTypeBuyerOrganisation = "BUYER_ORGANISATION"
 )
+
+// OrganisationEntityTypes lists every CanonicalEntity.EntityType value the
+// control plane recognises as "an organisation" for context-resolution
+// purposes (internal/provisioning.AuthoritativeContextResolver's
+// OrganisationID stage, ADR-BCP-016). A canonical entity of any other
+// EntityType can never be asserted as a request's organisation_id, even if
+// its ID is otherwise well-formed.
+var OrganisationEntityTypes = map[string]bool{
+	EntityTypeBuyerOrganisation:    true,
+	EntityTypeSupplierOrganisation: true,
+}

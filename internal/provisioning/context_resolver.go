@@ -24,14 +24,25 @@ type ContextAuthority interface {
 	ListMarketAssignmentsForTenant(ctx context.Context, tenantID string) ([]domain.MarketAssignment, error)
 	GetDigitalEstate(ctx context.Context, estateID string) (domain.DigitalEstate, error)
 	GetIsolationProfile(ctx context.Context, profileID string) (domain.IsolationProfile, error)
+	// GetCanonicalEntity backs the OrganisationID resolution stage
+	// (ADR-BCP-016): verifying a caller-asserted organisation_id names a
+	// real, ACTIVE, organisation-kind CanonicalEntity owned by the
+	// requesting tenant, never trusting the identifier at face value.
+	GetCanonicalEntity(ctx context.Context, id string) (domain.CanonicalEntity, error)
 }
 
 // ContextResolutionRequest carries caller identity plus identifiers whose
 // authority must be verified by CP before entering Platform Context.
 type ContextResolutionRequest struct {
-	PrincipalID        string
-	TenantID           string
-	LegalEntityID      string
+	PrincipalID   string
+	TenantID      string
+	LegalEntityID string
+	// OrganisationID, when supplied, must name a real, ACTIVE
+	// CanonicalEntity of an organisation EntityType
+	// (domain.OrganisationEntityTypes) owned by TenantID -- see Resolve's
+	// verification stage. Never trusted merely because it is
+	// well-formed (ADR-BCP-016).
+	OrganisationID     string
 	MarketID           string
 	DigitalEstateID    string
 	DeploymentRegion   string
@@ -95,6 +106,27 @@ func (r *AuthoritativeContextResolver) Resolve(ctx context.Context, req ContextR
 		evidence.Provenance["legal_entity_id"] = resolver.ContextSource{
 			Source: "baobab-cp:tenant-registry", TrustLevel: resolver.TrustSystem,
 			Evidence: req.LegalEntityID,
+		}
+	}
+
+	if req.OrganisationID != "" {
+		organisation, err := r.authority.GetCanonicalEntity(ctx, req.OrganisationID)
+		if err != nil {
+			return resolver.Context{}, fmt.Errorf("resolve organisation: %w", err)
+		}
+		if !domain.OrganisationEntityTypes[organisation.EntityType] {
+			return resolver.Context{}, errors.New("requested organisation_id is not a canonical organisation entity")
+		}
+		if organisation.Status != "ACTIVE" {
+			return resolver.Context{}, errors.New("requested organisation is not active")
+		}
+		if organisation.OwnerTenantID != req.TenantID {
+			return resolver.Context{}, errors.New("requested organisation does not belong to the requesting tenant")
+		}
+		evidence.OrganisationID = organisation.ID
+		evidence.Provenance["organisation_id"] = resolver.ContextSource{
+			Source: "baobab-cp:canonical-registry", TrustLevel: resolver.TrustSystem,
+			Evidence: organisation.ID,
 		}
 	}
 

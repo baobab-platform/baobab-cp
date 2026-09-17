@@ -5,6 +5,7 @@
 - [ADR-0004: Executable tenant context resolution policy](0004-context-resolution-policy.md)
 - [ADR-0006: Supplier organisation canonical entity registration](0006-supplier-organisation-canonical-entity.md)
 - [ADR-BCP-001: Baobab Control Plane — Parent Implementation Contract and Derived Artefacts](ADR-BCP-001-Baobab%20Control%20Plane%20—%20Parent%20Implementation%20Contract%20and%20Derived%20Artefacts.md)
+- [ADR-BCP-016: Buyer Organisation Canonical Entity Registration and OrganisationID Context Resolution](ADR-BCP-016%20—%20Buyer%20Organisation%20Canonical%20Entity%20Registration%20and%20OrganisationID%20Context%20Resolution.md)
 
 ADR-0005 ("BCP-DB-001/BCP-GO-001 conformance gap and remediation") is referenced from a
 source comment in `internal/repository/postgres.go` but has not been authored as a
