@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
 	"github.com/nabhold/baobab-cp/internal/domain"
+	productdomain "github.com/nabhold/baobab-cp/internal/product/domain"
 	"github.com/nabhold/baobab-cp/internal/resolver"
 )
 
@@ -63,6 +64,9 @@ var _ MarketRepository = (*PostgresRepository)(nil)
 var _ MarketWriter = (*PostgresRepository)(nil)
 var _ IsolationProfileRepository = (*PostgresRepository)(nil)
 var _ IsolationProfileWriter = (*PostgresRepository)(nil)
+var _ CompositionRepository = (*PostgresRepository)(nil)
+var _ ProductRepository = (*PostgresRepository)(nil)
+var _ EntitlementProjectionRepository = (*PostgresRepository)(nil)
 
 func Open(ctx context.Context, url string) (*PostgresRepository, error) {
 	pool, err := pgxpool.New(ctx, url)
@@ -1072,6 +1076,22 @@ func (r *PostgresRepository) CreateCapabilityScope(ctx context.Context, scope ca
 	if err != nil {
 		return fmt.Errorf("marshal capability scope metadata: %w", err)
 	}
+	// include_countries/exclude_countries are NOT NULL DEFAULT '{}' (migration
+	// 000029), but that default only applies when the column is omitted from
+	// the INSERT entirely -- naming it with a nil Go slice bind parameter
+	// sends an explicit SQL NULL, not the column default, and fails the
+	// NOT NULL constraint. A CapabilityScope with no country restriction (the
+	// common case: "an unspecified dimension means not further restricted",
+	// per this type's own doc comment) must not require the caller to know
+	// to pre-populate empty slices.
+	includeCountries := scope.IncludeCountries
+	if includeCountries == nil {
+		includeCountries = []string{}
+	}
+	excludeCountries := scope.ExcludeCountries
+	if excludeCountries == nil {
+		excludeCountries = []string{}
+	}
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO capability.capability_scope(
 			scope_id, tenant_id, legal_entity_id, organisation_id, business_unit_id,
@@ -1088,7 +1108,7 @@ func (r *PostgresRepository) CreateCapabilityScope(ctx context.Context, scope ca
 		scope.ScopeID, scope.TenantID, scope.LegalEntityID, scope.OrganisationID, scope.BusinessUnitID,
 		scope.DigitalEstateID, scope.DigitalPropertyID, scope.ChannelID, scope.MarketID, scope.Jurisdiction,
 		scope.CurrencyCode, scope.CustomerSegmentID, scope.CatalogueID, scope.OperatingRegionID, scope.GeographicRegionID,
-		scope.DeploymentRegion, scope.Environment, scope.IsolationProfileID, scope.IncludeCountries, scope.ExcludeCountries, metadata,
+		scope.DeploymentRegion, scope.Environment, scope.IsolationProfileID, includeCountries, excludeCountries, metadata,
 	)
 	return err
 }
@@ -1261,6 +1281,233 @@ func (r *PostgresRepository) RevokeGrant(ctx context.Context, grantID, revokedBy
 		return fmt.Errorf("capability grant %s version conflict or not found", grantID)
 	}
 	return nil
+}
+
+// CreateComposition inserts a CapabilityComposition and its members in one
+// transaction -- a composition with zero members would already be rejected
+// by Validate(), but the transaction also ensures a member-insert failure
+// (e.g. a duplicate capability_key) never leaves an orphaned composition
+// header row behind.
+func (r *PostgresRepository) CreateComposition(ctx context.Context, composition capabilitydomain.CapabilityComposition) error {
+	if r == nil || r.pool == nil {
+		return errors.New("repository is not initialized")
+	}
+	if err := composition.Validate(); err != nil {
+		return fmt.Errorf("validate capability composition: %w", err)
+	}
+	includes, err := json.Marshal(composition.IncludesCompositions)
+	if err != nil {
+		return fmt.Errorf("marshal includes_compositions: %w", err)
+	}
+	incompatible, err := json.Marshal(composition.IncompatibleWith)
+	if err != nil {
+		return fmt.Errorf("marshal incompatible_with: %w", err)
+	}
+	metadata, err := json.Marshal(composition.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal composition metadata: %w", err)
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var compositionID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO capability.capability_composition(composition_key, name, composition_type, version, includes_compositions, incompatible_with, lifecycle, metadata)
+		VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7, $8)
+		RETURNING composition_id::text`,
+		composition.CompositionKey, composition.Name, string(composition.CompositionType), composition.Version,
+		includes, incompatible, string(composition.Lifecycle), metadata,
+	).Scan(&compositionID)
+	if err != nil {
+		return err
+	}
+	for _, member := range composition.Members {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO capability.capability_composition_member(composition_id, capability_key, criticality, version_constraint, activation_condition)
+			VALUES ($1::uuid, $2, $3, NULLIF($4, ''), NULLIF($5, ''))`,
+			compositionID, member.CapabilityKey, string(member.Criticality), member.VersionConstraint, member.ActivationCondition,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// GetActiveComposition returns the highest-semver ACTIVE composition
+// registered under compositionKey, failing closed (an error, never a zero
+// value) when none is found. Ordering by string_to_array(version,
+// '.')::int[] compares each semver segment numerically, so "10.0.0"
+// correctly orders after "9.0.0" (unlike a plain text ORDER BY version).
+func (r *PostgresRepository) GetActiveComposition(ctx context.Context, compositionKey string) (capabilitydomain.CapabilityComposition, error) {
+	if r == nil || r.pool == nil {
+		return capabilitydomain.CapabilityComposition{}, errors.New("repository is not initialized")
+	}
+	var c capabilitydomain.CapabilityComposition
+	var compositionID, compositionType, lifecycle string
+	var includes, incompatible, metadata []byte
+	err := r.pool.QueryRow(ctx, `
+		SELECT composition_id::text, composition_key, COALESCE(name, ''), composition_type, version, includes_compositions, incompatible_with, lifecycle, metadata
+		FROM capability.capability_composition
+		WHERE composition_key = $1 AND lifecycle = 'ACTIVE'
+		ORDER BY string_to_array(version, '.')::int[] DESC
+		LIMIT 1`, compositionKey,
+	).Scan(&compositionID, &c.CompositionKey, &c.Name, &compositionType, &c.Version, &includes, &incompatible, &lifecycle, &metadata)
+	if err != nil {
+		return capabilitydomain.CapabilityComposition{}, fmt.Errorf("no ACTIVE composition registered for %q: %w", compositionKey, err)
+	}
+	c.ID = compositionID
+	c.CompositionType = capabilitydomain.CapabilityCompositionType(compositionType)
+	c.Lifecycle = capabilitydomain.CapabilityLifecycle(lifecycle)
+	if len(includes) > 0 {
+		if err := json.Unmarshal(includes, &c.IncludesCompositions); err != nil {
+			return capabilitydomain.CapabilityComposition{}, fmt.Errorf("unmarshal includes_compositions: %w", err)
+		}
+	}
+	if len(incompatible) > 0 {
+		if err := json.Unmarshal(incompatible, &c.IncompatibleWith); err != nil {
+			return capabilitydomain.CapabilityComposition{}, fmt.Errorf("unmarshal incompatible_with: %w", err)
+		}
+	}
+	if len(metadata) > 0 {
+		if err := json.Unmarshal(metadata, &c.Metadata); err != nil {
+			return capabilitydomain.CapabilityComposition{}, fmt.Errorf("unmarshal composition metadata: %w", err)
+		}
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT capability_key, criticality, COALESCE(version_constraint, ''), COALESCE(activation_condition, '')
+		FROM capability.capability_composition_member
+		WHERE composition_id = $1::uuid`, compositionID)
+	if err != nil {
+		return capabilitydomain.CapabilityComposition{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var member capabilitydomain.CompositionMember
+		var criticality string
+		if err := rows.Scan(&member.CapabilityKey, &criticality, &member.VersionConstraint, &member.ActivationCondition); err != nil {
+			return capabilitydomain.CapabilityComposition{}, err
+		}
+		member.Criticality = capabilitydomain.MembershipCriticality(criticality)
+		c.Members = append(c.Members, member)
+	}
+	if err := rows.Err(); err != nil {
+		return capabilitydomain.CapabilityComposition{}, err
+	}
+	return c, nil
+}
+
+func (r *PostgresRepository) CreateProduct(ctx context.Context, product productdomain.Product) error {
+	if r == nil || r.pool == nil {
+		return errors.New("repository is not initialized")
+	}
+	if err := product.Validate(); err != nil {
+		return fmt.Errorf("validate product: %w", err)
+	}
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO product.product(product_id, name, description, status, owner)
+		VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''))`,
+		product.ID, product.Name, product.Description, string(product.Status), product.Owner,
+	)
+	return err
+}
+
+func (r *PostgresRepository) GetProduct(ctx context.Context, productID string) (productdomain.Product, error) {
+	if r == nil || r.pool == nil {
+		return productdomain.Product{}, errors.New("repository is not initialized")
+	}
+	var p productdomain.Product
+	var status string
+	err := r.pool.QueryRow(ctx, `
+		SELECT product_id, name, COALESCE(description, ''), status, COALESCE(owner, '')
+		FROM product.product WHERE product_id = $1`, productID,
+	).Scan(&p.ID, &p.Name, &p.Description, &status, &p.Owner)
+	if err != nil {
+		return productdomain.Product{}, fmt.Errorf("get product %s: %w", productID, err)
+	}
+	p.Status = productdomain.ProductLifecycle(status)
+	return p, nil
+}
+
+func (r *PostgresRepository) CreateProductVersion(ctx context.Context, version productdomain.ProductVersion) error {
+	if r == nil || r.pool == nil {
+		return errors.New("repository is not initialized")
+	}
+	if err := version.Validate(); err != nil {
+		return fmt.Errorf("validate product version: %w", err)
+	}
+	row := r.pool.QueryRow(ctx, `
+		INSERT INTO product.product_version(product_id, version, composition_key, status, released_at, deprecated_at, retired_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING product_version_id::text`,
+		version.ProductID, version.Version, version.CompositionKey, string(version.Status),
+		version.ReleasedAt, version.DeprecatedAt, version.RetiredAt,
+	)
+	return row.Scan(&version.ID)
+}
+
+func (r *PostgresRepository) GetProductVersion(ctx context.Context, productVersionID string) (productdomain.ProductVersion, error) {
+	if r == nil || r.pool == nil {
+		return productdomain.ProductVersion{}, errors.New("repository is not initialized")
+	}
+	var v productdomain.ProductVersion
+	var status string
+	err := r.pool.QueryRow(ctx, `
+		SELECT product_version_id::text, product_id, version, composition_key, status, released_at, deprecated_at, retired_at
+		FROM product.product_version WHERE product_version_id = $1::uuid`, productVersionID,
+	).Scan(&v.ID, &v.ProductID, &v.Version, &v.CompositionKey, &status, &v.ReleasedAt, &v.DeprecatedAt, &v.RetiredAt)
+	if err != nil {
+		return productdomain.ProductVersion{}, fmt.Errorf("get product version %s: %w", productVersionID, err)
+	}
+	v.Status = productdomain.ProductLifecycle(status)
+	return v, nil
+}
+
+func (r *PostgresRepository) CreateEntitlementProjection(ctx context.Context, projection productdomain.EntitlementProjection) error {
+	if r == nil || r.pool == nil {
+		return errors.New("repository is not initialized")
+	}
+	if err := projection.Validate(); err != nil {
+		return fmt.Errorf("validate entitlement projection: %w", err)
+	}
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO product.entitlement_projection(subscription_id, tenant_id, capability_key, status, grant_id, failure_reason)
+		VALUES ($1::uuid, $2, $3, $4, NULLIF($5, '')::uuid, NULLIF($6, ''))`,
+		projection.SubscriptionID, projection.TenantID, projection.CapabilityKey, string(projection.Status),
+		projection.GrantID, projection.FailureReason,
+	)
+	return err
+}
+
+func (r *PostgresRepository) ListEntitlementProjections(ctx context.Context, subscriptionID string) ([]productdomain.EntitlementProjection, error) {
+	if r == nil || r.pool == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT entitlement_projection_id::text, subscription_id::text, tenant_id, capability_key, status, COALESCE(grant_id::text, ''), COALESCE(failure_reason, '')
+		FROM product.entitlement_projection WHERE subscription_id = $1::uuid ORDER BY created_at`, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []productdomain.EntitlementProjection
+	for rows.Next() {
+		var p productdomain.EntitlementProjection
+		var status string
+		if err := rows.Scan(&p.ID, &p.SubscriptionID, &p.TenantID, &p.CapabilityKey, &status, &p.GrantID, &p.FailureReason); err != nil {
+			return nil, err
+		}
+		p.Status = productdomain.EntitlementProjectionStatus(status)
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *PostgresRepository) GetCapability(ctx context.Context, capabilityKey string) (capabilitydomain.Capability, error) {

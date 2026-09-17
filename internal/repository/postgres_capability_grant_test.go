@@ -151,3 +151,59 @@ func TestPostgresCapabilityScopeAndGrantRoundTrip(t *testing.T) {
 		t.Fatal("a revoked grant must never report itself effective")
 	}
 }
+
+// TestPostgresCreateCapabilityScopeAcceptsUnrestrictedCountryLists is a
+// regression test: CreateCapabilityScope used to bind a nil
+// IncludeCountries/ExcludeCountries slice as an explicit SQL NULL rather
+// than letting include_countries/exclude_countries' NOT NULL DEFAULT '{}'
+// (migration 000029) apply, so the common case of a scope with no country
+// restriction -- "an unspecified dimension means not further restricted",
+// per CapabilityScope's own doc comment -- always failed the NOT NULL
+// constraint. Surfaced by Programme Gate P4's CompositionExpansionService,
+// the first caller to create a tenant-baseline scope with every dimension
+// left unset.
+func TestPostgresCreateCapabilityScopeAcceptsUnrestrictedCountryLists(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping PostgreSQL integration test")
+	}
+	ctx := context.Background()
+
+	store, err := postgres.Open(ctx, url)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.ApplyMigrations(ctx); err != nil {
+		t.Fatalf("apply migrations: %v", err)
+	}
+
+	const scopeID = "30000000-0000-0000-0000-0000000000f5"
+	const tenantID = "tn_unrestrictedscope"
+
+	admin, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer admin.Close()
+	cleanup := func() { admin.Exec(ctx, `DELETE FROM capability.capability_scope WHERE scope_id = $1::uuid`, scopeID) }
+	cleanup()
+	t.Cleanup(cleanup)
+
+	repo, err := Open(ctx, url)
+	if err != nil {
+		t.Fatalf("open repository: %v", err)
+	}
+	defer repo.Close()
+
+	if err := repo.CreateCapabilityScope(ctx, capabilitydomain.CapabilityScope{ScopeID: scopeID, TenantID: tenantID}); err != nil {
+		t.Fatalf("create capability scope with no country restriction: %v", err)
+	}
+	stored, err := repo.GetCapabilityScope(ctx, scopeID)
+	if err != nil {
+		t.Fatalf("get capability scope: %v", err)
+	}
+	if len(stored.IncludeCountries) != 0 || len(stored.ExcludeCountries) != 0 {
+		t.Fatalf("expected empty, not nil-vs-populated-mismatched, country lists, got %+v", stored)
+	}
+}
