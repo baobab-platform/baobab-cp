@@ -75,6 +75,7 @@ var _ ProductRepository = (*PostgresRepository)(nil)
 var _ EntitlementProjectionRepository = (*PostgresRepository)(nil)
 var _ TenantProvisioningRepository = (*PostgresRepository)(nil)
 var _ TenantManifestRepository = (*PostgresRepository)(nil)
+var _ ReadinessSnapshotRepository = (*PostgresRepository)(nil)
 
 func Open(ctx context.Context, url string) (*PostgresRepository, error) {
 	pool, err := pgxpool.New(ctx, url)
@@ -1672,6 +1673,133 @@ func (r *PostgresRepository) GetTenantManifest(ctx context.Context, provisioning
 		return provisioningdomain.TenantManifestRecord{}, err
 	}
 	return m, nil
+}
+
+// SaveReadinessSnapshot inserts snapshot and its check rows in one
+// transaction (migration 000043) -- a caller must never observe a
+// snapshot with a partial set of checks. It never updates an existing
+// snapshot; a later evaluation always inserts a new one, preserving
+// readiness history.
+func (r *PostgresRepository) SaveReadinessSnapshot(ctx context.Context, snapshot provisioningdomain.ReadinessSnapshotRecord) (string, error) {
+	if r == nil || r.pool == nil {
+		return "", errors.New("repository is not initialized")
+	}
+	id := snapshot.ID
+	if id == "" {
+		id = domain.NewUUIDv7()
+	}
+	blockingReasons, err := json.Marshal(snapshot.BlockingReasons)
+	if err != nil {
+		return "", fmt.Errorf("marshal blocking_reasons: %w", err)
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO provisioning.readiness_snapshot(
+			readiness_snapshot_id, tenant_provisioning_id, tenant_id,
+			desired_state_version, observed_state_version, overall_ready,
+			blocking_reasons, evaluated_at
+		) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)`,
+		id, snapshot.TenantProvisioningID, snapshot.TenantID,
+		snapshot.DesiredStateVersion, snapshot.ObservedStateVersion, snapshot.OverallReady,
+		blockingReasons, snapshot.EvaluatedAt,
+	); err != nil {
+		return "", fmt.Errorf("insert readiness snapshot: %w", err)
+	}
+	for _, check := range snapshot.Checks {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO provisioning.readiness_check(
+				readiness_snapshot_id, check_key, resource_type, status, reason,
+				evidence_reference, evaluated_at
+			) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)`,
+			id, check.CheckKey, check.ResourceType, check.Status, check.Reason,
+			check.EvidenceReference, check.EvaluatedAt,
+		); err != nil {
+			return "", fmt.Errorf("insert readiness check %s: %w", check.CheckKey, err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (r *PostgresRepository) ListReadinessSnapshots(ctx context.Context, provisioningID string) ([]provisioningdomain.ReadinessSnapshotRecord, error) {
+	if r == nil || r.pool == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT readiness_snapshot_id, tenant_provisioning_id, tenant_id, desired_state_version,
+			observed_state_version, overall_ready, blocking_reasons, evaluated_at, created_at
+		FROM provisioning.readiness_snapshot
+		WHERE tenant_provisioning_id = $1::uuid
+		ORDER BY evaluated_at DESC`, provisioningID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var snapshots []provisioningdomain.ReadinessSnapshotRecord
+	for rows.Next() {
+		var s provisioningdomain.ReadinessSnapshotRecord
+		var blockingReasons []byte
+		if err := rows.Scan(&s.ID, &s.TenantProvisioningID, &s.TenantID, &s.DesiredStateVersion,
+			&s.ObservedStateVersion, &s.OverallReady, &blockingReasons, &s.EvaluatedAt, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(blockingReasons, &s.BlockingReasons); err != nil {
+			return nil, fmt.Errorf("unmarshal blocking_reasons: %w", err)
+		}
+		snapshots = append(snapshots, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range snapshots {
+		checks, err := r.listReadinessChecks(ctx, snapshots[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		snapshots[i].Checks = checks
+	}
+	return snapshots, nil
+}
+
+func (r *PostgresRepository) listReadinessChecks(ctx context.Context, snapshotID string) ([]provisioningdomain.ReadinessCheckRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT check_key, resource_type, status, reason, evidence_reference, evaluated_at
+		FROM provisioning.readiness_check
+		WHERE readiness_snapshot_id = $1::uuid
+		ORDER BY check_key`, snapshotID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var checks []provisioningdomain.ReadinessCheckRecord
+	for rows.Next() {
+		var c provisioningdomain.ReadinessCheckRecord
+		var reason, evidenceReference *string
+		if err := rows.Scan(&c.CheckKey, &c.ResourceType, &c.Status, &reason, &evidenceReference, &c.EvaluatedAt); err != nil {
+			return nil, err
+		}
+		if reason != nil {
+			c.Reason = *reason
+		}
+		if evidenceReference != nil {
+			c.EvidenceReference = *evidenceReference
+		}
+		checks = append(checks, c)
+	}
+	return checks, rows.Err()
 }
 
 func (r *PostgresRepository) GetTenantProvisioning(ctx context.Context, id string) (provisioningdomain.TenantProvisioning, error) {

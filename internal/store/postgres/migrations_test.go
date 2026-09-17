@@ -52,6 +52,7 @@ func TestCanonicalMigrationFilesExist(t *testing.T) {
 		{name: "000040_trade_lanes.sql", needle: "CREATE TABLE market.trade_lane", context: "trade lane migration"},
 		{name: "000041_market_assignment_legacy_status_backfill_fix.sql", needle: "WHERE source = 'MIGRATION'", context: "market assignment legacy status backfill fix migration"},
 		{name: "000042_tenant_manifest.sql", needle: "CREATE TABLE IF NOT EXISTS provisioning.tenant_manifest", context: "tenant manifest persistence migration"},
+		{name: "000043_provisioning_readiness_snapshot.sql", needle: "CREATE TABLE IF NOT EXISTS provisioning.readiness_snapshot", context: "provisioning readiness snapshot migration"},
 	}
 
 	for _, tc := range checks {
