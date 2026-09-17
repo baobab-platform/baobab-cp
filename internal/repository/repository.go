@@ -169,6 +169,29 @@ type TenantProvisioningRepository interface {
 // when (tenant_id, idempotency_key) already has a row.
 var ErrTenantProvisioningAlreadyExists = errors.New("tenant provisioning already exists for this idempotency key")
 
+// TenantManifestRepository persists the desired-state manifest a
+// TenantProvisioning run was built from (Gate ZB-03.1, migration 000042),
+// so a restarted process can rehydrate the exact ResolvedManifest
+// BuildZB02Pipeline needs instead of depending on an in-memory closure.
+type TenantManifestRepository interface {
+	// CreateTenantProvisioningWithManifest atomically creates both the
+	// TenantProvisioning row and its manifest snapshot -- a caller must
+	// never end up with one but not the other. Fails with
+	// ErrTenantProvisioningAlreadyExists under the same conditions as
+	// CreateTenantProvisioning (no manifest row is left behind for a
+	// rejected duplicate).
+	CreateTenantProvisioningWithManifest(ctx context.Context, provisioning provisioningdomain.TenantProvisioning, manifest provisioningdomain.TenantManifestRecord) error
+	// GetTenantManifest returns the manifest snapshot for provisioningID,
+	// or an error if none was ever recorded for it (e.g. a TenantProvisioning
+	// row created before this table existed, or via the plain
+	// CreateTenantProvisioning path).
+	GetTenantManifest(ctx context.Context, provisioningID string) (provisioningdomain.TenantManifestRecord, error)
+}
+
+// ErrTenantManifestNotFound is returned by GetTenantManifest when no
+// manifest snapshot was ever recorded for the given provisioning ID.
+var ErrTenantManifestNotFound = errors.New("tenant manifest not found")
+
 // ErrContextNotFound is returned by GetContext when no resolved Context
 // exists for the given context_id, or exists but is expired (ADR-BCP-004
 // §72: a caller must not be able to distinguish "never existed" from
@@ -562,6 +585,10 @@ type Repository struct {
 	// TenantProvisionings is keyed by ID, mirroring the real table's
 	// primary key.
 	TenantProvisionings map[string]provisioningdomain.TenantProvisioning
+	// TenantManifests is keyed by TenantProvisioningID (1:1 with
+	// TenantProvisionings), mirroring provisioning.tenant_manifest's
+	// UNIQUE(tenant_provisioning_id).
+	TenantManifests map[string]provisioningdomain.TenantManifestRecord
 }
 
 // LinkAuditRecord is the in-memory equivalent of the audit_events row
@@ -638,6 +665,7 @@ var _ CompositionRepository = (*Repository)(nil)
 var _ ProductRepository = (*Repository)(nil)
 var _ EntitlementProjectionRepository = (*Repository)(nil)
 var _ TenantProvisioningRepository = (*Repository)(nil)
+var _ TenantManifestRepository = (*Repository)(nil)
 
 func NewInMemoryRepository() *Repository {
 	return &Repository{
@@ -665,6 +693,7 @@ func NewInMemoryRepository() *Repository {
 		ProductVersions:         map[string]productdomain.ProductVersion{},
 		EntitlementProjections:  map[string][]productdomain.EntitlementProjection{},
 		TenantProvisionings:     map[string]provisioningdomain.TenantProvisioning{},
+		TenantManifests:         map[string]provisioningdomain.TenantManifestRecord{},
 	}
 }
 
@@ -989,6 +1018,32 @@ func (r *Repository) CreateTenantProvisioning(_ context.Context, provisioning pr
 	}
 	r.TenantProvisionings[provisioning.ID] = provisioning
 	return nil
+}
+
+func (r *Repository) CreateTenantProvisioningWithManifest(ctx context.Context, provisioning provisioningdomain.TenantProvisioning, manifest provisioningdomain.TenantManifestRecord) error {
+	if r == nil {
+		return errors.New("repository is nil")
+	}
+	if err := r.CreateTenantProvisioning(ctx, provisioning); err != nil {
+		return err
+	}
+	manifest.TenantProvisioningID = provisioning.ID
+	if manifest.CreatedAt.IsZero() {
+		manifest.CreatedAt = provisioning.StartedAt
+	}
+	r.TenantManifests[provisioning.ID] = manifest
+	return nil
+}
+
+func (r *Repository) GetTenantManifest(_ context.Context, provisioningID string) (provisioningdomain.TenantManifestRecord, error) {
+	if r == nil {
+		return provisioningdomain.TenantManifestRecord{}, errors.New("repository is nil")
+	}
+	m, ok := r.TenantManifests[provisioningID]
+	if !ok {
+		return provisioningdomain.TenantManifestRecord{}, ErrTenantManifestNotFound
+	}
+	return m, nil
 }
 
 func (r *Repository) GetTenantProvisioning(_ context.Context, id string) (provisioningdomain.TenantProvisioning, error) {
