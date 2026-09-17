@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.nabhold.com/provisioning/v1/tenant-provisioning.schema.json",
+  "title": "Baobab Tenant Provisioning Manifest",
+  "type": "object",
+  "required": ["api_version", "kind", "metadata", "spec"],
+  "properties": {
+    "api_version": {"const": "baobab.nabhold.com/v1"},
+    "kind": {"const": "TenantProvisioning"},
+    "metadata": {
+      "type": "object",
+      "required": ["name", "tenant_id", "desired_state_version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "tenant_id": {"type": "string", "minLength": 1},
+        "desired_state_version": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "spec": {"type": "object"}
+  },
+  "additionalProperties": false
+}
