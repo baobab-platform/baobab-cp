@@ -330,6 +330,57 @@ func TestCanonicalEntityLifecycleRoutes(t *testing.T) {
 	}
 }
 
+// TestExternalReferenceRoutes proves the ADR-BCP-016 onboarding path is a
+// real, reachable HTTP surface, not just a repository-level capability: an
+// admin links a CanonicalEntity to a Keycloak Organization, then a
+// reverse lookup resolves that native identifier back to the entity -- the
+// mechanism a Trade/ZuriBeans onboarding flow would use to populate its own
+// canonical_organisation_id-shaped column.
+func TestExternalReferenceRoutes(t *testing.T) {
+	repo := repository.NewCanonicalRepository()
+	repo.Entities["org-1"] = domain.CanonicalEntity{ID: "org-1", EntityType: domain.EntityTypeBuyerOrganisation, Status: "ACTIVE", OwnerTenantID: testTenantID}
+	canonical := service.CanonicalEntityService{Repository: repo}
+	handler := New(Dependencies{Store: &fakeStore{}, AdminVerifier: fakeVerifier{principal: adminPrincipal()}, Canonical: canonical, ExternalReferences: repo})
+
+	body := `{"engine_id":"baobab-iam","native_type":"keycloak_organization","native_id":"kc-org-1"}`
+	request := httptest.NewRequest(http.MethodPost, "/v1/canonical-entities/org-1/external-references", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer admin-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create got status %d: %s", response.Code, response.Body.String())
+	}
+
+	// Repeating the exact same link must be rejected, not silently
+	// duplicated (registry.external_reference's UNIQUE constraint).
+	request2 := httptest.NewRequest(http.MethodPost, "/v1/canonical-entities/org-1/external-references", strings.NewReader(body))
+	request2.Header.Set("Authorization", "Bearer admin-token")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request2)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("expected a duplicate link to be rejected with 409, got %d: %s", response.Code, response.Body.String())
+	}
+
+	lookup := httptest.NewRequest(http.MethodGet, "/v1/external-references?engine_id=baobab-iam&native_type=keycloak_organization&native_id=kc-org-1", nil)
+	lookup.Header.Set("Authorization", "Bearer admin-token")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, lookup)
+	if response.Code != http.StatusOK {
+		t.Fatalf("lookup got status %d: %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"id":"org-1"`) {
+		t.Fatalf("expected the lookup to resolve back to org-1, got: %s", response.Body.String())
+	}
+
+	missing := httptest.NewRequest(http.MethodGet, "/v1/external-references?engine_id=baobab-iam&native_type=keycloak_organization&native_id=does-not-exist", nil)
+	missing.Header.Set("Authorization", "Bearer admin-token")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, missing)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected an unlinked native id to 404, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 type fakeVerifier struct {
 	principal auth.Principal
 	err       error

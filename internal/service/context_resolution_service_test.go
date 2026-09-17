@@ -54,7 +54,7 @@ func TestContextResolutionServiceResolvesTenantAndLegalEntity(t *testing.T) {
 		Identity: identityServiceFor(repository.NewInMemoryRepository()),
 		Tenants:  &fakeTenantStore{tenant: activeTenant()},
 	}
-	_, resolved, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "correlation-123", time.Now())
+	_, resolved, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "", "correlation-123", time.Now())
 	if err != nil {
 		t.Fatalf("resolve failed: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestContextResolutionServiceRejectsUnknownTenant(t *testing.T) {
 		Identity: identityServiceFor(repository.NewInMemoryRepository()),
 		Tenants:  &fakeTenantStore{err: domain.NotFoundError("tenant not found")},
 	}
-	if _, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "correlation-123", time.Now()); err == nil {
+	if _, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "", "correlation-123", time.Now()); err == nil {
 		t.Fatal("expected an unknown tenant to be rejected")
 	}
 }
@@ -83,7 +83,7 @@ func TestContextResolutionServiceRejectsInactiveTenant(t *testing.T) {
 		Identity: identityServiceFor(repository.NewInMemoryRepository()),
 		Tenants:  &fakeTenantStore{tenant: tenant},
 	}
-	_, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "correlation-123", time.Now())
+	_, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "", "correlation-123", time.Now())
 	if !errors.Is(err, ErrTenantNotActive) {
 		t.Fatalf("expected ErrTenantNotActive for a suspended tenant, got %v", err)
 	}
@@ -96,7 +96,7 @@ func TestContextResolutionServiceWrapsIdentityFailure(t *testing.T) {
 		Identity: IdentityService{Repository: repository.NewInMemoryRepository()},
 		Tenants:  &fakeTenantStore{tenant: activeTenant()},
 	}
-	_, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "correlation-123", time.Now())
+	_, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "", "correlation-123", time.Now())
 	if !errors.Is(err, ErrIdentityResolutionFailed) {
 		t.Fatalf("expected ErrIdentityResolutionFailed, got %v", err)
 	}
@@ -104,7 +104,7 @@ func TestContextResolutionServiceWrapsIdentityFailure(t *testing.T) {
 
 func TestContextResolutionServiceRequiresTenantStore(t *testing.T) {
 	svc := ContextResolutionService{Identity: identityServiceFor(repository.NewInMemoryRepository())}
-	if _, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "correlation-123", time.Now()); err == nil {
+	if _, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "", "correlation-123", time.Now()); err == nil {
 		t.Fatal("expected a nil Tenants store to be rejected")
 	}
 }
@@ -128,11 +128,74 @@ func TestContextResolutionServiceResolvesRequestSuppliedTenantWhenClaimEmpty(t *
 		Identity: identityServiceFor(repository.NewInMemoryRepository()),
 		Tenants:  &fakeTenantStore{tenant: activeTenant()},
 	}
-	_, resolved, err := svc.Resolve(context.Background(), principal, "tenant-123", "correlation-123", time.Now())
+	_, resolved, err := svc.Resolve(context.Background(), principal, "tenant-123", "", "correlation-123", time.Now())
 	if err != nil {
 		t.Fatalf("resolve failed: %v", err)
 	}
 	if resolved.TenantID != "tenant-123" {
 		t.Fatalf("expected the explicitly passed tenantID to win, got %q", resolved.TenantID)
+	}
+}
+
+// canonicalOrganisation seeds an ACTIVE, tenant-owned BUYER_ORGANISATION
+// CanonicalEntity directly into an in-memory CanonicalRepository, bypassing
+// CanonicalEntityService's DRAFT-first lifecycle -- only Resolve's own
+// verification is this test's concern.
+func canonicalOrganisation(id, entityType, status, ownerTenantID string) domain.CanonicalEntity {
+	return domain.CanonicalEntity{ID: id, EntityType: entityType, Status: status, OwnerTenantID: ownerTenantID}
+}
+
+func TestContextResolutionServiceResolvesOrganisationID(t *testing.T) {
+	canonical := repository.NewCanonicalRepository()
+	canonical.Entities["org-1"] = canonicalOrganisation("org-1", domain.EntityTypeBuyerOrganisation, "ACTIVE", "tenant-123")
+	svc := ContextResolutionService{
+		Identity:  identityServiceFor(repository.NewInMemoryRepository()),
+		Tenants:   &fakeTenantStore{tenant: activeTenant()},
+		Canonical: canonical,
+	}
+	_, resolved, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "org-1", "correlation-123", time.Now())
+	if err != nil {
+		t.Fatalf("resolve failed: %v", err)
+	}
+	if resolved.OrganisationID != "org-1" {
+		t.Fatalf("expected organisation_id to be resolved, got %q", resolved.OrganisationID)
+	}
+}
+
+func TestContextResolutionServiceRejectsOrganisationIDWithoutCanonicalRepository(t *testing.T) {
+	svc := ContextResolutionService{
+		Identity: identityServiceFor(repository.NewInMemoryRepository()),
+		Tenants:  &fakeTenantStore{tenant: activeTenant()},
+	}
+	if _, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "org-1", "correlation-123", time.Now()); err == nil {
+		t.Fatal("expected a supplied organisation_id to fail closed when no Canonical repository is configured")
+	}
+}
+
+func TestContextResolutionServiceRejectsOrganisationID(t *testing.T) {
+	cases := []struct {
+		name string
+		org  domain.CanonicalEntity
+	}{
+		{name: "unknown organisation id", org: domain.CanonicalEntity{}},
+		{name: "wrong entity type", org: canonicalOrganisation("org-1", domain.EntityTypeProduct, "ACTIVE", "tenant-123")},
+		{name: "inactive organisation", org: canonicalOrganisation("org-1", domain.EntityTypeBuyerOrganisation, "SUSPENDED", "tenant-123")},
+		{name: "cross-tenant organisation", org: canonicalOrganisation("org-1", domain.EntityTypeBuyerOrganisation, "ACTIVE", "tenant-999")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			canonical := repository.NewCanonicalRepository()
+			if tc.org.ID != "" {
+				canonical.Entities[tc.org.ID] = tc.org
+			}
+			svc := ContextResolutionService{
+				Identity:  identityServiceFor(repository.NewInMemoryRepository()),
+				Tenants:   &fakeTenantStore{tenant: activeTenant()},
+				Canonical: canonical,
+			}
+			if _, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "org-1", "correlation-123", time.Now()); err == nil {
+				t.Fatalf("expected organisation resolution to fail closed for %q", tc.name)
+			}
+		})
 	}
 }

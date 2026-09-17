@@ -56,8 +56,10 @@ func (h ResolverHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 	}
 	// ADR-BCP-004 §52: resolve identity -> resolve tenant -> validate
 	// principal<->tenant relationship -> resolve legal entity, all fail
-	// closed.
-	operationCtx, trustedContext, err := h.ContextResolution.Resolve(r.Context(), principal, tenantID, correlationID(r), time.Now())
+	// closed. This endpoint does not accept organisation_id today -- "" skips
+	// the ADR-BCP-016 stage entirely, matching this handler's pre-ZB-03.3
+	// behavior; see PlatformContextHandler for the endpoint that does.
+	operationCtx, trustedContext, err := h.ContextResolution.Resolve(r.Context(), principal, tenantID, "", correlationID(r), time.Now())
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrIdentityResolutionFailed):
