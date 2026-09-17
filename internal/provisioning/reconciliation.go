@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 
 	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
@@ -108,5 +109,20 @@ func (r DesiredObservedReconciler) Report(
 		report.ObservedStateVersion = op.DesiredStateVersion
 		report.Converged = true
 	}
+	logDrift(ctx, op, report.Drift)
 	return report, nil
+}
+
+// logDrift emits one structured, secret-free log line per drifted resource
+// (ADR-BCP-010 §31's "reconciliation state" observability requirement) --
+// Drift.Reason is a fixed, non-user-controlled string (see the Drift
+// constructions in reconciliation_resource.go), never provider/request
+// payload content.
+func logDrift(ctx context.Context, op provisioningdomain.TenantProvisioning, drift []Drift) {
+	for _, d := range drift {
+		slog.WarnContext(ctx, "provisioning resource drift detected",
+			"tenant_id", op.TenantID, "provisioning_id", op.ID, "correlation_id", op.ID,
+			"phase", "RECONCILE", "resource_type", d.ResourceType, "resource_id", d.ResourceKey,
+			"drift_kind", d.Kind, "repairable", d.Repairable, "reason", d.Reason)
+	}
 }

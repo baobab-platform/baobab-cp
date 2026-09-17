@@ -4,6 +4,8 @@ package provisioning
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"time"
 
 	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
 )
@@ -27,9 +29,18 @@ func (w ApplyWorker) Run(ctx context.Context, op provisioningdomain.TenantProvis
 		if step == nil {
 			return PhaseResult{}, errors.New("nil APPLY step")
 		}
+		stepStarted := time.Now()
 		if err := step.Apply(ctx, op); err != nil {
+			slog.ErrorContext(ctx, "provisioning apply step failed",
+				"tenant_id", op.TenantID, "provisioning_id", op.ID, "correlation_id", op.ID,
+				"phase", "APPLY", "resource_type", step.Key(), "attempt", op.AttemptCount,
+				"duration_ms", time.Since(stepStarted).Milliseconds(), "outcome", "failed", "error", err)
 			return PhaseResult{}, err
 		}
+		slog.InfoContext(ctx, "provisioning apply step completed",
+			"tenant_id", op.TenantID, "provisioning_id", op.ID, "correlation_id", op.ID,
+			"phase", "APPLY", "resource_type", step.Key(), "attempt", op.AttemptCount,
+			"duration_ms", time.Since(stepStarted).Milliseconds(), "outcome", "applied")
 	}
 	// Applying desired state does not itself prove observation/convergence.
 	return PhaseResult{ObservedStateVersion: op.ObservedStateVersion}, nil
