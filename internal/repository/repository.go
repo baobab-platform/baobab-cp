@@ -11,6 +11,7 @@ import (
 	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
 	"github.com/nabhold/baobab-cp/internal/domain"
 	productdomain "github.com/nabhold/baobab-cp/internal/product/domain"
+	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
 	"github.com/nabhold/baobab-cp/internal/resolver"
 )
 
@@ -135,6 +136,38 @@ type EntitlementProjectionRepository interface {
 	CreateEntitlementProjection(ctx context.Context, projection productdomain.EntitlementProjection) error
 	ListEntitlementProjections(ctx context.Context, subscriptionID string) ([]productdomain.EntitlementProjection, error)
 }
+
+// ErrTenantProvisioningVersionConflict is returned by
+// UpdateTenantProvisioning when expectedVersion no longer matches the
+// stored row -- the same optimistic-concurrency shape RevokeGrant already
+// uses for capability.capability_grant.version.
+var ErrTenantProvisioningVersionConflict = errors.New("tenant provisioning version conflict")
+
+// TenantProvisioningRepository is the read/write contract for
+// TenantProvisioning (Technical Specification SS21, Gate ZB-02 / Programme
+// Gate P7 "basics" -- provisioning.tenant_provisioning, migration 000038).
+type TenantProvisioningRepository interface {
+	// CreateTenantProvisioning inserts a new TenantProvisioning row.
+	// (tenant_id, idempotency_key) is UNIQUE (migration 000038) -- a
+	// caller retrying the same onboarding request with the same key gets
+	// ErrTenantProvisioningAlreadyExists rather than a silent duplicate,
+	// mirroring how CreateGrant/CreateComposition fail closed on conflict.
+	CreateTenantProvisioning(ctx context.Context, provisioning provisioningdomain.TenantProvisioning) error
+	GetTenantProvisioning(ctx context.Context, id string) (provisioningdomain.TenantProvisioning, error)
+	// GetTenantProvisioningByIdempotencyKey supports idempotent onboarding
+	// retries: a caller re-submitting the same (tenant_id, idempotency_key)
+	// pair gets back the existing aggregate instead of erroring.
+	GetTenantProvisioningByIdempotencyKey(ctx context.Context, tenantID, idempotencyKey string) (provisioningdomain.TenantProvisioning, error)
+	ListTenantProvisioningsForTenant(ctx context.Context, tenantID string) ([]provisioningdomain.TenantProvisioning, error)
+	// UpdateTenantProvisioning persists provisioning's new state,
+	// optimistically locked on expectedVersion (the version the caller
+	// read provisioning at, before calling TenantProvisioning.Advance).
+	UpdateTenantProvisioning(ctx context.Context, provisioning provisioningdomain.TenantProvisioning, expectedVersion int64) error
+}
+
+// ErrTenantProvisioningAlreadyExists is returned by CreateTenantProvisioning
+// when (tenant_id, idempotency_key) already has a row.
+var ErrTenantProvisioningAlreadyExists = errors.New("tenant provisioning already exists for this idempotency key")
 
 // ErrContextNotFound is returned by GetContext when no resolved Context
 // exists for the given context_id, or exists but is expired (ADR-BCP-004
@@ -502,6 +535,9 @@ type Repository struct {
 	// EntitlementProjections is keyed by SubscriptionID, mirroring
 	// ListEntitlementProjections' own lookup key.
 	EntitlementProjections map[string][]productdomain.EntitlementProjection
+	// TenantProvisionings is keyed by ID, mirroring the real table's
+	// primary key.
+	TenantProvisionings map[string]provisioningdomain.TenantProvisioning
 }
 
 // LinkAuditRecord is the in-memory equivalent of the audit_events row
@@ -576,6 +612,7 @@ var _ IsolationProfileWriter = (*Repository)(nil)
 var _ CompositionRepository = (*Repository)(nil)
 var _ ProductRepository = (*Repository)(nil)
 var _ EntitlementProjectionRepository = (*Repository)(nil)
+var _ TenantProvisioningRepository = (*Repository)(nil)
 
 func NewInMemoryRepository() *Repository {
 	return &Repository{
@@ -601,6 +638,7 @@ func NewInMemoryRepository() *Repository {
 		Products:                map[string]productdomain.Product{},
 		ProductVersions:         map[string]productdomain.ProductVersion{},
 		EntitlementProjections:  map[string][]productdomain.EntitlementProjection{},
+		TenantProvisionings:     map[string]provisioningdomain.TenantProvisioning{},
 	}
 }
 
@@ -900,6 +938,90 @@ func (r *Repository) ListEntitlementProjections(_ context.Context, subscriptionI
 		return nil, errors.New("repository is nil")
 	}
 	return r.EntitlementProjections[subscriptionID], nil
+}
+
+func (r *Repository) CreateTenantProvisioning(_ context.Context, provisioning provisioningdomain.TenantProvisioning) error {
+	if r == nil {
+		return errors.New("repository is nil")
+	}
+	if provisioning.ID == "" {
+		return errors.New("tenant provisioning id is required")
+	}
+	if err := provisioning.Validate(); err != nil {
+		return fmt.Errorf("validate tenant provisioning: %w", err)
+	}
+	if _, exists := r.TenantProvisionings[provisioning.ID]; exists {
+		return fmt.Errorf("tenant provisioning %s already exists", provisioning.ID)
+	}
+	for _, existing := range r.TenantProvisionings {
+		if existing.TenantID == provisioning.TenantID && existing.IdempotencyKey == provisioning.IdempotencyKey {
+			return ErrTenantProvisioningAlreadyExists
+		}
+	}
+	if provisioning.Version == 0 {
+		provisioning.Version = 1
+	}
+	r.TenantProvisionings[provisioning.ID] = provisioning
+	return nil
+}
+
+func (r *Repository) GetTenantProvisioning(_ context.Context, id string) (provisioningdomain.TenantProvisioning, error) {
+	if r == nil {
+		return provisioningdomain.TenantProvisioning{}, errors.New("repository is nil")
+	}
+	p, ok := r.TenantProvisionings[id]
+	if !ok {
+		return provisioningdomain.TenantProvisioning{}, fmt.Errorf("tenant provisioning %s not found", id)
+	}
+	return p, nil
+}
+
+func (r *Repository) GetTenantProvisioningByIdempotencyKey(_ context.Context, tenantID, idempotencyKey string) (provisioningdomain.TenantProvisioning, error) {
+	if r == nil {
+		return provisioningdomain.TenantProvisioning{}, errors.New("repository is nil")
+	}
+	for _, p := range r.TenantProvisionings {
+		if p.TenantID == tenantID && p.IdempotencyKey == idempotencyKey {
+			return p, nil
+		}
+	}
+	return provisioningdomain.TenantProvisioning{}, fmt.Errorf("tenant provisioning for tenant %s, idempotency key %s not found", tenantID, idempotencyKey)
+}
+
+func (r *Repository) ListTenantProvisioningsForTenant(_ context.Context, tenantID string) ([]provisioningdomain.TenantProvisioning, error) {
+	if r == nil {
+		return nil, errors.New("repository is nil")
+	}
+	var out []provisioningdomain.TenantProvisioning
+	for _, p := range r.TenantProvisionings {
+		if p.TenantID == tenantID {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (r *Repository) UpdateTenantProvisioning(_ context.Context, provisioning provisioningdomain.TenantProvisioning, expectedVersion int64) error {
+	if r == nil {
+		return errors.New("repository is nil")
+	}
+	existing, ok := r.TenantProvisionings[provisioning.ID]
+	if !ok {
+		return fmt.Errorf("tenant provisioning %s not found", provisioning.ID)
+	}
+	if existing.Version != expectedVersion {
+		return ErrTenantProvisioningVersionConflict
+	}
+	// Version is server-assigned from existing, not trusted from the
+	// caller, mirroring RevokeGrant's identical existing.Version+1
+	// contract and PostgresRepository.UpdateTenantProvisioning's
+	// unconditional `version=version+1`.
+	provisioning.Version = existing.Version + 1
+	if err := provisioning.Validate(); err != nil {
+		return fmt.Errorf("validate tenant provisioning: %w", err)
+	}
+	r.TenantProvisionings[provisioning.ID] = provisioning
+	return nil
 }
 
 // compareSemver compares two "major.minor.patch" version strings
