@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -40,6 +41,33 @@ func TestTenantProvisioningServicePlanIsIdempotent(t *testing.T) {
 	}
 	if len(all) != 1 {
 		t.Fatalf("expected exactly one TenantProvisioning to have been created, got %d", len(all))
+	}
+}
+
+func TestTenantProvisioningServicePlanRejectsIdempotencyConflict(t *testing.T) {
+	repo := repository.NewInMemoryRepository()
+	svc := TenantProvisioningService{Repository: repo}
+	ctx := context.Background()
+
+	first, err := svc.Plan(ctx, "tn_zuribeans", "idem-1", "hash-1", []string{"solution.baobab-xbt"}, []string{"UG", "ZA"})
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+
+	// Same idempotency key, different request_hash: a caller changed the
+	// desired state (e.g. added a market) but reused the old key. This
+	// MUST be rejected, not silently replay the first request's plan.
+	if _, err := svc.Plan(ctx, "tn_zuribeans", "idem-1", "hash-2", []string{"solution.baobab-xbt"}, []string{"UG", "ZA", "KE"}); !errors.Is(err, ErrTenantProvisioningIdempotencyConflict) {
+		t.Fatalf("expected ErrTenantProvisioningIdempotencyConflict, got %v", err)
+	}
+
+	// The original plan must be untouched by the rejected conflicting request.
+	stored, err := repo.GetTenantProvisioning(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if stored.RequestHash != "hash-1" || len(stored.MarketRequests) != 2 {
+		t.Fatalf("expected the original plan to be unchanged by the rejected conflict, got %+v", stored)
 	}
 }
 

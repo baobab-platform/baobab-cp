@@ -11,6 +11,14 @@ import (
 	"github.com/nabhold/baobab-cp/internal/repository"
 )
 
+// ErrTenantProvisioningIdempotencyConflict is returned by Plan when an
+// idempotency key that already identifies a TenantProvisioning is reused
+// with a different request_hash. Per the ZB-00/ZB-02 provisioning
+// idempotency rule, a caller MUST NOT be allowed to apply a different
+// desired state under an old idempotency identity: replay is only safe
+// when the request is byte-for-byte (hash-for-hash) the same request.
+var ErrTenantProvisioningIdempotencyConflict = errors.New("idempotency key reused with a different request")
+
 // TenantProvisioningService drives TenantProvisioning through Gate ZB-02's
 // PLAN -> APPLY -> RECONCILE -> READY -> ACTIVE lifecycle (Programme Gate
 // P7 "basics" -- see internal/provisioning/domain's package doc for exactly
@@ -33,15 +41,23 @@ func (s TenantProvisioningService) now() time.Time {
 
 // Plan idempotently creates a TenantProvisioning in PLAN status for
 // (tenantID, idempotencyKey): a caller retrying the same onboarding
-// request with the same idempotency key gets back the existing aggregate
-// unchanged, rather than a duplicate or an error, matching Programme Gate
-// P7's "Idempotency" requirement.
+// request (identical requestHash) with the same idempotency key gets back
+// the existing aggregate unchanged, rather than a duplicate or an error,
+// matching Programme Gate P7's "Idempotency" requirement. Reusing the key
+// with a *different* requestHash returns
+// ErrTenantProvisioningIdempotencyConflict instead of silently replaying
+// stale desired state under a new request.
 func (s TenantProvisioningService) Plan(ctx context.Context, tenantID, idempotencyKey, requestHash string, productRequests, marketRequests []string) (provisioningdomain.TenantProvisioning, error) {
 	if s.Repository == nil {
 		return provisioningdomain.TenantProvisioning{}, errors.New("tenant provisioning repository is required")
 	}
 	existing, err := s.Repository.GetTenantProvisioningByIdempotencyKey(ctx, tenantID, idempotencyKey)
 	if err == nil {
+		if existing.RequestHash != requestHash {
+			return provisioningdomain.TenantProvisioning{}, fmt.Errorf(
+				"%w: tenant %s idempotency key %s", ErrTenantProvisioningIdempotencyConflict, tenantID, idempotencyKey,
+			)
+		}
 		return existing, nil
 	}
 
@@ -58,11 +74,22 @@ func (s TenantProvisioningService) Plan(ctx context.Context, tenantID, idempoten
 	}
 	if err := s.Repository.CreateTenantProvisioning(ctx, provisioning); err != nil {
 		// A concurrent caller may have just created the same
-		// (tenant_id, idempotency_key) row; re-read rather than surface
-		// the conflict, since the desired outcome ("this request has a
-		// TenantProvisioning") is already satisfied either way.
+		// (tenant_id, idempotency_key) row. Re-read and apply the same
+		// hash check as above rather than assuming it is a safe replay --
+		// two concurrent callers racing with genuinely different desired
+		// state under the same key must still conflict, not silently let
+		// whichever write won decide the outcome.
 		if errors.Is(err, repository.ErrTenantProvisioningAlreadyExists) {
-			return s.Repository.GetTenantProvisioningByIdempotencyKey(ctx, tenantID, idempotencyKey)
+			raced, getErr := s.Repository.GetTenantProvisioningByIdempotencyKey(ctx, tenantID, idempotencyKey)
+			if getErr != nil {
+				return provisioningdomain.TenantProvisioning{}, getErr
+			}
+			if raced.RequestHash != requestHash {
+				return provisioningdomain.TenantProvisioning{}, fmt.Errorf(
+					"%w: tenant %s idempotency key %s", ErrTenantProvisioningIdempotencyConflict, tenantID, idempotencyKey,
+				)
+			}
+			return raced, nil
 		}
 		return provisioningdomain.TenantProvisioning{}, err
 	}
