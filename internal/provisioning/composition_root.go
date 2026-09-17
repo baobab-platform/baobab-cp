@@ -89,6 +89,7 @@ type ZB02Repository interface {
 	GetTradeLane(ctx context.Context, tenantID, tradeLaneID string) (domain.TradeLane, error)
 	SaveTradeLane(ctx context.Context, lane domain.TradeLane) error
 	ReadinessSnapshotStore
+	DriftSnapshotStore
 }
 
 // ZB02Dependencies is the wiring BuildZB02Pipeline needs. Now defaults to
@@ -199,7 +200,7 @@ func BuildZB02Pipeline(deps ZB02Dependencies, manifest ResolvedManifest, scopeID
 				return observedTradeLanes(ctx, deps.Repo, manifest), nil
 			}),
 		},
-	}}}
+	}}, Snapshots: deps.Repo}
 
 	readinessWorker := ReadinessWorker{Evaluator: NewReadinessEvaluator(
 		NewProbeCheck("market-participation", marketParticipationProbe{repo: deps.Repo, manifest: manifest}),

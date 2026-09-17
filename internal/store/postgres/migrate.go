@@ -78,6 +78,7 @@ var canonicalMigrationNames = []string{
 	"000041_market_assignment_legacy_status_backfill_fix.sql",
 	"000042_tenant_manifest.sql",
 	"000043_provisioning_readiness_snapshot.sql",
+	"000044_provisioning_reconciliation_snapshot.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

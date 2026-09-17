@@ -76,6 +76,7 @@ var _ EntitlementProjectionRepository = (*PostgresRepository)(nil)
 var _ TenantProvisioningRepository = (*PostgresRepository)(nil)
 var _ TenantManifestRepository = (*PostgresRepository)(nil)
 var _ ReadinessSnapshotRepository = (*PostgresRepository)(nil)
+var _ DriftSnapshotRepository = (*PostgresRepository)(nil)
 
 func Open(ctx context.Context, url string) (*PostgresRepository, error) {
 	pool, err := pgxpool.New(ctx, url)
@@ -1800,6 +1801,125 @@ func (r *PostgresRepository) listReadinessChecks(ctx context.Context, snapshotID
 		checks = append(checks, c)
 	}
 	return checks, rows.Err()
+}
+
+// SaveReconciliationSnapshot inserts snapshot and its drift rows in one
+// transaction (migration 000044) -- a caller must never observe a snapshot
+// with a partial set of drift rows. It never updates an existing snapshot;
+// a later evaluation always inserts a new one, preserving reconciliation
+// history.
+func (r *PostgresRepository) SaveReconciliationSnapshot(ctx context.Context, snapshot provisioningdomain.ReconciliationSnapshotRecord) (string, error) {
+	if r == nil || r.pool == nil {
+		return "", errors.New("repository is not initialized")
+	}
+	id := snapshot.ID
+	if id == "" {
+		id = domain.NewUUIDv7()
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO provisioning.reconciliation_snapshot(
+			reconciliation_snapshot_id, tenant_provisioning_id, tenant_id,
+			desired_state_version, observed_state_version, converged, evaluated_at
+		) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)`,
+		id, snapshot.TenantProvisioningID, snapshot.TenantID,
+		snapshot.DesiredStateVersion, snapshot.ObservedStateVersion, snapshot.Converged, snapshot.EvaluatedAt,
+	); err != nil {
+		return "", fmt.Errorf("insert reconciliation snapshot: %w", err)
+	}
+	for _, d := range snapshot.Drift {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO provisioning.resource_drift(
+				reconciliation_snapshot_id, resource_type, resource_id, drift_kind,
+				desired_hash, observed_hash, repairable, blocking, reason, detected_at, resolved_at
+			) VALUES ($1::uuid, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, $8, $9, $10, $11)`,
+			id, d.ResourceType, d.ResourceID, d.DriftKind,
+			d.DesiredHash, d.ObservedHash, d.Repairable, d.Blocking, d.Reason, d.DetectedAt, d.ResolvedAt,
+		); err != nil {
+			return "", fmt.Errorf("insert resource drift %s/%s: %w", d.ResourceType, d.ResourceID, err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (r *PostgresRepository) ListReconciliationSnapshots(ctx context.Context, provisioningID string) ([]provisioningdomain.ReconciliationSnapshotRecord, error) {
+	if r == nil || r.pool == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT reconciliation_snapshot_id, tenant_provisioning_id, tenant_id, desired_state_version,
+			observed_state_version, converged, evaluated_at, created_at
+		FROM provisioning.reconciliation_snapshot
+		WHERE tenant_provisioning_id = $1::uuid
+		ORDER BY evaluated_at DESC`, provisioningID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var snapshots []provisioningdomain.ReconciliationSnapshotRecord
+	for rows.Next() {
+		var s provisioningdomain.ReconciliationSnapshotRecord
+		if err := rows.Scan(&s.ID, &s.TenantProvisioningID, &s.TenantID, &s.DesiredStateVersion,
+			&s.ObservedStateVersion, &s.Converged, &s.EvaluatedAt, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		snapshots = append(snapshots, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range snapshots {
+		drift, err := r.listResourceDrift(ctx, snapshots[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		snapshots[i].Drift = drift
+	}
+	return snapshots, nil
+}
+
+func (r *PostgresRepository) listResourceDrift(ctx context.Context, snapshotID string) ([]provisioningdomain.ResourceDriftRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT resource_type, resource_id, drift_kind, desired_hash, observed_hash,
+			repairable, blocking, reason, detected_at, resolved_at
+		FROM provisioning.resource_drift
+		WHERE reconciliation_snapshot_id = $1::uuid
+		ORDER BY resource_type, resource_id`, snapshotID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var drift []provisioningdomain.ResourceDriftRecord
+	for rows.Next() {
+		var d provisioningdomain.ResourceDriftRecord
+		var desiredHash, observedHash *string
+		if err := rows.Scan(&d.ResourceType, &d.ResourceID, &d.DriftKind, &desiredHash, &observedHash,
+			&d.Repairable, &d.Blocking, &d.Reason, &d.DetectedAt, &d.ResolvedAt); err != nil {
+			return nil, err
+		}
+		if desiredHash != nil {
+			d.DesiredHash = *desiredHash
+		}
+		if observedHash != nil {
+			d.ObservedHash = *observedHash
+		}
+		drift = append(drift, d)
+	}
+	return drift, rows.Err()
 }
 
 func (r *PostgresRepository) GetTenantProvisioning(ctx context.Context, id string) (provisioningdomain.TenantProvisioning, error) {

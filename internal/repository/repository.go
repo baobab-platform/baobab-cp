@@ -204,6 +204,18 @@ type ReadinessSnapshotRepository interface {
 	ListReadinessSnapshots(ctx context.Context, provisioningID string) ([]provisioningdomain.ReadinessSnapshotRecord, error)
 }
 
+// DriftSnapshotRepository persists immutable reconciliation/drift-evaluation
+// evidence for a TenantProvisioning run (Gate ZB-03.1, migration 000044).
+type DriftSnapshotRepository interface {
+	// SaveReconciliationSnapshot inserts a new, immutable snapshot (and its
+	// drift rows) and returns the generated snapshot ID. It never updates
+	// an existing snapshot -- a later evaluation always produces a new one.
+	SaveReconciliationSnapshot(ctx context.Context, snapshot provisioningdomain.ReconciliationSnapshotRecord) (string, error)
+	// ListReconciliationSnapshots returns provisioningID's snapshots, most
+	// recent (by evaluated_at) first.
+	ListReconciliationSnapshots(ctx context.Context, provisioningID string) ([]provisioningdomain.ReconciliationSnapshotRecord, error)
+}
+
 // ErrContextNotFound is returned by GetContext when no resolved Context
 // exists for the given context_id, or exists but is expired (ADR-BCP-004
 // §72: a caller must not be able to distinguish "never existed" from
@@ -605,6 +617,9 @@ type Repository struct {
 	// (append-only, matching the real table's immutable-evidence design):
 	// each evaluation appends a new snapshot rather than replacing one.
 	ReadinessSnapshots map[string][]provisioningdomain.ReadinessSnapshotRecord
+	// ReconciliationSnapshots mirrors ReadinessSnapshots' shape for
+	// reconciliation/drift evidence.
+	ReconciliationSnapshots map[string][]provisioningdomain.ReconciliationSnapshotRecord
 }
 
 // LinkAuditRecord is the in-memory equivalent of the audit_events row
@@ -683,6 +698,7 @@ var _ EntitlementProjectionRepository = (*Repository)(nil)
 var _ TenantProvisioningRepository = (*Repository)(nil)
 var _ TenantManifestRepository = (*Repository)(nil)
 var _ ReadinessSnapshotRepository = (*Repository)(nil)
+var _ DriftSnapshotRepository = (*Repository)(nil)
 
 func NewInMemoryRepository() *Repository {
 	return &Repository{
@@ -712,6 +728,7 @@ func NewInMemoryRepository() *Repository {
 		TenantProvisionings:     map[string]provisioningdomain.TenantProvisioning{},
 		TenantManifests:         map[string]provisioningdomain.TenantManifestRecord{},
 		ReadinessSnapshots:      map[string][]provisioningdomain.ReadinessSnapshotRecord{},
+		ReconciliationSnapshots: map[string][]provisioningdomain.ReconciliationSnapshotRecord{},
 	}
 }
 
@@ -1087,6 +1104,32 @@ func (r *Repository) ListReadinessSnapshots(_ context.Context, provisioningID st
 	for i, s := range snapshots {
 		// Most-recent-first, matching PostgresRepository's ORDER BY
 		// evaluated_at DESC.
+		out[len(snapshots)-1-i] = s
+	}
+	return out, nil
+}
+
+func (r *Repository) SaveReconciliationSnapshot(_ context.Context, snapshot provisioningdomain.ReconciliationSnapshotRecord) (string, error) {
+	if r == nil {
+		return "", errors.New("repository is nil")
+	}
+	if snapshot.ID == "" {
+		snapshot.ID = domain.NewUUIDv7()
+	}
+	if snapshot.CreatedAt.IsZero() {
+		snapshot.CreatedAt = snapshot.EvaluatedAt
+	}
+	r.ReconciliationSnapshots[snapshot.TenantProvisioningID] = append(r.ReconciliationSnapshots[snapshot.TenantProvisioningID], snapshot)
+	return snapshot.ID, nil
+}
+
+func (r *Repository) ListReconciliationSnapshots(_ context.Context, provisioningID string) ([]provisioningdomain.ReconciliationSnapshotRecord, error) {
+	if r == nil {
+		return nil, errors.New("repository is nil")
+	}
+	snapshots := r.ReconciliationSnapshots[provisioningID]
+	out := make([]provisioningdomain.ReconciliationSnapshotRecord, len(snapshots))
+	for i, s := range snapshots {
 		out[len(snapshots)-1-i] = s
 	}
 	return out, nil
