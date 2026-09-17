@@ -203,6 +203,13 @@ type MarketRepository interface {
 	// covering at (i.e. effective_from <= at < effective_to, or no
 	// effective_to at all).
 	ListActiveMarketsForTenant(ctx context.Context, tenantID string, at time.Time) ([]domain.Market, error)
+	// ListMarketAssignmentsForTenant returns every MarketAssignment record
+	// for tenantID (all markets, all periods, with Capabilities populated) --
+	// unlike ListActiveMarketsForTenant, it exposes what the tenant is
+	// authorised to do in each market, not just which markets it has any
+	// assignment to (ADR-BCP-011 §6, Gate P0's market-participation
+	// capability-flag remodel).
+	ListMarketAssignmentsForTenant(ctx context.Context, tenantID string) ([]domain.MarketAssignment, error)
 }
 
 // MarketWriter is the mutable market/market-assignment contract.
@@ -1570,6 +1577,19 @@ func (r *Repository) ListActiveMarketsForTenant(_ context.Context, tenantID stri
 			continue
 		}
 		out = append(out, market)
+	}
+	return out, nil
+}
+
+func (r *Repository) ListMarketAssignmentsForTenant(_ context.Context, tenantID string) ([]domain.MarketAssignment, error) {
+	if r == nil {
+		return nil, errors.New("repository is nil")
+	}
+	var out []domain.MarketAssignment
+	for _, assignment := range r.MarketAssignments {
+		if assignment.TenantID == tenantID {
+			out = append(out, assignment)
+		}
 	}
 	return out, nil
 }

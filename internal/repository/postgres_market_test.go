@@ -83,12 +83,16 @@ func TestPostgresMarketRoundTrip(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	assignment := domain.MarketAssignment{ID: assignmentID, TenantID: tenantID, MarketID: marketID, EffectiveFrom: now.Add(-time.Hour)}
+	assignment := domain.MarketAssignment{
+		ID: assignmentID, TenantID: tenantID, LegalEntityID: "ZURIBEANS-ZA", MarketID: marketID,
+		Capabilities:  []domain.MarketParticipationCapability{domain.MarketParticipationSelling, domain.MarketParticipationImporting},
+		EffectiveFrom: now.Add(-time.Hour),
+	}
 	if err := repo.AssignMarketToTenant(ctx, assignment); err != nil {
 		t.Fatalf("assign market: %v", err)
 	}
 
-	overlapping := domain.MarketAssignment{ID: overlapAssignmentID, TenantID: tenantID, MarketID: marketID, EffectiveFrom: now}
+	overlapping := domain.MarketAssignment{ID: overlapAssignmentID, TenantID: tenantID, MarketID: marketID, Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationSelling}, EffectiveFrom: now}
 	if err := repo.AssignMarketToTenant(ctx, overlapping); !errors.Is(err, ErrMarketAssignmentOverlap) {
 		t.Fatalf("expected ErrMarketAssignmentOverlap for an overlapping assignment, got %v", err)
 	}
@@ -99,5 +103,23 @@ func TestPostgresMarketRoundTrip(t *testing.T) {
 	}
 	if len(active) != 1 || active[0].ID != marketID {
 		t.Fatalf("expected exactly one active market for %s, got %+v", tenantID, active)
+	}
+
+	assignments, err := repo.ListMarketAssignmentsForTenant(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("list market assignments: %v", err)
+	}
+	if len(assignments) != 1 {
+		t.Fatalf("expected exactly one market assignment for %s, got %+v", tenantID, assignments)
+	}
+	if assignments[0].LegalEntityID != "ZURIBEANS-ZA" {
+		t.Fatalf("expected legal_entity_id to round-trip, got %+v", assignments[0])
+	}
+	gotCapabilities := map[domain.MarketParticipationCapability]bool{}
+	for _, c := range assignments[0].Capabilities {
+		gotCapabilities[c] = true
+	}
+	if len(gotCapabilities) != 2 || !gotCapabilities[domain.MarketParticipationSelling] || !gotCapabilities[domain.MarketParticipationImporting] {
+		t.Fatalf("expected SELLING and IMPORTING capabilities to round-trip, got %+v", assignments[0].Capabilities)
 	}
 }

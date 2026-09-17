@@ -1852,11 +1852,12 @@ func (r *PostgresRepository) GetMarketByCode(ctx context.Context, code string) (
 	return market, nil
 }
 
-// AssignMarketToTenant persists a MarketAssignment. A pre-existing
-// assignment for the same (tenant_id, market_id) pair with an overlapping
-// validity period is rejected by market_assignment_active_excl (migration
-// 000024) and surfaced as ErrMarketAssignmentOverlap, mirroring how
-// CreateMapping already surfaces ErrMappingOverlap for the analogous
+// AssignMarketToTenant persists a MarketAssignment and its participation
+// capabilities in one transaction. A pre-existing assignment for the same
+// (tenant_id, market_id) pair with an overlapping validity period is
+// rejected by market_assignment_active_excl (migration 000024) and
+// surfaced as ErrMarketAssignmentOverlap, mirroring how CreateMapping
+// already surfaces ErrMappingOverlap for the analogous
 // canonical_mapping_source_type_active_excl violation.
 func (r *PostgresRepository) AssignMarketToTenant(ctx context.Context, assignment domain.MarketAssignment) error {
 	if r == nil || r.pool == nil {
@@ -1865,10 +1866,16 @@ func (r *PostgresRepository) AssignMarketToTenant(ctx context.Context, assignmen
 	if err := assignment.Validate(); err != nil {
 		return fmt.Errorf("validate market assignment: %w", err)
 	}
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO market.market_assignment(market_assignment_id, tenant_id, market_id, effective_from, effective_to)
-		VALUES ($1::uuid, $2, $3::uuid, $4, $5)`,
-		assignment.ID, assignment.TenantID, assignment.MarketID, assignment.EffectiveFrom, assignment.EffectiveTo,
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO market.market_assignment(market_assignment_id, tenant_id, legal_entity_id, market_id, effective_from, effective_to)
+		VALUES ($1::uuid, $2, NULLIF($3, ''), $4::uuid, $5, $6)`,
+		assignment.ID, assignment.TenantID, assignment.LegalEntityID, assignment.MarketID, assignment.EffectiveFrom, assignment.EffectiveTo,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -1877,7 +1884,69 @@ func (r *PostgresRepository) AssignMarketToTenant(ctx context.Context, assignmen
 		}
 		return err
 	}
-	return nil
+	for _, capability := range assignment.Capabilities {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO market.market_participation_capability(market_assignment_id, capability)
+			VALUES ($1::uuid, $2)`,
+			assignment.ID, string(capability),
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// ListMarketAssignmentsForTenant returns every MarketAssignment record for
+// tenantID with Capabilities populated (ADR-BCP-011 §6, Gate P0's
+// market-participation capability-flag remodel) -- unlike
+// ListActiveMarketsForTenant, this exposes what the tenant is authorised to
+// do in each market, not just which markets it has any assignment to.
+func (r *PostgresRepository) ListMarketAssignmentsForTenant(ctx context.Context, tenantID string) ([]domain.MarketAssignment, error) {
+	if r == nil || r.pool == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT market_assignment_id::text, tenant_id, COALESCE(legal_entity_id, ''), market_id::text, effective_from, effective_to
+		FROM market.market_assignment
+		WHERE tenant_id = $1
+		ORDER BY effective_from`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.MarketAssignment
+	for rows.Next() {
+		var a domain.MarketAssignment
+		if err := rows.Scan(&a.ID, &a.TenantID, &a.LegalEntityID, &a.MarketID, &a.EffectiveFrom, &a.EffectiveTo); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range out {
+		capRows, err := r.pool.Query(ctx, `SELECT capability FROM market.market_participation_capability WHERE market_assignment_id = $1::uuid`, out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		for capRows.Next() {
+			var capability string
+			if err := capRows.Scan(&capability); err != nil {
+				capRows.Close()
+				return nil, err
+			}
+			out[i].Capabilities = append(out[i].Capabilities, domain.MarketParticipationCapability(capability))
+		}
+		if err := capRows.Err(); err != nil {
+			capRows.Close()
+			return nil, err
+		}
+		capRows.Close()
+	}
+	return out, nil
 }
 
 func (r *PostgresRepository) ListActiveMarketsForTenant(ctx context.Context, tenantID string, at time.Time) ([]domain.Market, error) {
