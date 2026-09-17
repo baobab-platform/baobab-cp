@@ -58,6 +58,11 @@ type Dependencies struct {
 	// them) rather than registering handlers that would panic -- every
 	// other route in this file is unaffected either way.
 	Provisioning ProvisioningRepository
+	// ExternalReferences backs the /v1/canonical-entities/{entityID}/
+	// external-references routes and the external-reference lookup route
+	// (Gate ZB-03.3, ADR-BCP-016). Nil disables those routes, the same
+	// nil-skip shape Provisioning above already established.
+	ExternalReferences repository.ExternalReferenceRepository
 }
 type API struct {
 	store            store.TenantStore
@@ -73,7 +78,7 @@ func New(dependencies Dependencies) http.Handler {
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
-	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store}
+	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store, Canonical: dependencies.Canonical.Repository}
 	r := chi.NewRouter()
 	r.Use(a.securityHeaders, a.correlation, a.requestLog)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -111,6 +116,11 @@ func New(dependencies Dependencies) http.Handler {
 	r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/canonical-entities/{entityID}", canonical.get)
 	for _, action := range []string{"validate", "activate", "suspend", "retire"} {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/"+action, canonical.lifecycle(action))
+	}
+	if dependencies.ExternalReferences != nil {
+		externalReferences := externalReferenceHandler{repo: dependencies.ExternalReferences}
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/external-references", externalReferences.create)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/external-references", externalReferences.lookup)
 	}
 	if dependencies.Provisioning != nil {
 		prov := provisioningHandler{tenants: dependencies.Store, repo: dependencies.Provisioning}

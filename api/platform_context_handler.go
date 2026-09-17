@@ -40,6 +40,14 @@ type platformContextResolveRequest struct {
 	// see resolveWorkloadTenant's doc comment); must equal the claim if the
 	// token does carry one.
 	TenantID string `json:"tenant_id"`
+	// OrganisationID, when supplied, must name a real, ACTIVE,
+	// organisation-kind CanonicalEntity owned by the resolved tenant
+	// (ADR-BCP-016) -- verified by ContextResolutionService.Resolve, never
+	// trusted merely because it is well-formed. The calling workload (e.g.
+	// baobab-trade, resolving its own authenticated buyer's organisation)
+	// asserts this value itself; CP never parses it out of the workload's
+	// own token, per ADR-0010 §36 ("No Buyer Context by Header Alone").
+	OrganisationID string `json:"organisation_id,omitempty"`
 }
 
 type platformContextResolveResponse struct {
@@ -76,8 +84,11 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 	}
 	// ADR-BCP-004 §52: resolve identity -> resolve tenant -> validate
 	// principal<->tenant relationship -> resolve legal entity, all fail
-	// closed, mirroring ResolverHandler.Resolve's identical step.
-	_, trustedContext, err := h.ContextResolution.Resolve(r.Context(), principal, tenantID, correlationID(r), time.Now())
+	// closed, mirroring ResolverHandler.Resolve's identical step. Unlike
+	// that handler, this one also verifies req.OrganisationID when supplied
+	// (ADR-BCP-016) -- the only real HTTP path that reaches the ZB-03.2
+	// OrganisationID verification stage today.
+	_, trustedContext, err := h.ContextResolution.Resolve(r.Context(), principal, tenantID, req.OrganisationID, correlationID(r), time.Now())
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrIdentityResolutionFailed):

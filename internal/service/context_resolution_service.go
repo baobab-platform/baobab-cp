@@ -8,6 +8,7 @@ import (
 
 	"github.com/nabhold/baobab-cp/internal/auth"
 	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/nabhold/baobab-cp/internal/repository"
 	"github.com/nabhold/baobab-cp/internal/store"
 )
 
@@ -44,6 +45,13 @@ var ErrTenantNotActive = errors.New("tenant is not active")
 type ContextResolutionService struct {
 	Identity IdentityService
 	Tenants  store.TenantStore
+	// Canonical backs the optional OrganisationID verification stage
+	// (ADR-BCP-016). Nil is a valid zero value as long as no caller ever
+	// passes a non-empty organisationID to Resolve (every existing caller
+	// before this stage existed): Resolve fails closed with an explicit
+	// error rather than silently dropping an unverified organisationID if
+	// one is supplied while this is unset.
+	Canonical repository.CanonicalEntityRepository
 }
 
 // Resolve mirrors auth.NewOperationContext's signature and return shape
@@ -54,7 +62,7 @@ type ContextResolutionService struct {
 // already use NewOperationContext directly can switch to this with a
 // like-for-like change, gaining the tenant/legal-entity stages this type
 // adds on top.
-func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Principal, tenantID string, correlationID string, now time.Time) (context.Context, domain.Context, error) {
+func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Principal, tenantID string, organisationID string, correlationID string, now time.Time) (context.Context, domain.Context, error) {
 	if s.Tenants == nil {
 		return nil, domain.Context{}, errors.New("tenant store is required")
 	}
@@ -88,6 +96,34 @@ func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Pr
 	// degenerates to "the tenant's own legal entity," always populated,
 	// never caller-selectable.
 	trustedContext.LegalEntityID = tenant.LegalEntityID
+	// ADR-BCP-016: a caller-asserted organisationID is never trusted merely
+	// because it is well-formed -- it must name a real, ACTIVE,
+	// organisation-kind CanonicalEntity owned by the resolved tenant,
+	// mirroring AuthoritativeContextResolver.Resolve's identical
+	// OrganisationID stage (internal/provisioning/context_resolver.go).
+	if organisationID != "" {
+		if s.Canonical == nil {
+			return nil, domain.Context{}, errors.New("canonical entity repository is required to verify organisation_id")
+		}
+		organisation, err := s.Canonical.GetCanonicalEntity(ctx, organisationID)
+		if err != nil {
+			return nil, domain.Context{}, fmt.Errorf("resolve organisation: %w", err)
+		}
+		if !domain.OrganisationEntityTypes[organisation.EntityType] {
+			return nil, domain.Context{}, errors.New("requested organisation_id is not a canonical organisation entity")
+		}
+		if organisation.Status != "ACTIVE" {
+			return nil, domain.Context{}, errors.New("requested organisation is not active")
+		}
+		if organisation.OwnerTenantID != tenantID {
+			return nil, domain.Context{}, errors.New("requested organisation does not belong to the requesting tenant")
+		}
+		trustedContext.OrganisationID = organisation.ID
+		trustedContext.Provenance["organisation_id"] = domain.ContextSource{
+			Source: "baobab-cp:canonical-registry", TrustLevel: domain.TrustSystem,
+			Evidence: organisation.ID,
+		}
+	}
 	if err := trustedContext.Validate(); err != nil {
 		return nil, domain.Context{}, err
 	}
