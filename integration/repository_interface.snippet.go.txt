@@ -1,0 +1,15 @@
+// Merge target: internal/repository/repository.go
+//
+// Add these methods to the repository abstraction that should expose
+// TradeLane persistence. Do NOT replace repository.go with this snippet.
+//
+// Required imports (if not already present):
+//   "context"
+//   "time"
+//   "github.com/nabhold/baobab-cp/internal/domain"
+
+type TradeLaneRepository interface {
+	GetTradeLane(ctx context.Context, tenantID, tradeLaneID string) (domain.TradeLane, error)
+	GetMarketAssignment(ctx context.Context, tenantID, marketID string, at time.Time) (domain.MarketAssignment, error)
+	SaveTradeLane(ctx context.Context, lane domain.TradeLane) error
+}

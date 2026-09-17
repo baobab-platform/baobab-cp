@@ -1,0 +1,88 @@
+// Merge target: internal/repository/postgres.go
+//
+// This is a merge snippet, NOT a standalone Go file. It assumes the existing
+// PostgreSQL repository exposes a DB/Pool query API compatible with QueryRow
+// and Exec. Rename the receiver/type or DB field to match the current file.
+//
+// IMPORTANT: inspect postgres.go before merging. The repository is large and
+// already establishes error mapping, tenant isolation and transaction
+// conventions that this code should follow rather than replace.
+//
+// The SQL intentionally filters by tenant_id on reads and updates.
+
+func (r *PostgresRepository) GetTradeLane(
+	ctx context.Context,
+	tenantID string,
+	tradeLaneID string,
+) (domain.TradeLane, error) {
+	const query = `
+		SELECT trade_lane_id, tenant_id, origin_market_id, destination_market_id,
+		       direction, status, permitted_capability_keys, created_at, updated_at
+		  FROM market.trade_lane
+		 WHERE tenant_id = $1
+		   AND trade_lane_id = $2`
+
+	var lane domain.TradeLane
+	err := r.db.QueryRow(ctx, query, tenantID, tradeLaneID).Scan(
+		&lane.ID,
+		&lane.TenantID,
+		&lane.OriginMarketID,
+		&lane.DestinationMarketID,
+		&lane.Direction,
+		&lane.Status,
+		&lane.PermittedCapabilityKeys,
+		&lane.CreatedAt,
+		&lane.UpdatedAt,
+	)
+	if err != nil {
+		return domain.TradeLane{}, fmt.Errorf("get trade lane: %w", err)
+	}
+	return lane, nil
+}
+
+func (r *PostgresRepository) SaveTradeLane(
+	ctx context.Context,
+	lane domain.TradeLane,
+) error {
+	if err := lane.Validate(); err != nil {
+		return fmt.Errorf("validate trade lane: %w", err)
+	}
+
+	const query = `
+		INSERT INTO market.trade_lane (
+			trade_lane_id, tenant_id, origin_market_id, destination_market_id,
+			direction, status, permitted_capability_keys, created_at, updated_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		ON CONFLICT (trade_lane_id) DO UPDATE SET
+			direction = EXCLUDED.direction,
+			status = EXCLUDED.status,
+			permitted_capability_keys = EXCLUDED.permitted_capability_keys,
+			updated_at = EXCLUDED.updated_at
+		WHERE market.trade_lane.tenant_id = EXCLUDED.tenant_id`
+
+	_, err := r.db.Exec(ctx, query,
+		lane.ID,
+		lane.TenantID,
+		lane.OriginMarketID,
+		lane.DestinationMarketID,
+		lane.Direction,
+		lane.Status,
+		lane.PermittedCapabilityKeys,
+		lane.CreatedAt,
+		lane.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("save trade lane: %w", err)
+	}
+	return nil
+}
+
+// GetMarketAssignment should preferably reuse/extend the repository's existing
+// MarketAssignment query rather than introducing a second implementation.
+// Required semantics:
+//   tenant_id = requested tenant
+//   market_id = requested market
+//   effective_from <= at
+//   effective_to IS NULL OR at < effective_to
+//
+// It must return the capabilities added by migration 000037.
