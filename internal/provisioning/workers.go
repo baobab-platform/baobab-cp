@@ -4,6 +4,7 @@ package provisioning
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -46,18 +47,49 @@ func (w ApplyWorker) Run(ctx context.Context, op provisioningdomain.TenantProvis
 	return PhaseResult{ObservedStateVersion: op.ObservedStateVersion}, nil
 }
 
+// Reconciler is satisfied by DesiredObservedReconciler. Report (not a
+// flattened tuple) is the interface method so ReconcileWorker.Run can
+// persist the full drift evidence, not just its summary fields.
 type Reconciler interface {
-	Reconcile(ctx context.Context, op provisioningdomain.TenantProvisioning) (observedVersion int64, blockers []string, err error)
+	Report(ctx context.Context, op provisioningdomain.TenantProvisioning) (ReconciliationReport, error)
 }
-type ReconcileWorker struct{ Reconciler Reconciler }
+
+// DriftSnapshotStore persists immutable reconciliation/drift evidence (Gate
+// ZB-03.1, migration 000044). Optional: a nil Snapshots disables
+// persistence without disabling reconciliation itself.
+type DriftSnapshotStore interface {
+	SaveReconciliationSnapshot(ctx context.Context, snapshot provisioningdomain.ReconciliationSnapshotRecord) (string, error)
+}
+
+type ReconcileWorker struct {
+	Reconciler Reconciler
+	Snapshots  DriftSnapshotStore
+}
 
 func (ReconcileWorker) Name() string { return "RECONCILE" }
 func (w ReconcileWorker) Run(ctx context.Context, op provisioningdomain.TenantProvisioning) (PhaseResult, error) {
 	if w.Reconciler == nil {
 		return PhaseResult{}, errors.New("reconciler is required")
 	}
-	v, b, err := w.Reconciler.Reconcile(ctx, op)
-	return PhaseResult{ObservedStateVersion: v, BlockingReasons: b}, err
+	report, err := w.Reconciler.Report(ctx, op)
+	if err != nil {
+		return PhaseResult{}, err
+	}
+	if w.Snapshots != nil {
+		record := reconciliationSnapshotRecordFromReport(op.ID, report)
+		if _, saveErr := w.Snapshots.SaveReconciliationSnapshot(ctx, record); saveErr != nil {
+			// Same posture as ReadinessWorker: a failure to persist
+			// evidence must not itself block provisioning progress.
+			slog.ErrorContext(ctx, "reconciliation snapshot persistence failed",
+				"tenant_id", op.TenantID, "provisioning_id", op.ID, "correlation_id", op.ID,
+				"phase", "RECONCILE", "error", saveErr)
+		}
+	}
+	blockers := make([]string, 0, len(report.Drift))
+	for _, d := range report.Drift {
+		blockers = append(blockers, fmt.Sprintf("%s/%s: %s", d.ResourceType, d.ResourceKey, d.Reason))
+	}
+	return PhaseResult{ObservedStateVersion: report.ObservedStateVersion, BlockingReasons: blockers}, nil
 }
 
 // ReadinessEvaluator is satisfied by *ReadinessEvaluatorImpl. Report (not a
@@ -125,5 +157,27 @@ func readinessSnapshotRecordFromReport(provisioningID string, report ReadinessRe
 		DesiredStateVersion: report.DesiredStateVersion, ObservedStateVersion: report.ObservedStateVersion,
 		OverallReady: report.Ready, BlockingReasons: report.BlockingReasons,
 		EvaluatedAt: report.EvaluatedAt, Checks: checks,
+	}
+}
+
+// reconciliationSnapshotRecordFromReport converts a ReconciliationReport
+// into its persisted form. Every Drift item is treated as blocking -- true
+// of every drift finding this codebase produces today, since Reconciler.Report
+// itself only ever advances ObservedStateVersion on zero drift (see
+// DesiredObservedReconciler.Report). ResolvedAt is always nil; see
+// ResourceDriftRecord's doc comment for why.
+func reconciliationSnapshotRecordFromReport(provisioningID string, report ReconciliationReport) provisioningdomain.ReconciliationSnapshotRecord {
+	drift := make([]provisioningdomain.ResourceDriftRecord, 0, len(report.Drift))
+	for _, d := range report.Drift {
+		drift = append(drift, provisioningdomain.ResourceDriftRecord{
+			ResourceType: d.ResourceType, ResourceID: d.ResourceKey, DriftKind: string(d.Kind),
+			DesiredHash: d.DesiredHash, ObservedHash: d.ObservedHash,
+			Repairable: d.Repairable, Blocking: true, Reason: d.Reason, DetectedAt: report.EvaluatedAt,
+		})
+	}
+	return provisioningdomain.ReconciliationSnapshotRecord{
+		TenantProvisioningID: provisioningID, TenantID: report.TenantID,
+		DesiredStateVersion: report.DesiredStateVersion, ObservedStateVersion: report.ObservedStateVersion,
+		Converged: report.Converged, EvaluatedAt: report.EvaluatedAt, Drift: drift,
 	}
 }

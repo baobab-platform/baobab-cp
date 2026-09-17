@@ -56,7 +56,11 @@ func (r HashResourceReconciler) ReconcileResource(
 			continue
 		}
 		if d.DesiredHash != o.ObservedHash {
-			drift = append(drift, Drift{ResourceType: r.ResourceType, ResourceKey: key, Kind: DriftMismatch, Reason: "observed state differs from desired state", Repairable: true})
+			drift = append(drift, Drift{
+				ResourceType: r.ResourceType, ResourceKey: key, Kind: DriftMismatch,
+				Reason: "observed state differs from desired state", Repairable: true,
+				DesiredHash: d.DesiredHash, ObservedHash: o.ObservedHash,
+			})
 		}
 	}
 	if r.UnexpectedIsBlocker {

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"time"
 
 	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
 )
@@ -29,6 +30,11 @@ type Drift struct {
 	Kind         DriftKind
 	Reason       string
 	Repairable   bool
+	// DesiredHash/ObservedHash are populated for DriftMismatch (the values
+	// that differed); left empty for DriftMissing (nothing was observed to
+	// hash) and DriftUnexpected (nothing was desired to hash).
+	DesiredHash  string
+	ObservedHash string
 }
 
 type ResourceObservation struct {
@@ -40,10 +46,13 @@ type ResourceObservation struct {
 }
 
 type ReconciliationReport struct {
+	TenantID             string
+	ProvisioningID       string
 	DesiredStateVersion  int64
 	ObservedStateVersion int64
 	Converged            bool
 	Drift                []Drift
+	EvaluatedAt          time.Time
 }
 
 type ResourceReconciler interface {
@@ -55,21 +64,7 @@ type DesiredObservedReconciler struct {
 	Resources []ResourceReconciler
 }
 
-func (r DesiredObservedReconciler) Reconcile(
-	ctx context.Context,
-	op provisioningdomain.TenantProvisioning,
-) (int64, []string, error) {
-	report, err := r.Report(ctx, op)
-	if err != nil {
-		return op.ObservedStateVersion, nil, err
-	}
-	blockers := make([]string, 0, len(report.Drift))
-	for _, d := range report.Drift {
-		blockers = append(blockers, fmt.Sprintf("%s/%s: %s", d.ResourceType, d.ResourceKey, d.Reason))
-	}
-	return report.ObservedStateVersion, blockers, nil
-}
-
+// Report satisfies the Reconciler interface consumed by ReconcileWorker.
 func (r DesiredObservedReconciler) Report(
 	ctx context.Context,
 	op provisioningdomain.TenantProvisioning,
@@ -78,8 +73,10 @@ func (r DesiredObservedReconciler) Report(
 		return ReconciliationReport{}, errors.New("at least one resource reconciler is required")
 	}
 	report := ReconciliationReport{
+		TenantID: op.TenantID, ProvisioningID: op.ID,
 		DesiredStateVersion:  op.DesiredStateVersion,
 		ObservedStateVersion: op.ObservedStateVersion,
+		EvaluatedAt:          time.Now().UTC(),
 	}
 	seen := map[string]struct{}{}
 	for _, resource := range r.Resources {
