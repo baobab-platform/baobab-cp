@@ -206,7 +206,9 @@ To keep ZB-03 additive rather than a rewrite, per this programme's own governing
 2. Revocation signal propagation (§3) — **must be decided in ZB-03.9**. Until then, every
    engine's existing synchronous re-validation is the fail-closed default and must not be
    weakened; ZB-03.6/.7/.8's context/authorization work must not assume a push-revocation
-   signal exists yet.
+   signal exists yet. **Resolved — see §7**: synchronous re-validation stays the sole mechanism;
+   this bullet's "must not be weakened" instruction is now the permanent posture, not just the
+   interim one.
 
 Every other concern in §1's table has a named, evidenced, single owner. ZB-03.1 (deferred
 ZB-02 production surfaces) has no dependency on either open item and may proceed immediately.
