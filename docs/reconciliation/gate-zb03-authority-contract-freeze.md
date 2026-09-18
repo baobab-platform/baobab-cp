@@ -210,3 +210,39 @@ To keep ZB-03 additive rather than a rewrite, per this programme's own governing
 
 Every other concern in §1's table has a named, evidenced, single owner. ZB-03.1 (deferred
 ZB-02 production surfaces) has no dependency on either open item and may proceed immediately.
+
+---
+
+## 7. ZB-03.9 resolution (2026-09-18)
+
+Per §6 item 2's own instruction ("must be decided in ZB-03.9"), the revocation-propagation
+question is now decided, and the §1 table's "Workload lifecycle state" gap is partially closed —
+both scoped narrowly, consistent with §5's "additive, don't rebuild" principle.
+
+**Revocation signal propagation (§3): keep pure synchronous re-validation.** No outbox-based
+revocation events are being built in this slice. Every engine's existing fail-closed re-validation
+(`baobab-erp`'s synchronous context lookup, `baobab-trade`'s `assertActiveBuyerContext` against
+live-fetched state, this repo's own `AuthoritativeContextResolver`) is already correct and already
+safe — it just isn't fast. `shared`'s revocation event schemas
+(`contracts/identity-events/v1/*.schema.json`) remain defined but unconsumed. Building an
+event producer with no consumer, or a consumer with no producer, would be speculative work against
+a need nothing has demonstrated yet; §3's "cache-invalidation accelerant" framing stands as the
+right shape for that work *if and when* re-validation latency becomes a real, measured problem —
+not before. This does not weaken anything: it is the same synchronous-only posture §6 item 2
+already required as the interim default, now made permanent-until-justified rather than merely
+interim.
+
+**Workload lifecycle state (§1 table, row 28): `baobab-iam`-side consistency enforcement shipped;
+`baobab-cp`-side request-time enforcement remains unowned.** `baobab-iam`'s
+`tests/integration/run.sh` §9 now asserts every workload client's live `enabled` flag agrees with
+`nabhold/shared`'s `workload-registry.yaml` `status` field (Gate IAM-18) — a registry entry marked
+`SUSPENDED`/`REVOKED`/`RETIRED` with its matching Keycloak client still `enabled: true` now fails
+CI. This closes the *registration-consistency* half of the gap (an operator following the
+registry's own documented "set status to RETIRED before disabling the client" ordering can no
+longer silently skip the second step). It does **not** close the *request-time enforcement* half:
+this repo's `WorkloadVerifier` (`api/router.go:87-95`) still only checks token signature/issuer/
+audience/actor_type, never cross-references the caller's `client_id`/`azp` against the registry's
+`status` at all — a `REVOKED` workload's already-issued, not-yet-expired token would still pass
+verification here today. That remains **unowned** and is real follow-on work for a future slice
+(this repo's own PR, reading the registry the same way `baobab-iam`'s `run.sh` §9 already does),
+not folded into this decision.
