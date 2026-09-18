@@ -63,18 +63,29 @@ type Dependencies struct {
 	// (Gate ZB-03.3, ADR-BCP-016). Nil disables those routes, the same
 	// nil-skip shape Provisioning above already established.
 	ExternalReferences repository.ExternalReferenceRepository
+	// WorkloadRegistry backs request-time enforcement of ADR-0007 §45's
+	// workload lifecycle status (Gate ZB-03.10, closing the gap
+	// docs/reconciliation/gate-zb03-authority-contract-freeze.md §7 named):
+	// a workload token that authenticates successfully but whose client_id
+	// the registry marks non-ACTIVE is rejected. Nil (the default) disables
+	// this check entirely -- every existing workload route's behavior is
+	// unchanged unless an operator explicitly supplies one (see
+	// auth.LoadWorkloadRegistryFile), the same nil-disables-the-feature
+	// shape every other optional dependency in this struct already uses.
+	WorkloadRegistry auth.WorkloadRegistry
 }
 type API struct {
 	store            store.TenantStore
 	adminVerifier    auth.TokenVerifier
 	workloadVerifier auth.TokenVerifier
+	workloadRegistry auth.WorkloadRegistry
 	resolution       service.ResolutionService
 	identities       repository.IdentityRepository
 	memberships      repository.WorkforceMembershipRepository
 }
 
 func New(dependencies Dependencies) http.Handler {
-	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships}
+	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships}
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
@@ -160,6 +171,15 @@ func (a *API) authorize(verifier auth.TokenVerifier, actorType, requiredScope st
 			// reconciles the effective tenant via resolveWorkloadTenant
 			// instead, once it has the request body to consult.
 			if principal.ActorType != actorType || !principal.HasScope(requiredScope) || (actorType == "workload" && principal.ClientID == "") {
+				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
+				return
+			}
+			// Gate ZB-03.10: a workload token can authenticate successfully
+			// (valid signature, issuer, audience, actor_type) yet belong to
+			// a client the workload registry no longer considers ACTIVE --
+			// see auth.WorkloadRegistry's doc comment. Nil (unconfigured)
+			// preserves prior behavior exactly.
+			if actorType == "workload" && a.workloadRegistry != nil && !a.workloadRegistry.IsActive(principal.ClientID) {
 				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
 				return
 			}
