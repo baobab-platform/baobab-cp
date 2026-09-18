@@ -160,6 +160,67 @@ func TestResolveContextFailsClosed(t *testing.T) {
 	}
 }
 
+// fakeWorkloadRegistry lets tests control auth.WorkloadRegistry's verdict
+// without touching the filesystem (see internal/auth/workload_registry_test.go
+// for LoadWorkloadRegistryFile's own coverage).
+type fakeWorkloadRegistry struct{ active bool }
+
+func (r fakeWorkloadRegistry) IsActive(string) bool { return r.active }
+
+func TestResolveContextRejectsRevokedWorkload(t *testing.T) {
+	// Gate ZB-03.10: a workload token can pass signature/issuer/audience/
+	// actor_type verification yet belong to a client_id the workload
+	// registry no longer marks ACTIVE -- this must still be rejected.
+	store := &fakeStore{}
+	handler := New(Dependencies{
+		Store:            store,
+		WorkloadVerifier: fakeVerifier{principal: workloadPrincipal()},
+		WorkloadRegistry: fakeWorkloadRegistry{active: false},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/context/resolve", strings.NewReader(`{"product_id":"baobab_trade"}`))
+	req.Header.Set("Authorization", "Bearer workload-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("got status %d: %s", response.Code, response.Body.String())
+	}
+	if store.resolvedCalls != 0 {
+		t.Fatalf("expected no resolve call for a rejected request, got %d", store.resolvedCalls)
+	}
+}
+
+func TestResolveContextAllowsActiveWorkload(t *testing.T) {
+	store := &fakeStore{}
+	handler := New(Dependencies{
+		Store:            store,
+		WorkloadVerifier: fakeVerifier{principal: workloadPrincipal()},
+		WorkloadRegistry: fakeWorkloadRegistry{active: true},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/context/resolve", strings.NewReader(`{"product_id":"baobab_trade"}`))
+	req.Header.Set("Authorization", "Bearer workload-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+	if response.Code != http.StatusOK {
+		t.Fatalf("got status %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestResolveContextUnaffectedWhenWorkloadRegistryUnconfigured(t *testing.T) {
+	// The default (nil WorkloadRegistry, as every other existing test in
+	// this file already exercises) must preserve pre-ZB-03.10 behavior
+	// exactly -- this is what TestResolveContext above already proves, but
+	// stated explicitly here as the control case for the two tests above.
+	store := &fakeStore{}
+	handler := New(Dependencies{Store: store, WorkloadVerifier: fakeVerifier{principal: workloadPrincipal()}})
+	req := httptest.NewRequest(http.MethodPost, "/v1/context/resolve", strings.NewReader(`{"product_id":"baobab_trade"}`))
+	req.Header.Set("Authorization", "Bearer workload-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+	if response.Code != http.StatusOK {
+		t.Fatalf("got status %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestGetTenant(t *testing.T) {
 	store := &fakeStore{}
 	handler := New(Dependencies{Store: store, AdminVerifier: fakeVerifier{principal: adminPrincipal()}})
