@@ -63,6 +63,13 @@ type ContextResolutionService struct {
 // like-for-like change, gaining the tenant/legal-entity stages this type
 // adds on top.
 func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Principal, tenantID string, organisationID string, correlationID string, now time.Time) (context.Context, domain.Context, error) {
+	return s.ResolveExpectedOrganisationKind(ctx, principal, tenantID, organisationID, "", correlationID, now)
+}
+
+// ResolveExpectedOrganisationKind preserves Resolve's generic ADR-BCP-016
+// behaviour when expectedOrganisationType is empty. When supplied, it adds
+// ADR-BCP-018's exact-kind check before the Context can be trusted.
+func (s ContextResolutionService) ResolveExpectedOrganisationKind(ctx context.Context, principal auth.Principal, tenantID string, organisationID string, expectedOrganisationType string, correlationID string, now time.Time) (context.Context, domain.Context, error) {
 	if s.Tenants == nil {
 		return nil, domain.Context{}, errors.New("tenant store is required")
 	}
@@ -96,6 +103,14 @@ func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Pr
 	// degenerates to "the tenant's own legal entity," always populated,
 	// never caller-selectable.
 	trustedContext.LegalEntityID = tenant.LegalEntityID
+	if expectedOrganisationType != "" {
+		if organisationID == "" {
+			return nil, domain.Context{}, errors.New("organisation_id is required when expected_organisation_type is supplied")
+		}
+		if !domain.OrganisationEntityTypes[expectedOrganisationType] {
+			return nil, domain.Context{}, errors.New("expected_organisation_type is not a registered organisation entity type")
+		}
+	}
 	// ADR-BCP-016: a caller-asserted organisationID is never trusted merely
 	// because it is well-formed -- it must name a real, ACTIVE,
 	// organisation-kind CanonicalEntity owned by the resolved tenant,
@@ -111,6 +126,9 @@ func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Pr
 		}
 		if !domain.OrganisationEntityTypes[organisation.EntityType] {
 			return nil, domain.Context{}, errors.New("requested organisation_id is not a canonical organisation entity")
+		}
+		if expectedOrganisationType != "" && organisation.EntityType != expectedOrganisationType {
+			return nil, domain.Context{}, errors.New("requested organisation does not match expected_organisation_type")
 		}
 		if organisation.Status != "ACTIVE" {
 			return nil, domain.Context{}, errors.New("requested organisation is not active")
