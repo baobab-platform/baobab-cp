@@ -55,9 +55,9 @@ type platformContextResolveRequest struct {
 }
 
 type platformContextResolveResponse struct {
-	ContextID  string     `json:"context_id"`
-	TenantID   string     `json:"tenant_id"`
-	ResolvedAt time.Time  `json:"resolved_at"`
+	ContextID        string     `json:"context_id"`
+	TenantID         string     `json:"tenant_id"`
+	ResolvedAt       time.Time  `json:"resolved_at"`
 	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
 	OrganisationID   string     `json:"organisation_id,omitempty"`
 	OrganisationType string     `json:"organisation_type,omitempty"`
@@ -119,9 +119,9 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, platformContextResolveResponse{
-		ContextID:  trustedContext.ID,
-		TenantID:   trustedContext.TenantID,
-		ResolvedAt: trustedContext.ResolvedAt,
+		ContextID:        trustedContext.ID,
+		TenantID:         trustedContext.TenantID,
+		ResolvedAt:       trustedContext.ResolvedAt,
 		ExpiresAt:        trustedContext.ExpiresAt,
 		OrganisationID:   trustedContext.OrganisationID,
 		OrganisationType: req.ExpectedOrganisationType,
