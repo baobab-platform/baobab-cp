@@ -48,13 +48,19 @@ type platformContextResolveRequest struct {
 	// asserts this value itself; CP never parses it out of the workload's
 	// own token, per ADR-0010 §36 ("No Buyer Context by Header Alone").
 	OrganisationID string `json:"organisation_id,omitempty"`
+	// ExpectedOrganisationType requests ADR-BCP-018 exact-kind attestation.
+	// It is optional for backwards compatibility, but commands granting
+	// kind-specific authority must supply it.
+	ExpectedOrganisationType string `json:"expected_organisation_type,omitempty"`
 }
 
 type platformContextResolveResponse struct {
 	ContextID  string     `json:"context_id"`
 	TenantID   string     `json:"tenant_id"`
 	ResolvedAt time.Time  `json:"resolved_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
+	OrganisationID   string     `json:"organisation_id,omitempty"`
+	OrganisationType string     `json:"organisation_type,omitempty"`
 }
 
 func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +94,7 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 	// that handler, this one also verifies req.OrganisationID when supplied
 	// (ADR-BCP-016) -- the only real HTTP path that reaches the ZB-03.2
 	// OrganisationID verification stage today.
-	_, trustedContext, err := h.ContextResolution.Resolve(r.Context(), principal, tenantID, req.OrganisationID, correlationID(r), time.Now())
+	_, trustedContext, err := h.ContextResolution.ResolveExpectedOrganisationKind(r.Context(), principal, tenantID, req.OrganisationID, req.ExpectedOrganisationType, correlationID(r), time.Now())
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrIdentityResolutionFailed):
@@ -116,6 +122,8 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 		ContextID:  trustedContext.ID,
 		TenantID:   trustedContext.TenantID,
 		ResolvedAt: trustedContext.ResolvedAt,
-		ExpiresAt:  trustedContext.ExpiresAt,
+		ExpiresAt:        trustedContext.ExpiresAt,
+		OrganisationID:   trustedContext.OrganisationID,
+		OrganisationType: req.ExpectedOrganisationType,
 	})
 }
