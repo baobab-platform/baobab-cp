@@ -34,17 +34,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Pin integrity + contract-compatibility (§16/§10.5 of
       # docs/reconciliation/shared-control-plane-audit.md): check out
-      # nabhold/shared at exactly the commit contracts.lock.yaml pins, so
+      # baobab-platform/shared at exactly the commit contracts.lock.yaml pins, so
       # internal/contracttest's tests validate this repository's payloads
       # against the same schemas it declares a dependency on - not
-      # whatever nabhold/shared's default branch happens to contain today.
-      - name: Read pinned nabhold/shared commit
+      # whatever baobab-platform/shared's default branch happens to contain today.
+      - name: Read pinned baobab-platform/shared commit
         id: pin
         run: echo "commit=$(grep -m1 'commit:' contracts.lock.yaml | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - name: Checkout nabhold/shared at pinned commit
+      - name: Checkout baobab-platform/shared at pinned commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: nabhold/shared
+          repository: baobab-platform/shared
           ref: ${{ steps.pin.outputs.commit }}
           path: .shared-contracts
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

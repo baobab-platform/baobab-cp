@@ -6,7 +6,7 @@
 #
 # PURPOSE:
 #   Owns the trigger and the elevated issues/pull-requests permissions;
-#   delegates the greeting mechanism itself to nabhold/shared, per this
+#   delegates the greeting mechanism itself to baobab-platform/shared, per this
 #   org's "build common capabilities once, govern centrally" principle. A
 #   reusable workflow cannot declare its own repository-event trigger
 #   (only workflow_call), so this thin wrapper is the only place
@@ -33,7 +33,7 @@
 # in this repo's own Settings (not visible from a local clone):
 #   1. Settings -> Actions -> General -> Actions permissions: if this repo
 #      restricts to an explicit allow-list rather than "Allow all actions
-#      and reusable workflows", nabhold/shared must be added to it, or
+#      and reusable workflows", baobab-platform/shared must be added to it, or
 #      every job below fails at the `uses:` step before it can run.
 #   2. Settings -> Actions -> General -> Workflow permissions: must allow
 #      GITHUB_TOKEN to create issue/PR comments for actions/first-
@@ -61,16 +61,16 @@ jobs:
     permissions:
       issues: write
       pull-requests: write
-    # SHA is nabhold/shared's v1.0.0 tag (annotated tag — this is the
+    # SHA is baobab-platform/shared's v1.0.0 tag (annotated tag — this is the
     # peeled commit, not the tag object's own SHA), verified live via
-    # `git ls-remote --tags https://github.com/nabhold/shared.git v1.0.0`
-    # on 2026-08-25. Future nabhold/shared releases should flow through
+    # `git ls-remote --tags https://github.com/baobab-platform/shared.git v1.0.0`
+    # on 2026-08-25. Future baobab-platform/shared releases should flow through
     # Dependabot from here (see .github/dependabot.yml's github-actions
     # entry) — but re-verify manually on the first bump PR regardless,
     # since Dependabot has a documented issue (dependabot-core#14716)
     # resolving updates correctly the first time a previously-untagged
     # pin moves onto an actual tag.
-    uses: nabhold/shared/.github/workflows/greetings.yml@f8df9b90ffe8fef5cbf6d14a9bcf868f723d1464 # v1.1.0
+    uses: baobab-platform/shared/.github/workflows/greetings.yml@f8df9b90ffe8fef5cbf6d14a9bcf868f723d1464 # v1.1.0
     with:
       issue-message: |
         👋 Thanks for opening your first issue in **BAOBAB Enterprise Platform**!
