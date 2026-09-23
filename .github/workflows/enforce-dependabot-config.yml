@@ -44,4 +44,4 @@ jobs:
     # the tag object's own SHA), re-verified live via
     # `git ls-remote --tags https://github.com/baobab-platform/shared.git v1.0.0`
     # on 2026-08-25.
-    uses: baobab-platform/shared/.github/workflows/enforce-dependabot-config.yml@f8df9b90ffe8fef5cbf6d14a9bcf868f723d1464 # v1.1.0
+    uses: baobab-platform/shared/.github/workflows/enforce-dependabot-config.yml@f7466cc89a17c0b6e02b5a1e5fce3ce76073a718 # v1.4.0
