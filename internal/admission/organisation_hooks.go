@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/nabhold/baobab-cp/internal/repository"
 	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
 )
 
@@ -28,6 +29,8 @@ type TenantAdmittedEvent struct {
 	BasisRelationshipID  string
 	AdmissionDecisionID  string
 	EffectiveFrom        time.Time
+	// Actor is the authenticated principal that admitted the tenant.
+	Actor repository.AuditActor
 }
 
 // OrganisationAdmissionHook runs organisation provisioning after tenant admission.
@@ -67,5 +70,6 @@ func (h *OrganisationAdmissionHook) AfterTenantAdmitted(ctx context.Context, ev 
 		BasisRelationshipID:  ev.BasisRelationshipID,
 		AdmissionDecisionID:  ev.AdmissionDecisionID,
 		EffectiveFrom:        ev.EffectiveFrom,
+		Actor:                ev.Actor,
 	})
 }

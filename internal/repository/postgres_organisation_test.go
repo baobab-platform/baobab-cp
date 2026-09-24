@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -21,6 +22,8 @@ type orgFixture struct {
 	repo  *PostgresRepository
 	admin *pgxpool.Pool
 	at    time.Time
+	// lastOrganisationCorrelations collects the correlation ids organisation() used.
+	lastOrganisationCorrelations []string
 }
 
 func newOrgFixture(t *testing.T) *orgFixture {
@@ -59,10 +62,12 @@ func (f *orgFixture) organisation(t *testing.T, name string) string {
 		domain.EntityTypeOrganisation).Scan(&id); err != nil {
 		t.Fatalf("canonical entity: %v", err)
 	}
+	a := f.actor()
+	f.lastOrganisationCorrelations = append(f.lastOrganisationCorrelations, a.CorrelationID)
 	if _, err := f.repo.EnsureOrganisation(f.ctx, domain.Organisation{
 		CanonicalEntityID: id, DisplayName: name, VerificationState: domain.VerificationUnverified,
 		SourceAuthority: "test", Status: "ACTIVE", EffectiveFrom: f.at,
-	}); err != nil {
+	}, a); err != nil {
 		t.Fatalf("ensure organisation: %v", err)
 	}
 	return id
@@ -82,7 +87,34 @@ func (f *orgFixture) tenant(t *testing.T, legalEntityID string) string {
 }
 
 func (f *orgFixture) evidence() Evidence {
-	return Evidence{References: []string{"evd_share_register"}, VerifiedBy: "principal:reviewer", VerifiedAt: f.at}
+	return Evidence{References: []string{"evd_share_register"}, VerifiedAt: f.at, Reason: "share register reviewed"}
+}
+
+// actor is the authenticated reviewer; correlation ids are unique per call
+// so audit and outbox rows can be counted per operation.
+func (f *orgFixture) actor() AuditActor {
+	return AuditActor{ActorID: "principal:reviewer", ActorType: "human", CorrelationID: domain.NewUUIDv7()}
+}
+
+// recorded counts audit rows and outbox events written under one correlation id.
+func (f *orgFixture) recorded(t *testing.T, a AuditActor) (audits, events int, types []string) {
+	t.Helper()
+	if err := f.admin.QueryRow(f.ctx, `SELECT count(*) FROM audit_events WHERE correlation_id=$1::uuid`, a.CorrelationID).Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := f.admin.Query(f.ctx, `SELECT event_type FROM messaging.outbox WHERE correlation_id=$1::uuid ORDER BY occurred_at`, a.CorrelationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var typ string
+		if err := rows.Scan(&typ); err != nil {
+			t.Fatal(err)
+		}
+		types = append(types, typ)
+	}
+	return audits, len(types), types
 }
 
 func (f *orgFixture) edge(t *testing.T, source, target string) string {
@@ -91,7 +123,7 @@ func (f *orgFixture) edge(t *testing.T, source, target string) string {
 		SourceOrganisationID: source, TargetOrganisationID: target, RelationshipType: domain.CorpRelOwns,
 		DirectOrDerived: domain.CorporateFactDirect, VerificationState: domain.VerificationPendingReview,
 		Status: domain.RelationshipStatusPending, EffectiveFrom: f.at, SourceAuthority: "admission-review",
-	})
+	}, f.actor())
 	if err != nil {
 		t.Fatalf("ensure edge: %v", err)
 	}
@@ -117,14 +149,14 @@ func TestPostgresOrganisationRoundTripsContractFields(t *testing.T) {
 		Addresses:     []domain.OrganisationAddress{{AddressType: "REGISTERED", Lines: []string{"1 Road"}, CountryCode: "KE"}},
 		Metadata:      map[string]any{"k": "v"},
 	}
-	if created, err := f.repo.EnsureOrganisation(f.ctx, want); err != nil || !created {
+	if created, err := f.repo.EnsureOrganisation(f.ctx, want, f.actor()); err != nil || !created {
 		t.Fatalf("ensure: created=%v err=%v", created, err)
 	}
 	// A replay that tries to claim VERIFIED is ignored: identity is never overwritten.
 	replay := want
 	replay.VerificationState = domain.VerificationPendingReview
 	replay.DisplayName = "Renamed"
-	if created, err := f.repo.EnsureOrganisation(f.ctx, replay); err != nil || created {
+	if created, err := f.repo.EnsureOrganisation(f.ctx, replay, f.actor()); err != nil || created {
 		t.Fatalf("replay: created=%v err=%v", created, err)
 	}
 	got, err := f.repo.GetOrganisation(f.ctx, id)
@@ -166,13 +198,13 @@ func TestPostgresEnsureCorporateRelationshipConvergesAndVerifies(t *testing.T) {
 	if !strings.HasPrefix(first, "crel_") {
 		t.Fatalf("id %q is not a contract id", first)
 	}
-	if err := f.repo.VerifyCorporateRelationship(f.ctx, first, Evidence{VerifiedBy: "principal:x", VerifiedAt: f.at}); err == nil {
+	if err := f.repo.VerifyCorporateRelationship(f.ctx, first, Evidence{VerifiedAt: f.at}, f.actor()); err == nil {
 		t.Fatal("verification without evidence references must fail")
 	}
-	if err := f.repo.VerifyCorporateRelationship(f.ctx, first, f.evidence()); err != nil {
+	if err := f.repo.VerifyCorporateRelationship(f.ctx, first, f.evidence(), f.actor()); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if err := f.repo.VerifyCorporateRelationship(f.ctx, first, f.evidence()); err == nil {
+	if err := f.repo.VerifyCorporateRelationship(f.ctx, first, f.evidence(), f.actor()); err == nil {
 		t.Fatal("verifying an already verified relationship must fail rather than silently overwrite evidence")
 	}
 	rels, err := f.repo.ListCorporateRelationshipsByOrganisation(f.ctx, b, f.at.Add(time.Hour))
@@ -193,7 +225,7 @@ func TestPostgresControlAncestryIsDirectedMultiHopAndCycleSafe(t *testing.T) {
 	back := f.edge(t, leaf, owner)          // cycle
 	unverified := f.edge(t, stranger, leaf) // stays PENDING_REVIEW
 	for _, id := range []string{e1, e2, back} {
-		if err := f.repo.VerifyCorporateRelationship(f.ctx, id, f.evidence()); err != nil {
+		if err := f.repo.VerifyCorporateRelationship(f.ctx, id, f.evidence(), f.actor()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -220,17 +252,17 @@ func TestPostgresLegalEntityProfileIsNeverRepointed(t *testing.T) {
 	le := uniqueLE()
 	lep := domain.LegalEntityProfile{LegalEntityID: le, OrganisationID: a, LegalName: "A Ltd", LegalStatus: domain.LegalStatusUnknown,
 		SourceAuthority: "test", VerificationState: domain.VerificationUnverified, EffectiveFrom: f.at}
-	if created, err := f.repo.EnsureLegalEntityProfile(f.ctx, lep); err != nil || !created {
+	if created, err := f.repo.EnsureLegalEntityProfile(f.ctx, lep, f.actor()); err != nil || !created {
 		t.Fatalf("ensure: %v %v", created, err)
 	}
-	if created, err := f.repo.EnsureLegalEntityProfile(f.ctx, lep); err != nil || created {
+	if created, err := f.repo.EnsureLegalEntityProfile(f.ctx, lep, f.actor()); err != nil || created {
 		t.Fatalf("replay: %v %v", created, err)
 	}
 	lep.OrganisationID = b
-	if _, err := f.repo.EnsureLegalEntityProfile(f.ctx, lep); !errors.Is(err, ErrOrganisationConflict) {
+	if _, err := f.repo.EnsureLegalEntityProfile(f.ctx, lep, f.actor()); !errors.Is(err, ErrOrganisationConflict) {
 		t.Fatalf("re-pointing a legal entity must conflict, got %v", err)
 	}
-	if err := f.repo.VerifyLegalEntityProfile(f.ctx, le, f.evidence()); err != nil {
+	if err := f.repo.VerifyLegalEntityProfile(f.ctx, le, f.evidence(), f.actor()); err != nil {
 		t.Fatal(err)
 	}
 	got, err := f.repo.GetLegalEntityProfile(f.ctx, le)
@@ -243,14 +275,14 @@ func TestPostgresDefaultLegalEntityMappingReplayAndSwitch(t *testing.T) {
 	f := newOrgFixture(t)
 	le1, le2 := uniqueLE(), uniqueLE()
 	tenantID := f.tenant(t, le1)
-	id1, err := f.repo.EnsureDefaultTenantLegalEntityMapping(f.ctx, tenantID, le1, "test", f.at)
+	id1, err := f.repo.EnsureDefaultTenantLegalEntityMapping(f.ctx, tenantID, le1, "test", f.at, f.actor())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again, err := f.repo.EnsureDefaultTenantLegalEntityMapping(f.ctx, tenantID, le1, "test", f.at); err != nil || again != id1 {
+	if again, err := f.repo.EnsureDefaultTenantLegalEntityMapping(f.ctx, tenantID, le1, "test", f.at, f.actor()); err != nil || again != id1 {
 		t.Fatalf("replay: %q %v; want %q", again, err, id1)
 	}
-	id2, err := f.repo.EnsureDefaultTenantLegalEntityMapping(f.ctx, tenantID, le2, "test", f.at.Add(time.Hour))
+	id2, err := f.repo.EnsureDefaultTenantLegalEntityMapping(f.ctx, tenantID, le2, "test", f.at.Add(time.Hour), f.actor())
 	if err != nil || id2 == id1 {
 		t.Fatalf("switch: %q %v", id2, err)
 	}
@@ -277,24 +309,139 @@ func TestPostgresMappingsAndPlatformRelationshipsConverge(t *testing.T) {
 	tenantID := f.tenant(t, uniqueLE())
 	m := domain.TenantOrganisationMapping{TenantID: tenantID, OrganisationID: org, MappingRole: domain.TenantOrgRolePrimary,
 		Status: domain.RelationshipStatusActive, EffectiveFrom: f.at, Provenance: "test"}
-	a, err := f.repo.EnsureTenantOrganisationMapping(f.ctx, m)
+	a, err := f.repo.EnsureTenantOrganisationMapping(f.ctx, m, f.actor())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b, err := f.repo.EnsureTenantOrganisationMapping(f.ctx, m); err != nil || b != a {
+	if b, err := f.repo.EnsureTenantOrganisationMapping(f.ctx, m, f.actor()); err != nil || b != a {
 		t.Fatalf("mapping replay: %q %v; want %q", b, err, a)
 	}
 	pr := domain.PlatformRelationship{PlatformID: "baobab-platform", OrganisationID: org, RelationshipType: domain.PlatformRelExternalClient,
 		VerificationState: domain.VerificationPendingReview, Status: domain.RelationshipStatusPending, EffectiveFrom: f.at, SourceAuthority: "admission"}
-	p1, err := f.repo.EnsurePlatformRelationship(f.ctx, pr)
+	p1, err := f.repo.EnsurePlatformRelationship(f.ctx, pr, f.actor())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p2, err := f.repo.EnsurePlatformRelationship(f.ctx, pr); err != nil || p2 != p1 {
+	if p2, err := f.repo.EnsurePlatformRelationship(f.ctx, pr, f.actor()); err != nil || p2 != p1 {
 		t.Fatalf("platform relationship replay: %q %v; want %q", p2, err, p1)
 	}
 	pr.RelationshipType = domain.PlatformRelPartner
-	if p3, err := f.repo.EnsurePlatformRelationship(f.ctx, pr); err != nil || p3 == p1 {
+	if p3, err := f.repo.EnsurePlatformRelationship(f.ctx, pr, f.actor()); err != nil || p3 == p1 {
 		t.Fatalf("concurrent relationship types must coexist: %q %v", p3, err)
+	}
+}
+
+func TestPostgresOrganisationChangesAreAuditedAndPublishedOnce(t *testing.T) {
+	f := newOrgFixture(t)
+	var id string
+	if err := f.admin.QueryRow(f.ctx, `INSERT INTO registry.canonical_entity (entity_type, status) VALUES ('ORGANISATION','active') RETURNING canonical_entity_id::text`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	org := domain.Organisation{CanonicalEntityID: id, DisplayName: "Acme Retail Ltd", VerificationState: domain.VerificationUnverified,
+		SourceAuthority: "applicant-submission", Status: "ACTIVE", EffectiveFrom: f.at}
+
+	// Anonymous changes are refused before anything is written.
+	if _, err := f.repo.EnsureOrganisation(f.ctx, org, AuditActor{}); err == nil {
+		t.Fatal("an organisation change without an authenticated actor must be refused")
+	}
+	if got, _ := f.repo.GetOrganisation(f.ctx, id); got != nil {
+		t.Fatal("refused change must not write the organisation")
+	}
+
+	created := f.actor()
+	if _, err := f.repo.EnsureOrganisation(f.ctx, org, created); err != nil {
+		t.Fatal(err)
+	}
+	if audits, n, types := f.recorded(t, created); audits != 1 || n != 1 || types[0] != "com.baobab-platform.control-plane.organisation.created.v1" {
+		t.Fatalf("create: audits=%d events=%v", audits, types)
+	}
+	replay := f.actor()
+	if _, err := f.repo.EnsureOrganisation(f.ctx, org, replay); err != nil {
+		t.Fatal(err)
+	}
+	if audits, n, _ := f.recorded(t, replay); audits != 0 || n != 0 {
+		t.Fatalf("replay must record nothing: audits=%d events=%d", audits, n)
+	}
+
+	// A pending corporate fact is audited but not published; verification publishes activation.
+	target := f.organisation(t, "Target")
+	recorded := f.actor()
+	edgeID, err := f.repo.EnsureCorporateRelationship(f.ctx, domain.CorporateRelationship{
+		SourceOrganisationID: id, TargetOrganisationID: target, RelationshipType: domain.CorpRelOwns,
+		DirectOrDerived: domain.CorporateFactDirect, VerificationState: domain.VerificationPendingReview,
+		Status: domain.RelationshipStatusPending, EffectiveFrom: f.at, SourceAuthority: "applicant-submission",
+	}, recorded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if audits, n, _ := f.recorded(t, recorded); audits != 1 || n != 0 {
+		t.Fatalf("pending relationship: audits=%d events=%d; want audited, not published", audits, n)
+	}
+	verify := f.actor()
+	if err := f.repo.VerifyCorporateRelationship(f.ctx, edgeID, f.evidence(), verify); err != nil {
+		t.Fatal(err)
+	}
+	if audits, n, types := f.recorded(t, verify); audits != 1 || n != 1 || types[0] != "com.baobab-platform.control-plane.corporate-relationship.activated.v1" {
+		t.Fatalf("verify: audits=%d events=%v", audits, types)
+	}
+	var payload []byte
+	if err := f.admin.QueryRow(f.ctx, `SELECT payload FROM messaging.outbox WHERE correlation_id=$1::uuid`, verify.CorrelationID).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		TenantID string         `json:"tenantid"`
+		Data     map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), "evd_share_register") || envelope.Data["evidence_reference_count"] != float64(1) {
+		t.Fatalf("event must carry the evidence count, never the references: %s", payload)
+	}
+	var auditPayload []byte
+	if err := f.admin.QueryRow(f.ctx, `SELECT payload FROM audit_events WHERE correlation_id=$1::uuid`, verify.CorrelationID).Scan(&auditPayload); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(auditPayload), "evd_share_register") {
+		t.Fatalf("audit must retain which evidence supported the relationship (section 131): %s", auditPayload)
+	}
+	rels, err := f.repo.ListCorporateRelationshipsByOrganisation(f.ctx, target, f.at.Add(time.Hour))
+	if err != nil || len(rels) != 1 || rels[0].VerifiedBy != verify.ActorID {
+		t.Fatalf("verified_by must come from the authenticated actor: %+v %v", rels, err)
+	}
+
+	// Default legal-entity mapping: activation, silent replay, switch naming the replaced default.
+	le1, le2 := uniqueLE(), uniqueLE()
+	tenantID := f.tenant(t, le1)
+	first := f.actor()
+	id1, err := f.repo.EnsureDefaultTenantLegalEntityMapping(f.ctx, tenantID, le1, "test", f.at, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The fixture tenant projects le1 but has no mapping row yet, so the
+	// first call records the DEFAULT mapping: one audit row, one event.
+	if audits, n, types := f.recorded(t, first); audits != 1 || n != 1 || types[0] != "com.baobab-platform.control-plane.tenant-legal-entity-mapping.activated.v1" {
+		t.Fatalf("first default: audits=%d events=%v", audits, types)
+	}
+	again := f.actor()
+	if _, err := f.repo.EnsureDefaultTenantLegalEntityMapping(f.ctx, tenantID, le1, "test", f.at, again); err != nil {
+		t.Fatal(err)
+	}
+	if audits, n, _ := f.recorded(t, again); audits != 0 || n != 0 {
+		t.Fatalf("default replay must record nothing: audits=%d events=%d", audits, n)
+	}
+	switched := f.actor()
+	if _, err := f.repo.EnsureDefaultTenantLegalEntityMapping(f.ctx, tenantID, le2, "test", f.at.Add(time.Hour), switched); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.admin.QueryRow(f.ctx, `SELECT payload FROM messaging.outbox WHERE correlation_id=$1::uuid`, switched.CorrelationID).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	envelope.TenantID, envelope.Data = "", nil
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Data["replaces_mapping_id"] != id1 || envelope.TenantID != tenantID {
+		t.Fatalf("switch event must name the replaced default and be tenant-scoped: %s", payload)
 	}
 }
