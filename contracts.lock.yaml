@@ -1,13 +1,13 @@
 contract_bundle:
   name: "baobab-platform-resolution"
   version: "1.0.0"
-  source_repository: "nabhold/shared"
-  source_commit: c0b1dfcb5049f4e994e926a6f1ea9ff2b4a02b6c
+  source_repository: "baobab-platform/shared"
+  source_commit: ceb44d1514636954ffd07838c9b659515eefcc5d
 schema: nabhold-contract-consumer-lock
 version: "1.0"
 source:
-  repository: nabhold/shared
-  commit: c0b1dfcb5049f4e994e926a6f1ea9ff2b4a02b6c
+  repository: baobab-platform/shared
+  commit: ceb44d1514636954ffd07838c9b659515eefcc5d
 # This file previously listed 4 of the ~14 contracts this repository actually
 # implements against - see docs/reconciliation/shared-control-plane-audit.md
 # §6. It must declare every schema/policy file whose shape this repository's

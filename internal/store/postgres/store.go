@@ -19,12 +19,12 @@ import (
 // defaultEventSource is the stable, absolute producer URI used for every
 // event this Store emits, per contracts/events/v1/envelope.schema.json's
 // "source" field. Store.EventSource overrides it when set.
-const defaultEventSource = "https://control-plane.nabhold.internal"
+const defaultEventSource = "urn:baobab-platform:service:baobab-cp"
 
 // provisioningStartedDataSchema is the immutable payload schema URI for the
 // tenant-provisioning-started event, per ADR-0004 ("every domain event
 // requires an immutable payload schema URI").
-const provisioningStartedDataSchema = "https://contracts.nabhold.com/control-plane/v1/provisioning-started.schema.json"
+const provisioningStartedDataSchema = "https://contracts.baobab-platform.com/control-plane/v1/provisioning-started.schema.json"
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -167,7 +167,7 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 	// than the legacy outbox_events table and its retired snake_case shape
 	// - see docs/reconciliation/shared-control-plane-audit.md §12.
 	env, err := events.New(events.Params{
-		Type:           "com.nabhold.control-plane.tenant-provisioning-started.v1",
+		Type:           "com.baobab-platform.control-plane.tenant.provisioning-started.v1",
 		Source:         s.eventSource(),
 		Subject:        c.TenantID,
 		DataSchema:     provisioningStartedDataSchema,
