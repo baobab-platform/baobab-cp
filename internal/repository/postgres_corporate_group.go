@@ -41,7 +41,7 @@ func (r *PostgresRepository) ListCorporateControlDescendants(ctx context.Context
 			SELECT corporate_relationship_id, source_organisation_id, target_organisation_id
 			FROM registry.corporate_relationship
 			WHERE relationship_type IN ('OWNS','CONTROLS') AND verification_state='VERIFIED'
-			  AND status='ACTIVE' AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
+			  AND (status='ACTIVE' OR (status='ENDED' AND effective_to IS NOT NULL)) AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
 		), descendants(id, target, depth) AS (
 			SELECT corporate_relationship_id, target_organisation_id, 1
 			FROM consequential WHERE source_organisation_id = $1::uuid

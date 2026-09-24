@@ -117,6 +117,32 @@ func TestConsequentialityFailsClosed(t *testing.T) {
 	}
 }
 
+// TestEndedFactsKeepTheirHistory: an ENDED fact stays in force for the
+// period it covered (ADR-BCP-018 sections 74 and 86), never after its end,
+// and never without a recorded end.
+func TestEndedFactsKeepTheirHistory(t *testing.T) {
+	end := now.Add(-time.Hour)
+	edge := verifiedEdge("e", "a", "b", CorpRelOwns)
+	edge.Status, edge.EffectiveTo = RelationshipStatusEnded, &end
+	pr := verifiedPlatformRel("b", PlatformRelOwner, "")
+	pr.Status, pr.EffectiveTo = RelationshipStatusEnded, &end
+	before := end.Add(-time.Minute)
+	if !edge.IsConsequential(before) || !pr.IsConsequential(before) {
+		t.Fatal("an ended fact must stay in force for the period before its end")
+	}
+	if edge.IsConsequential(end) || pr.IsConsequential(end) {
+		t.Fatal("an ended fact must not be in force from its end")
+	}
+	edge.EffectiveTo, pr.EffectiveTo = nil, nil
+	if edge.IsConsequential(before) || pr.IsConsequential(before) {
+		t.Fatal("an ENDED fact without a recorded end must fail closed")
+	}
+	edge.Status, edge.EffectiveTo, edge.VerificationState = RelationshipStatusEnded, &end, VerificationPendingReview
+	if edge.IsConsequential(before) {
+		t.Fatal("a withdrawn claim that was never verified must not become history")
+	}
+}
+
 func TestVerifiedRequiresEvidence(t *testing.T) {
 	r := verifiedEdge("e", "a", "b", CorpRelOwns)
 	r.EvidenceReferences = nil

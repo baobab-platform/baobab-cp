@@ -53,6 +53,11 @@ type OrganisationRepository interface {
 	// EnsureCorporateRelationship is keyed by (source, target, type).
 	EnsureCorporateRelationship(ctx context.Context, rel domain.CorporateRelationship, actor AuditActor) (id string, err error)
 	VerifyCorporateRelationship(ctx context.Context, id string, ev Evidence, actor AuditActor) error
+	// EndCorporateRelationship ends a live corporate fact at at; history is kept.
+	EndCorporateRelationship(ctx context.Context, id string, at time.Time, reason string, actor AuditActor) error
+	// MarkCorporateRelationshipConflicted moves a live corporate fact to
+	// CONFLICTED so consequential use fails closed until review resolves it.
+	MarkCorporateRelationshipConflicted(ctx context.Context, id string, c Conflict, actor AuditActor) error
 	ListCorporateRelationshipsByOrganisation(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateRelationship, error)
 	// ListCorporateControlAncestry returns every consequential (VERIFIED,
 	// ACTIVE, in-window) OWNS/CONTROLS edge on a directed path into
@@ -80,6 +85,13 @@ type OrganisationRepository interface {
 	// EnsurePlatformRelationship is keyed by (organisation, platform, type).
 	EnsurePlatformRelationship(ctx context.Context, rel domain.PlatformRelationship, actor AuditActor) (id string, err error)
 	VerifyPlatformRelationship(ctx context.Context, id string, ev Evidence, actor AuditActor) error
+	// GetPlatformRelationship returns the relationship, or nil when absent.
+	GetPlatformRelationship(ctx context.Context, id string) (*domain.PlatformRelationship, error)
+	// EndPlatformRelationship ends a live PlatformRelationship at at; history is kept.
+	EndPlatformRelationship(ctx context.Context, id string, at time.Time, reason string, actor AuditActor) error
+	// ListLivePlatformRelationshipsByBasis returns the live PlatformRelationships
+	// (PLATFORM_GROUP_AFFILIATE) that rest on the given corporate relationship.
+	ListLivePlatformRelationshipsByBasis(ctx context.Context, corporateRelationshipID string) ([]domain.PlatformRelationship, error)
 	// ListPlatformRelationships returns the relationships in their effective
 	// window at at, whatever their status. Callers decide consequence with
 	// PlatformRelationship.IsConsequential.

@@ -231,7 +231,7 @@ func (r *PostgresRepository) ListCorporateControlAncestry(ctx context.Context, o
 			SELECT corporate_relationship_id, source_organisation_id, target_organisation_id
 			FROM registry.corporate_relationship
 			WHERE relationship_type IN ('OWNS','CONTROLS') AND verification_state='VERIFIED'
-			  AND status='ACTIVE' AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
+			  AND (status='ACTIVE' OR (status='ENDED' AND effective_to IS NOT NULL)) AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
 		), ancestry(id, source, depth) AS (
 			SELECT corporate_relationship_id, source_organisation_id, 1
 			FROM consequential WHERE target_organisation_id = $1::uuid
@@ -296,15 +296,46 @@ func (r *PostgresRepository) queryCorporateGroupMemberships(ctx context.Context,
 
 // --- PlatformRelationship ------------------------------------------------
 
-func (r *PostgresRepository) ListPlatformRelationships(ctx context.Context, organisationID string, at time.Time) ([]domain.PlatformRelationship, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT platform_relationship_id::text, platform_id, organisation_id::text, relationship_type,
+const platformRelationshipColumns = `platform_relationship_id::text, platform_id, organisation_id::text, relationship_type,
 			verification_state, status, effective_from, effective_to,
 			COALESCE(basis_relationship_id::text,''), COALESCE(admission_decision_id,''), source_authority,
-			evidence_references, COALESCE(verified_by,''), verified_at, COALESCE(classification,''), metadata
+			evidence_references, COALESCE(verified_by,''), verified_at, COALESCE(classification,''), metadata`
+
+func (r *PostgresRepository) ListPlatformRelationships(ctx context.Context, organisationID string, at time.Time) ([]domain.PlatformRelationship, error) {
+	return r.queryPlatformRelationships(ctx, `
+		SELECT `+platformRelationshipColumns+`
 		FROM registry.platform_relationship
 		WHERE organisation_id=$1::uuid AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
 		ORDER BY effective_from, platform_relationship_id`, organisationID, at)
+}
+
+func (r *PostgresRepository) ListLivePlatformRelationshipsByBasis(ctx context.Context, corporateRelationshipID string) ([]domain.PlatformRelationship, error) {
+	basis, err := domain.ParseResourceID(domain.CorporateRelationshipIDPrefix, corporateRelationshipID)
+	if err != nil {
+		return nil, err
+	}
+	return r.queryPlatformRelationships(ctx, `
+		SELECT `+platformRelationshipColumns+`
+		FROM registry.platform_relationship
+		WHERE basis_relationship_id=$1::uuid AND status IN `+liveStatuses+`
+		ORDER BY effective_from, platform_relationship_id`, basis)
+}
+
+func (r *PostgresRepository) GetPlatformRelationship(ctx context.Context, id string) (*domain.PlatformRelationship, error) {
+	row, err := domain.ParseResourceID(domain.PlatformRelationshipIDPrefix, id)
+	if err != nil {
+		return nil, err
+	}
+	got, err := r.queryPlatformRelationships(ctx, `SELECT `+platformRelationshipColumns+`
+		FROM registry.platform_relationship WHERE platform_relationship_id=$1::uuid`, row)
+	if err != nil || len(got) == 0 {
+		return nil, err
+	}
+	return &got[0], nil
+}
+
+func (r *PostgresRepository) queryPlatformRelationships(ctx context.Context, sql string, args ...any) ([]domain.PlatformRelationship, error) {
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +372,7 @@ func (r *PostgresRepository) ListPlatformOwnerOrganisations(ctx context.Context,
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT organisation_id::text FROM registry.platform_relationship
 		WHERE platform_id=$1 AND relationship_type='PLATFORM_OWNER'
-		  AND verification_state='VERIFIED' AND status='ACTIVE'
+		  AND verification_state='VERIFIED' AND (status='ACTIVE' OR (status='ENDED' AND effective_to IS NOT NULL))
 		  AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)`, platformID, at)
 	if err != nil {
 		return nil, err
