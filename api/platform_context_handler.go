@@ -57,13 +57,20 @@ type platformContextResolveRequest struct {
 	// OrganisationID; evidence that does not resolve fails closed.
 	// Supplying both is rejected.
 	IamOrganization *domain.IamOrganisationEvidence `json:"iam_organization,omitempty"`
+	// ExpectedOrganisationType requests ADR-BCP-024 exact-kind attestation
+	// of the organisation named by OrganisationID or IamOrganization. It is
+	// optional for backwards compatibility, but commands granting
+	// kind-specific authority must supply it.
+	ExpectedOrganisationType string `json:"expected_organisation_type,omitempty"`
 }
 
 type platformContextResolveResponse struct {
-	ContextID  string     `json:"context_id"`
-	TenantID   string     `json:"tenant_id"`
-	ResolvedAt time.Time  `json:"resolved_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	ContextID        string     `json:"context_id"`
+	TenantID         string     `json:"tenant_id"`
+	ResolvedAt       time.Time  `json:"resolved_at"`
+	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
+	OrganisationID   string     `json:"organisation_id,omitempty"`
+	OrganisationType string     `json:"organisation_type,omitempty"`
 }
 
 func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) {
@@ -104,9 +111,9 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 	var trustedContext domain.Context
 	var err error
 	if req.IamOrganization != nil {
-		_, trustedContext, err = h.ContextResolution.ResolveWithIamOrganisation(r.Context(), principal, tenantID, *req.IamOrganization, correlationID(r), time.Now())
+		_, trustedContext, err = h.ContextResolution.ResolveWithIamOrganisationKind(r.Context(), principal, tenantID, *req.IamOrganization, req.ExpectedOrganisationType, correlationID(r), time.Now())
 	} else {
-		_, trustedContext, err = h.ContextResolution.Resolve(r.Context(), principal, tenantID, req.OrganisationID, correlationID(r), time.Now())
+		_, trustedContext, err = h.ContextResolution.ResolveExpectedOrganisationKind(r.Context(), principal, tenantID, req.OrganisationID, req.ExpectedOrganisationType, correlationID(r), time.Now())
 	}
 	if err != nil {
 		switch {
@@ -134,9 +141,11 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, platformContextResolveResponse{
-		ContextID:  trustedContext.ID,
-		TenantID:   trustedContext.TenantID,
-		ResolvedAt: trustedContext.ResolvedAt,
-		ExpiresAt:  trustedContext.ExpiresAt,
+		ContextID:        trustedContext.ID,
+		TenantID:         trustedContext.TenantID,
+		ResolvedAt:       trustedContext.ResolvedAt,
+		ExpiresAt:        trustedContext.ExpiresAt,
+		OrganisationID:   trustedContext.OrganisationID,
+		OrganisationType: req.ExpectedOrganisationType,
 	})
 }

@@ -88,7 +88,16 @@ type TenantOrganisationMappingReader interface {
 // like-for-like change, gaining the tenant/legal-entity stages this type
 // adds on top.
 func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Principal, tenantID string, organisationID string, correlationID string, now time.Time) (context.Context, domain.Context, error) {
-	return s.resolve(ctx, principal, tenantID, organisationID, nil, correlationID, now)
+	return s.resolve(ctx, principal, tenantID, organisationID, "", nil, correlationID, now)
+}
+
+// ResolveExpectedOrganisationKind is Resolve with ADR-BCP-024 exact-kind
+// attestation: when expectedOrganisationType is non-empty, organisationID is
+// required and the attested organisation's EntityType must equal it. An
+// empty expectedOrganisationType preserves Resolve's generic ADR-BCP-016
+// behaviour.
+func (s ContextResolutionService) ResolveExpectedOrganisationKind(ctx context.Context, principal auth.Principal, tenantID string, organisationID string, expectedOrganisationType string, correlationID string, now time.Time) (context.Context, domain.Context, error) {
+	return s.resolve(ctx, principal, tenantID, organisationID, expectedOrganisationType, nil, correlationID, now)
 }
 
 // ResolveWithIamOrganisation resolves Context for IAM organisation evidence
@@ -98,6 +107,12 @@ func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Pr
 // Resolve. The evidence is never copied into the Context; its provenance
 // records how the Organisation was found.
 func (s ContextResolutionService) ResolveWithIamOrganisation(ctx context.Context, principal auth.Principal, tenantID string, ev domain.IamOrganisationEvidence, correlationID string, now time.Time) (context.Context, domain.Context, error) {
+	return s.ResolveWithIamOrganisationKind(ctx, principal, tenantID, ev, "", correlationID, now)
+}
+
+// ResolveWithIamOrganisationKind is ResolveWithIamOrganisation with
+// ADR-BCP-024 exact-kind attestation of the resolved organisation.
+func (s ContextResolutionService) ResolveWithIamOrganisationKind(ctx context.Context, principal auth.Principal, tenantID string, ev domain.IamOrganisationEvidence, expectedOrganisationType string, correlationID string, now time.Time) (context.Context, domain.Context, error) {
 	if s.IamOrganisations == nil {
 		return nil, domain.Context{}, fmt.Errorf("%w: no IAM organisation resolver is configured", ErrOrganisationNotResolved)
 	}
@@ -109,10 +124,20 @@ func (s ContextResolutionService) ResolveWithIamOrganisation(ctx context.Context
 		Source: "baobab-cp:iam-organisation-reference", TrustLevel: domain.TrustSystem,
 		Evidence: ev.Provider + ":" + ev.Issuer + "#" + ev.ProviderOrganisationID,
 	}
-	return s.resolve(ctx, principal, tenantID, organisationID, &source, correlationID, now)
+	return s.resolve(ctx, principal, tenantID, organisationID, expectedOrganisationType, &source, correlationID, now)
 }
 
-func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Principal, tenantID string, organisationID string, organisationSource *domain.ContextSource, correlationID string, now time.Time) (context.Context, domain.Context, error) {
+func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Principal, tenantID string, organisationID string, expectedOrganisationType string, organisationSource *domain.ContextSource, correlationID string, now time.Time) (context.Context, domain.Context, error) {
+	// ADR-BCP-024: an exact-kind request is checked before any lookup so a
+	// malformed request costs nothing and never reaches the registry.
+	if expectedOrganisationType != "" {
+		if organisationID == "" {
+			return nil, domain.Context{}, errors.New("organisation_id is required when expected_organisation_type is supplied")
+		}
+		if !domain.OrganisationEntityTypes[expectedOrganisationType] {
+			return nil, domain.Context{}, errors.New("expected_organisation_type is not a registered organisation entity type")
+		}
+	}
 	if s.Tenants == nil {
 		return nil, domain.Context{}, errors.New("tenant store is required")
 	}
@@ -168,6 +193,12 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 		}
 		if err := domain.AttestOrganisation(organisation, tenantID, mappings, now); err != nil {
 			return nil, domain.Context{}, err
+		}
+		// ADR-BCP-024: the kind is compared only after attestation, so a
+		// caller learns nothing about an organisation its tenant is not
+		// attested for.
+		if expectedOrganisationType != "" && organisation.EntityType != expectedOrganisationType {
+			return nil, domain.Context{}, errors.New("requested organisation does not match expected_organisation_type")
 		}
 		trustedContext.OrganisationID = organisation.ID
 		trustedContext.Provenance["organisation_id"] = domain.ContextSource{
