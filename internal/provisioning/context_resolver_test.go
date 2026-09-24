@@ -3,6 +3,7 @@ package provisioning
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -39,6 +40,9 @@ func (f contextAuthorityFake) GetCanonicalEntity(context.Context, string) (domai
 }
 func (f contextAuthorityFake) ListTenantOrganisationMappings(context.Context, string, time.Time) ([]domain.TenantOrganisationMapping, error) {
 	return f.mappings, nil
+}
+func (f contextAuthorityFake) ResolveIamOrganisation(context.Context, domain.IamOrganisationEvidence, time.Time) (string, error) {
+	return "", errors.New("no iam organisation links in this fake")
 }
 
 func TestAuthoritativeContextResolution(t *testing.T) {
