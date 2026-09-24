@@ -1,7 +1,5 @@
-// Target path: internal/domain/relationship_resolution.go
-//
-// Helpers for effective-dated corporate relationship filtering.
-// All consequential use must go through IsConsequential (fail closed).
+// Helpers for effective-dated organisation relationship filtering.
+// All consequential use goes through IsConsequential (fail closed).
 
 package domain
 
@@ -18,32 +16,23 @@ func FilterConsequentialCorporateRelationships(rels []CorporateRelationship, at 
 	return out
 }
 
-// ActivePlatformRelationships filters platform relationships in force at at
-// with authoritative verification (or PENDING for non-consequential display).
-func ActivePlatformRelationships(rels []PlatformRelationship, at time.Time) []PlatformRelationship {
-	out := make([]PlatformRelationship, 0, len(rels))
-	for _, r := range rels {
-		if r.IsActive(at) {
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
-// DefaultTenantLegalEntityID returns the legal_entity_id of the default mapping
-// if present and active at at; otherwise empty string (fail closed for projection).
-func DefaultTenantLegalEntityID(mappings []TenantLegalEntityMapping, at time.Time) string {
+// ProjectTenantLegalEntityID is the singular Tenant.LegalEntityID
+// compatibility projection: the legal entity of the active DEFAULT mapping
+// in force at at. Empty when there is none or when more than one qualifies,
+// so an ambiguous projection fails closed instead of picking one.
+func ProjectTenantLegalEntityID(mappings []TenantLegalEntityMapping, at time.Time) string {
+	found := ""
 	for _, m := range mappings {
-		if !m.IsDefault || m.Status != "ACTIVE" {
+		if m.MappingRole != TenantLegalEntityRoleDefault || m.Status != RelationshipStatusActive {
 			continue
 		}
-		if at.Before(m.EffectiveFrom) {
+		if !inWindow(at, m.EffectiveFrom, m.EffectiveTo) {
 			continue
 		}
-		if m.EffectiveTo != nil && !at.Before(*m.EffectiveTo) {
-			continue
+		if found != "" && found != m.LegalEntityID {
+			return ""
 		}
-		return m.LegalEntityID
+		found = m.LegalEntityID
 	}
-	return ""
+	return found
 }

@@ -1,5 +1,3 @@
-// Target path: internal/service/organisation/eligibility.go
-//
 // ADR-BCP-018 / ADR-BCP-017 — INTERNAL subscription eligibility (fail closed).
 
 package organisation
@@ -16,12 +14,13 @@ import (
 // EligibilityResolver derives INTERNAL eligibility from persisted relationships.
 type EligibilityResolver struct {
 	Orgs repository.OrganisationRepository
-	// PlatformOwnerOrgIDs returns organisation ids with verified PLATFORM_OWNER.
-	PlatformOwnerOrgIDs func(ctx context.Context, at time.Time) (map[string]struct{}, error)
+	// PlatformID selects the platform whose owners qualify; DefaultPlatformID when empty.
+	PlatformID string
 }
 
-// ResolveInternalEligibility returns (eligible, nil) or (false, nil) when denied.
-// Infrastructure errors are returned as non-nil error.
+// ResolveInternalEligibility returns (eligible, nil), or (false, nil) when
+// denied. Infrastructure errors are returned as a non-nil error and never
+// read as eligibility.
 func (r *EligibilityResolver) ResolveInternalEligibility(ctx context.Context, organisationID string, at time.Time) (bool, error) {
 	if organisationID == "" {
 		return false, nil
@@ -29,28 +28,35 @@ func (r *EligibilityResolver) ResolveInternalEligibility(ctx context.Context, or
 	if at.IsZero() {
 		at = time.Now().UTC()
 	}
+	platformID := r.PlatformID
+	if platformID == "" {
+		platformID = DefaultPlatformID
+	}
 	prs, err := r.Orgs.ListPlatformRelationships(ctx, organisationID, at)
 	if err != nil {
 		return false, fmt.Errorf("list platform relationships: %w", err)
 	}
-	if len(prs) == 0 {
+	var onPlatform []domain.PlatformRelationship
+	for _, pr := range prs {
+		if pr.PlatformID == platformID {
+			onPlatform = append(onPlatform, pr)
+		}
+	}
+	if len(onPlatform) == 0 {
 		return false, nil
 	}
-	corp, err := r.Orgs.ListCorporateRelationshipsByOrganisation(ctx, organisationID, at)
+	ancestry, err := r.Orgs.ListCorporateControlAncestry(ctx, organisationID, at)
 	if err != nil {
-		return false, fmt.Errorf("list corporate relationships: %w", err)
+		return false, fmt.Errorf("list corporate control ancestry: %w", err)
 	}
-	owners := map[string]struct{}{}
-	if r.PlatformOwnerOrgIDs != nil {
-		owners, err = r.PlatformOwnerOrgIDs(ctx, at)
-		if err != nil {
-			return false, fmt.Errorf("load platform owners: %w", err)
-		}
+	owners, err := r.Orgs.ListPlatformOwnerOrganisations(ctx, platformID, at)
+	if err != nil {
+		return false, fmt.Errorf("list platform owners: %w", err)
 	}
 	return domain.DeriveInternalEligibility(domain.InternalEligibilityEvidence{
 		OrganisationID:         organisationID,
-		PlatformRelationships:  prs,
-		CorporateRelationships: corp,
+		PlatformRelationships:  onPlatform,
+		CorporateRelationships: ancestry,
 		EvaluatedAt:            at,
 	}, owners), nil
 }

@@ -1,11 +1,10 @@
-// Target path: internal/store/postgres/organisation_register.go
-//
 // ADR-BCP-018 — organisation structure written inside RegisterTenant's transaction.
 
 package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,18 +12,34 @@ import (
 	"github.com/nabhold/baobab-cp/internal/domain"
 )
 
-// insertOrganisationOnRegister creates (idempotently) a CanonicalEntity of type
-// ORGANISATION, organisation_profile, legal_entity_profile, default
-// tenant_legal_entity_mapping, and tenant_organisation_mapping.
-// Platform relationships are not assigned here — admission policy does that
-// after review (privileged types must not be applicant-assigned).
+// registrationSourceAuthority marks facts that exist only because a tenant
+// was registered. Registration input is a claim, never verification.
+const registrationSourceAuthority = "control-plane-registration"
+
+// insertOrganisationOnRegister links a newly registered tenant to the
+// organisation structure:
+//
+//   - if a LegalEntityProfile already exists for the legal entity, the tenant
+//     is mapped to that profile's Organisation and nothing about the existing
+//     Organisation or profile is changed;
+//   - otherwise a new ORGANISATION CanonicalEntity (owned by this tenant, so
+//     ADR-BCP-016 organisation_id attestation keeps working), organisation
+//     profile and legal-entity profile are created as UNVERIFIED claims with
+//     legal_status UNKNOWN. Only an explicit verification transition may
+//     promote them (ADR-BCP-018 section 69, ADR-BCP-023);
+//   - the tenant's DEFAULT legal-entity mapping and PRIMARY organisation
+//     mapping are created if absent.
+//
+// Platform relationships are not assigned here; admission policy does that
+// after review, because privileged types must never be applicant-assigned.
 func insertOrganisationOnRegister(ctx context.Context, tx pgx.Tx, c domain.RegisterTenant) error {
 	at := time.Now().UTC()
 	var orgID string
 	err := tx.QueryRow(ctx, `
 		SELECT organisation_id::text FROM registry.legal_entity_profile
-		WHERE legal_entity_id = $1 LIMIT 1`, c.LegalEntityID).Scan(&orgID)
-	if err == pgx.ErrNoRows {
+		WHERE legal_entity_id = $1`, c.LegalEntityID).Scan(&orgID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
 		if err = tx.QueryRow(ctx, `
 			INSERT INTO registry.canonical_entity (entity_type, legal_entity_id, tenant_id, status)
 			VALUES ($1, $2, $3, 'active')
@@ -32,77 +47,42 @@ func insertOrganisationOnRegister(ctx context.Context, tx pgx.Tx, c domain.Regis
 			domain.EntityTypeOrganisation, c.LegalEntityID, c.TenantID).Scan(&orgID); err != nil {
 			return fmt.Errorf("create organisation canonical entity: %w", err)
 		}
-	} else if err != nil {
+		if _, err = tx.Exec(ctx, `
+			INSERT INTO registry.organisation_profile (
+				canonical_entity_id, display_name, verification_state, source_authority,
+				status, effective_from
+			) VALUES ($1::uuid, $2, 'UNVERIFIED', $3, 'ACTIVE', $4)`,
+			orgID, c.DisplayName, registrationSourceAuthority, at); err != nil {
+			return fmt.Errorf("create organisation profile: %w", err)
+		}
+		if _, err = tx.Exec(ctx, `
+			INSERT INTO registry.legal_entity_profile (
+				legal_entity_id, organisation_id, legal_name, legal_status,
+				source_authority, verification_state, effective_from
+			) VALUES ($1, $2::uuid, $3, 'UNKNOWN', $4, 'UNVERIFIED', $5)`,
+			c.LegalEntityID, orgID, c.DisplayName, registrationSourceAuthority, at); err != nil {
+			return fmt.Errorf("create legal entity profile: %w", err)
+		}
+	case err != nil:
 		return fmt.Errorf("lookup legal entity profile: %w", err)
 	}
 
 	if _, err = tx.Exec(ctx, `
-		INSERT INTO registry.organisation_profile (
-			canonical_entity_id, display_name, verification_state, source_authority,
-			status, effective_from
-		) VALUES ($1::uuid, $2, 'VERIFIED', 'control-plane-admission', 'ACTIVE', $3)
-		ON CONFLICT (canonical_entity_id) DO UPDATE SET
-			display_name = EXCLUDED.display_name,
-			updated_at = now()`,
-		orgID, c.DisplayName, at); err != nil {
-		return fmt.Errorf("upsert organisation profile: %w", err)
+		INSERT INTO registry.tenant_legal_entity_mapping (
+			tenant_id, legal_entity_id, mapping_role, status, effective_from, provenance
+		) VALUES ($1, $2, 'DEFAULT', 'ACTIVE', $3, $4)
+		ON CONFLICT (tenant_id) WHERE mapping_role = 'DEFAULT' AND status IN ('PENDING','ACTIVE','SUSPENDED')
+		DO NOTHING`,
+		c.TenantID, c.LegalEntityID, at, registrationSourceAuthority); err != nil {
+		return fmt.Errorf("tenant legal entity mapping: %w", err)
 	}
-
-	if _, err = tx.Exec(ctx, `
-		INSERT INTO registry.legal_entity_profile (
-			legal_entity_id, organisation_id, legal_name, legal_status,
-			source_authority, verification_state, effective_from
-		) VALUES ($1, $2::uuid, $3, 'ACTIVE', 'control-plane-admission', 'VERIFIED', $4)
-		ON CONFLICT (legal_entity_id) DO UPDATE SET
-			organisation_id = EXCLUDED.organisation_id,
-			legal_name = EXCLUDED.legal_name,
-			updated_at = now()`,
-		c.LegalEntityID, orgID, c.DisplayName, at); err != nil {
-		return fmt.Errorf("upsert legal entity profile: %w", err)
-	}
-
-	if _, err = tx.Exec(ctx, `
-		UPDATE registry.tenant_legal_entity_mapping
-		SET is_default = false, updated_at = now()
-		WHERE tenant_id = $1 AND is_default = true`, c.TenantID); err != nil {
-		return err
-	}
-	var mapID string
-	err = tx.QueryRow(ctx, `
-		SELECT tenant_legal_entity_mapping_id::text
-		FROM registry.tenant_legal_entity_mapping
-		WHERE tenant_id=$1 AND legal_entity_id=$2 AND status='ACTIVE' LIMIT 1`,
-		c.TenantID, c.LegalEntityID).Scan(&mapID)
-	if err == pgx.ErrNoRows {
-		if _, err = tx.Exec(ctx, `
-			INSERT INTO registry.tenant_legal_entity_mapping (
-				tenant_id, legal_entity_id, mapping_role, is_default, status,
-				effective_from, provenance
-			) VALUES ($1, $2, 'DEFAULT', true, 'ACTIVE', $3, 'control-plane-admission')`,
-			c.TenantID, c.LegalEntityID, at); err != nil {
-			return fmt.Errorf("insert tenant legal entity mapping: %w", err)
-		}
-	} else if err != nil {
-		return err
-	} else {
-		if _, err = tx.Exec(ctx, `
-			UPDATE registry.tenant_legal_entity_mapping
-			SET is_default = true, mapping_role = 'DEFAULT', updated_at = now()
-			WHERE tenant_legal_entity_mapping_id = $1::uuid`, mapID); err != nil {
-			return err
-		}
-	}
-
 	if _, err = tx.Exec(ctx, `
 		INSERT INTO registry.tenant_organisation_mapping (
-			tenant_id, organisation_id, mapping_role, is_default, status,
-			effective_from, provenance
-		)
-		SELECT $1, $2::uuid, 'PRIMARY_ORGANISATION', true, 'ACTIVE', $3, 'control-plane-admission'
-		WHERE NOT EXISTS (
-			SELECT 1 FROM registry.tenant_organisation_mapping
-			WHERE tenant_id=$1 AND organisation_id=$2::uuid AND status='ACTIVE'
-		)`, c.TenantID, orgID, at); err != nil {
+			tenant_id, organisation_id, mapping_role, status, effective_from, provenance
+		) VALUES ($1, $2::uuid, 'PRIMARY_ORGANISATION', 'ACTIVE', $3, $4)
+		ON CONFLICT (tenant_id) WHERE mapping_role = 'PRIMARY_ORGANISATION' AND status IN ('PENDING','ACTIVE','SUSPENDED')
+		DO NOTHING`,
+		c.TenantID, orgID, at, registrationSourceAuthority); err != nil {
 		return fmt.Errorf("tenant organisation mapping: %w", err)
 	}
 	return nil
