@@ -20,9 +20,15 @@ const (
 	TenantOrganisationMappingIDPrefix = "tom"
 	TenantLegalEntityMappingIDPrefix  = "tlem"
 	IamOrganisationReferenceIDPrefix  = "iamorg"
+	CounterpartyRoleIDPrefix          = "crole"
+	ResolutionCandidateIDPrefix       = "orc"
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// IsUUID reports whether s is a canonical (lower-case, hyphenated) uuid, the
+// form canonical entity ids take.
+func IsUUID(s string) bool { return uuidPattern.MatchString(s) }
 
 // FormatResourceID renders a row uuid as its contract identifier.
 func FormatResourceID(prefix, rowUUID string) (string, error) {

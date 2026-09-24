@@ -40,7 +40,11 @@ type Dependencies struct {
 	// OrganisationAdmission backs POST /v1/tenants/{tenantID}/
 	// organisation-admission (ADR-BCP-018 ORG-09). Nil skips the route.
 	OrganisationAdmission repository.OrganisationAdmissionRepository
-	Identity              service.IdentityService
+	// Counterparties backs the counterparty role, organisation
+	// reconciliation and resolution candidate routes (ADR-BCP-018 ORG-13).
+	// Nil skips those routes.
+	Counterparties repository.CounterpartyRepository
+	Identity       service.IdentityService
 	// Contexts backs PlatformContextHandler/CapabilityResolveHandler (the
 	// ADR-BCP-004/003 Runtime APIs). Nil is a valid zero value: both
 	// handlers return 503 CONTEXT_STORE_UNAVAILABLE rather than panicking
@@ -156,6 +160,19 @@ func New(dependencies Dependencies) http.Handler {
 	if dependencies.OrganisationAdmission != nil {
 		admission := organisationAdmissionHandler{onboarder: &svcorg.AdmissionOnboarder{Orgs: dependencies.OrganisationAdmission}}
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/organisation-admission", admission.onboard)
+	}
+	if dependencies.Counterparties != nil {
+		// Platform administrators only: a role is tenant relationship state
+		// (tenant:*), candidates are canonical identity (canonical:*), kept
+		// as separate privileges (ADR-BCP-014 section 120).
+		cp := counterpartyHandler{repo: dependencies.Counterparties}
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/counterparty-roles", cp.assign)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(nil, true)).Get("/v1/tenants/{tenantID}/counterparty-roles", cp.list)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/counterparty-roles/{roleID}/end", cp.end)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/organisation-reconciliation", cp.reconcile)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates", cp.listCandidates)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates/{candidateID}", cp.getCandidate)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/organisation-resolution-candidates/{candidateID}/decision", cp.decide)
 	}
 	if dependencies.Provisioning != nil {
 		prov := provisioningHandler{tenants: dependencies.Store, repo: dependencies.Provisioning}

@@ -58,8 +58,8 @@ func (r *PostgresRepository) FindOrganisationsByIdentifiers(ctx context.Context,
 	found := map[string]bool{}
 	for _, id := range governed {
 		// Stored values are normalised in SQL the same way
-		// domain.NormaliseIdentifierValue does; jurisdictions must agree
-		// when both sides state one.
+		// domain.NormaliseIdentifierValue does (normalisedIdentifierSQL);
+		// jurisdictions must agree when both sides state one.
 		rows, err := r.pool.Query(ctx, `
 			WITH candidates AS (
 				SELECT organisation_id AS org, registration_identifiers AS ids FROM registry.legal_entity_profile
@@ -68,7 +68,7 @@ func (r *PostgresRepository) FindOrganisationsByIdentifiers(ctx context.Context,
 			)
 			SELECT DISTINCT org::text FROM candidates c, jsonb_array_elements(c.ids) e
 			WHERE e->>'type' = $1
-			  AND upper(regexp_replace(e->>'value', '[[:space:]./-]', '', 'g')) = $2
+			  AND `+normalisedIdentifierSQL+` = $2
 			  AND ($3 = '' OR COALESCE(upper(e->>'issuing_jurisdiction'), '') IN ('', $3))
 			  AND ($4 = '' OR org::text <> $4)`,
 			id.Type, id.Value, id.IssuingJurisdiction, exclude)
