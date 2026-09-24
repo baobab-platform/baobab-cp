@@ -125,10 +125,16 @@ emitted events on that one field.
 
 | Event type | Emitted on |
 |---|---|
-| `com.nabhold.control-plane.market-participation-created.v1` | `CreateMarketAssignment` |
-| `com.nabhold.control-plane.market-participation-updated.v1` | `UpdateMarketAssignmentGovernance` |
-| `com.nabhold.control-plane.trade-lane-activated.v1` | `SaveTradeLane` when the resulting status is `ACTIVE` (not `SUSPENDED`/`RETIRED`) |
-| `com.nabhold.control-plane.tenant-provisioning-ready.v1` / `-active.v1` / `-failed.v1` | `UpdateTenantProvisioning` transitioning into `READY`/`ACTIVE`/`FAILED` specifically (not `PLAN`/`APPLY`/`RECONCILE`/`CANCELLED` — those advance the state machine but aren't milestones) |
+| `com.baobab-platform.control-plane.market-participation.created.v1` | `CreateMarketAssignment` |
+| `com.baobab-platform.control-plane.market-participation.updated.v1` | `UpdateMarketAssignmentGovernance` |
+| `com.baobab-platform.market.trade-lane.activated.v1` | `SaveTradeLane` when the resulting status is `ACTIVE` (not `SUSPENDED`/`RETIRED`) |
+| `com.baobab-platform.control-plane.tenant.provisioning-ready.v1` / `-active.v1` / `-failed.v1` | `UpdateTenantProvisioning` transitioning into `READY`/`ACTIVE`/`FAILED` specifically (not `PLAN`/`APPLY`/`RECONCILE`/`CANCELLED` — those advance the state machine but aren't milestones) |
+
+Every type is registered in `baobab-platform/shared` (`contracts/control-plane/v1/asyncapi.yaml`,
+`contracts/trade-lane/v1/asyncapi.yaml`) under the single `com.baobab-platform.*` namespace
+(ADR-SHARED-008); each envelope's `dataschema` names its payload schema there. The legacy
+`com.nabhold.*` names these events used before the GitHub organisation rename are no longer
+emitted or accepted.
 
 Nothing publishes these to a broker yet — they land in `messaging.outbox` for a relay this
 codebase does not yet include, matching every other outbox row already written by

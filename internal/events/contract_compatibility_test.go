@@ -17,10 +17,10 @@ func TestEnvelopeMatchesSharedSchema(t *testing.T) {
 	schema := contracttest.CompileSchema(t, dir, "events/v1/envelope.schema.json")
 
 	tenantEnvelope, err := events.New(events.Params{
-		Type:          "com.nabhold.control-plane.tenant-provisioning-started.v1",
-		Source:        "https://control-plane.nabhold.internal",
+		Type:          "com.baobab-platform.control-plane.tenant.provisioning-started.v1",
+		Source:        "urn:baobab-platform:service:baobab-cp",
 		Subject:       "tn_01k4example",
-		DataSchema:    "https://contracts.nabhold.com/control-plane/v1/provisioning-started.schema.json",
+		DataSchema:    "https://contracts.baobab-platform.com/control-plane/v1/provisioning-started.schema.json",
 		CorrelationID: "9f8b6e2a-0000-4000-8000-000000000001",
 		TenantID:      "tn_01k4example",
 		Data:          map[string]any{"tenant_id": "tn_01k4example"},
@@ -31,10 +31,10 @@ func TestEnvelopeMatchesSharedSchema(t *testing.T) {
 	contracttest.ValidateJSON(t, schema, tenantEnvelope)
 
 	platformEnvelope, err := events.New(events.Params{
-		Type:          "com.nabhold.control-plane.engine-registered.v1",
-		Source:        "https://control-plane.nabhold.internal",
+		Type:          "com.baobab-platform.control-plane.engine.registered.v1",
+		Source:        "urn:baobab-platform:service:baobab-cp",
 		Subject:       "engine:medusa",
-		DataSchema:    "https://contracts.nabhold.com/control-plane/v1/domain.schema.json",
+		DataSchema:    "https://contracts.baobab-platform.com/control-plane/v1/domain.schema.json",
 		CorrelationID: "9f8b6e2a-0000-4000-8000-000000000002",
 		Data:          map[string]any{"engine_id": "medusa"},
 	})
