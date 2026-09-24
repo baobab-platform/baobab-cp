@@ -16,6 +16,7 @@ import (
 	"github.com/nabhold/baobab-cp/internal/domain"
 	"github.com/nabhold/baobab-cp/internal/repository"
 	"github.com/nabhold/baobab-cp/internal/service"
+	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
 	"github.com/nabhold/baobab-cp/internal/store"
 )
 
@@ -36,7 +37,10 @@ type Dependencies struct {
 	// ORG-10). Nil skips those routes and leaves every iam_organization
 	// request failing closed.
 	IamOrganisations repository.IamOrganisationRepository
-	Identity         service.IdentityService
+	// OrganisationAdmission backs POST /v1/tenants/{tenantID}/
+	// organisation-admission (ADR-BCP-018 ORG-09). Nil skips the route.
+	OrganisationAdmission repository.OrganisationAdmissionRepository
+	Identity              service.IdentityService
 	// Contexts backs PlatformContextHandler/CapabilityResolveHandler (the
 	// ADR-BCP-004/003 Runtime APIs). Nil is a valid zero value: both
 	// handlers return 503 CONTEXT_STORE_UNAVAILABLE rather than panicking
@@ -148,6 +152,10 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/canonical-entities/{entityID}/iam-organisations", iam.list)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/iam-organisation-references/{referenceID}/retire", iam.retire)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/iam-organisations", iam.resolve)
+	}
+	if dependencies.OrganisationAdmission != nil {
+		admission := organisationAdmissionHandler{onboarder: &svcorg.AdmissionOnboarder{Orgs: dependencies.OrganisationAdmission}}
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/organisation-admission", admission.onboard)
 	}
 	if dependencies.Provisioning != nil {
 		prov := provisioningHandler{tenants: dependencies.Store, repo: dependencies.Provisioning}
