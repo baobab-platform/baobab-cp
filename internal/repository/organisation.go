@@ -61,6 +61,18 @@ type OrganisationRepository interface {
 
 	// CreateCorporateGroup is idempotent on the caller-supplied group id.
 	CreateCorporateGroup(ctx context.Context, g domain.CorporateGroup, actor AuditActor) error
+	GetCorporateGroup(ctx context.Context, id string) (*domain.CorporateGroup, error)
+	// ListCorporateControlDescendants returns every consequential OWNS/CONTROLS
+	// edge reachable downwards (source -> target) from organisationID,
+	// bounded by domain.MaxCorporateControlDepth.
+	ListCorporateControlDescendants(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateRelationship, error)
+	// ListCorporateGroupMembers returns the group's memberships in effect at at.
+	ListCorporateGroupMembers(ctx context.Context, groupID string, at time.Time) ([]domain.CorporateGroupMembership, error)
+	// ListLiveCorporateGroupMembers returns the group's PENDING, ACTIVE and
+	// SUSPENDED memberships whatever their effective window.
+	ListLiveCorporateGroupMembers(ctx context.Context, groupID string) ([]domain.CorporateGroupMembership, error)
+	// EndCorporateGroupMembership ends a live membership (history is kept).
+	EndCorporateGroupMembership(ctx context.Context, id string, at time.Time, reason string, actor AuditActor) error
 	// EnsureCorporateGroupMembership is keyed by (group, organisation).
 	EnsureCorporateGroupMembership(ctx context.Context, m domain.CorporateGroupMembership, actor AuditActor) (id string, err error)
 	ListCorporateGroupMemberships(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateGroupMembership, error)

@@ -249,14 +249,20 @@ func (r *PostgresRepository) ListCorporateControlAncestry(ctx context.Context, o
 
 // --- CorporateGroup ------------------------------------------------------
 
+const corporateGroupMembershipColumns = `corporate_group_membership_id::text, corporate_group_id::text,
+	organisation_id::text, COALESCE(group_role,''), basis_relationship_ids::text[],
+	COALESCE(manual_basis_reference,''), status, effective_from, effective_to, derived_at,
+	derivation_version, metadata`
+
 func (r *PostgresRepository) ListCorporateGroupMemberships(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateGroupMembership, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT corporate_group_membership_id::text, corporate_group_id::text, organisation_id::text,
-			COALESCE(group_role,''), basis_relationship_ids::text[], COALESCE(manual_basis_reference,''),
-			status, effective_from, effective_to, derived_at, derivation_version, metadata
+	return r.queryCorporateGroupMemberships(ctx, `SELECT `+corporateGroupMembershipColumns+`
 		FROM registry.corporate_group_membership
 		WHERE organisation_id=$1::uuid AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
 		ORDER BY effective_from, corporate_group_membership_id`, organisationID, at)
+}
+
+func (r *PostgresRepository) queryCorporateGroupMemberships(ctx context.Context, sql string, args ...any) ([]domain.CorporateGroupMembership, error) {
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
