@@ -41,6 +41,10 @@ var ErrExternalIdentityAlreadyLinked = errors.New("external identity already lin
 // identifier is already linked to that canonical entity.
 var ErrExternalReferenceAlreadyLinked = errors.New("external reference already linked to this canonical entity")
 
+// ErrExternalReferenceAmbiguous is returned when one provider key is linked
+// to more than one canonical entity; lookups fail closed on it.
+var ErrExternalReferenceAmbiguous = errors.New("external reference is linked to more than one canonical entity")
+
 // ErrCanonicalEntityNotFound is returned when CreateExternalReference's
 // insert is rejected by registry.external_reference's canonical_entity_id
 // foreign key -- the referenced CanonicalEntity does not exist.
@@ -197,12 +201,34 @@ func (r *PostgresRepository) GetCanonicalEntityByExternalReference(ctx context.C
 		return domain.CanonicalEntity{}, errors.New("repository is not initialized")
 	}
 	providerKey := externalReferenceProviderKey(domain.ExternalReference{NativeType: nativeType, NativeID: nativeID})
-	var canonicalEntityID string
-	err := r.pool.QueryRow(ctx, `SELECT canonical_entity_id::text FROM registry.external_reference WHERE provider = $1 AND provider_key = $2`, engineID, providerKey).Scan(&canonicalEntityID)
+	// registry.external_reference is unique only per canonical entity, so the
+	// same provider key may be linked to several entities. That is ambiguous
+	// and fails closed rather than resolving to whichever row comes first
+	// (ADR-BCP-018 section 66).
+	rows, err := r.pool.Query(ctx, `SELECT DISTINCT canonical_entity_id::text FROM registry.external_reference WHERE provider = $1 AND provider_key = $2 LIMIT 2`, engineID, providerKey)
 	if err != nil {
 		return domain.CanonicalEntity{}, fmt.Errorf("get external reference %s/%s: %w", engineID, providerKey, err)
 	}
-	return r.GetCanonicalEntity(ctx, canonicalEntityID)
+	defer rows.Close()
+	var found []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return domain.CanonicalEntity{}, err
+		}
+		found = append(found, id)
+	}
+	if err := rows.Err(); err != nil {
+		return domain.CanonicalEntity{}, err
+	}
+	switch len(found) {
+	case 0:
+		return domain.CanonicalEntity{}, fmt.Errorf("get external reference %s/%s: %w", engineID, providerKey, pgx.ErrNoRows)
+	case 1:
+		return r.GetCanonicalEntity(ctx, found[0])
+	default:
+		return domain.CanonicalEntity{}, fmt.Errorf("%w: %s/%s", ErrExternalReferenceAmbiguous, engineID, providerKey)
+	}
 }
 
 func (r *PostgresRepository) ListMappings(ctx context.Context, canonicalEntityID string) ([]domain.Mapping, error) {

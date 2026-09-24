@@ -140,14 +140,21 @@ func (r *CanonicalRepository) GetCanonicalEntityByExternalReference(_ context.Co
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	linked := ""
 	for _, ref := range r.ExternalReferences {
 		if ref.EngineID == engineID && ref.NativeType == nativeType && ref.NativeID == nativeID {
-			entity, exists := r.Entities[ref.CanonicalEntityID]
-			if !exists {
-				return domain.CanonicalEntity{}, fmt.Errorf("canonical entity %s not found", ref.CanonicalEntityID)
+			if linked != "" && linked != ref.CanonicalEntityID {
+				return domain.CanonicalEntity{}, fmt.Errorf("%w: %s/%s/%s", ErrExternalReferenceAmbiguous, engineID, nativeType, nativeID)
 			}
-			return entity, nil
+			linked = ref.CanonicalEntityID
 		}
 	}
-	return domain.CanonicalEntity{}, fmt.Errorf("external reference %s/%s/%s not found", engineID, nativeType, nativeID)
+	if linked == "" {
+		return domain.CanonicalEntity{}, fmt.Errorf("external reference %s/%s/%s not found", engineID, nativeType, nativeID)
+	}
+	entity, exists := r.Entities[linked]
+	if !exists {
+		return domain.CanonicalEntity{}, fmt.Errorf("canonical entity %s not found", linked)
+	}
+	return entity, nil
 }

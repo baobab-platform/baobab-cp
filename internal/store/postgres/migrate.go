@@ -80,6 +80,7 @@ var canonicalMigrationNames = []string{
 	"000043_provisioning_readiness_snapshot.sql",
 	"000044_provisioning_reconciliation_snapshot.sql",
 	"000045_adr_bcp_018_organisation.sql",
+	"000046_adr_bcp_018_iam_organisation_reference.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

@@ -19,6 +19,7 @@ const (
 	PlatformAccountMembershipIDPrefix = "pam"
 	TenantOrganisationMappingIDPrefix = "tom"
 	TenantLegalEntityMappingIDPrefix  = "tlem"
+	IamOrganisationReferenceIDPrefix  = "iamorg"
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
