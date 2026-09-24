@@ -79,6 +79,7 @@ var canonicalMigrationNames = []string{
 	"000042_tenant_manifest.sql",
 	"000043_provisioning_readiness_snapshot.sql",
 	"000044_provisioning_reconciliation_snapshot.sql",
+	"000045_adr_bcp_018_organisation.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

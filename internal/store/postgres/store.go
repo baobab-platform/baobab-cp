@@ -148,6 +148,11 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 	if _, err = tx.Exec(ctx, `INSERT INTO tenants(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region,metadata)VALUES($1,$2,$3,$4,$5,COALESCE($6,'{}'::jsonb))`, c.TenantID, c.LegalEntityID, c.DisplayName, c.IsolationStrategy, c.ResidencyRegion, c.Metadata); err != nil {
 		return domain.Operation{}, err
 	}
+	// ADR-BCP-018: ensure organisation canonical entity, profile, and default
+	// tenant_legal_entity_mapping in the same registration transaction.
+	if err = insertOrganisationOnRegister(ctx, tx, c); err != nil {
+		return domain.Operation{}, err
+	}
 	for _, product := range c.RequestedProducts {
 		// product_version_id is left unset (NULL): RegisterTenant's command
 		// surface only carries a product_id, with no version-selection
