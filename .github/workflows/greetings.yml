@@ -87,4 +87,4 @@ jobs:
         truth for the pinned Python version (see `pyproject.toml`'s
         `requires-python`).
 
-        See the [Contributing guide](https://github.com/nabhold/baobab/blob/main/CONTRIBUTING.md) for more.
+        See the [Contributing guide](https://github.com/baobab-platform/baobab-cp/blob/main/CONTRIBUTING.md) for more.

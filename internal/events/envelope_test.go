@@ -7,10 +7,10 @@ import (
 
 func validParams() Params {
 	return Params{
-		Type:          "com.nabhold.control-plane.tenant-provisioning-started.v1",
-		Source:        "https://control-plane.nabhold.internal",
+		Type:          "com.baobab-platform.control-plane.tenant.provisioning-started.v1",
+		Source:        "urn:baobab-platform:service:baobab-cp",
 		Subject:       "tn_01k4example",
-		DataSchema:    "https://contracts.nabhold.com/control-plane/v1/provisioning-started.schema.json",
+		DataSchema:    "https://contracts.baobab-platform.com/control-plane/v1/provisioning-started.schema.json",
 		CorrelationID: "9f8b6e2a-0000-4000-8000-000000000001",
 		TenantID:      "tn_01k4example",
 		Data:          map[string]any{"tenant_id": "tn_01k4example"},
@@ -89,5 +89,19 @@ func TestNewIsDeterministicGivenFixedIDAndClock(t *testing.T) {
 	}
 	if !env.Time.Equal(fixedTime) {
 		t.Fatalf("expected the injected clock to be used, got %v", env.Time)
+	}
+}
+
+func TestLegacyNamespaceIsRejected(t *testing.T) {
+	_, err := New(Params{
+		Type:          "com.nabhold.control-plane.tenant-provisioning-started.v1",
+		Source:        "urn:baobab-platform:service:baobab-cp",
+		Subject:       "tn_01k4example",
+		DataSchema:    "https://contracts.baobab-platform.com/control-plane/v1/provisioning-started.schema.json",
+		CorrelationID: "9f8b6e2a-0000-4000-8000-000000000001",
+		Data:          map[string]any{"tenant_id": "tn_01k4example"},
+	})
+	if err == nil {
+		t.Fatal("the legacy com.nabhold event namespace must be rejected; every event is com.baobab-platform.* (ADR-SHARED-008)")
 	}
 }

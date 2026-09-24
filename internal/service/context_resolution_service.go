@@ -23,6 +23,11 @@ var ErrIdentityResolutionFailed = errors.New("identity resolution failed")
 // unknown/inactive -> DENY").
 var ErrTenantNotActive = errors.New("tenant is not active")
 
+// ErrOrganisationNotResolved is returned when IAM organisation evidence does
+// not resolve, through an active link, to exactly one canonical Organisation
+// (ADR-BCP-018 section 66). Resolution fails closed on it.
+var ErrOrganisationNotResolved = errors.New("iam organisation evidence did not resolve to a canonical organisation")
+
 // ContextResolutionService implements the tenant and legal-entity stages of
 // ADR-BCP-004 §52's Context Resolution Algorithm: authenticate (done by
 // middleware before this is called) -> resolve principal -> resolve tenant
@@ -52,6 +57,26 @@ type ContextResolutionService struct {
 	// error rather than silently dropping an unverified organisationID if
 	// one is supplied while this is unset.
 	Canonical repository.CanonicalEntityRepository
+	// Mappings backs organisation attestation (ADR-BCP-018 gate ORG-14,
+	// domain.AttestOrganisation). Like Canonical it is only consulted when
+	// an organisationID is supplied, and Resolve fails closed if it is unset.
+	Mappings TenantOrganisationMappingReader
+	// IamOrganisations resolves IAM organisation evidence to a canonical
+	// Organisation (ADR-BCP-018 gate ORG-10). It is only consulted by
+	// ResolveWithIamOrganisation, which fails closed when it is unset.
+	IamOrganisations IamOrganisationResolver
+}
+
+// IamOrganisationResolver resolves IAM organisation evidence through an
+// active IamOrganisationReference.
+type IamOrganisationResolver interface {
+	ResolveIamOrganisation(ctx context.Context, ev domain.IamOrganisationEvidence, at time.Time) (string, error)
+}
+
+// TenantOrganisationMappingReader lists the TenantOrganisationMappings of
+// one tenant in effect at a point in time.
+type TenantOrganisationMappingReader interface {
+	ListTenantOrganisationMappings(ctx context.Context, tenantID string, at time.Time) ([]domain.TenantOrganisationMapping, error)
 }
 
 // Resolve mirrors auth.NewOperationContext's signature and return shape
@@ -63,6 +88,31 @@ type ContextResolutionService struct {
 // like-for-like change, gaining the tenant/legal-entity stages this type
 // adds on top.
 func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Principal, tenantID string, organisationID string, correlationID string, now time.Time) (context.Context, domain.Context, error) {
+	return s.resolve(ctx, principal, tenantID, organisationID, nil, correlationID, now)
+}
+
+// ResolveWithIamOrganisation resolves Context for IAM organisation evidence
+// (ADR-BCP-018 section 66): the evidence is resolved through an active
+// IamOrganisationReference to a canonical Organisation, which is then
+// attested against the tenant exactly like an organisation_id passed to
+// Resolve. The evidence is never copied into the Context; its provenance
+// records how the Organisation was found.
+func (s ContextResolutionService) ResolveWithIamOrganisation(ctx context.Context, principal auth.Principal, tenantID string, ev domain.IamOrganisationEvidence, correlationID string, now time.Time) (context.Context, domain.Context, error) {
+	if s.IamOrganisations == nil {
+		return nil, domain.Context{}, fmt.Errorf("%w: no IAM organisation resolver is configured", ErrOrganisationNotResolved)
+	}
+	organisationID, err := s.IamOrganisations.ResolveIamOrganisation(ctx, ev, now)
+	if err != nil {
+		return nil, domain.Context{}, fmt.Errorf("%w: %v", ErrOrganisationNotResolved, err)
+	}
+	source := domain.ContextSource{
+		Source: "baobab-cp:iam-organisation-reference", TrustLevel: domain.TrustSystem,
+		Evidence: ev.Provider + ":" + ev.Issuer + "#" + ev.ProviderOrganisationID,
+	}
+	return s.resolve(ctx, principal, tenantID, organisationID, &source, correlationID, now)
+}
+
+func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Principal, tenantID string, organisationID string, organisationSource *domain.ContextSource, correlationID string, now time.Time) (context.Context, domain.Context, error) {
 	if s.Tenants == nil {
 		return nil, domain.Context{}, errors.New("tenant store is required")
 	}
@@ -98,30 +148,34 @@ func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Pr
 	trustedContext.LegalEntityID = tenant.LegalEntityID
 	// ADR-BCP-016: a caller-asserted organisationID is never trusted merely
 	// because it is well-formed -- it must name a real, ACTIVE,
-	// organisation-kind CanonicalEntity owned by the resolved tenant,
-	// mirroring AuthoritativeContextResolver.Resolve's identical
+	// organisation-kind CanonicalEntity the resolved tenant is attested for
+	// (ADR-BCP-018 ORG-14, domain.AttestOrganisation), mirroring AuthoritativeContextResolver.Resolve's identical
 	// OrganisationID stage (internal/provisioning/context_resolver.go).
 	if organisationID != "" {
 		if s.Canonical == nil {
 			return nil, domain.Context{}, errors.New("canonical entity repository is required to verify organisation_id")
 		}
+		if s.Mappings == nil {
+			return nil, domain.Context{}, errors.New("tenant organisation mappings are required to verify organisation_id")
+		}
 		organisation, err := s.Canonical.GetCanonicalEntity(ctx, organisationID)
 		if err != nil {
 			return nil, domain.Context{}, fmt.Errorf("resolve organisation: %w", err)
 		}
-		if !domain.OrganisationEntityTypes[organisation.EntityType] {
-			return nil, domain.Context{}, errors.New("requested organisation_id is not a canonical organisation entity")
+		mappings, err := s.Mappings.ListTenantOrganisationMappings(ctx, tenantID, now)
+		if err != nil {
+			return nil, domain.Context{}, fmt.Errorf("resolve tenant organisation mappings: %w", err)
 		}
-		if organisation.Status != "ACTIVE" {
-			return nil, domain.Context{}, errors.New("requested organisation is not active")
-		}
-		if organisation.OwnerTenantID != tenantID {
-			return nil, domain.Context{}, errors.New("requested organisation does not belong to the requesting tenant")
+		if err := domain.AttestOrganisation(organisation, tenantID, mappings, now); err != nil {
+			return nil, domain.Context{}, err
 		}
 		trustedContext.OrganisationID = organisation.ID
 		trustedContext.Provenance["organisation_id"] = domain.ContextSource{
 			Source: "baobab-cp:canonical-registry", TrustLevel: domain.TrustSystem,
 			Evidence: organisation.ID,
+		}
+		if organisationSource != nil {
+			trustedContext.Provenance["organisation_id"] = *organisationSource
 		}
 	}
 	if err := trustedContext.Validate(); err != nil {

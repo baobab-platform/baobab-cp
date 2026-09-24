@@ -196,6 +196,7 @@ func TestPlatformContextHandlerResolvesOrganisationID(t *testing.T) {
 			Identity:  service.IdentityService{Repository: repo, Provision: service.WorkloadOnlyProvisioningPolicy},
 			Tenants:   &fakeStore{},
 			Canonical: canonical,
+			Mappings:  noOrganisationMappings{},
 		},
 		Contexts: repo,
 	}
@@ -235,6 +236,7 @@ func TestPlatformContextHandlerRejectsCrossTenantOrganisationID(t *testing.T) {
 			Identity:  service.IdentityService{Repository: repo, Provision: service.WorkloadOnlyProvisioningPolicy},
 			Tenants:   &fakeStore{},
 			Canonical: canonical,
+			Mappings:  noOrganisationMappings{},
 		},
 		Contexts: repo,
 	}
@@ -248,4 +250,12 @@ func TestPlatformContextHandlerRejectsCrossTenantOrganisationID(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected a cross-tenant organisation_id to be rejected with 403, got %d body=%s", w.Code, w.Body.String())
 	}
+}
+
+// noOrganisationMappings is a TenantOrganisationMappingReader with no
+// mappings: only owner-tenant attestation of buyer/supplier records applies.
+type noOrganisationMappings struct{}
+
+func (noOrganisationMappings) ListTenantOrganisationMappings(context.Context, string, time.Time) ([]domain.TenantOrganisationMapping, error) {
+	return nil, nil
 }

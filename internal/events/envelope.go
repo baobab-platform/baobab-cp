@@ -17,7 +17,10 @@ import (
 )
 
 var (
-	typePattern = regexp.MustCompile(`^com\.nabhold\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.v[1-9][0-9]*$`)
+	// Every event type is registered in baobab-platform/shared under the single
+	// com.baobab-platform.* namespace (ADR-SHARED-008); this is
+	// contracts/events/v1/envelope.schema.json's type pattern.
+	typePattern = regexp.MustCompile(`^com\.baobab-platform\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.v[1-9][0-9]*$`)
 	uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
 
@@ -59,10 +62,10 @@ type Envelope struct {
 // not accepted here.
 type Params struct {
 	// Type is the versioned reverse-DNS event type, e.g.
-	// "com.nabhold.control-plane.tenant-provisioning-started.v1".
+	// "com.baobab-platform.control-plane.tenant.provisioning-started.v1".
 	Type string
 	// Source is the stable absolute URI of the logical producer, e.g.
-	// "https://control-plane.nabhold.internal". It must not contain a
+	// "urn:baobab-platform:service:baobab-cp". It must not contain a
 	// deployment hostname, credential or tenant secret.
 	Source string
 	// Subject is the canonical business subject within the producer
@@ -101,7 +104,7 @@ type Params struct {
 // default tenant").
 func New(p Params) (Envelope, error) {
 	if !typePattern.MatchString(p.Type) {
-		return Envelope{}, errors.New("type must match ^com\\.nabhold\\.<domain>.<event>.vN$")
+		return Envelope{}, errors.New("type must match ^com\\.baobab-platform\\.<domain>.<event>.vN$")
 	}
 	if p.Source == "" {
 		return Envelope{}, errors.New("source is required")
