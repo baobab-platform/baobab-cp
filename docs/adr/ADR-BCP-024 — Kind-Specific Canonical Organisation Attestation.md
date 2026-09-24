@@ -1,9 +1,9 @@
-# ADR-BCP-018 — Kind-Specific Canonical Organisation Attestation
+# ADR-BCP-024 — Kind-Specific Canonical Organisation Attestation
 
 **Status:** Accepted
 **Date:** 2026-09-20
 **Repository:** `baobab-platform/baobab-cp`
-**Depends on:** ADR-BCP-004, ADR-BCP-014, ADR-BCP-016, ADR-BCP-017
+**Depends on:** ADR-BCP-004, ADR-BCP-014, ADR-BCP-016, ADR-BCP-017, ADR-BCP-018
 **Gate:** ZB-04 (Buyer Onboarding)
 
 ## Context
@@ -23,12 +23,17 @@ JWT, header, naming convention, or local copy.
 ## Decision
 
 1. `POST /v1/platform-context/resolve` accepts the optional
-   `expected_organisation_type` field alongside `organisation_id`.
+   `expected_organisation_type` field alongside `organisation_id` or
+   `iam_organization` (ADR-BCP-018 gate ORG-10).
 2. An expected type is valid only when:
-   - `organisation_id` is present;
+   - an organisation is named, by `organisation_id` or by IAM organisation
+     evidence that resolves to one;
    - it names a registered organisation type;
    - the resolved canonical entity's exact `EntityType` matches it.
 3. A mismatch fails the complete resolution closed. No Context is persisted.
+   The kind is compared only after the organisation is attested for the
+   tenant (ADR-BCP-018 gate ORG-14), so a caller cannot learn the kind of an
+   organisation its tenant is not attested for.
 4. A successful response includes `organisation_id` and
    `organisation_type` as Control Plane attestations.
 5. Existing callers remain compatible: omitting
@@ -37,9 +42,16 @@ JWT, header, naming convention, or local copy.
 6. Downstream engines must request the exact kind when a command grants
    kind-specific authority. ZB-04 approval requests
    `BUYER_ORGANISATION`.
-7. This endpoint verifies an existing canonical entity. It does not transfer
-   organisation lifecycle ownership to Control Plane and does not implement
-   the broader counterparty model deferred by ADR-BCP-014.
+7. This endpoint verifies an existing canonical entity; it creates and
+   changes nothing. Organisation authority is settled by ADR-BCP-018 (section
+   194), not by this ADR.
+8. The exact kind is the canonical entity's `EntityType`. That is the
+   bounded ADR-BCP-016 model, which ADR-BCP-018 keeps valid during
+   migration. When ADR-BCP-018 gate ORG-13 generalises buyer and supplier
+   organisations into Organisation plus counterparty roles, the attestation
+   SHALL be extended so that an Organisation holding the corresponding
+   active role satisfies the expected kind. Existing callers keep the same
+   request and response shape.
 
 ## Security properties
 

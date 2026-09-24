@@ -16,6 +16,7 @@ import (
 	"github.com/nabhold/baobab-cp/internal/domain"
 	"github.com/nabhold/baobab-cp/internal/repository"
 	"github.com/nabhold/baobab-cp/internal/service"
+	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
 	"github.com/nabhold/baobab-cp/internal/store"
 )
 
@@ -27,7 +28,19 @@ type Dependencies struct {
 	WorkloadVerifier auth.TokenVerifier
 	Resolution       service.ResolutionService
 	Canonical        service.CanonicalEntityService
-	Identity         service.IdentityService
+	// OrganisationMappings backs organisation_id attestation in context
+	// resolution (ADR-BCP-018 ORG-14). Nil leaves every organisation_id
+	// request failing closed.
+	OrganisationMappings service.TenantOrganisationMappingReader
+	// IamOrganisations backs the IAM organisation link routes and resolves
+	// IAM organisation evidence during context resolution (ADR-BCP-018
+	// ORG-10). Nil skips those routes and leaves every iam_organization
+	// request failing closed.
+	IamOrganisations repository.IamOrganisationRepository
+	// OrganisationAdmission backs POST /v1/tenants/{tenantID}/
+	// organisation-admission (ADR-BCP-018 ORG-09). Nil skips the route.
+	OrganisationAdmission repository.OrganisationAdmissionRepository
+	Identity              service.IdentityService
 	// Contexts backs PlatformContextHandler/CapabilityResolveHandler (the
 	// ADR-BCP-004/003 Runtime APIs). Nil is a valid zero value: both
 	// handlers return 503 CONTEXT_STORE_UNAVAILABLE rather than panicking
@@ -89,7 +102,7 @@ func New(dependencies Dependencies) http.Handler {
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
-	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store, Canonical: dependencies.Canonical.Repository}
+	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store, Canonical: dependencies.Canonical.Repository, Mappings: dependencies.OrganisationMappings, IamOrganisations: dependencies.IamOrganisations}
 	r := chi.NewRouter()
 	r.Use(a.securityHeaders, a.correlation, a.requestLog)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -132,6 +145,17 @@ func New(dependencies Dependencies) http.Handler {
 		externalReferences := externalReferenceHandler{repo: dependencies.ExternalReferences}
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/external-references", externalReferences.create)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/external-references", externalReferences.lookup)
+	}
+	if dependencies.IamOrganisations != nil {
+		iam := iamOrganisationHandler{repo: dependencies.IamOrganisations}
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/iam-organisations", iam.link)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/canonical-entities/{entityID}/iam-organisations", iam.list)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/iam-organisation-references/{referenceID}/retire", iam.retire)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/iam-organisations", iam.resolve)
+	}
+	if dependencies.OrganisationAdmission != nil {
+		admission := organisationAdmissionHandler{onboarder: &svcorg.AdmissionOnboarder{Orgs: dependencies.OrganisationAdmission}}
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/organisation-admission", admission.onboard)
 	}
 	if dependencies.Provisioning != nil {
 		prov := provisioningHandler{tenants: dependencies.Store, repo: dependencies.Provisioning}

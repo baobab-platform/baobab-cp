@@ -6,7 +6,7 @@
 #
 # PURPOSE:
 #   Owns the trigger and elevated per-job permissions; delegates the
-#   actual scanning to nabhold/shared's reusable security-*.yml
+#   actual scanning to baobab-platform/shared's reusable security-*.yml
 #   workflows, per this org's "build common capabilities once, govern
 #   centrally" principle — same pattern as this repo's pages.yml,
 #   greetings.yml and release.yml. Turns SECURITY.md's documented
@@ -17,7 +17,7 @@
 #   first time — previously this file was an empty placeholder and none
 #   of that tooling ran anywhere except a developer's own machine.
 #
-#   Also adds `dependency-review`, which is NOT a nabhold/shared call —
+#   Also adds `dependency-review`, which is NOT a baobab-platform/shared call —
 #   it's GitHub's own actions/dependency-review-action, invoked directly.
 #   Wrapping a single upstream action in another workflow_call layer adds
 #   indirection without adding anything shared/'s own Guiding Principle
@@ -27,13 +27,13 @@
 #
 # WHY THIS FILE ALSO ADOPTS enforce-action-pinning.yml AND
 # enforce-dependabot-config.yml AS SEPARATE FILES, NOT JOBS HERE:
-#   Both already exist as reusable workflows in nabhold/shared and are
+#   Both already exist as reusable workflows in baobab-platform/shared and are
 #   recommended for every repo (see shared's templates/README.md), but
 #   this repo had never actually adopted either. Delivered alongside this
 #   file as their own `.github/workflows/enforce-action-pinning.yml` /
 #   `enforce-dependabot-config.yml`, copied from shared's own caller
 #   templates verbatim (not merged into this file) — that mirrors how
-#   nabhold/shared's own ci.yml keeps them as separate jobs/files rather
+#   baobab-platform/shared's own ci.yml keeps them as separate jobs/files rather
 #   than folding them into this repo's security policy file, and keeps
 #   each check's trigger `paths:` narrow to what it actually needs to
 #   re-run on (workflow/action files, and dependabot.yml, respectively)
@@ -41,16 +41,16 @@
 #
 # CHANGE LOG (most recent first)
 # ------------------------------------------------------------------------------
-# * Re-pinned all three nabhold/shared `uses:` lines to the v1.1.0 tag —
+# * Re-pinned all three baobab-platform/shared `uses:` lines to the v1.1.0 tag —
 #   security-secrets-scan.yml, security-codeql.yml and security-python.yml
 #   all shipped in that release. SHA is the tag's peeled/dereferenced
 #   commit (not the annotated tag object's own SHA), verified live via
-#   `git ls-remote --tags https://github.com/nabhold/shared.git v1.1.0
+#   `git ls-remote --tags https://github.com/baobab-platform/shared.git v1.1.0
 #   v1.1.0^{}` on 2026-08-25 (f8df9b90ffe8fef5cbf6d14a9bcf868f723d1464),
 #   and confirmed present via `git ls-tree -r <that SHA> -- .github/workflows`.
 # * Initial version, replacing the previously-empty security.yml
 #   placeholder file. (Shipped with honest 0000...0000 placeholder pins
-#   at the time, since none of the three nabhold/shared reusable
+#   at the time, since none of the three baobab-platform/shared reusable
 #   workflows existed yet — see this file's git history for that revision.)
 # ==============================================================================
 
@@ -77,10 +77,10 @@ jobs:
     name: Secret scanning
     permissions:
       contents: read
-    # SHA is nabhold/shared's v1.1.0 tag (annotated — peeled commit, not
+    # SHA is baobab-platform/shared's v1.1.0 tag (annotated — peeled commit, not
     # the tag object's own SHA), verified live via `git ls-remote --tags
-    # https://github.com/nabhold/shared.git v1.1.0 v1.1.0^{}` on 2026-08-25.
-    uses: nabhold/shared/.github/workflows/security-secrets-scan.yml@f8df9b90ffe8fef5cbf6d14a9bcf868f723d1464 # v1.1.0
+    # https://github.com/baobab-platform/shared.git v1.1.0 v1.1.0^{}` on 2026-08-25.
+    uses: baobab-platform/shared/.github/workflows/security-secrets-scan.yml@f7466cc89a17c0b6e02b5a1e5fce3ce76073a718 # v1.4.0
 
   codeql:
     name: CodeQL
@@ -88,10 +88,10 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    # SHA is nabhold/shared's v1.1.0 tag (annotated — peeled commit, not
+    # SHA is baobab-platform/shared's v1.1.0 tag (annotated — peeled commit, not
     # the tag object's own SHA), verified live via `git ls-remote --tags
-    # https://github.com/nabhold/shared.git v1.1.0 v1.1.0^{}` on 2026-08-25.
-    uses: nabhold/shared/.github/workflows/security-codeql.yml@f8df9b90ffe8fef5cbf6d14a9bcf868f723d1464 # v1.1.0
+    # https://github.com/baobab-platform/shared.git v1.1.0 v1.1.0^{}` on 2026-08-25.
+    uses: baobab-platform/shared/.github/workflows/security-codeql.yml@f7466cc89a17c0b6e02b5a1e5fce3ce76073a718 # v1.4.0
     with:
       languages: '["go"]'
       build-mode: "autobuild"

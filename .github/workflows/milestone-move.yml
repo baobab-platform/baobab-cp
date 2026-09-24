@@ -7,7 +7,7 @@
 # PURPOSE:
 #   When an issue's milestone is set/changed, moves that issue's card to the
 #   "Sprint" column of this org's Baobab Platform project board
-#   (https://github.com/orgs/nabhold/projects/5), via github/update-project-
+#   (https://github.com/orgs/baobab-platform/projects/5), via github/update-project-
 #   action. Status column values ("Backlog", "Ready", "Sprint", "In
 #   Progress", "Review", "Testing", "Done") and the "Status" field name are
 #   this org's documented convention — see docs/governance/github-issues.md
@@ -15,7 +15,7 @@
 #
 # SETUP REQUIRED BEFORE THIS WORKFLOW CAN RUN — read before merging:
 #   1. Create a secret named PROJECTS_PAT (repository secret, or an
-#      organization secret shared across repos if other NABHOLD repos will
+#      organization secret shared across repos if other baobab-platform repos will
 #      need the same board-automation pattern). Per github/update-project-
 #      action's own documented requirement, the token needs `repo` and
 #      `write:org` scopes — the default GITHUB_TOKEN cannot write to an
@@ -28,12 +28,15 @@
 #      fine-grained project permissions are a newer surface than this
 #      action's own documentation covers.
 #   2. Confirm the PAT's owner has write access to
-#      https://github.com/orgs/nabhold/projects/5 — a token from an account
+#      https://github.com/orgs/baobab-platform/projects/5 — a token from an account
 #      that can't open the board itself will fail the same way regardless
 #      of scopes.
 #
 # CHANGE LOG (most recent first)
 # ------------------------------------------------------------------------------
+# * Pointed at the board's current owner: the organisation was renamed from
+#   nabhold to baobab-platform and the project board moved with it, keeping
+#   its number (5).
 # * Fixed from a copy-pasted tutorial example that was never wired up to
 #   this repository: organization was the literal placeholder string
 #   "YOUR_GITHUB_USERNAME" (now "nabhold"), project_number was a
@@ -63,7 +66,7 @@ jobs:
     steps:
       # SHA is github/update-project-action's v4 tag, verified live via
       # `git ls-remote --tags https://github.com/github/update-project-action.git`
-      # on 2026-08-25 — v4 is a LIGHTWEIGHT tag (unlike nabhold/shared's own
+      # on 2026-08-25 — v4 is a LIGHTWEIGHT tag (unlike baobab-platform/shared's own
       # v1.0.0, which is annotated), so the tag's own SHA is already the
       # commit SHA; there is no separate peeled object to resolve here.
       - name: Move issue to Sprint column
@@ -73,9 +76,9 @@ jobs:
           # workflow can succeed.
           github_token: ${{ secrets.PROJECTS_PAT }}
 
-          organization: "nabhold"
+          organization: "baobab-platform"
 
-          # From https://github.com/orgs/nabhold/projects/5
+          # From https://github.com/orgs/baobab-platform/projects/5
           project_number: 5
 
           # The GraphQL global node ID of the issue that was milestoned —

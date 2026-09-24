@@ -38,7 +38,7 @@ func SharedDir(t *testing.T) string {
 // file under contracts/ as a resource first (keyed by its own declared
 // "$id") so that cross-file "$ref"s (e.g. tenant-registration.schema.json's
 // reference to domain.schema.json's $defs) resolve against the local
-// checkout instead of making a network request to contracts.nabhold.com.
+// checkout instead of making a network request to contracts.baobab-platform.com.
 //
 // relPath may include a "#/json/pointer" fragment to compile a sub-schema
 // under a file's $defs (e.g. "control-plane/v1/context-resolution.schema.json#/$defs/response").

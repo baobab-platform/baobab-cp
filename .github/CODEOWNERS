@@ -1,6 +1,6 @@
-* @nabhold/platform-engineering
-/.github/ @nabhold/platform-engineering @nabhold/security
-/.devcontainer/ @nabhold/platform-engineering
-/.nabhold/ @nabhold/platform-engineering
-/Dockerfile @nabhold/platform-engineering @nabhold/security
-/SECURITY.md @nabhold/security
+* @baobab-platform/platform-engineering
+/.github/ @baobab-platform/platform-engineering @baobab-platform/security
+/.devcontainer/ @baobab-platform/platform-engineering
+/.baobab/ @baobab-platform/platform-engineering
+/Dockerfile @baobab-platform/platform-engineering @baobab-platform/security
+/SECURITY.md @baobab-platform/security

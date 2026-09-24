@@ -29,6 +29,13 @@ type ContextAuthority interface {
 	// real, ACTIVE, organisation-kind CanonicalEntity owned by the
 	// requesting tenant, never trusting the identifier at face value.
 	GetCanonicalEntity(ctx context.Context, id string) (domain.CanonicalEntity, error)
+	// ListTenantOrganisationMappings backs organisation attestation
+	// (ADR-BCP-018 gate ORG-14): a generic Organisation is attested only
+	// through an ACTIVE mapping to the requesting tenant.
+	ListTenantOrganisationMappings(ctx context.Context, tenantID string, at time.Time) ([]domain.TenantOrganisationMapping, error)
+	// ResolveIamOrganisation resolves IAM organisation evidence through an
+	// active IamOrganisationReference (ADR-BCP-018 gate ORG-10).
+	ResolveIamOrganisation(ctx context.Context, ev domain.IamOrganisationEvidence, at time.Time) (string, error)
 }
 
 // ContextResolutionRequest carries caller identity plus identifiers whose
@@ -38,11 +45,16 @@ type ContextResolutionRequest struct {
 	TenantID      string
 	LegalEntityID string
 	// OrganisationID, when supplied, must name a real, ACTIVE
-	// CanonicalEntity of an organisation EntityType
-	// (domain.OrganisationEntityTypes) owned by TenantID -- see Resolve's
-	// verification stage. Never trusted merely because it is
-	// well-formed (ADR-BCP-016).
-	OrganisationID     string
+	// CanonicalEntity of an organisation EntityType that TenantID is
+	// attested for (domain.AttestOrganisation: an ACTIVE tenant mapping, or
+	// ownership of a tenant-owned buyer/supplier record). Never trusted
+	// merely because it is well-formed (ADR-BCP-016, ADR-BCP-018 ORG-14).
+	OrganisationID string
+	// IamOrganization is the alternative to OrganisationID: IAM
+	// organisation evidence resolved through an active
+	// IamOrganisationReference, then attested like OrganisationID
+	// (ADR-BCP-018 section 66). Supplying both fails.
+	IamOrganization    *domain.IamOrganisationEvidence
 	MarketID           string
 	DigitalEstateID    string
 	DeploymentRegion   string
@@ -109,25 +121,38 @@ func (r *AuthoritativeContextResolver) Resolve(ctx context.Context, req ContextR
 		}
 	}
 
-	if req.OrganisationID != "" {
-		organisation, err := r.authority.GetCanonicalEntity(ctx, req.OrganisationID)
+	organisationID := req.OrganisationID
+	organisationSource := resolver.ContextSource{Source: "baobab-cp:canonical-registry", TrustLevel: resolver.TrustSystem}
+	if req.IamOrganization != nil {
+		if organisationID != "" {
+			return resolver.Context{}, errors.New("supply organisation_id or IAM organisation evidence, not both")
+		}
+		ev := *req.IamOrganization
+		resolved, err := r.authority.ResolveIamOrganisation(ctx, ev, r.now())
+		if err != nil {
+			return resolver.Context{}, fmt.Errorf("resolve iam organisation: %w", err)
+		}
+		organisationID = resolved
+		organisationSource = resolver.ContextSource{Source: "baobab-cp:iam-organisation-reference", TrustLevel: resolver.TrustSystem,
+			Evidence: ev.Provider + ":" + ev.Issuer + "#" + ev.ProviderOrganisationID}
+	}
+	if organisationID != "" {
+		organisation, err := r.authority.GetCanonicalEntity(ctx, organisationID)
 		if err != nil {
 			return resolver.Context{}, fmt.Errorf("resolve organisation: %w", err)
 		}
-		if !domain.OrganisationEntityTypes[organisation.EntityType] {
-			return resolver.Context{}, errors.New("requested organisation_id is not a canonical organisation entity")
+		mappings, err := r.authority.ListTenantOrganisationMappings(ctx, req.TenantID, r.now())
+		if err != nil {
+			return resolver.Context{}, fmt.Errorf("resolve tenant organisation mappings: %w", err)
 		}
-		if organisation.Status != "ACTIVE" {
-			return resolver.Context{}, errors.New("requested organisation is not active")
-		}
-		if organisation.OwnerTenantID != req.TenantID {
-			return resolver.Context{}, errors.New("requested organisation does not belong to the requesting tenant")
+		if err := domain.AttestOrganisation(organisation, req.TenantID, mappings, r.now()); err != nil {
+			return resolver.Context{}, err
 		}
 		evidence.OrganisationID = organisation.ID
-		evidence.Provenance["organisation_id"] = resolver.ContextSource{
-			Source: "baobab-cp:canonical-registry", TrustLevel: resolver.TrustSystem,
-			Evidence: organisation.ID,
+		if organisationSource.Evidence == "" {
+			organisationSource.Evidence = organisation.ID
 		}
+		evidence.Provenance["organisation_id"] = organisationSource
 	}
 
 	if req.MarketID != "" {

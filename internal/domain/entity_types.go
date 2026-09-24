@@ -27,6 +27,11 @@ const (
 	// Registration happens through the same CanonicalEntityService.Create
 	// API as EntityTypeSupplierOrganisation.
 	EntityTypeBuyerOrganisation = "BUYER_ORGANISATION"
+
+	// EntityTypeOrganisation is the generic ADR-BCP-018 organisation profile
+	// on CanonicalEntity. BUYER_ORGANISATION and SUPPLIER_ORGANISATION remain
+	// specialised kinds; both are organisation entity types for context resolution.
+	EntityTypeOrganisation = "ORGANISATION"
 )
 
 // OrganisationEntityTypes lists every CanonicalEntity.EntityType value the
@@ -36,6 +41,7 @@ const (
 // EntityType can never be asserted as a request's organisation_id, even if
 // its ID is otherwise well-formed.
 var OrganisationEntityTypes = map[string]bool{
+	EntityTypeOrganisation:         true,
 	EntityTypeBuyerOrganisation:    true,
 	EntityTypeSupplierOrganisation: true,
 }

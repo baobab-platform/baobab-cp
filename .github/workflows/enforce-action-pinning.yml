@@ -5,15 +5,15 @@
 # File: .github/workflows/enforce-action-pinning.yml
 #
 # PURPOSE:
-#   Delegates to nabhold/shared's reusable enforce-action-pinning.yml —
+#   Delegates to baobab-platform/shared's reusable enforce-action-pinning.yml —
 #   fails CI if any `uses:` reference in this repo's .github/workflows
 #   or .github/actions isn't pinned to a full 40-character commit SHA.
-#   This check already exists in nabhold/shared and is recommended for
+#   This check already exists in baobab-platform/shared and is recommended for
 #   every repo (see shared's templates/README.md); this repo had simply
 #   never adopted it before now, despite already following the pinning
 #   discipline it enforces throughout .github/workflows.
 #
-#   Copied from nabhold/shared's templates/caller-enforce-action-pinning.yml
+#   Copied from baobab-platform/shared's templates/caller-enforce-action-pinning.yml
 #   verbatim — no repo-specific adjustments were needed.
 #
 # CHANGE LOG (most recent first)
@@ -43,8 +43,8 @@ jobs:
   check:
     permissions:
       contents: read
-    # SHA is nabhold/shared's v1.0.0 tag (annotated — peeled commit, not
+    # SHA is baobab-platform/shared's v1.0.0 tag (annotated — peeled commit, not
     # the tag object's own SHA), re-verified live via
-    # `git ls-remote --tags https://github.com/nabhold/shared.git v1.0.0`
+    # `git ls-remote --tags https://github.com/baobab-platform/shared.git v1.0.0`
     # on 2026-08-25.
-    uses: nabhold/shared/.github/workflows/enforce-action-pinning.yml@f8df9b90ffe8fef5cbf6d14a9bcf868f723d1464 # v1.1.0
+    uses: baobab-platform/shared/.github/workflows/enforce-action-pinning.yml@f7466cc89a17c0b6e02b5a1e5fce3ce76073a718 # v1.4.0
