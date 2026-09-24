@@ -2,12 +2,16 @@ package provisioning
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
+	"github.com/nabhold/baobab-cp/internal/contracttest"
 	"github.com/nabhold/baobab-cp/internal/domain"
 	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
 	"github.com/nabhold/baobab-cp/internal/repository"
@@ -257,10 +261,10 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 		eventTypes = append(eventTypes, eventType)
 	}
 	expected := map[string]int{
-		"com.nabhold.control-plane.market-participation-created.v1": 2,
-		"com.nabhold.control-plane.trade-lane-activated.v1":         2,
-		"com.nabhold.control-plane.tenant-provisioning-ready.v1":    1,
-		"com.nabhold.control-plane.tenant-provisioning-active.v1":   1,
+		"com.baobab-platform.control-plane.market-participation.created.v1": 2,
+		"com.baobab-platform.market.trade-lane.activated.v1":                2,
+		"com.baobab-platform.control-plane.tenant.provisioning-ready.v1":    1,
+		"com.baobab-platform.control-plane.tenant.provisioning-active.v1":   1,
 	}
 	got := map[string]int{}
 	for _, eventType := range eventTypes {
@@ -270,5 +274,52 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 		if got[eventType] != count {
 			t.Fatalf("expected %d %s outbox event(s), got %d (all events: %v)", count, eventType, got[eventType], eventTypes)
 		}
+	}
+	validateOutboxAgainstShared(ctx, t, admin, tenantID)
+}
+
+// validateOutboxAgainstShared checks every event this run wrote to the
+// outbox against baobab-platform/shared (SHARED_CONTRACTS_DIR): the canonical
+// envelope, and the payload schema its own dataschema names. A dataschema
+// the pinned Shared revision does not contain yet is logged, not failed, so
+// newly registered events start validating as soon as contracts.lock.yaml
+// pins a revision that has them.
+func validateOutboxAgainstShared(ctx context.Context, t *testing.T, admin *pgxpool.Pool, tenantID string) {
+	t.Helper()
+	dir := os.Getenv("SHARED_CONTRACTS_DIR")
+	if dir == "" {
+		t.Log("SHARED_CONTRACTS_DIR not set; outbox events not validated against baobab-platform/shared")
+		return
+	}
+	envelopeSchema := contracttest.CompileSchema(t, dir, "events/v1/envelope.schema.json")
+	rows, err := admin.Query(ctx, `SELECT payload FROM messaging.outbox WHERE tenant_id = $1`, tenantID)
+	if err != nil {
+		t.Fatalf("query outbox payloads: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		var envelope map[string]any
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		contracttest.ValidateJSON(t, envelopeSchema, envelope)
+		dataschema, _ := envelope["dataschema"].(string)
+		relPath, ok := strings.CutPrefix(dataschema, "https://contracts.baobab-platform.com/")
+		if !ok {
+			t.Fatalf("%v: dataschema %q is not a baobab-platform/shared contract", envelope["type"], dataschema)
+		}
+		file, _, _ := strings.Cut(relPath, "#")
+		if _, err := os.Stat(filepath.Join(dir, "contracts", file)); err != nil {
+			t.Logf("%v: %s is not in the pinned Shared revision yet; payload not validated", envelope["type"], file)
+			continue
+		}
+		contracttest.ValidateJSON(t, contracttest.CompileSchema(t, dir, relPath), envelope["data"])
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 }

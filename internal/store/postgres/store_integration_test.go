@@ -71,7 +71,7 @@ func TestTenantLifecycleEndToEnd(t *testing.T) {
 	if err := store.pool.QueryRow(ctx, `SELECT aggregate_id, event_type, payload FROM messaging.outbox WHERE aggregate_id=$1`, tenantID).Scan(&aggregateID, &eventType, &rawPayload); err != nil {
 		t.Fatalf("read outbox row: %v", err)
 	}
-	if eventType != "com.nabhold.control-plane.tenant-provisioning-started.v1" {
+	if eventType != "com.baobab-platform.control-plane.tenant.provisioning-started.v1" {
 		t.Fatalf("unexpected outbox event_type: %q", eventType)
 	}
 	var envelope events.Envelope
