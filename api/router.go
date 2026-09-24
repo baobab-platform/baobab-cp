@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/nabhold/baobab-cp/internal/auth"
 	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/nabhold/baobab-cp/internal/metrics"
 	"github.com/nabhold/baobab-cp/internal/repository"
 	"github.com/nabhold/baobab-cp/internal/service"
 	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
@@ -44,7 +45,13 @@ type Dependencies struct {
 	// reconciliation and resolution candidate routes (ADR-BCP-018 ORG-13).
 	// Nil skips those routes.
 	Counterparties repository.CounterpartyRepository
-	Identity       service.IdentityService
+	// OrganisationObservability backs the relationship drift and
+	// organisation audit lineage routes (ADR-BCP-018 ORG-15). Nil skips them.
+	OrganisationObservability repository.OrganisationObservabilityRepository
+	// Metrics is served on GET /metrics to workloads holding metrics:read.
+	// Nil serves nothing.
+	Metrics  *metrics.Registry
+	Identity service.IdentityService
 	// Contexts backs PlatformContextHandler/CapabilityResolveHandler (the
 	// ADR-BCP-004/003 Runtime APIs). Nil is a valid zero value: both
 	// handlers return 503 CONTEXT_STORE_UNAVAILABLE rather than panicking
@@ -173,6 +180,16 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates", cp.listCandidates)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates/{candidateID}", cp.getCandidate)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/organisation-resolution-candidates/{candidateID}/decision", cp.decide)
+	}
+	if dependencies.OrganisationObservability != nil {
+		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-drift", obs.drift)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/audit", obs.audit)
+	}
+	if dependencies.Metrics != nil {
+		// Scraped by a monitoring workload; labels are bounded vocabularies
+		// and carry no identifiers (ADR-BCP-008 section 44).
+		r.With(a.authorize(a.workloadVerifier, "workload", "metrics:read")).Method(http.MethodGet, "/metrics", dependencies.Metrics.Handler())
 	}
 	if dependencies.Provisioning != nil {
 		prov := provisioningHandler{tenants: dependencies.Store, repo: dependencies.Provisioning}

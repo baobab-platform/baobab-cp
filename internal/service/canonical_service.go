@@ -15,6 +15,40 @@ import (
 type CanonicalEntityService struct {
 	Repository repository.CanonicalEntityRepository
 	Now        func() time.Time
+	// Organisations suspends organisation-kind entities atomically with
+	// their profile and OrganisationSuspended event (ADR-BCP-018 section
+	// 124). Nil falls back to the generic transition, which emits nothing.
+	Organisations OrganisationSuspender
+}
+
+// OrganisationSuspender suspends an organisation-kind canonical entity.
+type OrganisationSuspender interface {
+	SuspendOrganisationEntity(ctx context.Context, id string, expectedVersion int64, at time.Time, reason string, actor repository.AuditActor) error
+}
+
+// organisationSuspensionReason records suspensions made through the generic
+// canonical lifecycle API, which carries no reason of its own.
+const organisationSuspensionReason = "suspended through the canonical entity lifecycle"
+
+// SuspendAs is Suspend attributed to actor. An organisation-kind entity is
+// suspended together with its profile and OrganisationSuspended event.
+func (s CanonicalEntityService) SuspendAs(ctx context.Context, id string, expectedVersion int64, actor repository.AuditActor) (domain.CanonicalEntity, error) {
+	entity, err := s.Get(ctx, id)
+	if err != nil {
+		return domain.CanonicalEntity{}, err
+	}
+	if s.Organisations == nil || !domain.OrganisationEntityTypes[entity.EntityType] {
+		return s.Suspend(ctx, id, expectedVersion)
+	}
+	now := time.Now().UTC()
+	if s.Now != nil {
+		now = s.Now().UTC()
+	}
+	if err := s.Organisations.SuspendOrganisationEntity(ctx, id, expectedVersion, now, organisationSuspensionReason, actor); err != nil {
+		return domain.CanonicalEntity{}, err
+	}
+	entity.Status, entity.Version = "SUSPENDED", expectedVersion+1
+	return entity, nil
 }
 
 func (s CanonicalEntityService) Create(ctx context.Context, entity domain.CanonicalEntity) (domain.CanonicalEntity, error) {

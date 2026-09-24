@@ -8,6 +8,7 @@ import (
 
 	"github.com/nabhold/baobab-cp/internal/auth"
 	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/nabhold/baobab-cp/internal/metrics"
 	"github.com/nabhold/baobab-cp/internal/repository"
 	"github.com/nabhold/baobab-cp/internal/store"
 )
@@ -347,5 +348,41 @@ func TestContextResolutionServiceAttestsKindByCounterpartyRole(t *testing.T) {
 				t.Fatal("expected resolution to fail closed")
 			}
 		})
+	}
+}
+
+// TestContextResolutionServiceCountsOrganisationFailures proves ADR-BCP-018
+// section 130's resolution counters: each fail-closed organisation outcome
+// is counted, and an organisation the tenant is not attested for also
+// counts as a denied cross-tenant access.
+func TestContextResolutionServiceCountsOrganisationFailures(t *testing.T) {
+	now := time.Now().UTC()
+	canonical := repository.NewCanonicalRepository()
+	canonical.Entities["foreign"] = canonicalOrganisation("foreign", domain.EntityTypeBuyerOrganisation, "ACTIVE", "tenant-999")
+	canonical.Entities["supplier"] = canonicalOrganisation("supplier", domain.EntityTypeSupplierOrganisation, "ACTIVE", "tenant-123")
+	svc := ContextResolutionService{
+		Identity:  identityServiceFor(repository.NewInMemoryRepository()),
+		Tenants:   &fakeTenantStore{tenant: activeTenant()},
+		Canonical: canonical,
+		Mappings:  tenantMappings(nil),
+	}
+	resolve := func(org, kind string) {
+		t.Helper()
+		if _, _, err := svc.ResolveExpectedOrganisationKind(context.Background(), workloadPrincipalForContext(), "tenant-123", org, kind, "correlation-123", now); err == nil {
+			t.Fatalf("%s as %q must fail closed", org, kind)
+		}
+	}
+	notMapped, crossTenant, wrongKind := metrics.RelationshipResolutionFailures.Value(metrics.OutcomeNotMapped),
+		metrics.CrossTenantGroupAccessDenied.Value(), metrics.RelationshipResolutionFailures.Value(metrics.OutcomeWrongKind)
+	resolve("foreign", "")
+	resolve("supplier", domain.EntityTypeBuyerOrganisation)
+	if got := metrics.RelationshipResolutionFailures.Value(metrics.OutcomeNotMapped); got != notMapped+1 {
+		t.Fatalf("not_mapped %d -> %d", notMapped, got)
+	}
+	if got := metrics.CrossTenantGroupAccessDenied.Value(); got != crossTenant+1 {
+		t.Fatalf("cross_tenant_group_access_denied_total %d -> %d; a wrong kind is not a cross-tenant access", crossTenant, got)
+	}
+	if got := metrics.RelationshipResolutionFailures.Value(metrics.OutcomeWrongKind); got != wrongKind+1 {
+		t.Fatalf("wrong_kind %d -> %d", wrongKind, got)
 	}
 }

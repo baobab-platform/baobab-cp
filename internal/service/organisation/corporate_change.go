@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/nabhold/baobab-cp/internal/metrics"
 	"github.com/nabhold/baobab-cp/internal/repository"
 )
 
@@ -73,6 +74,7 @@ func (r *CorporateChangeReviewer) Review(ctx context.Context, corporateRelations
 			PlatformRelationshipID: pr.ID, PlatformID: pr.PlatformID, OrganisationID: pr.OrganisationID, InternalEligible: eligible,
 		})
 	}
+	metrics.InternalEligibilityReviews.Add(uint64(len(review.Affiliates)))
 	return review, nil
 }
 
@@ -119,14 +121,22 @@ func (r *CorporateChangeReviewer) TerminateAffiliate(ctx context.Context, t Affi
 		return "", err
 	}
 	if t.ReclassifyAs == "" {
+		metrics.PlatformRelationshipReclassifications.Inc(metrics.OutcomeAffiliateEnded)
 		return "", nil
 	}
-	return r.Orgs.EnsurePlatformRelationship(ctx, domain.PlatformRelationship{
+	id, err := r.Orgs.EnsurePlatformRelationship(ctx, domain.PlatformRelationship{
 		PlatformID: affiliate.PlatformID, OrganisationID: affiliate.OrganisationID, RelationshipType: t.ReclassifyAs,
 		VerificationState: domain.VerificationPendingReview, Status: domain.RelationshipStatusPending,
 		EffectiveFrom: t.At, AdmissionDecisionID: t.DecisionReference, SourceAuthority: "platform-governance",
 		Metadata: map[string]any{"reclassified_from_platform_relationship_id": affiliate.ID},
 	}, actor)
+	if err != nil {
+		// The affiliate is ended even though the reclassification failed.
+		metrics.PlatformRelationshipReclassifications.Inc(metrics.OutcomeAffiliateEnded)
+		return "", err
+	}
+	metrics.PlatformRelationshipReclassifications.Inc(metrics.OutcomeAffiliateMovedTo)
+	return id, nil
 }
 
 // liveAffiliate finds the live PLATFORM_GROUP_AFFILIATE relationship id.
