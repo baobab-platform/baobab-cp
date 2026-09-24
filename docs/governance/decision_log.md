@@ -25,6 +25,10 @@ inventory and evidence. Summary of the five locked/decided items:
    repository's own Technical Specification (CR-003) and `docs/adr/ADR-BCP-015` had
    independently specified a different, incompatible `baobab.*` format that no code here
    ever implemented; both documents are corrected by reference to `shared` ADR-SHARED-008.
+   **Erratum (event namespace migration):** after the GitHub organisation rename,
+   `baobab-platform/shared`'s envelope accepts only `com.baobab-platform.<context>.<...>.v<N>`
+   (ADR-SHARED-008), and every event this repository emits now uses that namespace and is
+   registered in Shared. `com.nabhold.*` is no longer emitted or accepted.
 4. **ADR-BCP-001 migration-count erratum.** CR-004 in the Technical Specification
    documents the 17-vs-18 discrepancy. Moot in practice: the canonical migration set has
    grown to 32 files (`000001`–`000032`), all registered in `canonicalMigrationNames`.

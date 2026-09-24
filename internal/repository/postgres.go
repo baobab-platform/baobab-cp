@@ -2767,7 +2767,7 @@ func (r *PostgresRepository) SaveTradeLane(ctx context.Context, lane domain.Trad
 		Data: map[string]any{
 			"trade_lane_id": lane.ID, "tenant_id": lane.TenantID,
 			"origin_market_id": lane.OriginMarketID, "destination_market_id": lane.DestinationMarketID,
-			"direction": string(lane.Direction),
+			"direction": string(lane.Direction), "status": string(lane.Status),
 		},
 	})
 	if err != nil {
