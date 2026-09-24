@@ -293,3 +293,59 @@ func TestContextResolutionServiceAttestsExpectedOrganisationKind(t *testing.T) {
 }
 
 var errAny = errors.New("any error")
+
+// fakeRoles holds counterparty roles keyed by organisation|tenant|role.
+type fakeRoles struct {
+	held map[string]bool
+	err  error
+}
+
+func (f fakeRoles) HoldsCounterpartyRole(_ context.Context, organisationID, tenantID, role string, _ time.Time) (bool, error) {
+	return f.held[organisationID+"|"+tenantID+"|"+role], f.err
+}
+
+// TestContextResolutionServiceAttestsKindByCounterpartyRole proves
+// ADR-BCP-024 clause 8: a generic ORGANISATION satisfies a buyer or
+// supplier kind only while it holds that role for the requesting tenant; a
+// legacy kind still has to match exactly, and a failing role lookup fails
+// closed.
+func TestContextResolutionServiceAttestsKindByCounterpartyRole(t *testing.T) {
+	now := time.Now().UTC()
+	canonical := repository.NewCanonicalRepository()
+	canonical.Entities["generic"] = canonicalOrganisation("generic", domain.EntityTypeOrganisation, "ACTIVE", "")
+	canonical.Entities["supplier"] = canonicalOrganisation("supplier", domain.EntityTypeSupplierOrganisation, "ACTIVE", "tenant-123")
+	mappings := tenantMappings{{TenantID: "tenant-123", OrganisationID: "generic", Status: domain.RelationshipStatusActive, EffectiveFrom: now.Add(-time.Hour)}}
+	buyerRole := fakeRoles{held: map[string]bool{"generic|tenant-123|BUYER": true, "supplier|tenant-123|BUYER": true}}
+	otherTenantRole := fakeRoles{held: map[string]bool{"generic|tenant-999|BUYER": true}}
+	for name, tc := range map[string]struct {
+		roles          CounterpartyRoleReader
+		organisationID string
+		expected       string
+		allow          bool
+	}{
+		"generic holding BUYER":           {buyerRole, "generic", domain.EntityTypeBuyerOrganisation, true},
+		"generic without SUPPLIER role":   {buyerRole, "generic", domain.EntityTypeSupplierOrganisation, false},
+		"generic, role in another tenant": {otherTenantRole, "generic", domain.EntityTypeBuyerOrganisation, false},
+		"generic, no role reader":         {nil, "generic", domain.EntityTypeBuyerOrganisation, false},
+		"legacy supplier holding BUYER":   {buyerRole, "supplier", domain.EntityTypeBuyerOrganisation, false},
+		"role lookup failure":             {fakeRoles{err: errors.New("db down")}, "generic", domain.EntityTypeBuyerOrganisation, false},
+		"legacy supplier as itself":       {nil, "supplier", domain.EntityTypeSupplierOrganisation, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc := ContextResolutionService{
+				Identity:          identityServiceFor(repository.NewInMemoryRepository()),
+				Tenants:           &fakeTenantStore{tenant: activeTenant()},
+				Canonical:         canonical,
+				Mappings:          mappings,
+				CounterpartyRoles: tc.roles,
+			}
+			_, resolved, err := svc.ResolveExpectedOrganisationKind(context.Background(), workloadPrincipalForContext(), "tenant-123", tc.organisationID, tc.expected, "correlation-123", now)
+			if tc.allow && (err != nil || resolved.OrganisationID != tc.organisationID) {
+				t.Fatalf("expected attestation, got %v", err)
+			}
+			if !tc.allow && err == nil {
+				t.Fatal("expected resolution to fail closed")
+			}
+		})
+	}
+}

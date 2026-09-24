@@ -45,17 +45,22 @@ JWT, header, naming convention, or local copy.
 7. This endpoint verifies an existing canonical entity; it creates and
    changes nothing. Organisation authority is settled by ADR-BCP-018 (section
    194), not by this ADR.
-8. The exact kind is the canonical entity's `EntityType`. That is the
-   bounded ADR-BCP-016 model, which ADR-BCP-018 keeps valid during
-   migration. When ADR-BCP-018 gate ORG-13 generalises buyer and supplier
-   organisations into Organisation plus counterparty roles, the attestation
-   SHALL be extended so that an Organisation holding the corresponding
-   active role satisfies the expected kind. Existing callers keep the same
-   request and response shape.
+8. A legacy ADR-BCP-016 kind (`BUYER_ORGANISATION`,
+   `SUPPLIER_ORGANISATION`) satisfies only its own exact `EntityType`.
+   ADR-BCP-018 gate ORG-13 generalises buyer and supplier organisations
+   into Organisation plus tenant-scoped counterparty roles; a generic
+   `ORGANISATION`, which has no commercial kind of its own (ADR-BCP-018
+   section 7), satisfies `BUYER_ORGANISATION` or `SUPPLIER_ORGANISATION`
+   only while it holds the matching BUYER or SUPPLIER role, ACTIVE and in
+   effect, for the requesting tenant. A failed role lookup fails closed.
+   Existing callers keep the same request and response shape.
 
 ## Security properties
 
 - A supplier canonical entity cannot be used to activate a buyer account.
+- A generic Organisation is a buyer only for a tenant it holds an ACTIVE
+  BUYER role for; a PENDING, SUSPENDED or ENDED role, or a role held for
+  another tenant, attests nothing.
 - Cross-tenant, inactive, missing, non-organisation, and wrong-kind entities
   all fail closed.
 - The workload token still requires `context:resolve`.
