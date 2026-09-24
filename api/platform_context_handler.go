@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nabhold/baobab-cp/internal/auth"
+	"github.com/nabhold/baobab-cp/internal/domain"
 	"github.com/nabhold/baobab-cp/internal/repository"
 	"github.com/nabhold/baobab-cp/internal/service"
 )
@@ -41,13 +42,21 @@ type platformContextResolveRequest struct {
 	// token does carry one.
 	TenantID string `json:"tenant_id"`
 	// OrganisationID, when supplied, must name a real, ACTIVE,
-	// organisation-kind CanonicalEntity owned by the resolved tenant
-	// (ADR-BCP-016) -- verified by ContextResolutionService.Resolve, never
+	// organisation-kind CanonicalEntity the resolved tenant is attested for
+	// (ADR-BCP-016, ADR-BCP-018 ORG-14) -- verified by ContextResolutionService.Resolve, never
 	// trusted merely because it is well-formed. The calling workload (e.g.
 	// baobab-trade, resolving its own authenticated buyer's organisation)
 	// asserts this value itself; CP never parses it out of the workload's
 	// own token, per ADR-0010 §36 ("No Buyer Context by Header Alone").
 	OrganisationID string `json:"organisation_id,omitempty"`
+	// IamOrganization is the alternative to OrganisationID (ADR-BCP-018
+	// gate ORG-10): the IAM organisation from the workload's authenticated
+	// user's organisation claim (shared contracts/organisation/v1
+	// IamOrganisationEvidence). It is resolved through an active
+	// IamOrganisationReference and then attested exactly like
+	// OrganisationID; evidence that does not resolve fails closed.
+	// Supplying both is rejected.
+	IamOrganization *domain.IamOrganisationEvidence `json:"iam_organization,omitempty"`
 }
 
 type platformContextResolveResponse struct {
@@ -88,9 +97,21 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 	// that handler, this one also verifies req.OrganisationID when supplied
 	// (ADR-BCP-016) -- the only real HTTP path that reaches the ZB-03.2
 	// OrganisationID verification stage today.
-	_, trustedContext, err := h.ContextResolution.Resolve(r.Context(), principal, tenantID, req.OrganisationID, correlationID(r), time.Now())
+	if req.IamOrganization != nil && req.OrganisationID != "" {
+		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "supply organisation_id or iam_organization, not both", false)
+		return
+	}
+	var trustedContext domain.Context
+	var err error
+	if req.IamOrganization != nil {
+		_, trustedContext, err = h.ContextResolution.ResolveWithIamOrganisation(r.Context(), principal, tenantID, *req.IamOrganization, correlationID(r), time.Now())
+	} else {
+		_, trustedContext, err = h.ContextResolution.Resolve(r.Context(), principal, tenantID, req.OrganisationID, correlationID(r), time.Now())
+	}
 	if err != nil {
 		switch {
+		case errors.Is(err, service.ErrOrganisationNotResolved):
+			problem(w, r, http.StatusForbidden, "ORGANISATION_NOT_RESOLVED", "the IAM organisation is not linked to a canonical organisation", false)
 		case errors.Is(err, service.ErrIdentityResolutionFailed):
 			problem(w, r, http.StatusForbidden, "IDENTITY_RESOLUTION_FAILED", "the authenticated identity could not be resolved", false)
 		case errors.Is(err, service.ErrTenantNotActive):

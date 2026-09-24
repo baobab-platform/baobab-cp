@@ -85,6 +85,10 @@ func (h externalReferenceHandler) lookup(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	entity, err := h.repo.GetCanonicalEntityByExternalReference(r.Context(), engineID, nativeType, nativeID)
+	if errors.Is(err, repository.ErrExternalReferenceAmbiguous) {
+		problem(w, r, http.StatusConflict, "EXTERNAL_REFERENCE_AMBIGUOUS", "that external reference is linked to more than one canonical entity", false)
+		return
+	}
 	if err != nil {
 		problem(w, r, http.StatusNotFound, "EXTERNAL_REFERENCE_NOT_FOUND", "no canonical entity is linked to that external reference", false)
 		return
