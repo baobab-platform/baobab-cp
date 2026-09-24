@@ -16,6 +16,7 @@ type contextAuthorityFake struct {
 	estate       domain.DigitalEstate
 	profile      domain.IsolationProfile
 	organisation domain.CanonicalEntity
+	mappings     []domain.TenantOrganisationMapping
 }
 
 func (f contextAuthorityFake) GetTenant(context.Context, string) (domain.Tenant, error) {
@@ -35,6 +36,9 @@ func (f contextAuthorityFake) GetIsolationProfile(context.Context, string) (doma
 }
 func (f contextAuthorityFake) GetCanonicalEntity(context.Context, string) (domain.CanonicalEntity, error) {
 	return f.organisation, nil
+}
+func (f contextAuthorityFake) ListTenantOrganisationMappings(context.Context, string, time.Time) ([]domain.TenantOrganisationMapping, error) {
+	return f.mappings, nil
 }
 
 func TestAuthoritativeContextResolution(t *testing.T) {

@@ -29,6 +29,10 @@ type ContextAuthority interface {
 	// real, ACTIVE, organisation-kind CanonicalEntity owned by the
 	// requesting tenant, never trusting the identifier at face value.
 	GetCanonicalEntity(ctx context.Context, id string) (domain.CanonicalEntity, error)
+	// ListTenantOrganisationMappings backs organisation attestation
+	// (ADR-BCP-018 gate ORG-14): a generic Organisation is attested only
+	// through an ACTIVE mapping to the requesting tenant.
+	ListTenantOrganisationMappings(ctx context.Context, tenantID string, at time.Time) ([]domain.TenantOrganisationMapping, error)
 }
 
 // ContextResolutionRequest carries caller identity plus identifiers whose
@@ -38,10 +42,10 @@ type ContextResolutionRequest struct {
 	TenantID      string
 	LegalEntityID string
 	// OrganisationID, when supplied, must name a real, ACTIVE
-	// CanonicalEntity of an organisation EntityType
-	// (domain.OrganisationEntityTypes) owned by TenantID -- see Resolve's
-	// verification stage. Never trusted merely because it is
-	// well-formed (ADR-BCP-016).
+	// CanonicalEntity of an organisation EntityType that TenantID is
+	// attested for (domain.AttestOrganisation: an ACTIVE tenant mapping, or
+	// ownership of a tenant-owned buyer/supplier record). Never trusted
+	// merely because it is well-formed (ADR-BCP-016, ADR-BCP-018 ORG-14).
 	OrganisationID     string
 	MarketID           string
 	DigitalEstateID    string
@@ -114,14 +118,12 @@ func (r *AuthoritativeContextResolver) Resolve(ctx context.Context, req ContextR
 		if err != nil {
 			return resolver.Context{}, fmt.Errorf("resolve organisation: %w", err)
 		}
-		if !domain.OrganisationEntityTypes[organisation.EntityType] {
-			return resolver.Context{}, errors.New("requested organisation_id is not a canonical organisation entity")
+		mappings, err := r.authority.ListTenantOrganisationMappings(ctx, req.TenantID, r.now())
+		if err != nil {
+			return resolver.Context{}, fmt.Errorf("resolve tenant organisation mappings: %w", err)
 		}
-		if organisation.Status != "ACTIVE" {
-			return resolver.Context{}, errors.New("requested organisation is not active")
-		}
-		if organisation.OwnerTenantID != req.TenantID {
-			return resolver.Context{}, errors.New("requested organisation does not belong to the requesting tenant")
+		if err := domain.AttestOrganisation(organisation, req.TenantID, mappings, r.now()); err != nil {
+			return resolver.Context{}, err
 		}
 		evidence.OrganisationID = organisation.ID
 		evidence.Provenance["organisation_id"] = resolver.ContextSource{

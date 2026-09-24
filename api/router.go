@@ -27,7 +27,11 @@ type Dependencies struct {
 	WorkloadVerifier auth.TokenVerifier
 	Resolution       service.ResolutionService
 	Canonical        service.CanonicalEntityService
-	Identity         service.IdentityService
+	// OrganisationMappings backs organisation_id attestation in context
+	// resolution (ADR-BCP-018 ORG-14). Nil leaves every organisation_id
+	// request failing closed.
+	OrganisationMappings service.TenantOrganisationMappingReader
+	Identity             service.IdentityService
 	// Contexts backs PlatformContextHandler/CapabilityResolveHandler (the
 	// ADR-BCP-004/003 Runtime APIs). Nil is a valid zero value: both
 	// handlers return 503 CONTEXT_STORE_UNAVAILABLE rather than panicking
@@ -89,7 +93,7 @@ func New(dependencies Dependencies) http.Handler {
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
-	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store, Canonical: dependencies.Canonical.Repository}
+	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store, Canonical: dependencies.Canonical.Repository, Mappings: dependencies.OrganisationMappings}
 	r := chi.NewRouter()
 	r.Use(a.securityHeaders, a.correlation, a.requestLog)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
