@@ -48,7 +48,7 @@ func TestRegisterTenantRecordsUnverifiedOrganisationClaims(t *testing.T) {
 
 	organisationEvents := func(correlationID string) map[string]int {
 		t.Helper()
-		rows, err := store.pool.Query(ctx, `SELECT event_type FROM messaging.outbox WHERE correlation_id::text=$1 AND event_type LIKE 'com.baobab-platform.control-plane.%'`, correlationID)
+		rows, err := store.pool.Query(ctx, `SELECT event_type FROM messaging.outbox WHERE correlation_id::text=$1 AND event_type LIKE 'com.baobab-platform.control-plane.%' AND event_type NOT LIKE 'com.baobab-platform.control-plane.tenant.%'`, correlationID)
 		if err != nil {
 			t.Fatal(err)
 		}
