@@ -86,6 +86,19 @@ func (e *env) tenantWithOrganisation(t *testing.T, relType domain.PlatformRelati
 	return org, res, req
 }
 
+// tenantFor creates a tenant whose singular legal entity is legalEntityID.
+func (e *env) tenantFor(t *testing.T, legalEntityID string) string {
+	t.Helper()
+	tenantID := "tn_" + token()
+	if _, err := e.admin.Exec(e.ctx, `INSERT INTO legal_entities(legal_entity_id) VALUES ($1) ON CONFLICT DO NOTHING`, legalEntityID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.admin.Exec(e.ctx, `INSERT INTO tenants(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region) VALUES ($1,$2,'T','row_level_security','af-south-1')`, tenantID, legalEntityID); err != nil {
+		t.Fatal(err)
+	}
+	return tenantID
+}
+
 func (e *env) evidence() repository.Evidence {
 	return repository.Evidence{References: []string{"evd_" + token()}, VerifiedAt: e.at, Reason: "reviewed"}
 }

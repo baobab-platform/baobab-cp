@@ -392,12 +392,25 @@ func (r *PostgresRepository) ListPlatformAccountMemberships(ctx context.Context,
 // --- Tenant mappings -----------------------------------------------------
 
 func (r *PostgresRepository) ListTenantOrganisationMappings(ctx context.Context, tenantID string, at time.Time) ([]domain.TenantOrganisationMapping, error) {
-	rows, err := r.pool.Query(ctx, `
+	return r.queryTenantOrganisationMappings(ctx, `
 		SELECT tenant_organisation_mapping_id::text, tenant_id, organisation_id::text, mapping_role,
 			status, effective_from, effective_to, provenance, metadata
 		FROM registry.tenant_organisation_mapping
 		WHERE tenant_id=$1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
 		ORDER BY effective_from, tenant_organisation_mapping_id`, tenantID, at)
+}
+
+func (r *PostgresRepository) ListLiveTenantOrganisationMappings(ctx context.Context, tenantID string) ([]domain.TenantOrganisationMapping, error) {
+	return r.queryTenantOrganisationMappings(ctx, `
+		SELECT tenant_organisation_mapping_id::text, tenant_id, organisation_id::text, mapping_role,
+			status, effective_from, effective_to, provenance, metadata
+		FROM registry.tenant_organisation_mapping
+		WHERE tenant_id=$1 AND status IN `+liveStatuses+`
+		ORDER BY effective_from, tenant_organisation_mapping_id`, tenantID)
+}
+
+func (r *PostgresRepository) queryTenantOrganisationMappings(ctx context.Context, sql string, args ...any) ([]domain.TenantOrganisationMapping, error) {
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
