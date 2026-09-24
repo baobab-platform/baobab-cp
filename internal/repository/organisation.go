@@ -15,12 +15,14 @@ import (
 // organisation). Such changes need a governed transition, never an upsert.
 var ErrOrganisationConflict = errors.New("organisation identity conflict")
 
-// Evidence is the input to an explicit verification transition. VerifiedBy
-// must be derived from the authenticated principal, never from a payload.
+// Evidence is the input to an explicit verification transition. Who
+// verified is never part of it: verified_by is recorded from the
+// AuditActor of the authenticated caller.
 type Evidence struct {
 	References []string
-	VerifiedBy string
 	VerifiedAt time.Time
+	// Reason is recorded in the audit trail.
+	Reason string
 }
 
 // OrganisationRepository persists ADR-BCP-018 organisation-domain records.
@@ -29,23 +31,28 @@ type Evidence struct {
 // returns the existing live row unchanged instead of inserting a duplicate
 // or overwriting it. Verify* operations are the only way a record becomes
 // VERIFIED, and they require evidence.
+//
+// Every mutation takes the authenticated AuditActor. A mutation that
+// changes state writes an audit_events row and, for ADR-BCP-018 section
+// 124 transitions, a messaging.outbox event in the same transaction; a
+// replay that changes nothing writes neither (ADR-BCP-018 sections 124-131).
 type OrganisationRepository interface {
 	// EnsureOrganisation creates the profile if absent; an existing profile
 	// (including its verification state) is left untouched.
-	EnsureOrganisation(ctx context.Context, org domain.Organisation) (created bool, err error)
+	EnsureOrganisation(ctx context.Context, org domain.Organisation, actor AuditActor) (created bool, err error)
 	GetOrganisation(ctx context.Context, canonicalEntityID string) (*domain.Organisation, error)
 
 	// EnsureLegalEntityProfile creates the profile if absent. It returns
 	// ErrOrganisationConflict when the legal entity already belongs to a
 	// different organisation.
-	EnsureLegalEntityProfile(ctx context.Context, lep domain.LegalEntityProfile) (created bool, err error)
+	EnsureLegalEntityProfile(ctx context.Context, lep domain.LegalEntityProfile, actor AuditActor) (created bool, err error)
 	GetLegalEntityProfile(ctx context.Context, legalEntityID string) (*domain.LegalEntityProfile, error)
 	ListLegalEntityProfilesByOrganisation(ctx context.Context, organisationID string) ([]domain.LegalEntityProfile, error)
-	VerifyLegalEntityProfile(ctx context.Context, legalEntityID string, ev Evidence) error
+	VerifyLegalEntityProfile(ctx context.Context, legalEntityID string, ev Evidence, actor AuditActor) error
 
 	// EnsureCorporateRelationship is keyed by (source, target, type).
-	EnsureCorporateRelationship(ctx context.Context, rel domain.CorporateRelationship) (id string, err error)
-	VerifyCorporateRelationship(ctx context.Context, id string, ev Evidence) error
+	EnsureCorporateRelationship(ctx context.Context, rel domain.CorporateRelationship, actor AuditActor) (id string, err error)
+	VerifyCorporateRelationship(ctx context.Context, id string, ev Evidence, actor AuditActor) error
 	ListCorporateRelationshipsByOrganisation(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateRelationship, error)
 	// ListCorporateControlAncestry returns every consequential (VERIFIED,
 	// ACTIVE, in-window) OWNS/CONTROLS edge on a directed path into
@@ -53,14 +60,14 @@ type OrganisationRepository interface {
 	ListCorporateControlAncestry(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateRelationship, error)
 
 	// CreateCorporateGroup is idempotent on the caller-supplied group id.
-	CreateCorporateGroup(ctx context.Context, g domain.CorporateGroup) error
+	CreateCorporateGroup(ctx context.Context, g domain.CorporateGroup, actor AuditActor) error
 	// EnsureCorporateGroupMembership is keyed by (group, organisation).
-	EnsureCorporateGroupMembership(ctx context.Context, m domain.CorporateGroupMembership) (id string, err error)
+	EnsureCorporateGroupMembership(ctx context.Context, m domain.CorporateGroupMembership, actor AuditActor) (id string, err error)
 	ListCorporateGroupMemberships(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateGroupMembership, error)
 
 	// EnsurePlatformRelationship is keyed by (organisation, platform, type).
-	EnsurePlatformRelationship(ctx context.Context, rel domain.PlatformRelationship) (id string, err error)
-	VerifyPlatformRelationship(ctx context.Context, id string, ev Evidence) error
+	EnsurePlatformRelationship(ctx context.Context, rel domain.PlatformRelationship, actor AuditActor) (id string, err error)
+	VerifyPlatformRelationship(ctx context.Context, id string, ev Evidence, actor AuditActor) error
 	// ListPlatformRelationships returns the relationships in their effective
 	// window at at, whatever their status. Callers decide consequence with
 	// PlatformRelationship.IsConsequential.
@@ -70,13 +77,13 @@ type OrganisationRepository interface {
 	ListPlatformOwnerOrganisations(ctx context.Context, platformID string, at time.Time) (map[string]struct{}, error)
 
 	// CreatePlatformAccount is idempotent on the caller-supplied account id.
-	CreatePlatformAccount(ctx context.Context, acct domain.PlatformAccount) error
+	CreatePlatformAccount(ctx context.Context, acct domain.PlatformAccount, actor AuditActor) error
 	// EnsurePlatformAccountMembership is keyed by (account, organisation, role).
-	EnsurePlatformAccountMembership(ctx context.Context, m domain.PlatformAccountMembership) (id string, err error)
+	EnsurePlatformAccountMembership(ctx context.Context, m domain.PlatformAccountMembership, actor AuditActor) (id string, err error)
 	ListPlatformAccountMemberships(ctx context.Context, accountID string, at time.Time) ([]domain.PlatformAccountMembership, error)
 
 	// EnsureTenantOrganisationMapping is keyed by (tenant, organisation, role).
-	EnsureTenantOrganisationMapping(ctx context.Context, m domain.TenantOrganisationMapping) (id string, err error)
+	EnsureTenantOrganisationMapping(ctx context.Context, m domain.TenantOrganisationMapping, actor AuditActor) (id string, err error)
 	ListTenantOrganisationMappings(ctx context.Context, tenantID string, at time.Time) ([]domain.TenantOrganisationMapping, error)
 	ListTenantLegalEntityMappings(ctx context.Context, tenantID string, at time.Time) ([]domain.TenantLegalEntityMapping, error)
 	// EnsureDefaultTenantLegalEntityMapping makes legalEntityID the tenant's
@@ -84,5 +91,5 @@ type OrganisationRepository interface {
 	// compatibility projection, in one transaction. Replaying it for the
 	// current default is a no-op; a different legal entity ends the previous
 	// default (history is kept) before the new one is recorded.
-	EnsureDefaultTenantLegalEntityMapping(ctx context.Context, tenantID, legalEntityID, provenance string, at time.Time) (id string, err error)
+	EnsureDefaultTenantLegalEntityMapping(ctx context.Context, tenantID, legalEntityID, provenance string, at time.Time, actor AuditActor) (id string, err error)
 }

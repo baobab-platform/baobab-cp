@@ -77,7 +77,7 @@ func (e *env) tenantWithOrganisation(t *testing.T, relType domain.PlatformRelati
 	req = ProvisionRequest{
 		TenantID: tenantID, CanonicalEntityID: org, LegalEntityID: le, DisplayName: "Org " + org[:8],
 		SourceAuthority: "control-plane-admission", PlatformRelType: relType, PlatformRelAuthority: "platform-governance",
-		BasisRelationshipID: basis, AdmissionDecisionID: "adm_" + token(), EffectiveFrom: e.at,
+		BasisRelationshipID: basis, AdmissionDecisionID: "adm_" + token(), EffectiveFrom: e.at, Actor: actor(),
 	}
 	res, err := (&Provisioner{Orgs: e.repo}).ProvisionTenantOrganisation(e.ctx, req)
 	if err != nil {
@@ -87,7 +87,29 @@ func (e *env) tenantWithOrganisation(t *testing.T, relType domain.PlatformRelati
 }
 
 func (e *env) evidence() repository.Evidence {
-	return repository.Evidence{References: []string{"evd_" + token()}, VerifiedBy: "principal:reviewer", VerifiedAt: e.at}
+	return repository.Evidence{References: []string{"evd_" + token()}, VerifiedAt: e.at, Reason: "reviewed"}
+}
+
+func actor() repository.AuditActor {
+	return repository.AuditActor{ActorID: "principal:reviewer", ActorType: "human", CorrelationID: domain.NewUUIDv7()}
+}
+
+func (e *env) outboxTypes(t *testing.T, correlationID string) []string {
+	t.Helper()
+	rows, err := e.admin.Query(e.ctx, `SELECT event_type FROM messaging.outbox WHERE correlation_id=$1::uuid ORDER BY occurred_at, event_type`, correlationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var typ string
+		if err := rows.Scan(&typ); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, typ)
+	}
+	return out
 }
 
 func TestProvisioningIsIdempotentAndNeverVerifies(t *testing.T) {
@@ -96,8 +118,15 @@ func TestProvisioningIsIdempotentAndNeverVerifies(t *testing.T) {
 	if !first.OrganisationCreated || !first.LegalEntityProfileCreated {
 		t.Fatalf("first provision should create profiles: %+v", first)
 	}
+	if got := e.outboxTypes(t, req.Actor.CorrelationID); len(got) != 3 {
+		// organisation.created + tenant-legal-entity-mapping.activated +
+		// tenant-organisation-mapping.activated; the PENDING platform
+		// relationship is audited but publishes nothing.
+		t.Fatalf("first provision published %v; want exactly three activation events", got)
+	}
 	p := &Provisioner{Orgs: e.repo}
 	for i := 0; i < 3; i++ {
+		req.Actor = actor()
 		again, err := p.ProvisionTenantOrganisation(e.ctx, req)
 		if err != nil {
 			t.Fatalf("replay %d: %v", i, err)
@@ -107,6 +136,9 @@ func TestProvisioningIsIdempotentAndNeverVerifies(t *testing.T) {
 			again.TenantOrganisationMapping != first.TenantOrganisationMapping ||
 			again.PlatformRelationshipID != first.PlatformRelationshipID {
 			t.Fatalf("replay %d diverged: %+v vs %+v", i, again, first)
+		}
+		if got := e.outboxTypes(t, req.Actor.CorrelationID); len(got) != 0 {
+			t.Fatalf("replay %d published %v; a replay must publish nothing", i, got)
 		}
 	}
 	for table, where := range map[string]string{
@@ -135,6 +167,7 @@ func TestPrivilegedRelationshipsNeedServerAuthority(t *testing.T) {
 		_, err := p.ProvisionTenantOrganisation(e.ctx, ProvisionRequest{
 			TenantID: "tn_x", CanonicalEntityID: "00000000-0000-0000-0000-000000000000", LegalEntityID: "LE-X",
 			DisplayName: "X", SourceAuthority: "applicant-submission", PlatformRelType: typ, PlatformRelAuthority: "applicant-submission",
+			Actor: actor(),
 		})
 		if err == nil || !strings.Contains(err.Error(), "server-side source_authority") {
 			t.Errorf("%s from an applicant must be refused before any write, got %v", typ, err)
@@ -154,7 +187,7 @@ func TestInternalEligibilityFollowsVerifiedDirectedOwnership(t *testing.T) {
 	sub := e.canonicalOrganisation(t)
 	ownerRel := domain.PlatformRelationship{PlatformID: platform, OrganisationID: owner, RelationshipType: domain.PlatformRelOwner,
 		VerificationState: domain.VerificationPendingReview, Status: domain.RelationshipStatusPending, EffectiveFrom: e.at, SourceAuthority: "platform-governance"}
-	ownerRelID, err := e.repo.EnsurePlatformRelationship(e.ctx, ownerRel)
+	ownerRelID, err := e.repo.EnsurePlatformRelationship(e.ctx, ownerRel, actor())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +195,7 @@ func TestInternalEligibilityFollowsVerifiedDirectedOwnership(t *testing.T) {
 		id, err := e.repo.EnsureCorporateRelationship(e.ctx, domain.CorporateRelationship{
 			SourceOrganisationID: src, TargetOrganisationID: dst, RelationshipType: domain.CorpRelOwns,
 			DirectOrDerived: domain.CorporateFactDirect, VerificationState: domain.VerificationPendingReview,
-			Status: domain.RelationshipStatusPending, EffectiveFrom: e.at, SourceAuthority: "shared-governance"})
+			Status: domain.RelationshipStatusPending, EffectiveFrom: e.at, SourceAuthority: "shared-governance"}, actor())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -171,7 +204,7 @@ func TestInternalEligibilityFollowsVerifiedDirectedOwnership(t *testing.T) {
 	e1, e2 := edge(owner, holding), edge(holding, sub)
 	affiliateID, err := e.repo.EnsurePlatformRelationship(e.ctx, domain.PlatformRelationship{PlatformID: platform, OrganisationID: sub,
 		RelationshipType: domain.PlatformRelGroupAffiliate, BasisRelationshipID: e2, VerificationState: domain.VerificationPendingReview,
-		Status: domain.RelationshipStatusPending, EffectiveFrom: e.at, SourceAuthority: "platform-governance"})
+		Status: domain.RelationshipStatusPending, EffectiveFrom: e.at, SourceAuthority: "platform-governance"}, actor())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,15 +218,15 @@ func TestInternalEligibilityFollowsVerifiedDirectedOwnership(t *testing.T) {
 	}
 	check("nothing verified", false)
 	for _, id := range []string{e1, e2} {
-		if err := e.repo.VerifyCorporateRelationship(e.ctx, id, e.evidence()); err != nil {
+		if err := e.repo.VerifyCorporateRelationship(e.ctx, id, e.evidence(), actor()); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := e.repo.VerifyPlatformRelationship(e.ctx, affiliateID, e.evidence()); err != nil {
+	if err := e.repo.VerifyPlatformRelationship(e.ctx, affiliateID, e.evidence(), actor()); err != nil {
 		t.Fatal(err)
 	}
 	check("owner's platform relationship still unverified", false)
-	if err := e.repo.VerifyPlatformRelationship(e.ctx, ownerRelID, e.evidence()); err != nil {
+	if err := e.repo.VerifyPlatformRelationship(e.ctx, ownerRelID, e.evidence(), actor()); err != nil {
 		t.Fatal(err)
 	}
 	check("two-hop verified chain from verified owner", true)
@@ -202,16 +235,16 @@ func TestInternalEligibilityFollowsVerifiedDirectedOwnership(t *testing.T) {
 	// thereby first-party.
 	parentOfOwner := e.canonicalOrganisation(t)
 	up := edge(parentOfOwner, owner)
-	if err := e.repo.VerifyCorporateRelationship(e.ctx, up, e.evidence()); err != nil {
+	if err := e.repo.VerifyCorporateRelationship(e.ctx, up, e.evidence(), actor()); err != nil {
 		t.Fatal(err)
 	}
 	fake, err := e.repo.EnsurePlatformRelationship(e.ctx, domain.PlatformRelationship{PlatformID: platform, OrganisationID: parentOfOwner,
 		RelationshipType: domain.PlatformRelGroupAffiliate, BasisRelationshipID: up, VerificationState: domain.VerificationPendingReview,
-		Status: domain.RelationshipStatusPending, EffectiveFrom: e.at, SourceAuthority: "platform-governance"})
+		Status: domain.RelationshipStatusPending, EffectiveFrom: e.at, SourceAuthority: "platform-governance"}, actor())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e.repo.VerifyPlatformRelationship(e.ctx, fake, e.evidence()); err != nil {
+	if err := e.repo.VerifyPlatformRelationship(e.ctx, fake, e.evidence(), actor()); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := resolver.ResolveInternalEligibility(e.ctx, parentOfOwner, later); err != nil || got {

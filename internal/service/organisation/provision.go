@@ -44,6 +44,9 @@ type ProvisionRequest struct {
 	AdmissionDecisionID string
 	EffectiveFrom       time.Time
 	SkipPlatformRel     bool
+	// Actor is the authenticated principal the change is audited against
+	// (ADR-BCP-018 section 131). Required.
+	Actor repository.AuditActor
 }
 
 // ProvisionResult names the rows provisioning converged on.
@@ -94,7 +97,7 @@ func (p *Provisioner) ProvisionTenantOrganisation(ctx context.Context, req Provi
 		SourceAuthority:   req.SourceAuthority,
 		Status:            "ACTIVE",
 		EffectiveFrom:     req.EffectiveFrom,
-	})
+	}, req.Actor)
 	if err != nil {
 		return res, fmt.Errorf("ensure organisation: %w", err)
 	}
@@ -109,12 +112,12 @@ func (p *Provisioner) ProvisionTenantOrganisation(ctx context.Context, req Provi
 		SourceAuthority:             req.SourceAuthority,
 		VerificationState:           domain.VerificationUnverified,
 		EffectiveFrom:               req.EffectiveFrom,
-	})
+	}, req.Actor)
 	if err != nil {
 		return res, fmt.Errorf("ensure legal entity profile: %w", err)
 	}
 
-	if res.TenantLegalEntityMappingID, err = p.Orgs.EnsureDefaultTenantLegalEntityMapping(ctx, req.TenantID, req.LegalEntityID, req.SourceAuthority, req.EffectiveFrom); err != nil {
+	if res.TenantLegalEntityMappingID, err = p.Orgs.EnsureDefaultTenantLegalEntityMapping(ctx, req.TenantID, req.LegalEntityID, req.SourceAuthority, req.EffectiveFrom, req.Actor); err != nil {
 		return res, fmt.Errorf("default tenant legal entity mapping: %w", err)
 	}
 
@@ -125,7 +128,7 @@ func (p *Provisioner) ProvisionTenantOrganisation(ctx context.Context, req Provi
 		Status:         domain.RelationshipStatusActive,
 		EffectiveFrom:  req.EffectiveFrom,
 		Provenance:     req.SourceAuthority,
-	}); err != nil {
+	}, req.Actor); err != nil {
 		return res, fmt.Errorf("tenant organisation mapping: %w", err)
 	}
 
@@ -140,7 +143,7 @@ func (p *Provisioner) ProvisionTenantOrganisation(ctx context.Context, req Provi
 			BasisRelationshipID: req.BasisRelationshipID,
 			AdmissionDecisionID: req.AdmissionDecisionID,
 			SourceAuthority:     req.PlatformRelAuthority,
-		}); err != nil {
+		}, req.Actor); err != nil {
 			return res, fmt.Errorf("platform relationship: %w", err)
 		}
 	}

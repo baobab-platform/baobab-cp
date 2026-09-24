@@ -17,7 +17,12 @@ import (
 )
 
 var (
-	typePattern = regexp.MustCompile(`^com\.nabhold\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.v[1-9][0-9]*$`)
+	// Canonical event types follow ADR-SHARED-008 (com.baobab-platform.*),
+	// the only form contracts/events/v1/envelope.schema.json accepts. The
+	// legacy com.nabhold.* prefix is still accepted because events shipped
+	// before the GitHub organisation rename use it; migrating those, and
+	// their consumers, is a separate change. New event types must be canonical.
+	typePattern = regexp.MustCompile(`^com\.(?:baobab-platform|nabhold)\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.v[1-9][0-9]*$`)
 	uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
 
@@ -101,7 +106,7 @@ type Params struct {
 // default tenant").
 func New(p Params) (Envelope, error) {
 	if !typePattern.MatchString(p.Type) {
-		return Envelope{}, errors.New("type must match ^com\\.nabhold\\.<domain>.<event>.vN$")
+		return Envelope{}, errors.New("type must match ^com\\.baobab-platform\\.<domain>.<event>.vN$ (or the legacy com.nabhold prefix)")
 	}
 	if p.Source == "" {
 		return Envelope{}, errors.New("source is required")

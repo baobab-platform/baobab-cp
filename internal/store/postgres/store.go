@@ -150,7 +150,7 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 	}
 	// ADR-BCP-018: ensure organisation canonical entity, profile, and default
 	// tenant_legal_entity_mapping in the same registration transaction.
-	if err = insertOrganisationOnRegister(ctx, tx, c); err != nil {
+	if err = s.insertOrganisationOnRegister(ctx, tx, c, metadata, key); err != nil {
 		return domain.Operation{}, err
 	}
 	for _, product := range c.RequestedProducts {

@@ -31,19 +31,51 @@ func TestRegisterTenantRecordsUnverifiedOrganisationClaims(t *testing.T) {
 	}
 
 	legalEntityID := "LE-" + strings.ToUpper(strings.ReplaceAll(domain.NewUUIDv7(), "-", "")[:16])
-	register := func(displayName string) string {
+	register := func(displayName string) (string, string) {
 		t.Helper()
 		tenantID := domain.NewTenantID()
+		correlationID := domain.NewUUIDv7()
 		command := domain.RegisterTenant{LegalEntityID: legalEntityID, TenantID: tenantID, DisplayName: displayName,
 			IsolationStrategy: "row_level_security", ResidencyRegion: "af-south-1"}
-		metadata := basestore.RequestMetadata{ActorID: "integration-test", ActorType: "workload", CorrelationID: "9f8b6e2a-0000-4000-8000-000000000045"}
+		metadata := basestore.RequestMetadata{ActorID: "integration-test", ActorType: "workload", CorrelationID: correlationID}
 		if _, err := store.RegisterTenant(ctx, "org-register-"+tenantID, metadata, command); err != nil {
 			t.Fatalf("register tenant: %v", err)
 		}
-		return tenantID
+		return tenantID, correlationID
 	}
-	first := register("Applicant-supplied name")
-	second := register("Different name from a second registration")
+	first, firstCorrelation := register("Applicant-supplied name")
+	second, secondCorrelation := register("Different name from a second registration")
+
+	organisationEvents := func(correlationID string) map[string]int {
+		t.Helper()
+		rows, err := store.pool.Query(ctx, `SELECT event_type FROM messaging.outbox WHERE correlation_id::text=$1 AND event_type LIKE 'com.baobab-platform.control-plane.%'`, correlationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		got := map[string]int{}
+		for rows.Next() {
+			var typ string
+			if err := rows.Scan(&typ); err != nil {
+				t.Fatal(err)
+			}
+			got[typ]++
+		}
+		return got
+	}
+	created, legalMapping, orgMapping := "com.baobab-platform.control-plane.organisation.created.v1",
+		"com.baobab-platform.control-plane.tenant-legal-entity-mapping.activated.v1",
+		"com.baobab-platform.control-plane.tenant-organisation-mapping.activated.v1"
+	if got := organisationEvents(firstCorrelation); len(got) != 3 || got[created] != 1 || got[legalMapping] != 1 || got[orgMapping] != 1 {
+		t.Fatalf("first registration published %v; want organisation.created and both mapping activations once", got)
+	}
+	if got := organisationEvents(secondCorrelation); len(got) != 2 || got[created] != 0 || got[legalMapping] != 1 || got[orgMapping] != 1 {
+		t.Fatalf("second registration published %v; it reuses the organisation, so only its mappings activate", got)
+	}
+	var audited int
+	if err := store.pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE correlation_id::text=$1 AND action LIKE 'organisation.%'`, firstCorrelation).Scan(&audited); err != nil || audited != 1 {
+		t.Fatalf("organisation creation audit rows = %d, %v; want 1", audited, err)
+	}
 
 	var orgID, orgState, orgName, orgSource, lepState, lepStatus, lepOrg string
 	if err := store.pool.QueryRow(ctx, `
