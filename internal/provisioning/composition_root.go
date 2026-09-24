@@ -48,6 +48,9 @@ type ContextAuthorityRepo interface {
 	// GetCanonicalEntity backs the OrganisationID resolution stage
 	// (ADR-BCP-016).
 	GetCanonicalEntity(ctx context.Context, id string) (domain.CanonicalEntity, error)
+	// ListTenantOrganisationMappings backs organisation attestation
+	// (ADR-BCP-018 gate ORG-14).
+	ListTenantOrganisationMappings(ctx context.Context, tenantID string, at time.Time) ([]domain.TenantOrganisationMapping, error)
 }
 
 // ContextAuthorityAdapter composes store.TenantStore with
@@ -77,6 +80,10 @@ func (a ContextAuthorityAdapter) GetIsolationProfile(ctx context.Context, profil
 }
 func (a ContextAuthorityAdapter) GetCanonicalEntity(ctx context.Context, id string) (domain.CanonicalEntity, error) {
 	return a.Repo.GetCanonicalEntity(ctx, id)
+}
+
+func (a ContextAuthorityAdapter) ListTenantOrganisationMappings(ctx context.Context, tenantID string, at time.Time) ([]domain.TenantOrganisationMapping, error) {
+	return a.Repo.ListTenantOrganisationMappings(ctx, tenantID, at)
 }
 
 var _ ContextAuthority = ContextAuthorityAdapter{}

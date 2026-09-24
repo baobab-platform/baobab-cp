@@ -41,8 +41,8 @@ type platformContextResolveRequest struct {
 	// token does carry one.
 	TenantID string `json:"tenant_id"`
 	// OrganisationID, when supplied, must name a real, ACTIVE,
-	// organisation-kind CanonicalEntity owned by the resolved tenant
-	// (ADR-BCP-016) -- verified by ContextResolutionService.Resolve, never
+	// organisation-kind CanonicalEntity the resolved tenant is attested for
+	// (ADR-BCP-016, ADR-BCP-018 ORG-14) -- verified by ContextResolutionService.Resolve, never
 	// trusted merely because it is well-formed. The calling workload (e.g.
 	// baobab-trade, resolving its own authenticated buyer's organisation)
 	// asserts this value itself; CP never parses it out of the workload's

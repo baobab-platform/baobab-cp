@@ -152,6 +152,7 @@ func TestContextResolutionServiceResolvesOrganisationID(t *testing.T) {
 		Identity:  identityServiceFor(repository.NewInMemoryRepository()),
 		Tenants:   &fakeTenantStore{tenant: activeTenant()},
 		Canonical: canonical,
+		Mappings:  tenantMappings(nil),
 	}
 	_, resolved, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "org-1", "correlation-123", time.Now())
 	if err != nil {
@@ -192,9 +193,55 @@ func TestContextResolutionServiceRejectsOrganisationID(t *testing.T) {
 				Identity:  identityServiceFor(repository.NewInMemoryRepository()),
 				Tenants:   &fakeTenantStore{tenant: activeTenant()},
 				Canonical: canonical,
+				Mappings:  tenantMappings(nil),
 			}
 			if _, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "org-1", "correlation-123", time.Now()); err == nil {
 				t.Fatalf("expected organisation resolution to fail closed for %q", tc.name)
+			}
+		})
+	}
+}
+
+// tenantMappings is a fixed TenantOrganisationMappingReader.
+type tenantMappings []domain.TenantOrganisationMapping
+
+func (m tenantMappings) ListTenantOrganisationMappings(context.Context, string, time.Time) ([]domain.TenantOrganisationMapping, error) {
+	return m, nil
+}
+
+// TestContextResolutionServiceAttestsGenericOrganisationByMapping proves
+// ADR-BCP-018 gate ORG-14 on this resolver: a platform-scoped ORGANISATION is
+// attested only by an ACTIVE mapping to the requesting tenant, never by
+// having been registered by it, and a supplied organisation_id fails closed
+// when no mapping reader is configured.
+func TestContextResolutionServiceAttestsGenericOrganisationByMapping(t *testing.T) {
+	now := time.Now().UTC()
+	canonical := repository.NewCanonicalRepository()
+	canonical.Entities["org-1"] = canonicalOrganisation("org-1", domain.EntityTypeOrganisation, "ACTIVE", "tenant-123")
+	mapped := tenantMappings{{TenantID: "tenant-123", OrganisationID: "org-1", Status: domain.RelationshipStatusActive, EffectiveFrom: now.Add(-time.Hour)}}
+	ended := tenantMappings{{TenantID: "tenant-123", OrganisationID: "org-1", Status: domain.RelationshipStatusEnded, EffectiveFrom: now.Add(-time.Hour)}}
+	for name, tc := range map[string]struct {
+		mappings TenantOrganisationMappingReader
+		allow    bool
+	}{
+		"active mapping":                 {mapped, true},
+		"registering tenant, no mapping": {tenantMappings(nil), false},
+		"ended mapping":                  {ended, false},
+		"no mapping reader":              {nil, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc := ContextResolutionService{
+				Identity:  identityServiceFor(repository.NewInMemoryRepository()),
+				Tenants:   &fakeTenantStore{tenant: activeTenant()},
+				Canonical: canonical,
+				Mappings:  tc.mappings,
+			}
+			_, resolved, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), "tenant-123", "org-1", "correlation-123", now)
+			if tc.allow && (err != nil || resolved.OrganisationID != "org-1") {
+				t.Fatalf("expected attestation, got %v", err)
+			}
+			if !tc.allow && err == nil {
+				t.Fatal("expected organisation resolution to fail closed")
 			}
 		})
 	}

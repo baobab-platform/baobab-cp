@@ -52,6 +52,16 @@ type ContextResolutionService struct {
 	// error rather than silently dropping an unverified organisationID if
 	// one is supplied while this is unset.
 	Canonical repository.CanonicalEntityRepository
+	// Mappings backs organisation attestation (ADR-BCP-018 gate ORG-14,
+	// domain.AttestOrganisation). Like Canonical it is only consulted when
+	// an organisationID is supplied, and Resolve fails closed if it is unset.
+	Mappings TenantOrganisationMappingReader
+}
+
+// TenantOrganisationMappingReader lists the TenantOrganisationMappings of
+// one tenant in effect at a point in time.
+type TenantOrganisationMappingReader interface {
+	ListTenantOrganisationMappings(ctx context.Context, tenantID string, at time.Time) ([]domain.TenantOrganisationMapping, error)
 }
 
 // Resolve mirrors auth.NewOperationContext's signature and return shape
@@ -98,25 +108,26 @@ func (s ContextResolutionService) Resolve(ctx context.Context, principal auth.Pr
 	trustedContext.LegalEntityID = tenant.LegalEntityID
 	// ADR-BCP-016: a caller-asserted organisationID is never trusted merely
 	// because it is well-formed -- it must name a real, ACTIVE,
-	// organisation-kind CanonicalEntity owned by the resolved tenant,
-	// mirroring AuthoritativeContextResolver.Resolve's identical
+	// organisation-kind CanonicalEntity the resolved tenant is attested for
+	// (ADR-BCP-018 ORG-14, domain.AttestOrganisation), mirroring AuthoritativeContextResolver.Resolve's identical
 	// OrganisationID stage (internal/provisioning/context_resolver.go).
 	if organisationID != "" {
 		if s.Canonical == nil {
 			return nil, domain.Context{}, errors.New("canonical entity repository is required to verify organisation_id")
 		}
+		if s.Mappings == nil {
+			return nil, domain.Context{}, errors.New("tenant organisation mappings are required to verify organisation_id")
+		}
 		organisation, err := s.Canonical.GetCanonicalEntity(ctx, organisationID)
 		if err != nil {
 			return nil, domain.Context{}, fmt.Errorf("resolve organisation: %w", err)
 		}
-		if !domain.OrganisationEntityTypes[organisation.EntityType] {
-			return nil, domain.Context{}, errors.New("requested organisation_id is not a canonical organisation entity")
+		mappings, err := s.Mappings.ListTenantOrganisationMappings(ctx, tenantID, now)
+		if err != nil {
+			return nil, domain.Context{}, fmt.Errorf("resolve tenant organisation mappings: %w", err)
 		}
-		if organisation.Status != "ACTIVE" {
-			return nil, domain.Context{}, errors.New("requested organisation is not active")
-		}
-		if organisation.OwnerTenantID != tenantID {
-			return nil, domain.Context{}, errors.New("requested organisation does not belong to the requesting tenant")
+		if err := domain.AttestOrganisation(organisation, tenantID, mappings, now); err != nil {
+			return nil, domain.Context{}, err
 		}
 		trustedContext.OrganisationID = organisation.ID
 		trustedContext.Provenance["organisation_id"] = domain.ContextSource{
