@@ -65,6 +65,17 @@ type ContextResolutionService struct {
 	// Organisation (ADR-BCP-018 gate ORG-10). It is only consulted by
 	// ResolveWithIamOrganisation, which fails closed when it is unset.
 	IamOrganisations IamOrganisationResolver
+	// CounterpartyRoles lets a generic ORGANISATION satisfy an expected
+	// BUYER_ORGANISATION or SUPPLIER_ORGANISATION kind by holding the
+	// matching counterparty role for the tenant (ADR-BCP-024 clause 8,
+	// ADR-BCP-018 gate ORG-13). Nil keeps exact-kind attestation strict.
+	CounterpartyRoles CounterpartyRoleReader
+}
+
+// CounterpartyRoleReader reports whether an organisation holds an ACTIVE,
+// in-effect counterparty role for a tenant.
+type CounterpartyRoleReader interface {
+	HoldsCounterpartyRole(ctx context.Context, organisationID, tenantID, role string, at time.Time) (bool, error)
 }
 
 // IamOrganisationResolver resolves IAM organisation evidence through an
@@ -197,8 +208,10 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 		// ADR-BCP-024: the kind is compared only after attestation, so a
 		// caller learns nothing about an organisation its tenant is not
 		// attested for.
-		if expectedOrganisationType != "" && organisation.EntityType != expectedOrganisationType {
-			return nil, domain.Context{}, errors.New("requested organisation does not match expected_organisation_type")
+		if expectedOrganisationType != "" {
+			if err := s.attestKind(ctx, organisation, tenantID, expectedOrganisationType, now); err != nil {
+				return nil, domain.Context{}, err
+			}
 		}
 		trustedContext.OrganisationID = organisation.ID
 		trustedContext.Provenance["organisation_id"] = domain.ContextSource{
@@ -213,4 +226,26 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 		return nil, domain.Context{}, err
 	}
 	return auth.WithOperationContext(opCtx, trustedContext), trustedContext, nil
+}
+
+// attestKind enforces ADR-BCP-024's exact kind. A legacy ADR-BCP-016 kind
+// must match exactly, so a supplier record can never stand in for a buyer.
+// A generic ORGANISATION has no commercial kind of its own (ADR-BCP-018
+// section 7); it satisfies BUYER_ORGANISATION or SUPPLIER_ORGANISATION only
+// while it holds the matching ACTIVE role for this tenant (clause 8).
+func (s ContextResolutionService) attestKind(ctx context.Context, organisation domain.CanonicalEntity, tenantID, expected string, now time.Time) error {
+	if organisation.EntityType == expected {
+		return nil
+	}
+	role := domain.LegacyOrganisationRole[expected]
+	if organisation.EntityType == domain.EntityTypeOrganisation && role != "" && s.CounterpartyRoles != nil {
+		held, err := s.CounterpartyRoles.HoldsCounterpartyRole(ctx, organisation.ID, tenantID, role, now)
+		if err != nil {
+			return fmt.Errorf("resolve counterparty role: %w", err)
+		}
+		if held {
+			return nil
+		}
+	}
+	return errors.New("requested organisation does not match expected_organisation_type")
 }

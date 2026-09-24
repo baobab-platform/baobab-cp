@@ -8,9 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nabhold/baobab-cp/internal/auth"
 	"github.com/nabhold/baobab-cp/internal/contracttest"
 	"github.com/nabhold/baobab-cp/internal/domain"
 	"github.com/nabhold/baobab-cp/internal/repository"
+	"github.com/nabhold/baobab-cp/internal/service"
+	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
 // ADR-BCP-018 gate ORG-13 against real PostgreSQL. The database is shared
@@ -405,4 +408,48 @@ func TestCounterpartyRecordsConformToSharedContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	contracttest.ValidateJSON(t, candidateSchema, decided)
+}
+
+// TestBuyerKindAttestedByCounterpartyRole is ADR-BCP-024 clause 8 end to
+// end against PostgreSQL: an admitted generic Organisation, mapped to its
+// tenant, is attested as a BUYER_ORGANISATION only while it holds an ACTIVE
+// BUYER role for that tenant.
+func TestBuyerKindAttestedByCounterpartyRole(t *testing.T) {
+	e := newEnv(t)
+	tenants, err := postgres.Open(e.ctx, os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(tenants.Close)
+	org, _, req := e.tenantWithOrganisation(t, domain.PlatformRelExternalClient, "")
+	if _, err := e.admin.Exec(e.ctx, `UPDATE tenants SET observed_state='active' WHERE tenant_id=$1`, req.TenantID); err != nil {
+		t.Fatal(err)
+	}
+	svc := service.ContextResolutionService{
+		Identity: service.IdentityService{Repository: repository.NewInMemoryRepository(), Provision: service.WorkloadOnlyProvisioningPolicy},
+		Tenants:  tenants, Canonical: e.repo, Mappings: e.repo, CounterpartyRoles: e.repo,
+	}
+	attest := func() error {
+		principal := auth.Principal{Subject: "baobab-trade", Issuer: "https://iam.baobab-platform.test/realms/baobab", ActorType: "workload",
+			TenantID: req.TenantID, ClientID: "baobab-trade", TokenID: "token-" + token()}
+		_, _, err := svc.ResolveExpectedOrganisationKind(e.ctx, principal, req.TenantID, org, domain.EntityTypeBuyerOrganisation, domain.NewUUIDv7(), time.Now().UTC())
+		return err
+	}
+	if attest() == nil {
+		t.Fatal("an organisation without a BUYER role must not be attested as a buyer")
+	}
+	role, _, err := e.repo.EnsureCounterpartyRole(e.ctx, domain.CounterpartyRole{OrganisationID: org, TenantID: req.TenantID,
+		Role: domain.CounterpartyRoleBuyer, EffectiveFrom: time.Now().UTC().Add(-time.Minute), SourceAuthority: "test"}, actor())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := attest(); err != nil {
+		t.Fatalf("an ACTIVE BUYER role for the tenant attests the buyer kind: %v", err)
+	}
+	if err := e.repo.EndCounterpartyRole(e.ctx, role, time.Now().UTC(), "closed", actor()); err != nil {
+		t.Fatal(err)
+	}
+	if attest() == nil {
+		t.Fatal("an ended BUYER role must no longer attest the buyer kind")
+	}
 }

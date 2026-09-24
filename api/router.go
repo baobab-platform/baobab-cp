@@ -106,7 +106,7 @@ func New(dependencies Dependencies) http.Handler {
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
-	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store, Canonical: dependencies.Canonical.Repository, Mappings: dependencies.OrganisationMappings, IamOrganisations: dependencies.IamOrganisations}
+	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store, Canonical: dependencies.Canonical.Repository, Mappings: dependencies.OrganisationMappings, IamOrganisations: dependencies.IamOrganisations, CounterpartyRoles: dependencies.Counterparties}
 	r := chi.NewRouter()
 	r.Use(a.securityHeaders, a.correlation, a.requestLog)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
