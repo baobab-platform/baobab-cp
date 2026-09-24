@@ -1,50 +1,22 @@
-// Target path: baobab-platform/baobab-cp/internal/domain/organisation.go
+// Target path: internal/domain/organisation.go
 //
 // ADR-BCP-018 — Canonical Organisation, Corporate Group, Platform Account
-// and Tenant Relationship Model.
+// and Tenant Relationship Model (runtime domain types).
 //
-// Purpose
-// -------
-// Runtime domain types for the generic Organisation model and related
-// relationship / mapping concepts. Control Plane is the runtime authority;
-// Shared is the contract/schema authority.
+// Control Plane is the runtime authority; Shared is the contract authority.
+// Vocabulary and required fields align with contracts/organisation/v1.
 //
-// Design constraints (normative)
-// ------------------------------
-//   - Organisation != LegalEntity != Tenant
-//   - Organisation is a profile/extension of CanonicalEntity, not a parallel
-//     identity system. Identity is always canonical_entity_id.
-//   - BUYER_ORGANISATION and SUPPLIER_ORGANISATION (ADR-BCP-016 / ADR-0006)
-//     remain valid specialised EntityTypes; they migrate forward without
-//     destructive rewrite.
-//   - CorporateRelationship != CounterpartyRelationship (ADR-BCP-014)
-//   - CorporateRelationship != ADR-BCP-012 operational LegalEntityRelationship
-//   - CorporateRelationship != PlatformRelationship
-//   - PlatformAccount != Tenant; PlatformAccount is not an authorization boundary
-//   - CorporateGroup is not an authorization boundary
-//   - Tenant.LegalEntityID remains a compatibility projection of the default
-//     TenantLegalEntityMapping (is_default = true) until consumers migrate
-//   - All consequential relationship resolution MUST fail closed when
-//     authoritative evidence is missing or conflicted
-//
-// Reuse
-// -----
-// Prefer CanonicalEntity, CanonicalRelationship, Mapping, ExternalReference
-// and MappingScope. Do not invent a second identity spine.
+// Invariants:
+//   Organisation != LegalEntity != Tenant
+//   CorporateRelationship != CounterpartyRelationship / PlatformRelationship
+//   PlatformAccount != Tenant; CorporateGroup != authorization boundary
+//   Consequential resolution fails closed without authoritative evidence
 
 package domain
 
-import (
-	"time"
-)
+import "time"
 
-// ---------------------------------------------------------------------------
-// Verification and lifecycle (aligned with Shared contracts/organisation/v1)
-// ---------------------------------------------------------------------------
-
-// VerificationState is the evidence state for identity or relationship claims.
-// Consequential decisions MUST fail closed when state is anything other than
-// VerificationVerified.
+// VerificationState is the evidence state for organisation-domain records.
 type VerificationState string
 
 const (
@@ -56,129 +28,98 @@ const (
 	VerificationExpired       VerificationState = "EXPIRED"
 )
 
-// IsAuthoritative reports whether this state may be used for consequential
-// decisions (INTERNAL eligibility, related-party treatment, etc.).
+// IsAuthoritative reports whether the state may be used for consequential decisions.
 func (s VerificationState) IsAuthoritative() bool {
 	return s == VerificationVerified
 }
 
-// OrganisationForm describes what sort of organisation this is.
-// It MUST NOT encode commercial role (SUPPLIER/CUSTOMER); those are
-// relationships or CounterpartyRoles (ADR-BCP-014).
+// OrganisationForm is organisational form only — never commercial role.
 type OrganisationForm string
 
 const (
-	OrgFormCompany                  OrganisationForm = "COMPANY"
-	OrgFormPartnership              OrganisationForm = "PARTNERSHIP"
-	OrgFormTrust                    OrganisationForm = "TRUST"
-	OrgFormAssociation              OrganisationForm = "ASSOCIATION"
-	OrgFormPublicBody               OrganisationForm = "PUBLIC_BODY"
-	OrgFormNonprofit                OrganisationForm = "NONPROFIT"
-	OrgFormUnincorporated           OrganisationForm = "UNINCORPORATED_ORGANISATION"
-	OrgFormSoleProprietor           OrganisationForm = "SOLE_PROPRIETOR"
-	OrgFormCooperative              OrganisationForm = "COOPERATIVE"
-	OrgFormGovernmentEntity         OrganisationForm = "GOVERNMENT_ENTITY"
-	OrgFormFinancialInstitution     OrganisationForm = "FINANCIAL_INSTITUTION"
-	OrgFormOther                    OrganisationForm = "OTHER"
+	OrgFormCompany                    OrganisationForm = "COMPANY"
+	OrgFormPartnership                OrganisationForm = "PARTNERSHIP"
+	OrgFormTrust                      OrganisationForm = "TRUST"
+	OrgFormAssociation                OrganisationForm = "ASSOCIATION"
+	OrgFormPublicBody                 OrganisationForm = "PUBLIC_BODY"
+	OrgFormNonprofit                  OrganisationForm = "NONPROFIT"
+	OrgFormUnincorporatedOrganisation OrganisationForm = "UNINCORPORATED_ORGANISATION"
+	OrgFormSoleProprietor             OrganisationForm = "SOLE_PROPRIETOR"
+	OrgFormCooperative                OrganisationForm = "COOPERATIVE"
+	OrgFormGovernmentEntity           OrganisationForm = "GOVERNMENT_ENTITY"
+	OrgFormFinancialInstitution       OrganisationForm = "FINANCIAL_INSTITUTION"
+	OrgFormOther                      OrganisationForm = "OTHER"
 )
 
-// ---------------------------------------------------------------------------
-// Organisation profile (anchored to CanonicalEntity)
-// ---------------------------------------------------------------------------
-
-// Organisation is the runtime profile for a real-world organisation.
-// Identity is always CanonicalEntityID; this type never stands alone.
-//
-// Existing BUYER_ORGANISATION / SUPPLIER_ORGANISATION CanonicalEntity rows
-// may gain an Organisation profile without changing their EntityType.
+// Organisation is a profile on CanonicalEntity (identity = CanonicalEntityID).
 type Organisation struct {
-	// CanonicalEntityID is the sole identity. Required.
-	CanonicalEntityID string `json:"canonical_entity_id"`
-
-	DisplayName      string           `json:"display_name"`
-	OfficialName     string           `json:"official_name,omitempty"`
-	TradingNames     []string         `json:"trading_names,omitempty"`
-	OrganisationForm OrganisationForm `json:"organisation_form,omitempty"`
-	Jurisdiction     string           `json:"jurisdiction,omitempty"`
-
+	CanonicalEntityID string            `json:"canonical_entity_id"`
+	DisplayName       string            `json:"display_name"`
+	OfficialName      string            `json:"official_name,omitempty"`
+	TradingNames      []string          `json:"trading_names,omitempty"`
+	OrganisationForm  OrganisationForm  `json:"organisation_form,omitempty"`
+	Jurisdiction      string            `json:"jurisdiction,omitempty"`
 	VerificationState VerificationState `json:"verification_state"`
 	SourceAuthority   string            `json:"source_authority"`
-	Status            string            `json:"status"` // DRAFT|VALIDATED|ACTIVE|...
-
-	EffectiveFrom time.Time  `json:"effective_from"`
-	EffectiveTo   *time.Time `json:"effective_to,omitempty"`
-
-	// Metadata is non-authoritative extension data.
-	Metadata map[string]any `json:"metadata,omitempty"`
+	Status            string            `json:"status"`
+	EffectiveFrom     time.Time         `json:"effective_from"`
+	EffectiveTo       *time.Time        `json:"effective_to,omitempty"`
+	Metadata          map[string]any    `json:"metadata,omitempty"`
 }
 
-// ---------------------------------------------------------------------------
-// LegalEntityProfile (runtime; first-party ids still governed by Shared registry)
-// ---------------------------------------------------------------------------
-
-// LegalEntityProfile is a legally recognised person attached to an Organisation.
-// organisation_id and legal_entity_id remain distinct even when 1:1.
-//
-// First-party ids (NABHOLD, ZURIBEANS, THAMANI-GLOBAL, EQUATOR-ESTATE) continue
-// to match Shared contracts/legal-entity/registry.yaml. External profiles are
-// Control-Plane-issued and do not require a Shared registry entry (tenancy v1.1).
+// LegalEntityProfile attaches a legal person to an Organisation.
+// Runtime authority is Control Plane; Shared governs first-party registry ids only.
 type LegalEntityProfile struct {
-	LegalEntityID              string            `json:"legal_entity_id"`
-	OrganisationID             string            `json:"organisation_id"` // CanonicalEntityID
-	LegalName                  string            `json:"legal_name"`
-	JurisdictionOfIncorporation string           `json:"jurisdiction_of_incorporation,omitempty"`
-	LegalStatus                string            `json:"legal_status"`
-	SourceAuthority            string            `json:"source_authority"`
-	VerificationState          VerificationState `json:"verification_state"`
-	EffectiveFrom              time.Time         `json:"effective_from"`
-	EffectiveTo                *time.Time        `json:"effective_to,omitempty"`
-	EvidenceReferences         []string          `json:"evidence_references,omitempty"`
-	Metadata                   map[string]any    `json:"metadata,omitempty"`
+	LegalEntityID               string            `json:"legal_entity_id"`
+	OrganisationID              string            `json:"organisation_id"`
+	LegalName                   string            `json:"legal_name"`
+	JurisdictionOfIncorporation string            `json:"jurisdiction_of_incorporation,omitempty"`
+	LegalStatus                 string            `json:"legal_status"`
+	SourceAuthority             string            `json:"source_authority"`
+	VerificationState           VerificationState `json:"verification_state"`
+	EffectiveFrom               time.Time         `json:"effective_from"`
+	EffectiveTo                 *time.Time        `json:"effective_to,omitempty"`
+	EvidenceReferences          []string          `json:"evidence_references,omitempty"`
+	Metadata                    map[string]any    `json:"metadata,omitempty"`
 }
 
-// ---------------------------------------------------------------------------
-// CorporateRelationship (ownership / control — NOT commercial, NOT platform)
-// ---------------------------------------------------------------------------
-
-// CorporateRelationshipType enumerates ownership/control edges.
-// Extensible. Does not include commercial roles.
+// CorporateRelationshipType is the ADR-BCP-018 vocabulary (no redundant inverses).
 type CorporateRelationshipType string
 
 const (
-	CorpRelOwns         CorporateRelationshipType = "OWNS"
-	CorpRelControls     CorporateRelationshipType = "CONTROLS"
-	CorpRelParentOf     CorporateRelationshipType = "PARENT_OF"
-	CorpRelSubsidiaryOf CorporateRelationshipType = "SUBSIDIARY_OF"
-	CorpRelAffiliateOf  CorporateRelationshipType = "AFFILIATE_OF"
-	CorpRelJointVenture CorporateRelationshipType = "JOINT_VENTURE"
-	CorpRelSisterOf     CorporateRelationshipType = "SISTER_OF"
-	CorpRelBranchOf     CorporateRelationshipType = "BRANCH_OF"
-	CorpRelRelatedTo    CorporateRelationshipType = "RELATED_TO"
+	CorpRelOwns             CorporateRelationshipType = "OWNS"
+	CorpRelControls         CorporateRelationshipType = "CONTROLS"
+	CorpRelBranchOf         CorporateRelationshipType = "BRANCH_OF"
+	CorpRelAffiliateOf      CorporateRelationshipType = "AFFILIATE_OF"
+	CorpRelJointVentureWith CorporateRelationshipType = "JOINT_VENTURE_WITH"
+	CorpRelSuccessorOf      CorporateRelationshipType = "SUCCESSOR_OF"
 )
 
-// CorporateRelationship is an effective-dated ownership/control edge between
-// two Organisations. Used for INTERNAL subscription eligibility (ADR-BCP-017),
-// related-party treatment and corporate reporting.
-//
+// CorporateRelationship is an effective-dated ownership/control edge.
 // MUST NOT be used as a runtime authorization boundary.
-// same corporate group != cross-tenant access.
 type CorporateRelationship struct {
 	ID                   string                    `json:"id"`
 	SourceOrganisationID string                    `json:"source_organisation_id"`
 	TargetOrganisationID string                    `json:"target_organisation_id"`
 	RelationshipType     CorporateRelationshipType `json:"relationship_type"`
 	OwnershipPercentage  *float64                  `json:"ownership_percentage,omitempty"`
+	ControlBasis         string                    `json:"control_basis,omitempty"`
+	DirectOrDerived      string                    `json:"direct_or_derived,omitempty"`
 	VerificationState    VerificationState         `json:"verification_state"`
-	Status               string                    `json:"status"` // ACTIVE|SUSPENDED|RETIRED|CONFLICTED
+	Status               string                    `json:"status"`
 	EffectiveFrom        time.Time                 `json:"effective_from"`
 	EffectiveTo          *time.Time                `json:"effective_to,omitempty"`
-	EvidenceReferences   []string                  `json:"evidence_references,omitempty"`
 	SourceAuthority      string                    `json:"source_authority"`
+	EvidenceReferences   []string                  `json:"evidence_references,omitempty"`
+	VerifiedBy           string                    `json:"verified_by,omitempty"`
+	VerifiedAt           *time.Time                `json:"verified_at,omitempty"`
+	Classification       string                    `json:"classification,omitempty"`
 	Metadata             map[string]any            `json:"metadata,omitempty"`
 }
 
-// IsConsequential reports whether this relationship may be used for
-// INTERNAL eligibility or related-party decisions. Fail closed otherwise.
+// IsConsequential reports whether this edge may drive INTERNAL eligibility
+// or related-party decisions. Fail closed without VERIFIED + ACTIVE + window.
+// Only OWNS and CONTROLS are consequential for INTERNAL eligibility policy.
 func (r CorporateRelationship) IsConsequential(at time.Time) bool {
 	if !r.VerificationState.IsAuthoritative() {
 		return false
@@ -186,84 +127,88 @@ func (r CorporateRelationship) IsConsequential(at time.Time) bool {
 	if r.Status != "ACTIVE" {
 		return false
 	}
+	if r.SourceAuthority == "" {
+		return false
+	}
 	if at.Before(r.EffectiveFrom) {
 		return false
 	}
 	if r.EffectiveTo != nil && !at.Before(*r.EffectiveTo) {
 		return false
 	}
-	return true
+	switch r.RelationshipType {
+	case CorpRelOwns, CorpRelControls:
+		return true
+	default:
+		return false
+	}
 }
 
-// ---------------------------------------------------------------------------
-// CorporateGroup (projection — not an authorization boundary)
-// ---------------------------------------------------------------------------
-
-// CorporateGroup is a governed economic/corporate group projection derived
-// from the CorporateRelationship graph. Membership confers no runtime
-// permission.
+// CorporateGroup is a projection; root is optional when no unique parent exists.
 type CorporateGroup struct {
-	ID                string     `json:"id"`
-	DisplayName       string     `json:"display_name"`
-	RootOrganisationID string    `json:"root_organisation_id"`
-	Status            string     `json:"status"`
-	EffectiveFrom     time.Time  `json:"effective_from"`
-	EffectiveTo       *time.Time `json:"effective_to,omitempty"`
-	Metadata          map[string]any `json:"metadata,omitempty"`
+	ID                 string         `json:"id"`
+	DisplayName        string         `json:"display_name"`
+	RootOrganisationID string         `json:"root_organisation_id,omitempty"`
+	Status             string         `json:"status"`
+	EffectiveFrom      time.Time      `json:"effective_from"`
+	EffectiveTo        *time.Time     `json:"effective_to,omitempty"`
+	Metadata           map[string]any `json:"metadata,omitempty"`
 }
 
-// CorporateGroupMembership links an Organisation to a CorporateGroup.
+// CorporateGroupMembership is derived from CorporateRelationship edges.
+// Confers no runtime permission. Must carry derivation lineage.
 type CorporateGroupMembership struct {
-	ID               string     `json:"id"`
-	CorporateGroupID string     `json:"corporate_group_id"`
-	OrganisationID   string     `json:"organisation_id"`
-	MembershipType   string     `json:"membership_type"` // ROOT|SUBSIDIARY|AFFILIATE|...
-	Status           string     `json:"status"`
-	EffectiveFrom    time.Time  `json:"effective_from"`
-	EffectiveTo      *time.Time `json:"effective_to,omitempty"`
-	Metadata         map[string]any `json:"metadata,omitempty"`
+	ID                   string         `json:"id"`
+	CorporateGroupID     string         `json:"corporate_group_id"`
+	OrganisationID       string         `json:"organisation_id"`
+	MembershipType       string         `json:"membership_type"`
+	Status               string         `json:"status"`
+	EffectiveFrom        time.Time      `json:"effective_from"`
+	EffectiveTo          *time.Time     `json:"effective_to,omitempty"`
+	BasisRelationshipIDs []string       `json:"basis_relationship_ids"`
+	DerivedAt            time.Time      `json:"derived_at"`
+	DerivationVersion    string         `json:"derivation_version"`
+	Metadata             map[string]any `json:"metadata,omitempty"`
 }
 
-// ---------------------------------------------------------------------------
-// PlatformRelationship and PlatformAccount
-// ---------------------------------------------------------------------------
-
-// PlatformRelationshipType answers: how does this Organisation relate to Baobab?
-// Privileged types (PLATFORM_OWNER, PLATFORM_OPERATOR, PLATFORM_GROUP_AFFILIATE)
-// are server-authoritative; applicants MUST NOT self-assign them (ADR-BCP-017).
+// PlatformRelationshipType enumerates platform affiliation kinds.
 type PlatformRelationshipType string
 
 const (
-	PlatformRelOwner           PlatformRelationshipType = "PLATFORM_OWNER"
-	PlatformRelOperator        PlatformRelationshipType = "PLATFORM_OPERATOR"
-	PlatformRelGroupAffiliate  PlatformRelationshipType = "PLATFORM_GROUP_AFFILIATE"
-	PlatformRelPartner         PlatformRelationshipType = "PLATFORM_PARTNER"
-	PlatformRelExternalClient  PlatformRelationshipType = "EXTERNAL_CLIENT"
-	PlatformRelManagedEntity   PlatformRelationshipType = "MANAGED_ENTITY"
+	PlatformRelOwner          PlatformRelationshipType = "PLATFORM_OWNER"
+	PlatformRelOperator       PlatformRelationshipType = "PLATFORM_OPERATOR"
+	PlatformRelGroupAffiliate PlatformRelationshipType = "PLATFORM_GROUP_AFFILIATE"
+	PlatformRelPartner        PlatformRelationshipType = "PLATFORM_PARTNER"
+	PlatformRelExternalClient PlatformRelationshipType = "EXTERNAL_CLIENT"
+	PlatformRelManagedEntity  PlatformRelationshipType = "MANAGED_ENTITY"
 )
 
-// PlatformRelationship is lifecycle-managed and server-authoritative for
-// privileged types. PLATFORM_GROUP_AFFILIATE != runtime permission.
+// PlatformRelationship links an Organisation to the platform.
+// An organisation may hold concurrent relationship types.
 type PlatformRelationship struct {
-	ID                string                   `json:"id"`
-	OrganisationID    string                   `json:"organisation_id"`
-	RelationshipType  PlatformRelationshipType `json:"relationship_type"`
-	VerificationState VerificationState        `json:"verification_state"`
-	Status            string                   `json:"status"`
-	EffectiveFrom     time.Time                `json:"effective_from"`
-	EffectiveTo       *time.Time               `json:"effective_to,omitempty"`
-	EvidenceReferences []string                `json:"evidence_references,omitempty"`
-	SourceAuthority   string                   `json:"source_authority"`
-	Metadata          map[string]any           `json:"metadata,omitempty"`
+	ID                  string                   `json:"id"`
+	PlatformID          string                   `json:"platform_id"`
+	OrganisationID      string                   `json:"organisation_id"`
+	RelationshipType    PlatformRelationshipType `json:"relationship_type"`
+	VerificationState   VerificationState        `json:"verification_state"`
+	Status              string                   `json:"status"`
+	EffectiveFrom       time.Time                `json:"effective_from"`
+	EffectiveTo         *time.Time               `json:"effective_to,omitempty"`
+	BasisRelationshipID string                   `json:"basis_relationship_id,omitempty"`
+	AdmissionDecisionID string                   `json:"admission_decision_id,omitempty"`
+	SourceAuthority     string                   `json:"source_authority"`
+	EvidenceReferences  []string                 `json:"evidence_references,omitempty"`
+	VerifiedBy          string                   `json:"verified_by,omitempty"`
+	VerifiedAt          *time.Time               `json:"verified_at,omitempty"`
+	Metadata            map[string]any           `json:"metadata,omitempty"`
 }
 
-// IsConsequential reports whether this platform relationship may be used for
-// INTERNAL eligibility derivation. Fail closed otherwise.
-func (r PlatformRelationship) IsConsequential(at time.Time) bool {
-	if !r.VerificationState.IsAuthoritative() {
+// IsActive reports whether the platform relationship is in force at at.
+func (r PlatformRelationship) IsActive(at time.Time) bool {
+	if r.Status != "ACTIVE" && r.Status != "PENDING" {
 		return false
 	}
-	if r.Status != "ACTIVE" {
+	if !r.VerificationState.IsAuthoritative() && r.Status != "PENDING" {
 		return false
 	}
 	if at.Before(r.EffectiveFrom) {
@@ -275,59 +220,120 @@ func (r PlatformRelationship) IsConsequential(at time.Time) bool {
 	return true
 }
 
-// PlatformAccount is a commercial/administrative grouping. It is NOT a Tenant
-// and does NOT confer data access or authorization.
-// same PlatformAccount != shared authorization.
+// PlatformAccount is commercial/administrative. NOT a Tenant.
 type PlatformAccount struct {
-	ID                    string     `json:"id"`
-	DisplayName           string     `json:"display_name"`
-	PrimaryOrganisationID string     `json:"primary_organisation_id,omitempty"`
-	Status                string     `json:"status"`
-	EffectiveFrom         time.Time  `json:"effective_from"`
-	EffectiveTo           *time.Time `json:"effective_to,omitempty"`
-	BillingReference      string     `json:"billing_reference,omitempty"`
+	ID                    string         `json:"id"`
+	DisplayName           string         `json:"display_name"`
+	PrimaryOrganisationID string         `json:"primary_organisation_id,omitempty"`
+	Status                string         `json:"status"`
+	EffectiveFrom         time.Time      `json:"effective_from"`
+	EffectiveTo           *time.Time     `json:"effective_to,omitempty"`
+	BillingReference      string         `json:"billing_reference,omitempty"`
 	Metadata              map[string]any `json:"metadata,omitempty"`
 }
 
-// PlatformAccountMembership links an Organisation or Tenant to a PlatformAccount
-// for commercial purposes only.
+// PlatformAccountMembership links organisations or tenants to an account.
 type PlatformAccountMembership struct {
-	ID                string     `json:"id"`
-	PlatformAccountID string     `json:"platform_account_id"`
-	MemberType        string     `json:"member_type"` // ORGANISATION|TENANT
-	MemberID          string     `json:"member_id"`
-	Role              string     `json:"role,omitempty"` // commercial role, not IAM
-	Status            string     `json:"status"`
-	EffectiveFrom     time.Time  `json:"effective_from"`
-	EffectiveTo       *time.Time `json:"effective_to,omitempty"`
+	ID                string         `json:"id"`
+	PlatformAccountID string         `json:"platform_account_id"`
+	MemberType        string         `json:"member_type"`
+	MemberID          string         `json:"member_id"`
+	Role              string         `json:"role,omitempty"`
+	Status            string         `json:"status"`
+	EffectiveFrom     time.Time      `json:"effective_from"`
+	EffectiveTo       *time.Time     `json:"effective_to,omitempty"`
 	Metadata          map[string]any `json:"metadata,omitempty"`
 }
 
-// ---------------------------------------------------------------------------
-// Explicit tenant mappings (replace implicit singular LegalEntityID over time)
-// ---------------------------------------------------------------------------
-
-// TenantOrganisationMapping associates a Tenant with one or more Organisations.
+// TenantOrganisationMapping is an explicit tenant↔organisation link.
 type TenantOrganisationMapping struct {
-	ID             string     `json:"id"`
-	TenantID       string     `json:"tenant_id"`
-	OrganisationID string     `json:"organisation_id"` // CanonicalEntityID
-	IsDefault      bool       `json:"is_default"`
-	Status         string     `json:"status"`
-	EffectiveFrom  time.Time  `json:"effective_from"`
-	EffectiveTo    *time.Time `json:"effective_to,omitempty"`
+	ID             string         `json:"id"`
+	TenantID       string         `json:"tenant_id"`
+	OrganisationID string         `json:"organisation_id"`
+	MappingRole    string         `json:"mapping_role"`
+	IsDefault      bool           `json:"is_default"`
+	Status         string         `json:"status"`
+	EffectiveFrom  time.Time      `json:"effective_from"`
+	EffectiveTo    *time.Time     `json:"effective_to,omitempty"`
+	Provenance     string         `json:"provenance"`
 	Metadata       map[string]any `json:"metadata,omitempty"`
 }
 
-// TenantLegalEntityMapping associates a Tenant with one or more LegalEntityProfiles.
-// The row with IsDefault=true is the compatibility projection of Tenant.LegalEntityID.
+// TenantLegalEntityMapping is an explicit tenant↔legal-entity link.
+// The default row projects Tenant.LegalEntityID for compatibility.
 type TenantLegalEntityMapping struct {
-	ID            string     `json:"id"`
-	TenantID      string     `json:"tenant_id"`
-	LegalEntityID string     `json:"legal_entity_id"`
-	IsDefault     bool       `json:"is_default"`
-	Status        string     `json:"status"`
-	EffectiveFrom time.Time  `json:"effective_from"`
-	EffectiveTo   *time.Time `json:"effective_to,omitempty"`
+	ID            string         `json:"id"`
+	TenantID      string         `json:"tenant_id"`
+	LegalEntityID string         `json:"legal_entity_id"`
+	MappingRole   string         `json:"mapping_role"`
+	IsDefault     bool           `json:"is_default"`
+	Status        string         `json:"status"`
+	EffectiveFrom time.Time      `json:"effective_from"`
+	EffectiveTo   *time.Time     `json:"effective_to,omitempty"`
+	Provenance    string         `json:"provenance"`
 	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
+// InternalEligibilityEvidence is the input to DeriveInternalEligibility.
+type InternalEligibilityEvidence struct {
+	OrganisationID         string
+	PlatformRelationships  []PlatformRelationship
+	CorporateRelationships []CorporateRelationship
+	EvaluatedAt            time.Time
+}
+
+// DeriveInternalEligibility decides ADR-BCP-017 INTERNAL product eligibility.
+//
+// Rules (fail closed):
+//   - PLATFORM_OWNER or PLATFORM_OPERATOR (verified, active) → eligible
+//   - PLATFORM_GROUP_AFFILIATE only when linked by consequential OWNS/CONTROLS
+//     to a known platform-owner organisation
+//   - EXTERNAL_CLIENT / PARTNER alone → not eligible
+//   - Corporate group membership / PlatformAccount never considered
+func DeriveInternalEligibility(ev InternalEligibilityEvidence, platformOwnerOrgIDs map[string]struct{}) bool {
+	at := ev.EvaluatedAt
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	for _, pr := range ev.PlatformRelationships {
+		if pr.OrganisationID != ev.OrganisationID {
+			continue
+		}
+		if !pr.IsActive(at) || !pr.VerificationState.IsAuthoritative() {
+			continue
+		}
+		switch pr.RelationshipType {
+		case PlatformRelOwner, PlatformRelOperator:
+			return true
+		case PlatformRelGroupAffiliate:
+			if affiliateOwnsPathToOwner(ev.OrganisationID, ev.CorporateRelationships, platformOwnerOrgIDs, at) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func affiliateOwnsPathToOwner(orgID string, rels []CorporateRelationship, owners map[string]struct{}, at time.Time) bool {
+	if len(owners) == 0 {
+		return false
+	}
+	for _, r := range rels {
+		if !r.IsConsequential(at) {
+			continue
+		}
+		var other string
+		switch {
+		case r.SourceOrganisationID == orgID:
+			other = r.TargetOrganisationID
+		case r.TargetOrganisationID == orgID:
+			other = r.SourceOrganisationID
+		default:
+			continue
+		}
+		if _, ok := owners[other]; ok {
+			return true
+		}
+	}
+	return false
 }
