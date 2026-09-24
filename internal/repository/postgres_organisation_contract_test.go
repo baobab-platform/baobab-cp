@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/nabhold/baobab-cp/internal/contracttest"
 	"github.com/nabhold/baobab-cp/internal/domain"
@@ -16,8 +17,8 @@ import (
 // validates each outbox row against baobab-platform/shared: the envelope
 // against events/v1/envelope.schema.json and data against the matching
 // organisation/v1/events.schema.json $def. Needs TEST_DATABASE_URL and
-// SHARED_CONTRACTS_DIR; it skips while the pinned Shared revision predates
-// organisation/v1 (bump contracts.lock.yaml once shared#82 merges).
+// SHARED_CONTRACTS_DIR; it skips only if the pinned Shared revision predates
+// organisation/v1.
 func TestPostgresOrganisationEventsConformToSharedContract(t *testing.T) {
 	dir := contracttest.SharedDir(t)
 	if _, err := os.Stat(filepath.Join(dir, "contracts", "organisation", "v1", "events.schema.json")); err != nil {
@@ -76,6 +77,19 @@ func TestPostgresOrganisationEventsConformToSharedContract(t *testing.T) {
 		MappingRole: domain.TenantOrgRolePrimary, Status: domain.RelationshipStatusActive, EffectiveFrom: f.at, Provenance: "test"}, act())
 	must(err)
 
+	// Lifecycle transitions: a second fact is conflicted, then the affiliate
+	// and its basis end.
+	other, err := f.repo.EnsureCorporateRelationship(f.ctx, domain.CorporateRelationship{
+		SourceOrganisationID: sub, TargetOrganisationID: owner, RelationshipType: domain.CorpRelControls,
+		DirectOrDerived: domain.CorporateFactDirect, VerificationState: domain.VerificationPendingReview,
+		Status: domain.RelationshipStatusPending, EffectiveFrom: f.at, SourceAuthority: "admission-review",
+	}, act())
+	must(err)
+	must(f.repo.MarkCorporateRelationshipConflicted(f.ctx, other, Conflict{References: []string{"evd_conflict"},
+		DetectedAt: f.at.Add(time.Minute), Reason: "sources disagree"}, act()))
+	must(f.repo.EndPlatformRelationship(f.ctx, affiliate, f.at.Add(time.Hour), "divested", act()))
+	must(f.repo.EndCorporateRelationship(f.ctx, edge, f.at.Add(time.Hour), "divested", act()))
+
 	rows, err := f.admin.Query(f.ctx, `SELECT event_type, payload FROM messaging.outbox WHERE correlation_id::text = ANY($1)`, correlations)
 	must(err)
 	defer rows.Close()
@@ -99,6 +113,7 @@ func TestPostgresOrganisationEventsConformToSharedContract(t *testing.T) {
 		events.OrganisationCreated, events.CorporateRelationshipActivated, events.LegalEntityVerified,
 		events.PlatformRelationshipActivated, events.PlatformAccountCreated, events.PlatformAccountMembershipChanged,
 		events.TenantLegalEntityMappingActivated, events.TenantOrganisationMappingActivated,
+		events.CorporateRelationshipConflicted, events.CorporateRelationshipEnded, events.PlatformRelationshipEnded,
 	} {
 		if !seen[want] {
 			t.Errorf("scenario did not emit %s", want)

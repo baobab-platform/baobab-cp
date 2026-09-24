@@ -262,10 +262,11 @@ func (r CorporateRelationship) Validate() error {
 }
 
 // IsConsequential reports whether this edge may drive INTERNAL eligibility or
-// related-party decisions at at. Fails closed without VERIFIED + ACTIVE +
-// effective window. Only OWNS and CONTROLS are consequential for eligibility.
+// related-party decisions at at. Fails closed unless VERIFIED, in force
+// (ACTIVE, or ENDED for the period before its end) and inside its effective
+// window. Only OWNS and CONTROLS are consequential for eligibility.
 func (r CorporateRelationship) IsConsequential(at time.Time) bool {
-	if !r.VerificationState.IsAuthoritative() || r.Status != RelationshipStatusActive || r.SourceAuthority == "" {
+	if !r.VerificationState.IsAuthoritative() || !inForce(r.Status, r.EffectiveTo) || r.SourceAuthority == "" {
 		return false
 	}
 	if !inWindow(at, r.EffectiveFrom, r.EffectiveTo) {
@@ -382,11 +383,12 @@ func (r PlatformRelationship) Validate() error {
 }
 
 // IsConsequential reports whether the relationship may drive a decision at
-// at: VERIFIED, ACTIVE and inside its effective window. PENDING records are
+// at: VERIFIED, in force (ACTIVE, or ENDED for the period before its end)
+// and inside its effective window. PENDING records are
 // visible for review but never consequential.
 func (r PlatformRelationship) IsConsequential(at time.Time) bool {
 	return r.VerificationState.IsAuthoritative() &&
-		r.Status == RelationshipStatusActive &&
+		inForce(r.Status, r.EffectiveTo) &&
 		inWindow(at, r.EffectiveFrom, r.EffectiveTo)
 }
 
@@ -550,6 +552,14 @@ func affiliateControlledByOwner(orgID, basisID string, rels []CorporateRelations
 		frontier = next
 	}
 	return false
+}
+
+// inForce reports whether a relationship's status lets it be in force inside
+// its effective window: ACTIVE, or ENDED with the effective_to the end
+// recorded. An ended fact stays true for the period it covered, so as-of
+// queries before the end still see it (ADR-BCP-018 sections 74 and 86).
+func inForce(status string, effectiveTo *time.Time) bool {
+	return status == RelationshipStatusActive || (status == RelationshipStatusEnded && effectiveTo != nil)
 }
 
 func inWindow(at, from time.Time, to *time.Time) bool {
