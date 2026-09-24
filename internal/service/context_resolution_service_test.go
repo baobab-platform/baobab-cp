@@ -246,3 +246,50 @@ func TestContextResolutionServiceAttestsGenericOrganisationByMapping(t *testing.
 		})
 	}
 }
+
+// TestContextResolutionServiceAttestsExpectedOrganisationKind proves
+// ADR-BCP-024 on the service: the exact kind is enforced, including for a
+// generic ORGANISATION attested by mapping, and the kind is compared only
+// after tenant attestation so an unattested organisation's kind is never
+// revealed.
+func TestContextResolutionServiceAttestsExpectedOrganisationKind(t *testing.T) {
+	now := time.Now().UTC()
+	canonical := repository.NewCanonicalRepository()
+	canonical.Entities["buyer"] = canonicalOrganisation("buyer", domain.EntityTypeBuyerOrganisation, "ACTIVE", "tenant-123")
+	canonical.Entities["supplier"] = canonicalOrganisation("supplier", domain.EntityTypeSupplierOrganisation, "ACTIVE", "tenant-123")
+	canonical.Entities["foreign-supplier"] = canonicalOrganisation("foreign-supplier", domain.EntityTypeSupplierOrganisation, "ACTIVE", "tenant-999")
+	canonical.Entities["generic"] = canonicalOrganisation("generic", domain.EntityTypeOrganisation, "ACTIVE", "")
+	svc := ContextResolutionService{
+		Identity:  identityServiceFor(repository.NewInMemoryRepository()),
+		Tenants:   &fakeTenantStore{tenant: activeTenant()},
+		Canonical: canonical,
+		Mappings:  tenantMappings{{TenantID: "tenant-123", OrganisationID: "generic", Status: domain.RelationshipStatusActive, EffectiveFrom: now.Add(-time.Hour)}},
+	}
+	for name, tc := range map[string]struct {
+		organisationID, expected string
+		wantErr                  error // nil means success; errAny means any error
+	}{
+		"buyer as buyer":               {"buyer", domain.EntityTypeBuyerOrganisation, nil},
+		"generic as organisation":      {"generic", domain.EntityTypeOrganisation, nil},
+		"no expectation":               {"supplier", "", nil},
+		"supplier as buyer":            {"supplier", domain.EntityTypeBuyerOrganisation, errAny},
+		"generic as buyer":             {"generic", domain.EntityTypeBuyerOrganisation, errAny},
+		"foreign supplier as buyer":    {"foreign-supplier", domain.EntityTypeBuyerOrganisation, domain.ErrOrganisationNotMappedToTenant},
+		"non-organisation expected":    {"buyer", domain.EntityTypeProduct, errAny},
+		"expectation, no organisation": {"", domain.EntityTypeBuyerOrganisation, errAny},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, resolved, err := svc.ResolveExpectedOrganisationKind(context.Background(), workloadPrincipalForContext(), "tenant-123", tc.organisationID, tc.expected, "correlation-123", now)
+			switch {
+			case tc.wantErr == nil && (err != nil || resolved.OrganisationID != tc.organisationID):
+				t.Fatalf("expected attestation of %q, got %v", tc.organisationID, err)
+			case tc.wantErr == errAny && err == nil:
+				t.Fatal("expected resolution to fail closed")
+			case tc.wantErr != nil && tc.wantErr != errAny && !errors.Is(err, tc.wantErr):
+				t.Fatalf("expected %v, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+var errAny = errors.New("any error")
