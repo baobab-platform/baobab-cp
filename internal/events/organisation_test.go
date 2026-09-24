@@ -11,7 +11,7 @@ func TestEventTypePrefixes(t *testing.T) {
 		CorrelationID: "0192a1b0-7c3e-7a10-8000-0000000000ff", Data: map[string]any{"organisation_id": "x"}}
 	for typ, ok := range map[string]bool{
 		OrganisationCreated: true, // canonical, ADR-SHARED-008
-		"com.nabhold.control-plane.tenant-provisioning-started.v1": true, // legacy, still accepted
+		"com.nabhold.control-plane.tenant-provisioning-started.v1": false, // legacy namespace, rejected
 		"baobab.control-plane.organisation.created.v1":             false,
 		"com.example.control-plane.organisation.created.v1":        false,
 		"com.baobab-platform.control-plane.organisation.created":   false,

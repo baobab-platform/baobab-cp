@@ -13,7 +13,7 @@ import (
 // (ADR-0004, contracts/events/v1/envelope.schema.json's "source" field):
 // every event this repository emits shares one producer identity unless
 // PostgresRepository.EventSource overrides it.
-const defaultEventSource = "https://control-plane.nabhold.internal"
+const defaultEventSource = "urn:baobab-platform:service:baobab-cp"
 
 // Gate ZB-02 event types/schemas. Scope note: this pass wires outbox
 // publishing only for the write paths Gate ZB-02 itself introduced
@@ -24,19 +24,21 @@ const defaultEventSource = "https://control-plane.nabhold.internal"
 // this pass. Wiring events into those is a separate, larger change with a
 // wider blast radius; see the ZB-02 spec cross-check for the full list.
 const (
-	eventTypeMarketParticipationCreated = "com.nabhold.control-plane.market-participation-created.v1"
-	eventTypeMarketParticipationUpdated = "com.nabhold.control-plane.market-participation-updated.v1"
-	eventTypeTradeLaneActivated         = "com.nabhold.control-plane.trade-lane-activated.v1"
-	eventTypeTenantProvisioningReady    = "com.nabhold.control-plane.tenant-provisioning-ready.v1"
-	eventTypeTenantProvisioningActive   = "com.nabhold.control-plane.tenant-provisioning-active.v1"
-	eventTypeTenantProvisioningFailed   = "com.nabhold.control-plane.tenant-provisioning-failed.v1"
+	// Registered in baobab-platform/shared contracts/control-plane/v1/asyncapi.yaml
+	// and contracts/trade-lane/v1/asyncapi.yaml (ADR-SHARED-008).
+	eventTypeMarketParticipationCreated = "com.baobab-platform.control-plane.market-participation.created.v1"
+	eventTypeMarketParticipationUpdated = "com.baobab-platform.control-plane.market-participation.updated.v1"
+	eventTypeTradeLaneActivated         = "com.baobab-platform.market.trade-lane.activated.v1"
+	eventTypeTenantProvisioningReady    = "com.baobab-platform.control-plane.tenant.provisioning-ready.v1"
+	eventTypeTenantProvisioningActive   = "com.baobab-platform.control-plane.tenant.provisioning-active.v1"
+	eventTypeTenantProvisioningFailed   = "com.baobab-platform.control-plane.tenant.provisioning-failed.v1"
 
-	schemaMarketParticipationCreated = "https://contracts.nabhold.com/control-plane/v1/market-participation-created.schema.json"
-	schemaMarketParticipationUpdated = "https://contracts.nabhold.com/control-plane/v1/market-participation-updated.schema.json"
-	schemaTradeLaneActivated         = "https://contracts.nabhold.com/control-plane/v1/trade-lane-activated.schema.json"
-	schemaTenantProvisioningReady    = "https://contracts.nabhold.com/control-plane/v1/tenant-provisioning-ready.schema.json"
-	schemaTenantProvisioningActive   = "https://contracts.nabhold.com/control-plane/v1/tenant-provisioning-active.schema.json"
-	schemaTenantProvisioningFailed   = "https://contracts.nabhold.com/control-plane/v1/tenant-provisioning-failed.schema.json"
+	schemaMarketParticipationCreated = "https://contracts.baobab-platform.com/control-plane/v1/market-participation-created.schema.json"
+	schemaMarketParticipationUpdated = "https://contracts.baobab-platform.com/control-plane/v1/market-participation-updated.schema.json"
+	schemaTradeLaneActivated         = "https://contracts.baobab-platform.com/trade-lane/v1/events.schema.json#/$defs/tradeLaneActivatedEventData"
+	schemaTenantProvisioningReady    = "https://contracts.baobab-platform.com/control-plane/v1/tenant-provisioning-milestone.schema.json"
+	schemaTenantProvisioningActive   = schemaTenantProvisioningReady
+	schemaTenantProvisioningFailed   = schemaTenantProvisioningReady
 )
 
 func (r *PostgresRepository) eventSource() string {
