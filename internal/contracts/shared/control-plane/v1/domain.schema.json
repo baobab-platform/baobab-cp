@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/domain.schema.json",
+  "title": "Baobab-Platform control-plane domain identifiers",
+  "$defs": {
+    "resourceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 63
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "canonicalLegalEntityId": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 63,
+      "description": "Canonical legal-entity identifier known to Control Plane. First-party IDs reconcile to contracts/legal-entity/registry.yaml; external IDs are Control-Plane-issued or registered and need not appear in that registry (ADR-BCP-018)."
+    },
+    "legacyLegalEntityAlias": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 63,
+      "deprecated": true,
+      "description": "Legacy control-plane alias accepted at documented input boundaries during the v1 compatibility window only."
+    },
+    "legalEntityIdInput": {
+      "oneOf": [
+        { "$ref": "#/$defs/canonicalLegalEntityId" },
+        { "$ref": "#/$defs/legacyLegalEntityAlias" }
+      ],
+      "description": "Compatibility input union. Consumers must resolve aliases and emit only canonicalLegalEntityId values."
+    },
+    "legalEntityId": {
+      "$ref": "#/$defs/canonicalLegalEntityId",
+      "description": "Backward-compatible definition name for canonical legal-entity output and persistence contracts."
+    },
+    "tenantId": {
+      "type": "string",
+      "pattern": "^tn_[a-z0-9]+$",
+      "minLength": 6,
+      "maxLength": 63,
+      "description": "Opaque Control Plane-minted tenant identifier. It must not contain a legal-entity, country, market or vendor identity."
+    },
+    "productId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 63,
+      "description": "Version-1 product identifier. Canonical engine products use kebab case; underscore aliases remain accepted during migration."
+    },
+    "estateId": { "$ref": "#/$defs/resourceId" },
+    "environment": {
+      "type": "string",
+      "enum": ["local", "development", "staging", "production"]
+    },
+    "mappingId": {
+      "type": "string",
+      "pattern": "^map_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63,
+      "description": "Control Plane-minted opaque mapping identifier. Not derived from canonical identity or external reference."
+    },
+    "canonicalEntityId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "minLength": 3,
+      "maxLength": 128,
+      "description": "Opaque canonical identifier for a business concept minted by its authoritative domain."
+    },
+    "externalReferenceId": {
+      "type": "string",
+      "pattern": "^ref_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63,
+      "description": "Control Plane reference to a native identifier from an external system."
+    },
+    "mappingScopeId": {
+      "type": "string",
+      "pattern": "^scope_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63,
+      "description": "Identifier for a mapping scope (combination of dimensions)."
+    },
+    "mappingType": {
+      "type": "string",
+      "enum": ["IDENTITY", "REPRESENTATION", "ORGANISATIONAL", "CONTENT", "COMMERCE", "ERP", "CATALOGUE", "PRICING", "TAX", "WAREHOUSE", "FULFILMENT", "PAYMENT", "DOMAIN", "LOCALE", "CURRENCY", "CHANNEL", "CAPABILITY", "INTEGRATION", "MIGRATION", "ALIAS", "SUCCESSOR"],
+      "description": "Semantic classification of the mapping relationship."
+    },
+    "mappingStatus": {
+      "type": "string",
+      "enum": ["DRAFT", "VALIDATED", "ACTIVE", "DEPRECATED", "SUSPENDED", "MIGRATING", "QUARANTINED", "RETIRED"],
+      "description": "Lifecycle state of the mapping."
+    },
+    "mappingDirection": {
+      "type": "string",
+      "enum": ["BIDIRECTIONAL", "CANONICAL_TO_EXTERNAL", "EXTERNAL_TO_CANONICAL", "SOURCE_TO_TARGET"],
+      "description": "Direction of resolution for the mapping."
+    },
+    "mappingConfidence": {
+      "type": "string",
+      "enum": ["CONFIRMED", "PROBABLE", "CANDIDATE", "REJECTED"],
+      "description": "Confidence level for imported or reconciled mappings."
+    },
+    "mappingCardinality": {
+      "type": "string",
+      "enum": ["ONE_TO_ONE", "ONE_TO_MANY", "MANY_TO_ONE", "MANY_TO_MANY"],
+      "description": "Cardinality of the mapping relationship."
+    },
+    "tenantProvisioningId": {
+      "type": "string",
+      "pattern": "^tp_[a-z0-9]+$",
+      "minLength": 6,
+      "maxLength": 63,
+      "description": "Control Plane-minted opaque identifier for a TenantProvisioning orchestration aggregate (Technical Specification SS21). Distinct from tenantId: a tenant has exactly one lifecycle identity but may have more than one provisioning run over time (initial onboarding, later product additions)."
+    },
+    "tenantProvisioningPhase": {
+      "type": "string",
+      "enum": ["DRAFT", "VALIDATING", "PLANNED", "REGISTERING", "CONFIGURING_CONTEXT", "PROVISIONING_ENTITLEMENTS", "PROVISIONING_PROVIDERS", "VALIDATING_SECURITY", "VERIFYING_READINESS", "BLOCKED", "REMEDIATING", "READY"],
+      "description": "Fine-grained orchestration phase within a TenantProvisioning run (Technical Specification SS22). Deliberately distinct from, and a sub-classification of, the coarser provisioning-state-machine.yaml lifecycle state (e.g. several of these phases all occur while the coarse state is \"provisioning\" or \"reconciling\") -- this enum does not replace or renumber that already-implemented state machine."
+    },
+    "readinessSnapshotId": {
+      "type": "string",
+      "pattern": "^ready_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63,
+      "description": "Control Plane-minted opaque identifier for a ReadinessSnapshot (Technical Specification SS44, SS51)."
+    },
+    "readinessStatus": {
+      "type": "string",
+      "enum": ["READY", "DEGRADED", "BLOCKED", "NOT_READY"],
+      "description": "Readiness verdict for one object in the readiness hierarchy (Provider/Capability/Product/Estate/Tenant, Technical Specification SS44)."
+    },
+    "driftRecordId": {
+      "type": "string",
+      "pattern": "^drift_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63,
+      "description": "Control Plane-minted opaque identifier for a Drift record (Technical Specification SS42-43)."
+    },
+    "driftObjectType": {
+      "type": "string",
+      "enum": ["TENANT", "LEGAL_ENTITY", "DIGITAL_ESTATE", "MARKET_PARTICIPATION", "PRODUCT_SUBSCRIPTION", "CAPABILITY_GRANT", "CAPABILITY_BINDING", "PROVIDER_CONFIGURATION"],
+      "description": "The class of object a Drift record compares desired vs. observed state for. Intentionally the set of objects Programme Gate P0's classification (phase-0-architecture-inventory-and-lock.md) identified as carrying desired/observed state, not an open-ended free-text field."
+    },
+    "driftResolution": {
+      "type": "string",
+      "enum": ["UNRESOLVED", "RECONCILED", "BLOCKED"],
+      "description": "Whether a detected drift has been reconciled, remains unresolved, or reconciliation itself is blocked (e.g. reconciling it safely requires human approval)."
+    }
+  }
+}

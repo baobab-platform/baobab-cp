@@ -491,24 +491,33 @@ const MaxCorporateControlDepth = 16
 //   - EXTERNAL_CLIENT / PARTNER / MANAGED_ENTITY → not eligible
 //   - corporate group membership and PlatformAccount are never considered
 func DeriveInternalEligibility(ev InternalEligibilityEvidence, platformOwnerOrgIDs map[string]struct{}) bool {
+	return len(QualifyingPlatformRelationships(ev, platformOwnerOrgIDs)) > 0
+}
+
+// QualifyingPlatformRelationships returns the platform relationships that
+// make ev.OrganisationID INTERNAL-eligible under DeriveInternalEligibility's
+// rules, in input order: the evidence an INTERNAL classification records
+// (ADR-BCP-017 section 13). None means not eligible.
+func QualifyingPlatformRelationships(ev InternalEligibilityEvidence, platformOwnerOrgIDs map[string]struct{}) []PlatformRelationship {
 	at := ev.EvaluatedAt
 	if at.IsZero() {
 		at = time.Now().UTC()
 	}
+	var out []PlatformRelationship
 	for _, pr := range ev.PlatformRelationships {
 		if pr.OrganisationID != ev.OrganisationID || !pr.IsConsequential(at) {
 			continue
 		}
 		switch pr.RelationshipType {
 		case PlatformRelOwner, PlatformRelOperator:
-			return true
+			out = append(out, pr)
 		case PlatformRelGroupAffiliate:
 			if affiliateControlledByOwner(ev.OrganisationID, pr.BasisRelationshipID, ev.CorporateRelationships, platformOwnerOrgIDs, at) {
-				return true
+				out = append(out, pr)
 			}
 		}
 	}
-	return false
+	return out
 }
 
 // affiliateControlledByOwner walks consequential edges backwards (target →
