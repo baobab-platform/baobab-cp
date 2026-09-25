@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	productdomain "github.com/nabhold/baobab-cp/internal/product/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	productdomain "github.com/baobab-platform/baobab-cp/internal/product/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 // CompositionExpansionService turns a ProductSubscription's ProductVersion

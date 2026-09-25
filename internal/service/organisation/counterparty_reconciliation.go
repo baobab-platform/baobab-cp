@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 // ReconciliationSource marks resolution candidates found by a reconciliation run.

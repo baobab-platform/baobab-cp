@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/store/postgres"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 )
 
 func main() {

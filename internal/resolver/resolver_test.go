@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 func TestScopeMatcherPrefersMoreSpecificMatch(t *testing.T) {

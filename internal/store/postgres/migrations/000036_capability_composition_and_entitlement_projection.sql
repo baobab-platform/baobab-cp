@@ -3,7 +3,7 @@
 -- needs that migration 000033 deliberately left unbuilt:
 --
 -- 1. capability.capability_composition / capability_composition_member --
---    the CapabilityComposition registry nabhold/shared's
+--    the CapabilityComposition registry baobab-platform/shared's
 --    contracts/capability/v1/composition.schema.json describes, but which
 --    has never had a Go type or table in this repository. Until now,
 --    product.product_version.composition_key (migration 000033) was a free

@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
 // TestTenantManifestSurvivesProcessRestart proves the Gate ZB-03.1 gap this

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 // TestCounterpartyRoutesRefuseBeforePersistence covers what the HTTP layer

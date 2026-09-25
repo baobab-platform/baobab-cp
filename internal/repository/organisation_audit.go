@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/events"
 	"github.com/jackc/pgx/v5"
-	"github.com/nabhold/baobab-cp/internal/events"
 )
 
 var correlationPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

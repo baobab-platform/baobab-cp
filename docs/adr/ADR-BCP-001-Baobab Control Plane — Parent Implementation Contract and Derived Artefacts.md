@@ -2,12 +2,12 @@
 
 **Parent Contract:** `BCP-IMPL-001`
 **System:** Baobab Control Plane
-**Repository:** `nabhold/baobab-cp`
+**Repository:** `baobab-platform/baobab-cp`
 **Implementation Language:** Go
 **Authoritative Runtime Store:** PostgreSQL 17
 **HTTP Contract:** OpenAPI 3.2.0
 **Event Contract:** AsyncAPI 3.0.0
-**Contract Authority:** `nabhold/shared`
+**Contract Authority:** `baobab-platform/shared`
 **Status:** Proposed Normative Implementation Baseline
 **Architecture Style:** Modular monolith control plane with explicit bounded contexts and independently evolvable adapters
 **Scope:** Canonical identity, mappings, markets, estates, topology, capabilities, isolation, context resolution, audit and messaging
@@ -1833,7 +1833,7 @@ The database tests must run against PostgreSQL 17, not an SQLite substitute.
 
 ## 25. Go architecture objective
 
-`nabhold/baobab-cp` SHALL begin as a **modular monolith**, not as a collection of premature microservices.
+`baobab-platform/baobab-cp` SHALL begin as a **modular monolith**, not as a collection of premature microservices.
 
 Boundaries SHALL nevertheless be strict enough that individual modules may later be extracted where operational evidence justifies it.
 
@@ -1844,7 +1844,7 @@ Go's official guidance recommends `internal/` for implementation packages in ser
 # 26. Repository structure
 
 ```text
-nabhold/baobab-cp/
+baobab-platform/baobab-cp/
 │
 ├── cmd/
 │   ├── api/
@@ -3237,7 +3237,7 @@ plus organisation-approved static analysis.
 Canonical API/event definitions SHALL live in:
 
 ```text
-nabhold/shared/
+baobab-platform/shared/
 └── contracts/
     └── control-plane/
         ├── openapi/
@@ -4914,7 +4914,7 @@ Examples become part of developer documentation and contract tests.
 
 # 110. Contract CI
 
-`nabhold/shared` SHALL test:
+`baobab-platform/shared` SHALL test:
 
 ```text
 OpenAPI syntactic validity
@@ -4928,7 +4928,7 @@ breaking-change detection
 examples against schemas
 ```
 
-`nabhold/baobab-cp` SHALL test:
+`baobab-platform/baobab-cp` SHALL test:
 
 ```text
 handlers conform to OpenAPI
@@ -5414,7 +5414,7 @@ breaking-change checks exist
 # 127. Repository responsibility matrix
 
 ```text
-nabhold/shared
+baobab-platform/shared
     owns:
         canonical schemas
         OpenAPI
@@ -5424,7 +5424,7 @@ nabhold/shared
         identifiers
         compatibility policy
 
-nabhold/baobab-cp
+baobab-platform/baobab-cp
     owns:
         Go implementation
         migrations
@@ -5493,7 +5493,7 @@ The three derived artefacts SHALL collectively preserve the following invariant:
 The physical implementation therefore becomes:
 
 ```text
-                         nabhold/shared
+                         baobab-platform/shared
                                │
                     Canonical Contracts
                                │
@@ -5502,7 +5502,7 @@ The physical implementation therefore becomes:
         OpenAPI 3.2                        AsyncAPI 3.0
              │                                   │
              ▼                                   ▼
-                       nabhold/baobab-cp
+                       baobab-platform/baobab-cp
                                │
                  ┌─────────────┴─────────────┐
                  │                           │

@@ -1680,7 +1680,7 @@ engine-provisioning.succeeded
 engine-provisioning.failed
 ```
 
-Names and envelope structures must conform to `nabhold/shared`.
+Names and envelope structures must conform to `baobab-platform/shared`.
 
 Do not create a second event convention just for onboarding.
 

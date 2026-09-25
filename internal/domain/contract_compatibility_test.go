@@ -4,15 +4,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/contracttest"
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/contracttest"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 // These tests validate payloads this repository's own domain types produce
-// against the actual JSON Schemas in a local nabhold/shared checkout, per
+// against the actual JSON Schemas in a local baobab-platform/shared checkout, per
 // the automation called for in
 // docs/reconciliation/shared-control-plane-audit.md §6/§10.5. Set
-// SHARED_CONTRACTS_DIR to a checkout of nabhold/shared at (or above) the
+// SHARED_CONTRACTS_DIR to a checkout of baobab-platform/shared at (or above) the
 // commit pinned in contracts.lock.yaml; they are skipped otherwise.
 
 func TestRegisterTenantMatchesSharedSchema(t *testing.T) {

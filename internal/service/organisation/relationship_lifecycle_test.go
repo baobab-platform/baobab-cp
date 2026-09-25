@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/events"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/events"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 // lifecycleFixture is a verified platform owner that verifiably owns an

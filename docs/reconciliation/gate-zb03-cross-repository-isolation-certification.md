@@ -5,15 +5,15 @@ isolation-relevant test this programme has built or found already in place acros
 repositories, map each to the specific ADR-0007/ADR-BCP/ADR-ERP/ADR-0009 isolation requirement
 it proves, name what remains genuinely uncovered, and give a certification verdict.
 **Date:** 2026-09-18
-**Method:** direct inspection of test files across `nabhold/baobab-iam`,
-`nabhold/baobab-cp`, `nabhold/baobab-trade`, `nabhold/baobab-erp`, `nabhold/zuribeans` as
+**Method:** direct inspection of test files across `baobab-platform/baobab-iam`,
+`baobab-platform/baobab-cp`, `baobab-platform/baobab-trade`, `baobab-platform/baobab-erp`, `baobab-platform/zuribeans` as
 checked out locally. Every test cited below was confirmed to exist at the stated path
 (`ls`/`grep`), not assumed from memory or an earlier summary. This is an audit of what's
 already built and proven, not a new live multi-service integration harness: no repository in
 this platform has a docker-compose stack, CI job, or any other mechanism that wires
 Keycloak+`baobab-cp`+`baobab-trade`+`baobab-erp`+`zuribeans` together as one running system
 (confirmed by inspecting every repo's CI workflows — each runs its own services in isolation;
-`nabhold/baobab-trade`'s `test:isolation` npm script, for instance, is a single-repo Vitest
+`baobab-platform/baobab-trade`'s `test:isolation` npm script, for instance, is a single-repo Vitest
 run against `tests/commerce-context.test.ts`, not a repo-spanning execution). Building one
 would be new infrastructure invention with no precedent anywhere in this platform, not
 certification of what exists — out of scope here, consistent with `gate-zb03-authority-
@@ -38,16 +38,16 @@ Every test below proves one or more of:
 
 ## 2. Inventory
 
-### `nabhold/baobab-iam` (`tests/integration/run.sh`, verified against a live Keycloak in CI)
+### `baobab-platform/baobab-iam` (`tests/integration/run.sh`, verified against a live Keycloak in CI)
 
 | § | What it proves | Isolation category |
 |---|---|---|
-| §9 | Every `config/clients/*-workload.json` client is registered in `nabhold/shared`'s workload registry with in-allowlist scopes, **and** (Gate IAM-18, ZB-03.9) its live `enabled` flag agrees with the registry's `status` — a `REVOKED`/`SUSPENDED`/`RETIRED` entry with `enabled: true` fails CI | Workload lifecycle |
+| §9 | Every `config/clients/*-workload.json` client is registered in `baobab-platform/shared`'s workload registry with in-allowlist scopes, **and** (Gate IAM-18, ZB-03.9) its live `enabled` flag agrees with the registry's `status` — a `REVOKED`/`SUSPENDED`/`RETIRED` entry with `enabled: true` fails CI | Workload lifecycle |
 | §10 | Cross-workload identity isolation: one workload's token cannot impersonate another's `azp`/`sub` (ADR-0007 §102) | Actor-type / workload |
 | §20 | Thamani ≠ ZuriBeans structural isolation | Estate/brand |
 | §21 | Thamani/ZuriBeans browser client redirect isolation | Estate/brand |
 
-### `nabhold/baobab-cp`
+### `baobab-platform/baobab-cp`
 
 | File | What it proves | Isolation category |
 |---|---|---|
@@ -58,7 +58,7 @@ Every test below proves one or more of:
 | `internal/repository/postgres_identity_unlink_test.go`, `postgres_identity_merge_test.go` | Identity unlink/merge auditing enforces its last-credential guard and rejects a double-link | Human identity |
 | `api/router_test.go` (`TestResolveContextRejectsRevokedWorkload`, `TestResolveContextAllowsActiveWorkload`, `TestResolveContextUnaffectedWhenWorkloadRegistryUnconfigured`, ZB-03.10, this slice) | A workload token that authenticates successfully but whose `client_id` the workload registry marks non-`ACTIVE` is rejected at request time; the default (unconfigured) behaviour is unchanged | Workload lifecycle |
 
-### `nabhold/baobab-trade`
+### `baobab-platform/baobab-trade`
 
 | File | What it proves | Isolation category |
 |---|---|---|
@@ -68,14 +68,14 @@ Every test below proves one or more of:
 | `tests/authenticate-middleware.test.ts` (ZB-03.7) | The real `authenticate()` boundary rejects forged signatures, expired tokens, and a correctly-signed token for the wrong actor type | Actor-type |
 | `tests/b2b-context-route.test.ts` (ZB-03.7) | An IDOR case: a real, validly-signed token for an actor with no membership in the requested organisation is rejected | Organisation |
 
-### `nabhold/baobab-erp`
+### `baobab-platform/baobab-erp`
 
 | File | What it proves | Isolation category |
 |---|---|---|
 | `tests/tenancy/test_context_resolver.py` | A cross-tenant `(ad_client_id, ad_org_id)` pair fails closed | Tenant |
 | `tests/integration/test_http_server.py` (ZB-03.8) | A validly authenticated workload token whose scope doesn't grant the endpoint it's calling is rejected with `403`, distinct from `401` | Actor-type / scope |
 
-### `nabhold/zuribeans`
+### `baobab-platform/zuribeans`
 
 | File | What it proves | Isolation category |
 |---|---|---|
@@ -88,7 +88,7 @@ Every test below proves one or more of:
 `baobab-cp`'s new `WorkloadRegistry` enforcement (§2 above, this slice) is **opt-in and
 disabled by default** (`api.Dependencies.WorkloadRegistry` nil unless an operator supplies
 `auth.LoadWorkloadRegistryFile` a local snapshot path). This repository has no existing
-runtime mechanism for consuming any `nabhold/shared` contract live — `internal/contracttest`'s
+runtime mechanism for consuming any `baobab-platform/shared` contract live — `internal/contracttest`'s
 `SHARED_CONTRACTS_DIR` is a test-only, local-checkout pattern (see that package's own doc
 comment), not something any production binary reads. Building a live-fetch-and-cache
 mechanism (polling cadence, staleness policy, fail-open-vs-fail-closed on a fetch error) is a

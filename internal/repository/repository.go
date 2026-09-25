@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	productdomain "github.com/nabhold/baobab-cp/internal/product/domain"
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/resolver"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	productdomain "github.com/baobab-platform/baobab-cp/internal/product/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
 )
 
 // MappingRepository defines the contract for retrieving canonical mappings.
@@ -518,7 +518,7 @@ var ErrMergeNotEligible = errors.New("merge source or target principal is not el
 // The source Principal row is archived (status ARCHIVED), never deleted,
 // and remains resolvable via GetPrincipal.
 //
-// nabhold/shared's principal.schema.json is additionalProperties: false
+// baobab-platform/shared's principal.schema.json is additionalProperties: false
 // with no merged-into field, and ADR-0004 §21 only requires the retired
 // identity remain resolvable "through historical audit records" (not via a
 // live pointer) -- so provenance is carried entirely by the two

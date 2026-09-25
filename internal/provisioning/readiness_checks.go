@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 )
 
 // ResourceReadinessProbe lets existing repositories/resolvers prove one

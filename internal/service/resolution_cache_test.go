@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/resolver"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
 )
 
 type fakeResolver struct {

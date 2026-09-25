@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 func TestEngineRelocationPreservesCanonicalIdentity(t *testing.T) {

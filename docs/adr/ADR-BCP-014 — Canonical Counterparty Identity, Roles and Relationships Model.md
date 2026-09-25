@@ -3,8 +3,8 @@
 **Status:** Accepted — Normative Platform Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
-**Primary Repository:** `nabhold/baobab-cp`  
-**Canonical Contracts:** `nabhold/shared`  
+**Primary Repository:** `baobab-platform/baobab-cp`  
+**Canonical Contracts:** `baobab-platform/shared`  
 **Consuming Engines:** `baobab-trade`, `baobab-erp`, `baobab-iam`, `baobab-cms`, future Baobab engines  
 **Reference Tenant:** ZuriBeans
 
@@ -2289,12 +2289,12 @@ These costs are justified by the platform's multi-engine, multi-tenant architect
 # 148. Implementation Ownership
 
 ```text
-nabhold/shared
+baobab-platform/shared
     │
     ├── canonical schemas
     └── canonical events
 
-nabhold/baobab-cp
+baobab-platform/baobab-cp
     │
     ├── canonical identity
     ├── roles
@@ -2302,18 +2302,18 @@ nabhold/baobab-cp
     ├── resolution
     └── mappings
 
-nabhold/baobab-trade
+baobab-platform/baobab-trade
     │
     ├── customer projection
     ├── supplier projection
     ├── logistics projection
     └── commercial relationships
 
-nabhold/baobab-erp
+baobab-platform/baobab-erp
     │
     └── C_BPartner projection
 
-nabhold/baobab-iam
+baobab-platform/baobab-iam
     │
     └── Keycloak Organisation projection
 ```

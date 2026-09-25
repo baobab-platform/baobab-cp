@@ -1,7 +1,7 @@
 -- Persists resolved Context values so they can be looked up later by
 -- context_id (ADR-BCP-004 SS70 "Context Identifier", SS73 "Context Cache").
--- This is the store the Runtime APIs (nabhold/baobab-cp #74 sub-work item 6)
--- need: nabhold/shared's resolutionRequest contract requires callers to pass
+-- This is the store the Runtime APIs (baobab-platform/baobab-cp #74 sub-work item 6)
+-- need: baobab-platform/shared's resolutionRequest contract requires callers to pass
 -- a pre-resolved context_id rather than an inline context, which means
 -- something durable has to answer "what did context_id X resolve to" after
 -- the POST /v1/context/resolve call that minted it returns.

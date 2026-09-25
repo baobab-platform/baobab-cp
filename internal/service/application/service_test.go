@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/contracttest"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/events"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service/application"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nabhold/baobab-cp/internal/contracttest"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/events"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service/application"
-	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
 // ADR-BCP-017 client application workflow against real PostgreSQL.

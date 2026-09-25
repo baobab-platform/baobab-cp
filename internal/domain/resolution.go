@@ -108,7 +108,7 @@ type EngineInstance struct {
 	EffectiveTo        *time.Time `json:"effective_to,omitempty"`
 }
 
-// MappingScope's fields mirror nabhold/shared's contracts/control-plane/v1/
+// MappingScope's fields mirror baobab-platform/shared's contracts/control-plane/v1/
 // canonical-mapping.schema.json #/$defs/mappingScope field-for-field (names,
 // required-ness) per docs/reconciliation/platform-resolution-spine-audit.md
 // Gate 1; see internal/domain/contract_compatibility_test.go. Gate 2

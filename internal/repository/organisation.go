@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 // ErrOrganisationConflict reports that a write would silently change an

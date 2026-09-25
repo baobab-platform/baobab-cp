@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/resolver"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
 )
 
 type CapabilityBindingStore interface {

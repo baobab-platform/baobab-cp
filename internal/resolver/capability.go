@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 )
 
 // CapabilityBinding represents the effective binding between a capability and a runtime engine instance.
@@ -108,7 +108,7 @@ func (CapabilityResolverImpl) Resolve(_ context.Context, q CapabilityResolutionQ
 		return ResolvedCapability{}, errors.New("capability not found")
 	}
 
-	// Tie-break order follows nabhold/shared's canonical
+	// Tie-break order follows baobab-platform/shared's canonical
 	// contracts/capability/v1/scope-specificity.yaml exactly: specificity,
 	// then binding_mode preference, then explicit priority (ADR-BCP-003
 	// SS16-19's "Priority SHALL NOT casually override scope specificity" and
@@ -137,7 +137,7 @@ func (CapabilityResolverImpl) Resolve(_ context.Context, q CapabilityResolutionQ
 	// A SHADOW binding is non-authoritative: even when it wins ranking (no
 	// PRIMARY/FALLBACK/MIGRATION candidate is eligible), it SHALL NOT be
 	// returned as a resolution result -- resolve as if no eligible binding
-	// existed (capabilitydomain.BindingModeShadow; nabhold/shared's
+	// existed (capabilitydomain.BindingModeShadow; baobab-platform/shared's
 	// scope-specificity.yaml "binding mode preference").
 	if chosen.binding.BindingMode == capabilitydomain.BindingModeShadow {
 		return ResolvedCapability{}, errors.New("capability not found")
@@ -154,7 +154,7 @@ func (CapabilityResolverImpl) Resolve(_ context.Context, q CapabilityResolutionQ
 }
 
 // bindingModeRank orders binding modes by resolution preference (highest
-// first): PRIMARY, FALLBACK, SHADOW, MIGRATION -- mirroring nabhold/shared's
+// first): PRIMARY, FALLBACK, SHADOW, MIGRATION -- mirroring baobab-platform/shared's
 // contracts/capability/v1/scope-specificity.yaml "binding_mode_preference".
 // DISABLED is never ranked: it is filtered out of candidates before this is
 // ever consulted.

@@ -2,15 +2,15 @@
 
 **Status:** Accepted
 **Date:** 2026-09-07
-**Repository:** `nabhold/baobab-cp`
+**Repository:** `baobab-platform/baobab-cp`
 **Depends on:** ADR-BCP-001
-**Contract:** `nabhold/shared/contracts/supplier-onboarding/v1` (see `nabhold/shared` ADR-0006)
+**Contract:** `baobab-platform/shared/contracts/supplier-onboarding/v1` (see `baobab-platform/shared` ADR-0006)
 
 ## Context
 
-`nabhold/thamani` is building a supplier registration, vetting and
-cross-border sourcing capability (see `nabhold/shared` ADR-0006 for the
-cross-repository context, including why `nabhold/zuribeans`' own
+`baobab-platform/thamani` is building a supplier registration, vetting and
+cross-border sourcing capability (see `baobab-platform/shared` ADR-0006 for the
+cross-repository context, including why `baobab-platform/zuribeans`' own
 independently-built supplier-registration slice does not resolve this
 program's discovery). That capability needs a canonical entity kind so a
 supplier organisation can eventually be resolved and mapped the same way a
@@ -44,13 +44,13 @@ existing limitation rather than this ADR introducing a new one.
 
 ## Consequences
 
-- `nabhold/thamani` (or any hosting estate) may call the existing
+- `baobab-platform/thamani` (or any hosting estate) may call the existing
   `POST /v1/canonical-entities` endpoint with
   `entity_type: "SUPPLIER_ORGANISATION"` once it is ready to register a
   supplier organisation's canonical identity — this ADR does not itself
   perform that registration.
 - This does not resolve canonical Organisation ownership.
-  `nabhold/shared`'s `contracts/erp/v1/system-of-record.yaml` keeps that
+  `baobab-platform/shared`'s `contracts/erp/v1/system-of-record.yaml` keeps that
   concept's `canonical_owner` `unassigned` (CI-enforced there), and a
   `SUPPLIER_ORGANISATION` canonical entity here is a distinct, narrower
   concept — an estate-scoped supplier record, not the platform-wide

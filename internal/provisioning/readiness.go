@@ -11,7 +11,7 @@ import (
 	"sort"
 	"time"
 
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 )
 
 type ReadinessStatus string

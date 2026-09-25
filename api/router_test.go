@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service"
-	"github.com/nabhold/baobab-cp/internal/store"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/store"
 )
 
 const testTenantID = "tn_01k4zuribeans"

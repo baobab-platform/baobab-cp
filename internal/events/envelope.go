@@ -1,6 +1,6 @@
 // Package events constructs the organisation-wide CloudEvents envelope
 // defined by contracts/events/v1/envelope.schema.json (ADR-0004, accepted in
-// nabhold/shared), so that any future event publisher in this repository
+// baobab-platform/shared), so that any future event publisher in this repository
 // builds one envelope shape instead of each call site inventing its own -
 // see docs/reconciliation/shared-control-plane-audit.md §5/§10.6. It
 // intentionally has no RabbitMQ or other broker dependency: this package
@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 var (
@@ -36,7 +36,7 @@ const (
 // contracts/events/v1/envelope.schema.json. Field order and JSON tags match
 // the schema's property names exactly; do not add fields here without
 // updating that schema first (this repository does not get to invent
-// envelope fields independently of nabhold/shared - see ADR-0004 and the
+// envelope fields independently of baobab-platform/shared - see ADR-0004 and the
 // audit's §6, "no repository should invent a separate spelling").
 type Envelope struct {
 	SpecVersion     string         `json:"specversion"`

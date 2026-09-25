@@ -1,13 +1,13 @@
 // Package contracttest helps *_test.go files in other packages validate
 // payloads this repository actually produces against the JSON Schemas
-// nabhold/shared publishes, using a local checkout of nabhold/shared at the
+// baobab-platform/shared publishes, using a local checkout of baobab-platform/shared at the
 // commit pinned in contracts.lock.yaml. This is the automation called for in
 // docs/reconciliation/shared-control-plane-audit.md §6/§10.5: contracts.lock.yaml
 // records a pinned commit but nothing previously checked baobab-cp's actual
 // output against it.
 //
 // Tests using this package are skipped unless SHARED_CONTRACTS_DIR is set to
-// a checkout of nabhold/shared (CI checks out the commit pinned in
+// a checkout of baobab-platform/shared (CI checks out the commit pinned in
 // contracts.lock.yaml; set it to a local clone for local development).
 package contracttest
 
@@ -22,19 +22,19 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-// SharedDir returns the local nabhold/shared checkout path from
+// SharedDir returns the local baobab-platform/shared checkout path from
 // SHARED_CONTRACTS_DIR, skipping the calling test if it is not set.
 func SharedDir(t *testing.T) string {
 	t.Helper()
 	dir := os.Getenv("SHARED_CONTRACTS_DIR")
 	if dir == "" {
-		t.Skip("SHARED_CONTRACTS_DIR not set; skipping nabhold/shared contract-compatibility test")
+		t.Skip("SHARED_CONTRACTS_DIR not set; skipping baobab-platform/shared contract-compatibility test")
 	}
 	return dir
 }
 
 // CompileSchema compiles the schema at contracts/<relPath> (relative to a
-// nabhold/shared checkout) for validation, registering every *.schema.json
+// baobab-platform/shared checkout) for validation, registering every *.schema.json
 // file under contracts/ as a resource first (keyed by its own declared
 // "$id") so that cross-file "$ref"s (e.g. tenant-registration.schema.json's
 // reference to domain.schema.json's $defs) resolve against the local
@@ -90,7 +90,7 @@ func CompileSchema(t *testing.T, sharedDir, relPath string) *jsonschema.Schema {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("index nabhold/shared contracts under %s: %v", contractsDir, err)
+		t.Fatalf("index baobab-platform/shared contracts under %s: %v", contractsDir, err)
 	}
 	if targetID == "" {
 		t.Fatalf("no schema with a matching path %q (relative to %s) was found; check the checkout and relPath", filePath, contractsDir)
@@ -108,7 +108,7 @@ func CompileSchema(t *testing.T, sharedDir, relPath string) *jsonschema.Schema {
 
 // stripNonRE2Patterns walks a decoded JSON Schema document and deletes any
 // "pattern" keyword whose value Go's RE2-based regexp package cannot
-// compile. nabhold/shared correctly uses ECMA 262 regex features (e.g.
+// compile. baobab-platform/shared correctly uses ECMA 262 regex features (e.g.
 // negative lookahead in trace_id's pattern) that are valid per the JSON
 // Schema specification but unsupported by RE2; without this, the schema
 // compiler's own meta-schema self-check ("is every 'pattern' value a

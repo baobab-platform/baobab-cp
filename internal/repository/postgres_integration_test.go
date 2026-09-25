@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nabhold/baobab-cp/internal/resolver"
-	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
 // TestPostgresCapabilityBindingExclusionConstraintFires is a regression test for

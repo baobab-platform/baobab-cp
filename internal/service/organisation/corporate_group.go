@@ -8,8 +8,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 // CorporateGroupDeriver keeps a CorporateGroup's membership equal to what its

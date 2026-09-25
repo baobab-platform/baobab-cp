@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service"
 )
 
 func kindAttestationHandler(t *testing.T, entities ...domain.CanonicalEntity) PlatformContextHandler {

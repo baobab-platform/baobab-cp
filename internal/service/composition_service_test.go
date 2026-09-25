@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	productdomain "github.com/nabhold/baobab-cp/internal/product/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	productdomain "github.com/baobab-platform/baobab-cp/internal/product/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 func activeProductVersion() productdomain.ProductVersion {

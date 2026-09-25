@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"time"
 
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/events"
+	productdomain "github.com/baobab-platform/baobab-cp/internal/product/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/events"
-	productdomain "github.com/nabhold/baobab-cp/internal/product/domain"
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/resolver"
 )
 
 // ErrMappingOverlap is returned when a mapping insert is rejected by the
@@ -386,7 +386,7 @@ func (r *PostgresRepository) SaveMapping(ctx context.Context, mapping domain.Map
 // CreateMappingScope, GetMappingScope and ListMappingScopes are Gate 2's
 // (docs/reconciliation/platform-resolution-spine-audit.md) first real
 // Postgres-backed persistence for domain.MappingScope -- Gate 1 (#61) gave
-// it Go fields matching nabhold/shared's wire schema, but nothing loaded or
+// it Go fields matching baobab-platform/shared's wire schema, but nothing loaded or
 // saved one against mapping.mapping_scope until migration
 // 000025_mapping_scope_dimensions.sql completed that table's columns.
 //

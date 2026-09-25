@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
-	basestore "github.com/nabhold/baobab-cp/internal/store"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	basestore "github.com/baobab-platform/baobab-cp/internal/store"
 )
 
 // TestRegisterTenantRecordsUnverifiedOrganisationClaims proves ADR-BCP-018

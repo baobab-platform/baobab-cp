@@ -3,12 +3,12 @@
 **Status:** Accepted — Normative Platform Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
-**Repository:** `nabhold/baobab-cp`  
-**Runtime Authority:** `nabhold/baobab-cp`  
-**Contract Authority:** `nabhold/shared`  
-**Accounting Authority:** `nabhold/baobab-erp`  
-**Commercial Execution Authority:** `nabhold/baobab-trade`  
-**Identity Authority:** `nabhold/baobab-iam`  
+**Repository:** `baobab-platform/baobab-cp`  
+**Runtime Authority:** `baobab-platform/baobab-cp`  
+**Contract Authority:** `baobab-platform/shared`  
+**Accounting Authority:** `baobab-platform/baobab-erp`  
+**Commercial Execution Authority:** `baobab-platform/baobab-trade`  
+**Identity Authority:** `baobab-platform/baobab-iam`  
 **Reference Tenant:** ZuriBeans  
 
 **Depends On:**
@@ -1763,7 +1763,7 @@ This complexity is unavoidable in real multi-entity trade.
 
 # 79. Shared Contract Requirements
 
-`nabhold/shared` SHALL define canonical contracts for:
+`baobab-platform/shared` SHALL define canonical contracts for:
 
 ```text
 LegalEntityRelationship

@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
 // TestAuthoritativeContextResolverOrganisationFailsClosed proves ADR-BCP-016's

@@ -6,8 +6,8 @@ identity/organisation/authorization concern today, which repositories may only c
 projection of it, and which concerns have **no owner yet** — so no ZB-03 slice is built on
 an assumed authority that does not actually exist.
 **Date:** 2026-09-17
-**Method:** direct, read-only inspection of `nabhold/baobab-iam`, `nabhold/baobab-cp`,
-`nabhold/baobab-trade`, `nabhold/baobab-erp`, `nabhold/zuribeans` and `nabhold/shared` as
+**Method:** direct, read-only inspection of `baobab-platform/baobab-iam`, `baobab-platform/baobab-cp`,
+`baobab-platform/baobab-trade`, `baobab-platform/baobab-erp`, `baobab-platform/zuribeans` and `baobab-platform/shared` as
 checked out locally — ADRs, Go/TypeScript/Python/Java source, SQL migrations, JSON Schema
 contracts, and existing tests. Every claim below cites a file. Nothing is asserted from ADR
 prose alone where code could be read directly.
@@ -33,7 +33,7 @@ unblocks.
 | Supplier qualification / lifecycle | `zuribeans` (estate-owned, per accepted ADR) | ERP/CP projections once wired | `baobab-iam` (identity ≠ approval) | **Real.** `supplier_organisations`/`supplier_capabilities`/`supplier_certifications`/`supplier_status_events`, full 11-state lifecycle with transition guard (`zuribeans/src/lib/db/schema.ts`, `src/lib/supplier/lifecycle.ts`), `canonical_organisation_id` reserved and unpopulated (`schema.ts` line 50). No supplier-representative/membership model exists yet (`supplier_contacts` is inert metadata, not authorization). |
 | Market participation / trade lane authority | `baobab-cp` | Trade, ERP, ZuriBeans | frontend market switcher deciding eligibility itself | **Real.** Gate ZB-02 (`MarketAssignment`, `TradeLane`), already isolation-tested. `zuribeans`'s own market-context resolver explicitly does **not** gate eligibility, only presentation (`zuribeans/docs/adr/0004-market-context-resolution.md:56-58`) — this is correct today only because nothing downstream yet relies on it for authorization; ZB-03.6 must not accidentally start trusting it. |
 | ERP-native authorization (`AD_Role`, `AD_Client`/`AD_Org` grants) | `baobab-erp` | ERP only | IAM mirroring every role into iDempiere | **Decided, not implemented.** ADR-ERP-002 §50 / ADR-ERP-010 §37-39 (both Accepted) explicitly reject 1:1 role mirroring — but no mapping/policy code exists yet to translate an IAM role/scope into an `AD_Role` grant (`baobab-erp/architecture/conformance.yaml`). |
-| Revocation propagation (identity/session/membership/workload/tenant/grant → downstream reject) | **unowned as a cross-repo signal**; each repo owns rejecting its own stale authority | all engines | — | **Gap. See §3.** `nabhold/shared` already defines the event schemas (`identity.disabled`, `session.revoked`, `workload.revoked`, `membership.revoked`, `entitlement.revoked`, `credential.compromised` — `shared/contracts/identity-events/v1/`); nothing emits them yet. |
+| Revocation propagation (identity/session/membership/workload/tenant/grant → downstream reject) | **unowned as a cross-repo signal**; each repo owns rejecting its own stale authority | all engines | — | **Gap. See §3.** `baobab-platform/shared` already defines the event schemas (`identity.disabled`, `session.revoked`, `workload.revoked`, `membership.revoked`, `entitlement.revoked`, `credential.compromised` — `shared/contracts/identity-events/v1/`); nothing emits them yet. |
 | Cross-cutting event/error/idempotency contract shape | `shared` | all engines | any engine inventing its own envelope/error/idempotency-key shape | **Real and mature.** `contracts/events/v1/envelope.schema.json`, `contracts/errors/v1/problem-details.schema.json`, `contracts/idempotency/v1/policy.yaml`, `contracts/authorization/v1/{scope-registry,reason-code-registry,delegation}.yaml` — all Accepted, all reusable as-is. |
 
 ---
@@ -237,7 +237,7 @@ interim.
 **Workload lifecycle state (§1 table, row 28): `baobab-iam`-side consistency enforcement shipped;
 `baobab-cp`-side request-time enforcement remains unowned.** `baobab-iam`'s
 `tests/integration/run.sh` §9 now asserts every workload client's live `enabled` flag agrees with
-`nabhold/shared`'s `workload-registry.yaml` `status` field (Gate IAM-18) — a registry entry marked
+`baobab-platform/shared`'s `workload-registry.yaml` `status` field (Gate IAM-18) — a registry entry marked
 `SUSPENDED`/`REVOKED`/`RETIRED` with its matching Keycloak client still `enabled: true` now fails
 CI. This closes the *registration-consistency* half of the gap (an operator following the
 registry's own documented "set status to RETIRED before disabling the client" ordering can no

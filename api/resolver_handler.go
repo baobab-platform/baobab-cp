@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/service"
 )
 
 // ResolverHandler exposes the composed resolution service over HTTP.

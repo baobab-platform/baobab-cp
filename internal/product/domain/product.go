@@ -1,7 +1,7 @@
 // Package domain holds the product module's aggregate model: Product,
 // ProductVersion and EntitlementProjection (Technical Specification §31,
 // §88, §91; Programme Gate P4 "Product and Composition Engine"). Mirrors
-// nabhold/shared's contracts/product/v1 package field-for-field. This
+// baobab-platform/shared's contracts/product/v1 package field-for-field. This
 // package owns these types; other modules reference them through explicit
 // imports rather than duplicating or reaching into this module's
 // persistence directly (ADR-BCP-010 §39-40, "one owning module per
@@ -30,7 +30,7 @@ func ValidProductID(v string) bool {
 }
 
 // ProductLifecycle is the operational lifecycle of a Product or
-// ProductVersion (mirrors nabhold/shared's contracts/product/v1/domain.schema.json
+// ProductVersion (mirrors baobab-platform/shared's contracts/product/v1/domain.schema.json
 // #/$defs/productLifecycle -- deliberately the same five values as
 // capability/v1's capabilityLifecycle, declared locally since Product is not
 // itself a Capability).

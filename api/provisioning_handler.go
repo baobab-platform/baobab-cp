@@ -38,12 +38,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/provisioning"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/store"
 	"github.com/go-chi/chi/v5"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/provisioning"
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/store"
 )
 
 // ProvisioningRepository is every persistence dependency the provisioning

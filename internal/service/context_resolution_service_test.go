@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/metrics"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/store"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/metrics"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/store"
 )
 
 type fakeTenantStore struct {
@@ -112,7 +112,7 @@ func TestContextResolutionServiceRequiresTenantStore(t *testing.T) {
 
 // TestContextResolutionServiceResolvesRequestSuppliedTenantWhenClaimEmpty is
 // the regression test for the real-world case every other test in this file
-// skips over: no workload client in nabhold/baobab-iam mints a tenant_id
+// skips over: no workload client in baobab-platform/baobab-iam mints a tenant_id
 // claim today (see api.resolveWorkloadTenant's doc comment for why), so
 // principal.TenantID is empty for every real workload token. Before this,
 // auth.NewOperationContext's own "verified workload principal is required"

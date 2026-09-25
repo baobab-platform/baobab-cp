@@ -7,7 +7,7 @@ import (
 )
 
 // GrantSource is the provenance of a CapabilityGrant (ADR-BCP-003 §10,
-// mirrored in nabhold/shared's contracts/capability/v1/domain.schema.json
+// mirrored in baobab-platform/shared's contracts/capability/v1/domain.schema.json
 // #/$defs/capabilityGrantSource). Multiple independent grants from
 // different sources may coexist for the same tenant/capability/scope;
 // revoking one source's grant never revokes another source's grant for the
@@ -57,7 +57,7 @@ func (s GrantStatus) Valid() bool {
 // CapabilityGrant answers exactly one question: may this tenant, in this
 // scope, consume this capability? It never determines which provider or
 // engine instance serves the request -- that is CapabilityBinding's job
-// (ADR-BCP-003 §9). Mirrors nabhold/shared's
+// (ADR-BCP-003 §9). Mirrors baobab-platform/shared's
 // contracts/capability/v1/grant.schema.json field-for-field.
 type CapabilityGrant struct {
 	ID               string         `json:"id,omitempty"`
@@ -94,7 +94,7 @@ func (g CapabilityGrant) Validate() error {
 	// Provenance SHALL be retained back to its source (§10); a grant
 	// whose source is not the platform's own baseline entitlement must
 	// name the record it came from (e.g. a subscription_id), matching
-	// nabhold/shared's grant.schema.json conditional requirement.
+	// baobab-platform/shared's grant.schema.json conditional requirement.
 	if g.Source != GrantSourcePlatformBaseline && strings.TrimSpace(g.SourceReference) == "" {
 		return errors.New("source_reference is required unless source is PLATFORM_BASELINE")
 	}

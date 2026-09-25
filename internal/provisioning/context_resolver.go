@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/resolver"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
 )
 
 // ContextAuthority is deliberately read-only. Context resolution consumes

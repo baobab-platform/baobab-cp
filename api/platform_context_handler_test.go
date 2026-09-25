@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service"
 )
 
 func TestPlatformContextHandlerResolvesAndPersistsContext(t *testing.T) {
@@ -63,7 +63,7 @@ func TestPlatformContextHandlerResolvesAndPersistsContext(t *testing.T) {
 // TestPlatformContextHandlerAcceptsRequestSuppliedTenantWhenClaimEmpty is
 // this handler's counterpart to
 // TestResolverHandlerAcceptsRequestSuppliedTenantWhenClaimEmpty: no workload
-// client in nabhold/baobab-iam mints a tenant_id claim today, so a request
+// client in baobab-platform/baobab-iam mints a tenant_id claim today, so a request
 // body tenant_id is how the real-world workload path supplies one.
 func TestPlatformContextHandlerAcceptsRequestSuppliedTenantWhenClaimEmpty(t *testing.T) {
 	repo := repository.NewInMemoryRepository()

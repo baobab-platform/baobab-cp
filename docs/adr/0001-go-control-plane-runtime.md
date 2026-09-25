@@ -24,8 +24,8 @@ Temporal. Schema-per-tenant is the default database isolation strategy; RLS is
 an explicit alternative provisioner strategy. APISIX is reconciled through its
 Admin API and never queries the control-plane database.
 
-Canonical portable contracts are versioned in `nabhold/shared`. Environment
-provisioning belongs to `nabhold/infrastructure`.
+Canonical portable contracts are versioned in `baobab-platform/shared`. Environment
+provisioning belongs to `baobab-platform/infrastructure`.
 
 ## Consequences
 

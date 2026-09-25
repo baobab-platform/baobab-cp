@@ -4,7 +4,7 @@ package api
 // (principalTenant) against a caller-supplied tenant (requestedTenant --
 // a request body field, or a previously-resolved Context's own TenantID).
 //
-// No workload client in nabhold/baobab-iam mints a tenant_id claim today
+// No workload client in baobab-platform/baobab-iam mints a tenant_id claim today
 // (client-credentials tokens are static per-client, and ADR-0007 SS88
 // explicitly allows one workload identity, e.g. baobab-trade, to serve many
 // tenants -- a static claim can't express that), so principalTenant is

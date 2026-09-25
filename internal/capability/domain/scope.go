@@ -7,7 +7,7 @@ import (
 
 // CapabilityScope represents the applicability dimensions of one
 // CapabilityGrant or CapabilityBinding (ADR-BCP-003 §13). It mirrors
-// nabhold/shared's contracts/capability/v1/scope.schema.json field-for-field
+// baobab-platform/shared's contracts/capability/v1/scope.schema.json field-for-field
 // and is deliberately distinct from MappingScope (internal/domain):
 // the two share dimension vocabulary but are evaluated by different
 // resolvers for different purposes (ADR-SHARED-007 §25). An unspecified

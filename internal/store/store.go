@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 var ErrIdempotencyConflict = errors.New("idempotency key was already used with a different request")

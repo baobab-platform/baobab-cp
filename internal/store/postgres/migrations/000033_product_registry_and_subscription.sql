@@ -1,4 +1,4 @@
--- Gate: remodel ProductSubscription against nabhold/shared's new
+-- Gate: remodel ProductSubscription against baobab-platform/shared's new
 -- contracts/product/v1 package (ADR-SHARED-009, Programme Gate P1).
 -- Programme Gate P0's classification (docs/reconciliation/phase-0-
 -- architecture-inventory-and-lock.md) found the previous product_subscriptions
@@ -19,7 +19,7 @@
 -- scope, not this migration's. product_subscription.product_version_id is
 -- therefore nullable for the same reason capability_binding.provider_id was
 -- left nullable in migration 000028: a required field in the target model
--- with no producing workflow yet (tracked: nabhold/baobab-cp#74-class
+-- with no producing workflow yet (tracked: baobab-platform/baobab-cp#74-class
 -- follow-up, Programme Gate P4).
 
 CREATE SCHEMA IF NOT EXISTS product;

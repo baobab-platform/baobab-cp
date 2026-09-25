@@ -1,5 +1,5 @@
 # Standalone local topology - a self-contained stand-in for the two
-# services nabhold/infrastructure's own compose/compose.yaml provisions
+# services baobab-platform/infrastructure's own compose/compose.yaml provisions
 # for this repo (POSTGRES_DB/POSTGRES_USER default to "baobab_control"
 # there too - see that repo's compose/.env.example). Naming matches
 # deliberately so a contributor can point DATABASE_URL/RABBITMQ_URL at

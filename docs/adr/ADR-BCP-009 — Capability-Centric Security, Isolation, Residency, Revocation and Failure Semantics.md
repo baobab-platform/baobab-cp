@@ -3,10 +3,10 @@
 **Status:** Proposed — Normative Platform Security Architecture  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
-**Repository:** `nabhold/baobab-cp`  
-**Runtime Authority:** `nabhold/baobab-cp`  
-**Contract Authority:** `nabhold/shared`  
-**Identity Authority:** `nabhold/baobab-iam`
+**Repository:** `baobab-platform/baobab-cp`  
+**Runtime Authority:** `baobab-platform/baobab-cp`  
+**Contract Authority:** `baobab-platform/shared`  
+**Identity Authority:** `baobab-platform/baobab-iam`
 
 **Depends On:**
 
@@ -19,7 +19,7 @@
 - ADR-BCP-007 — Control Plane APIs, Capability Resolution Contracts, Caching, Resolution Assertions and Service-to-Service Consumption Model
 - ADR-BCP-008 — Control Plane Audit, Observability, Reconciliation, Readiness and Operational Governance Model
 - ADR-SHARED-007 — Canonical Capability Contracts, Composition Registry and Cross-Engine Provider Model
-- Applicable `nabhold/baobab-iam` ADRs, particularly ADR-IAM-0008 and identity lifecycle/revocation/resilience decisions
+- Applicable `baobab-platform/baobab-iam` ADRs, particularly ADR-IAM-0008 and identity lifecycle/revocation/resilience decisions
 
 **Applies To:** Tenant isolation, legal-entity isolation, Digital Estate boundaries, capability authorization, provider access, engine topology, regional placement, data residency, IAM integration, revocation, service identity, privileged administration, failure behaviour, caching, audit and incident containment.
 
@@ -2844,7 +2844,7 @@ approved commercial buyer
 
 # 199. Security Contract Authority
 
-`nabhold/shared` SHALL define canonical contracts for:
+`baobab-platform/shared` SHALL define canonical contracts for:
 
 ```text id="u8g3m5"
 security reason codes

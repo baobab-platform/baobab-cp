@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/metrics"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/metrics"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 // TestOrganisationObservabilityRoutesAreScoped covers ADR-BCP-018 gate

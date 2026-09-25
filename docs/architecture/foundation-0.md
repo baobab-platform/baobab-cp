@@ -2,7 +2,7 @@
 
 ## Mission
 
-`nabhold/baobab-cp` owns the desired state and lifecycle of Nabhold tenants. It
+`baobab-platform/baobab-cp` owns the desired state and lifecycle of Nabhold tenants. It
 accepts authorised management commands, records auditable state, publishes
 versioned events, and reconciles approved platform resources through scoped
 adapters.
@@ -13,7 +13,7 @@ infrastructure repository, or a general enterprise-application monorepo.
 ## Canonical contracts
 
 The authoritative Foundation 0 definitions are maintained in
-`nabhold/shared`:
+`baobab-platform/shared`:
 
 - `contracts/control-plane/v1/openapi.yaml`
 - `contracts/control-plane/v1/asyncapi.yaml`

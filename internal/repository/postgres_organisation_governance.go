@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/events"
 	"github.com/jackc/pgx/v5"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/events"
 )
 
 // firstPartySourceAuthority marks facts established by Shared governance.

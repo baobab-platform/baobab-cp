@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 )
 
 type grantStoreFake struct {

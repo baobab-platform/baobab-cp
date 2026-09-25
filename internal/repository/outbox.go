@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/baobab-platform/baobab-cp/internal/events"
 	"github.com/jackc/pgx/v5"
-	"github.com/nabhold/baobab-cp/internal/events"
 )
 
 // defaultEventSource mirrors internal/store/postgres.Store's own constant

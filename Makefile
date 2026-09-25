@@ -1,4 +1,4 @@
-# Path to a sibling clone of nabhold/infrastructure, used by the
+# Path to a sibling clone of baobab-platform/infrastructure, used by the
 # *-infra targets below. Override with `INFRASTRUCTURE_DIR=/path make dev-up-infra`
 # if it isn't cloned next to this repo.
 INFRASTRUCTURE_DIR ?= ../infrastructure
@@ -35,19 +35,19 @@ dev-down:
 dev-logs:
 	docker compose logs -f
 
-# Run against nabhold/infrastructure's real Postgres+RabbitMQ instead of
+# Run against baobab-platform/infrastructure's real Postgres+RabbitMQ instead of
 # this repo's standalone stand-in - the same topology this repo runs
 # against in shared/staging environments. See README's "Local topology
 # options" before using these.
 dev-up-infra:
-	@test -f $(INFRA_ENV) || { echo "error: $(INFRA_ENV) not found - clone nabhold/infrastructure as a sibling directory (or set INFRASTRUCTURE_DIR) and follow its README to create compose/.env" >&2; exit 1; }
+	@test -f $(INFRA_ENV) || { echo "error: $(INFRA_ENV) not found - clone baobab-platform/infrastructure as a sibling directory (or set INFRASTRUCTURE_DIR) and follow its README to create compose/.env" >&2; exit 1; }
 	docker compose --project-directory $(INFRASTRUCTURE_DIR)/compose -f $(INFRA_COMPOSE) --env-file $(INFRA_ENV) up -d --wait postgresql rabbitmq
 dev-down-infra:
 	docker compose --project-directory $(INFRASTRUCTURE_DIR)/compose -f $(INFRA_COMPOSE) --env-file $(INFRA_ENV) down
 dev-logs-infra:
 	docker compose --project-directory $(INFRASTRUCTURE_DIR)/compose -f $(INFRA_COMPOSE) --env-file $(INFRA_ENV) logs -f postgresql rabbitmq
 # Prints the DATABASE_URL/RABBITMQ_URL to paste into .env for dev-up-infra,
-# derived from nabhold/infrastructure's own compose/.env rather than
+# derived from baobab-platform/infrastructure's own compose/.env rather than
 # duplicating its secrets here.
 dev-env-infra:
 	@test -f $(INFRA_ENV) || { echo "error: $(INFRA_ENV) not found - see dev-up-infra" >&2; exit 1; }

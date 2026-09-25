@@ -19,7 +19,7 @@ inventory and evidence. Summary of the five locked/decided items:
    alongside `engine_instance_id`, giving CR-005's shape a real column on both sides.
    Nullable pending a provider-registration backfill workflow (`#76`, `#82`).
 3. **Event vocabulary lock.** Canonical event-type format is
-   `com.nabhold.<context>.<...>.v<N>` (`nabhold/shared`'s
+   `com.nabhold.<context>.<...>.v<N>` (`baobab-platform/shared`'s
    `contracts/events/v1/envelope.schema.json`), already implemented by `internal/events`
    and verified end-to-end against real PostgreSQL and the real shared schema. This
    repository's own Technical Specification (CR-003) and `docs/adr/ADR-BCP-015` had

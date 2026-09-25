@@ -1,9 +1,9 @@
-# Audit: `nabhold/shared` ↔ `nabhold/baobab-cp` Reconciliation
+# Audit: `baobab-platform/shared` ↔ `baobab-platform/baobab-cp` Reconciliation
 
 **Scope:** Verification that `baobab-cp`'s implementation, persistence, API and documentation
 derive from and remain coherent with the canonical contracts and accepted ADRs owned by
-`nabhold/shared`.
-**Method:** Direct reading of `nabhold/shared` ADRs (0001–0005), governance contracts
+`baobab-platform/shared`.
+**Method:** Direct reading of `baobab-platform/shared` ADRs (0001–0005), governance contracts
 (`tenancy.yaml`, `legal-entity/registry.yaml`), the `contracts/control-plane/v1/*` and
 `contracts/events|errors|idempotency/v1/*` schemas, cross-referenced against `baobab-cp`'s
 actual Go source, SQL migrations, tests and documentation as committed on
@@ -14,7 +14,7 @@ document alone, since that document is explicitly `Status: Proposed`, not an acc
 
 **Status update:** the P0 finding in §2.1 and P1 backlog items 3–5 (§10) have since been
 remediated in follow-up commits on this branch, each verified against a real PostgreSQL
-instance and/or a real `nabhold/shared` checkout rather than asserted. §12 records what
+instance and/or a real `baobab-platform/shared` checkout rather than asserted. §12 records what
 changed, what is intentionally still open, and one additional defect (a column-type
 mismatch in `messaging.outbox`) found while scoping item 6. The findings below are left as
 originally written, as the record of what was found and why; §12 is the record of what was
@@ -25,7 +25,7 @@ then done about it.
 ## 1. Executive summary
 
 `baobab-cp` correctly adopted the *shape* of the canonical mapping model described in
-`nabhold/shared` — schema-qualified tables for canonical entities, mappings, markets,
+`baobab-platform/shared` — schema-qualified tables for canonical entities, mappings, markets,
 capabilities and topology exist, and the repository has its own detailed (if only
 "Proposed") internal elaboration of that model in `docs/adr/ADR-BCP-001-...md`. However,
 the repository is currently **not internally coherent**: it contains two unreconciled
@@ -43,11 +43,11 @@ tests (which exercise an in-memory/mocked store, not the real schema). Concretel
   See §2.1.
 - **P0 — a second family of `registry`/`mapping`/`capability`/`topology` tables (the ones
   actually created by `cmd/migrate`) is queried by `internal/repository/postgres.go` using
-  column and table names, and an ID strategy, that diverge from `nabhold/shared`'s
+  column and table names, and an ID strategy, that diverge from `baobab-platform/shared`'s
   canonical schemas in ways that are individually correctable but currently untested
   against a real PostgreSQL instance (`postgres_integration_test.go` exists but does not
   cover these code paths — see §2.2/§4).
-- **P1 — identifier grammar is not enforced anywhere in Go.** `nabhold/shared` fixes exact
+- **P1 — identifier grammar is not enforced anywhere in Go.** `baobab-platform/shared` fixes exact
   formats for `tenant_id` (`tn_[a-z0-9]+`), `mapping_id` (`map_[a-z0-9]+`),
   `external_reference_id` (`ref_[a-z0-9]+`) and `mapping_scope_id` (`scope_[a-z0-9]+`) in
   `contracts/control-plane/v1/domain.schema.json`. `baobab-cp` mints raw `uuid` values for
@@ -159,11 +159,11 @@ However, comparing the **actual migration column names** (not the aspirational p
 `effective_from`/`effective_to`, `authority`, `classification`, while the migration that is
 actually committed, `000002_canonical_registry.sql`, has `canonical_entity_id`,
 `tenant_id`, `legal_entity_id`, `external_key`, and no temporal columns at all) against
-`nabhold/shared`'s `contracts/control-plane/v1/canonical-mapping.schema.json` and
+`baobab-platform/shared`'s `contracts/control-plane/v1/canonical-mapping.schema.json` and
 `domain.schema.json` surfaces real, shared-contract-level gaps that are independent of the
 ADR-BCP-001 aspiration:
 
-| Table (as migrated) | Gap vs. `nabhold/shared` v1 contracts |
+| Table (as migrated) | Gap vs. `baobab-platform/shared` v1 contracts |
 |---|---|
 | `registry.canonical_entity` | No `effective_from`/`effective_to` (temporal validity is mandatory per the Mapping Model §25 and implied by `mapping.canonical_key` uniqueness semantics); `tenant_id`/`legal_entity_id` are unconstrained `text`, not validated against `tenant_id` (`^tn_[a-z0-9]+$`) or `legal_entity_id` (`^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*$`) grammars from `domain.schema.json`. |
 | `mapping.canonical_mapping` | Column/table name diverges from the shared schema's `Mapping` (fields `mapping_id`, `canonical_entity_id`, `external_reference_id`/`target_canonical_entity_id`, `scope_id`, `direction`, `cardinality`, `confidence`, `effective_from`/`effective_to`, `revision`) — the migrated table only has `source_entity_id`/`target_entity_id` and no scope, direction, cardinality, confidence or temporal columns at all, so the exclusion-constraint-based non-overlap guarantee `canonical-mapping.schema.json` implies (and `ADR-BCP-001` §16.3 specifies as "a core architectural invariant") is not present on this table. The temporal exclusion constraint that *does* exist is on `capability.capability_binding` only (`000012`). |
@@ -180,7 +180,7 @@ external contract they claim to implement.
 
 ## 3. Identifier and naming audit
 
-| Concept | `nabhold/shared` canonical form | `baobab-cp` as committed | Status |
+| Concept | `baobab-platform/shared` canonical form | `baobab-cp` as committed | Status |
 |---|---|---|---|
 | `tenant_id` | `^tn_[a-z0-9]+$` (`domain.schema.json`) | `domain.ValidResource` accepts any `^[a-z][a-z0-9]*(_[a-z0-9]+)*$` 3–63 char string; no `tn_` prefix required or minted anywhere | **Non-conformant.** A caller can register a tenant with `tenant_id: "acme"` and it will be accepted. |
 | `legal_entity_id` | `^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*$`, must exist in `contracts/legal-entity/registry.yaml` | Same generic lowercase `resourceID` regex is applied to `legal_entity_id` as to `tenant_id` in `domain.RegisterTenant.Validate()` — **the uppercase-kebab canonical form would be rejected**, and there is no check against the legal-entity registry at all | **Non-conformant**, and inverted: it accepts the *wrong* case and rejects the *canonical* one. |
@@ -198,7 +198,7 @@ validators once, the way `domain.NewUUIDv7()` already does for UUIDv7 generation
 handler and validator currently re-implements ID shape checking ad hoc
 (`domain.ValidResource`, `productID` regexp in `internal/domain/context.go`, etc.), which is
 exactly the "identifiers MUST NOT be checked five different ways in five different layers"
-failure mode `nabhold/shared`'s ADRs are trying to prevent.
+failure mode `baobab-platform/shared`'s ADRs are trying to prevent.
 
 ---
 
@@ -219,7 +219,7 @@ failure mode `nabhold/shared`'s ADRs are trying to prevent.
   three orphaned files, because they are, correctly, not supposed to be part of the
   canonical set at all (see remediation in §10).
 - No contract test in this repository loads and validates against the actual JSON Schemas
-  in `nabhold/shared/contracts/control-plane/v1/*.json` (e.g. via a JSON Schema validator
+  in `baobab-platform/shared/contracts/control-plane/v1/*.json` (e.g. via a JSON Schema validator
   library) — `contracts.lock.yaml` records a commit SHA to pin against but nothing in CI or
   `go test ./...` appears to fetch or validate against it.
 - No test asserts the `tn_`/`map_`/`ref_`/`scope_` ID-prefix grammars from §3.
@@ -228,7 +228,7 @@ failure mode `nabhold/shared`'s ADRs are trying to prevent.
 
 ## 5. Event architecture
 
-`docs/architecture/foundation-0.md`, the local ADR-0001, and `nabhold/shared`'s
+`docs/architecture/foundation-0.md`, the local ADR-0001, and `baobab-platform/shared`'s
 `control-plane-foundation.md` all commit to: RabbitMQ with publisher confirms and DLQs, a
 transactional outbox, and (per ADR-0004) a CloudEvents-shaped envelope with
 `baobabscope`/`correlationid`/`causationid`/`tenantid`/`idempotencykey` extension
@@ -260,7 +260,7 @@ retire, which risks becoming a template a future contributor copies.
 
 ```yaml
 source:
-  repository: nabhold/shared
+  repository: baobab-platform/shared
   commit: 0bc19d2a74459f98e97ecd852d6dac94f0844483
 contracts:
   - contracts/control-plane/v1/access-token-claims.schema.json
@@ -286,7 +286,7 @@ the live router in `api/router.go`).
 
 There is no CI job in `.github/workflows/` (not inspected file-by-file in this pass, see
 §11) confirmed to validate `baobab-cp` against updates to the pinned `shared` commit, so a
-breaking change in `nabhold/shared` would not be caught automatically.
+breaking change in `baobab-platform/shared` would not be caught automatically.
 
 ---
 
@@ -346,7 +346,7 @@ internal/
 ├── gateway/                # APISIX admin API client
 └── config/
 pkg/
-└── contracts/              # generated clients from nabhold/shared
+└── contracts/              # generated clients from baobab-platform/shared
 ```
 
 The actual tree has the HTTP layer at top-level `api/` (not `internal/api/`), a flat
@@ -384,7 +384,7 @@ exactly the kind of thing that costs a new contributor real time.
 4. Add `effective_from`/`effective_to` and the `mapping_single_authoritative_excl`-style
    exclusion constraint to `mapping.canonical_mapping`, matching the invariant
    `canonical-mapping.schema.json` and `ADR-BCP-001` §16.3 both specify.
-5. Update `contracts.lock.yaml` to declare every `nabhold/shared` contract file actually
+5. Update `contracts.lock.yaml` to declare every `baobab-platform/shared` contract file actually
    implemented against, and add a CI job that fails when the pinned commit's schemas
    diverge from what `baobab-cp` emits/persists.
 6. Design and implement the transactional outbox → RabbitMQ publisher using the canonical
@@ -468,14 +468,14 @@ Applied in follow-up commits on this branch, each verified rather than asserted:
   `provisioning-state-machine.yaml`, `errors/v1/problem-details.schema.json` and
   `idempotency/v1/policy.yaml` alongside what was already listed. Its pinned commit
   (`0bc19d2a`) predated `canonical-mapping.schema.json` entirely and has been bumped to
-  `nabhold/shared`'s current HEAD (`2da1a429`). The new `internal/contracttest` package
-  compiles a schema from a local `nabhold/shared` checkout (`SHARED_CONTRACTS_DIR`) and
+  `baobab-platform/shared`'s current HEAD (`2da1a429`). The new `internal/contracttest` package
+  compiles a schema from a local `baobab-platform/shared` checkout (`SHARED_CONTRACTS_DIR`) and
   validates a marshaled Go value against it; three tests now pass against the pinned
   commit — `RegisterTenant` against `tenant-registration.schema.json`, `ResolvedContext`
   against `context-resolution.schema.json`'s response definition, and the `problem()`
   error-response helper against the organisation-wide `problem-details.schema.json`
   (confirming this one was already field-for-field correct). `.github/workflows/ci.yml`
-  now checks out `nabhold/shared` at exactly the pinned commit and adds a `postgres:17`
+  now checks out `baobab-platform/shared` at exactly the pinned commit and adds a `postgres:17`
   service, so both this and the PostgreSQL integration tests run in CI instead of always
   skipping.
 - **§10 item 6 (P1) — envelope + transactional outbox wiring done; publisher still open.**
@@ -513,4 +513,4 @@ Applied in follow-up commits on this branch, each verified rather than asserted:
 Verified together, not just individually, at every stage of this remediation: `go build
 ./...`, `go vet ./...`, `gofmt -l cmd internal`, `go test ./...` and `go test -race ./...`
 all pass with both `TEST_DATABASE_URL` (a real PostgreSQL instance) and
-`SHARED_CONTRACTS_DIR` (a real `nabhold/shared` checkout at the pinned commit) set.
+`SHARED_CONTRACTS_DIR` (a real `baobab-platform/shared` checkout at the pinned commit) set.

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/resolver"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
 )
 
 type failingResolverRepository struct{}

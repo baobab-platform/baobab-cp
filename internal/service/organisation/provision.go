@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 // DefaultPlatformID is the Baobab Platform instance relationships attach to

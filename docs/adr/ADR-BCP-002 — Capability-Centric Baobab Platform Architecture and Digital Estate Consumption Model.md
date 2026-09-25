@@ -3,16 +3,16 @@
 **Status:** Proposed — Normative Target Architecture  
 **Date:** 2026-09-10  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
-**Repository:** `nabhold/baobab-cp`  
-**Primary Runtime Owner:** `nabhold/baobab-cp`  
-**Contract Authority:** `nabhold/shared`  
-**Identity Authority:** `nabhold/baobab-iam`  
+**Repository:** `baobab-platform/baobab-cp`  
+**Primary Runtime Owner:** `baobab-platform/baobab-cp`  
+**Contract Authority:** `baobab-platform/shared`  
+**Identity Authority:** `baobab-platform/baobab-iam`  
 **Architecture Style:** Capability-centric, multi-tenant, context-resolved, headless, contract-driven platform control plane  
 **Target Runtime:** Go  
 **Authoritative Runtime Store:** PostgreSQL 17  
 **Applies To:** Baobab Control Plane, all Baobab engines, Digital Estates, platform contracts, tenant provisioning, capability entitlements and capability resolution  
 **Depends On:** ADR-BCP-001 — Baobab Control Plane Parent Implementation Contract and Derived Artefacts  
-**Related Decisions:** Baobab IAM ADR-0001 through ADR-0018; `nabhold/shared` ADRs governing Digital Estates, tenancy, legal entities, canonical mappings, ERP boundaries and cross-engine contracts  
+**Related Decisions:** Baobab IAM ADR-0001 through ADR-0018; `baobab-platform/shared` ADRs governing Digital Estates, tenancy, legal entities, canonical mappings, ERP boundaries and cross-engine contracts  
 **Supersedes:** Any interpretation of `Product`, `Engine`, `EngineInstance`, `Capability`, `CapabilityBinding`, entitlement or Digital Estate that requires Digital Estates to consume vendor-specific engines directly  
 **Migration Posture:** Remodel before production; compatibility with non-production data is subordinate to architectural correctness  
 **Decision Type:** Foundational platform architecture
@@ -47,7 +47,7 @@ Products and solutions SHALL package capabilities.
 
 `baobab-cp` SHALL resolve capabilities to providers and provider instances according to context, entitlement, policy, topology, temporal validity, health, isolation and contract compatibility.
 
-`nabhold/shared` SHALL define the canonical language and contracts for capabilities, compositions, contexts, provider declarations, events and interoperability.
+`baobab-platform/shared` SHALL define the canonical language and contracts for capabilities, compositions, contexts, provider declarations, events and interoperability.
 
 `baobab-iam` SHALL remain authoritative for identity, authentication, credential/session security, authentication assurance and coarse OAuth/OIDC access.
 
@@ -225,7 +225,7 @@ The target platform SHALL be:
 ┌──────────────────────────────────────────────────────────────┐
 │                    BAOBAB CONTROL PLANE                       │
 │                                                              │
-│                      nabhold/baobab-cp                        │
+│                      baobab-platform/baobab-cp                        │
 │                                                              │
 │ Identity Context          Tenant / Legal Entity              │
 │ Digital Estate           Market / Geography                  │
@@ -240,7 +240,7 @@ The target platform SHALL be:
               │                             │
               ▼                             ▼
 ┌───────────────────────────┐   ┌──────────────────────────────┐
-│     nabhold/shared        │   │      nabhold/baobab-iam     │
+│     baobab-platform/shared        │   │      baobab-platform/baobab-iam     │
 │                           │   │          Keycloak            │
 │ Capability contracts     │   │                              │
 │ Context contracts        │   │ Identity                     │
@@ -826,7 +826,7 @@ documents.trade.verify
 intelligence.fx.query
 ```
 
-The exact namespace registry SHALL be owned by `nabhold/shared`.
+The exact namespace registry SHALL be owned by `baobab-platform/shared`.
 
 ---
 
@@ -1736,7 +1736,7 @@ Examples:
 | Accounting documents | `baobab-erp` |
 | Content | `baobab-cms` |
 | Intelligence outputs | `baobab-pulse` |
-| Shared contracts | `nabhold/shared` |
+| Shared contracts | `baobab-platform/shared` |
 
 Replicas and projections SHALL not become competing sources of truth.
 
@@ -2156,9 +2156,9 @@ Canonical references do not make CP the owner of every entity's business state.
 
 ---
 
-# 46. `nabhold/shared` Contract Authority
+# 46. `baobab-platform/shared` Contract Authority
 
-This ADR requires a companion architecture decision in `nabhold/shared`.
+This ADR requires a companion architecture decision in `baobab-platform/shared`.
 
 The companion SHALL define the canonical contracts for:
 
@@ -2177,7 +2177,7 @@ Capability lifecycle events
 Capability reason codes
 ```
 
-`nabhold/shared` SHALL remain non-deployable.
+`baobab-platform/shared` SHALL remain non-deployable.
 
 It SHALL own:
 
@@ -2240,9 +2240,9 @@ Target responsibilities:
 
 | Concern | Owner |
 |---|---|
-| Capability vocabulary | `nabhold/shared` |
-| Capability schemas | `nabhold/shared` |
-| Capability composition contracts | `nabhold/shared` |
+| Capability vocabulary | `baobab-platform/shared` |
+| Capability schemas | `baobab-platform/shared` |
+| Capability composition contracts | `baobab-platform/shared` |
 | Runtime capability registry | `baobab-cp` |
 | Capability grants | `baobab-cp` |
 | Provider bindings | `baobab-cp` |
@@ -2252,7 +2252,7 @@ Target responsibilities:
 | Business behaviour | Domain engines |
 | Business authorization | Domain engines |
 | Digital experience | Digital Estates |
-| Physical infrastructure | `nabhold/infrastructure` |
+| Physical infrastructure | `baobab-platform/infrastructure` |
 
 ---
 

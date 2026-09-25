@@ -3,7 +3,7 @@ package reconcile
 import (
 	"fmt"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 // ReconcileTenantState resolves the desired lifecycle state against the current observed state.

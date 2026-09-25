@@ -13,9 +13,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service/subscription"
 	"github.com/go-chi/chi/v5"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service/subscription"
 )
 
 type subscriptionClassificationHandler struct {

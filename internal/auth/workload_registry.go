@@ -8,7 +8,7 @@ import (
 )
 
 // WorkloadRegistry answers whether a workload client_id is currently
-// ACTIVE per nabhold/shared's contracts/identity/v1/workload-registry.yaml
+// ACTIVE per baobab-platform/shared's contracts/identity/v1/workload-registry.yaml
 // (ADR-0007 §45's PROVISIONED/ACTIVE/SUSPENDED/REVOKED/RETIRED lifecycle).
 //
 // This closes the gap docs/reconciliation/gate-zb03-authority-contract-freeze.md
@@ -32,7 +32,7 @@ type WorkloadRegistry interface {
 // StaticWorkloadRegistry is a WorkloadRegistry backed by an in-memory
 // snapshot, loaded once at process startup rather than fetched over the
 // network on every request (or even periodically) -- this repository has
-// no existing runtime mechanism for consuming nabhold/shared contracts
+// no existing runtime mechanism for consuming baobab-platform/shared contracts
 // live (contracttest's SHARED_CONTRACTS_DIR is a test-only, local-checkout
 // pattern; see internal/contracttest's own doc comment), and inventing one
 // here -- polling cadence, staleness policy, fail-open-vs-fail-closed on a
@@ -49,19 +49,19 @@ func (r *StaticWorkloadRegistry) IsActive(clientID string) bool {
 	return r.active[clientID]
 }
 
-// workloadRegistryFile mirrors the subset of nabhold/shared's
+// workloadRegistryFile mirrors the subset of baobab-platform/shared's
 // contracts/identity/v1/workload-registry.yaml this repository actually
 // needs (client_id -> status); every other field in that contract
 // (repository, owner, runtime, environment, allowed_audiences,
 // allowed_scopes, credential_type, rotation_owner) is baobab-iam's and
-// nabhold/shared's own concern, not re-modelled here.
+// baobab-platform/shared's own concern, not re-modelled here.
 type workloadRegistryFile struct {
 	Workloads map[string]struct {
 		Status string `yaml:"status"`
 	} `yaml:"workloads"`
 }
 
-// LoadWorkloadRegistryFile parses a local snapshot of nabhold/shared's
+// LoadWorkloadRegistryFile parses a local snapshot of baobab-platform/shared's
 // workload-registry.yaml (fetched and pinned by whatever process an
 // operator's deployment tooling uses -- this repository does not fetch it
 // itself; see StaticWorkloadRegistry's doc comment for why). The map key

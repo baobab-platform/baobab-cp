@@ -3,9 +3,9 @@
 **Document ID:** BCP-TS-ONBOARDING-001  
 **Status:** Proposed Normative Implementation Specification  
 **Date:** 2026-09-11  
-**Primary Repository:** `nabhold/baobab-cp`  
-**Contract Authority:** `nabhold/shared`  
-**Identity Authority:** `nabhold/baobab-iam`  
+**Primary Repository:** `baobab-platform/baobab-cp`  
+**Contract Authority:** `baobab-platform/shared`  
+**Identity Authority:** `baobab-platform/baobab-iam`  
 **Target Runtime:** Go Control Plane / PostgreSQL 17  
 **Architecture:** Capability-centric, multi-tenant, multi-legal-entity, multi-market, multi-region, provider-neutral, fail-closed  
 **Supersedes:** Repeated per-ADR implementation Gate-0 discovery exercises  
@@ -191,18 +191,18 @@ PHASE 0 — PLATFORM MODEL INVENTORY AND ARCHITECTURE LOCK
 It SHALL cover both:
 
 ```text
-nabhold/baobab-cp
-nabhold/shared
+baobab-platform/baobab-cp
+baobab-platform/shared
 ```
 
 and SHALL also inspect integration contracts referenced by:
 
 ```text
-nabhold/baobab-iam
-nabhold/baobab-trade
-nabhold/baobab-erp
-nabhold/baobab-cms
-nabhold/baobab-pulse
+baobab-platform/baobab-iam
+baobab-platform/baobab-trade
+baobab-platform/baobab-erp
+baobab-platform/baobab-cms
+baobab-platform/baobab-pulse
 ```
 
 where necessary to determine compatibility.
@@ -477,7 +477,7 @@ is not canonical because it lacks the platform namespace and version.
 
 # 13. Shared Event Vocabulary Authority
 
-`nabhold/shared` SHALL become authoritative for:
+`baobab-platform/shared` SHALL become authoritative for:
 
 ```text
 event names
@@ -489,7 +489,7 @@ reason-code vocabulary
 
 No runtime repository SHALL invent independent canonical event names.
 
-**ERRATUM (`shared` ADR-SHARED-008, Gate ZB-01):** CR-003 above specified the canonical event-type format as `baobab.<bounded-context>.<aggregate>.<event>.v<major>`. This repository is not the event-vocabulary authority — §13 says so in the same breath — and `nabhold/shared` had already shipped and enforced a different format, `com.nabhold.<context>.<...>.v<N>` (`contracts/events/v1/envelope.schema.json`), across every real identity/ERP/supplier-onboarding event before this specification was written. CR-003's format is superseded; `com.nabhold.*` is canonical. See ADR-SHARED-008 for the full resolution and `baobab-cp` ADR-BCP-015 for the downstream correction to ADR-BCP-011/012/013/014 and `baobab-trade` ADR-0019/0020/0021/0022.
+**ERRATUM (`shared` ADR-SHARED-008, Gate ZB-01):** CR-003 above specified the canonical event-type format as `baobab.<bounded-context>.<aggregate>.<event>.v<major>`. This repository is not the event-vocabulary authority — §13 says so in the same breath — and `baobab-platform/shared` had already shipped and enforced a different format, `com.nabhold.<context>.<...>.v<N>` (`contracts/events/v1/envelope.schema.json`), across every real identity/ERP/supplier-onboarding event before this specification was written. CR-003's format is superseded; `com.nabhold.*` is canonical. See ADR-SHARED-008 for the full resolution and `baobab-cp` ADR-BCP-015 for the downstream correction to ADR-BCP-011/012/013/014 and `baobab-trade` ADR-0019/0020/0021/0022.
 
 ---
 
@@ -2236,7 +2236,7 @@ without corrupting CP architecture.
 
 # 82. Repository Responsibilities
 
-## `nabhold/shared`
+## `baobab-platform/shared`
 
 Owns:
 
@@ -2255,7 +2255,7 @@ Does not own runtime state.
 
 ---
 
-# 83. `nabhold/baobab-cp`
+# 83. `baobab-platform/baobab-cp`
 
 Owns:
 
@@ -2279,7 +2279,7 @@ outbox
 
 ---
 
-# 84. `nabhold/baobab-iam`
+# 84. `baobab-platform/baobab-iam`
 
 Owns:
 
@@ -2349,7 +2349,7 @@ No schema work proceeds before P0 passes.
 
 # 88. Programme Gate P1 — Shared Contract Foundation
 
-Implement in `nabhold/shared`:
+Implement in `baobab-platform/shared`:
 
 ```text
 Capability

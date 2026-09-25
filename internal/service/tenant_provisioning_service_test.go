@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 func fixedClock(t time.Time) func() time.Time {

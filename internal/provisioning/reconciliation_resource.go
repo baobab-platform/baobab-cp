@@ -4,7 +4,7 @@ package provisioning
 import (
 	"context"
 
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 )
 
 // DesiredResourceReader returns canonical desired-state hashes for one

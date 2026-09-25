@@ -4185,8 +4185,8 @@ Implementation error codes SHALL be reconciled with the shared uppercase canonic
 The API/contract audit SHALL remove stale organisational naming such as:
 
 ```text
-nabhold/shared
-github.com/nabhold/...
+baobab-platform/shared
+github.com/baobab-platform/...
 docs.nabhold.com
 ```
 

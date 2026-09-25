@@ -1,4 +1,4 @@
-module github.com/nabhold/baobab-cp
+module github.com/baobab-platform/baobab-cp
 
 go 1.27.0
 

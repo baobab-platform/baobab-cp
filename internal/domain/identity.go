@@ -41,7 +41,7 @@ func (p Principal) Validate() error {
 }
 
 // NewPrincipalID mints a new canonical identity identifier. Per ADR-0004 §5
-// ("If nabhold/shared defines a UUID or UUIDv7 convention for canonical
+// ("If baobab-platform/shared defines a UUID or UUIDv7 convention for canonical
 // entities, Canonical Identity SHALL follow that convention") this follows
 // contracts/identity/v1/principal.schema.json's own established convention
 // -- a bare UUID (format: uuid), not this package's map_/scope_/ref_-style
