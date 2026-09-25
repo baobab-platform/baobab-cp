@@ -1,7 +1,8 @@
 # ADR-BCP-018 — Canonical Organisation, Corporate Group, Platform Account and Tenant Relationship Model
 
-**Status:** Proposed — Normative Platform Architecture  
-**Date:** 2026-09-22  
+**Status:** Accepted — Normative Platform Architecture  
+**Date:** 2026-09-22 (proposed); accepted 2026-09-25  
+**Acceptance evidence:** gates ORG-01 to ORG-16 are implemented on `main` in `baobab-platform/baobab-cp` against contracts in `baobab-platform/shared`, and verified by PostgreSQL integration, contract-conformance and isolation tests in CI. Operations are in `docs/runbooks/adr-bcp-018-organisation-operations.md`; the ORG-11 certification record is `docs/readiness/org-11-billing-projection-certification.md`. The decision log entry of 2026-09-25 lists the gate-by-gate evidence.  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Primary Repository:** `baobab-platform/baobab-cp`  
 **Contract Authority:** `baobab-platform/shared`  
