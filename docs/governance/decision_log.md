@@ -6,6 +6,38 @@ source file, or ADR) it is drawn from; nothing here is asserted from prose alone
 
 ---
 
+## 2026-09-25 — ADR-BCP-018 accepted
+
+ADR-BCP-018 moves from Proposed to **Accepted — Normative Platform Architecture**. Its migrations, APIs, contracts, security policy, runbooks and readiness gates were already on `main`, and a normative ADR still marked Proposed was governance drift.
+
+Evidence, gate by gate (migration numbers refer to `internal/store/postgres/migrations`; Shared paths are under `baobab-platform/shared` `contracts/`):
+
+| Gate | Evidence |
+|---|---|
+| ORG-01 Shared contracts | `organisation/v1`, validated with Draft 2020-12 and negative fixtures; this repository pins it in `contracts.lock.yaml`, guarded by `TestSourceContractReferencesAreDeclared` |
+| ORG-02 Organisation | 000045; `internal/repository/postgres_organisation*.go` |
+| ORG-03 / ORG-12 LegalEntity and first-party reconciliation | 000045; `cmd/reconcile-first-party`; `legal-entity/registry.yaml` |
+| ORG-04 CorporateRelationship | 000045; directed, evidence-backed, effective-dated lifecycle and divestiture review |
+| ORG-05 CorporateGroup | 000045; `CorporateGroupDeriver` derives membership from verified relationships (not yet wired to a route or worker; see gaps) |
+| ORG-06 PlatformRelationship | 000045; verification, conflict and end transitions |
+| ORG-07 PlatformAccount | 000045 and 000053: explicit tenant binding and the §83 lifecycle (#164) |
+| ORG-08 Tenant mappings | 000045; explicit mappings and fail-closed context attestation |
+| ORG-09 Admission | 000050 and 000054: ClientApplication, AdmissionDecision, organisation admission, and the TenantOnboardingRequest handoff (#165) |
+| ORG-10 IAM Organisation | 000046; explicit Keycloak → ExternalReference → Organisation path |
+| ORG-11 Subscription classification | 000051 and 000052; classification, provenance, drift and billing projection (#160, #161) |
+| ORG-13 Buyer/supplier reconciliation | 000047; quarantine, never auto-merge |
+| ORG-14 Isolation/security | production-path isolation tests |
+| ORG-15 Drift/audit/metrics | 000048; drift rules, audit lineage, §130 metrics |
+| ORG-16 Production readiness | 000049; indexes, append-only audit, post-restore verifier, runbook |
+
+Known, recorded gaps that do not reopen the decision:
+
+- Tenant registration does not yet require an AUTHORISED TenantOnboardingRequest (runbook §12).
+- `CorporateGroupDeriver` is implemented and tested, but no route or worker invokes it in production, so derived groups are refreshed only when it is called programmatically.
+- The engine-side items in the ORG-11 certification record remain open: the Kill Bill and HyperSwitch providers and the outbox relays.
+
+---
+
 ## 2026-09-13 — Programme Gate P0 checklist (BCP-TS-ONBOARDING-001 §87)
 
 See `docs/reconciliation/phase-0-architecture-inventory-and-lock.md` for the full
