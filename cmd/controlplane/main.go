@@ -12,6 +12,7 @@ import (
 
 	"github.com/nabhold/baobab-cp/api"
 	"github.com/nabhold/baobab-cp/internal/auth"
+	"github.com/nabhold/baobab-cp/internal/billing"
 	"github.com/nabhold/baobab-cp/internal/config"
 	"github.com/nabhold/baobab-cp/internal/metrics"
 	resolverrepo "github.com/nabhold/baobab-cp/internal/repository"
@@ -79,6 +80,19 @@ func main() {
 	applications := &application.Service{Repo: resolverRepository, Eligibility: eligibility}
 	classifications := &subscription.Classifier{Repo: resolverRepository, Admissions: resolverRepository, Orgs: resolverRepository,
 		Memberships: resolverRepository, Eligibility: eligibility}
+	// ADR-BCP-018 gate ORG-11: engines register from their Shared
+	// EngineRegistration through the capability registry, all on one path.
+	registered, err := billing.RegisterEmbeddedEngines(ctx, resolverRepository, cfg.Environment, slog.Default())
+	if err != nil {
+		slog.Error("engine registration failed", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("engine providers registered", "providers", registered)
+	if cfg.BillingEngineURL != "" {
+		projector := &billing.Projector{Repo: resolverRepository, Engine: &billing.Client{BaseURL: cfg.BillingEngineURL,
+			Tokens: billing.FileTokenSource{Path: cfg.BillingWorkloadTokenFile}}}
+		go projector.Run(ctx, cfg.BillingSyncInterval)
+	}
 	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, ExternalReferences: resolverRepository, OrganisationMappings: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, OrganisationObservability: resolverRepository, Metrics: metrics.Default, Applications: applications, Classifications: classifications}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		slog.Info("control plane listening", "address", cfg.HTTPAddress)

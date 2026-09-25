@@ -1,0 +1,127 @@
+{
+  "repository": "baobab-payments",
+  "capabilities": [
+    {
+      "capability_key": "payment.intent.create",
+      "name": "Create payment intent",
+      "description": "Create a payment intent for an authorised monetary obligation in Control Plane-resolved context.",
+      "domain": "payment",
+      "owner": "baobab-payments",
+      "lifecycle": "ACTIVE",
+      "maturity": "EXPERIMENTAL",
+      "contracts": [
+        {
+          "major": 1,
+          "request_schema": "payment.schema.json#/$defs/CreatePaymentIntentRequest",
+          "response_schema": "payment.schema.json#/$defs/PaymentIntent",
+          "error_schema": "../../errors/v1/problem-details.schema.json",
+          "event_schemas": [
+            "events.schema.json#/$defs/PaymentCreated"
+          ]
+        }
+      ],
+      "data_classification": "TENANT_CONFIDENTIAL"
+    },
+    {
+      "capability_key": "payment.payment.authorize",
+      "name": "Authorise payment",
+      "description": "Authorise funds for a payment intent through an eligible provider.",
+      "domain": "payment",
+      "owner": "baobab-payments",
+      "lifecycle": "ACTIVE",
+      "maturity": "EXPERIMENTAL",
+      "contracts": [
+        {
+          "major": 1,
+          "request_schema": "payment.schema.json#/$defs/ConfirmPaymentIntentRequest",
+          "response_schema": "payment.schema.json#/$defs/Payment",
+          "error_schema": "../../errors/v1/problem-details.schema.json",
+          "event_schemas": [
+            "events.schema.json#/$defs/PaymentAuthorized",
+            "events.schema.json#/$defs/PaymentFailed"
+          ]
+        }
+      ],
+      "data_classification": "TENANT_CONFIDENTIAL"
+    },
+    {
+      "capability_key": "payment.payment.capture",
+      "name": "Capture payment",
+      "description": "Capture an authorised payment.",
+      "domain": "payment",
+      "owner": "baobab-payments",
+      "lifecycle": "ACTIVE",
+      "maturity": "EXPERIMENTAL",
+      "contracts": [
+        {
+          "major": 1,
+          "request_schema": "payment.schema.json#/$defs/CapturePaymentRequest",
+          "response_schema": "payment.schema.json#/$defs/Payment",
+          "error_schema": "../../errors/v1/problem-details.schema.json",
+          "event_schemas": [
+            "events.schema.json#/$defs/PaymentCaptured",
+            "events.schema.json#/$defs/PaymentFailed"
+          ]
+        }
+      ],
+      "data_classification": "TENANT_CONFIDENTIAL"
+    },
+    {
+      "capability_key": "payment.refund.create",
+      "name": "Refund payment",
+      "description": "Refund a captured payment in whole or part.",
+      "domain": "payment",
+      "owner": "baobab-payments",
+      "lifecycle": "ACTIVE",
+      "maturity": "EXPERIMENTAL",
+      "contracts": [
+        {
+          "major": 1,
+          "request_schema": "payment.schema.json#/$defs/CreateRefundRequest",
+          "response_schema": "payment.schema.json#/$defs/Refund",
+          "error_schema": "../../errors/v1/problem-details.schema.json",
+          "event_schemas": [
+            "events.schema.json#/$defs/PaymentRefunded"
+          ]
+        }
+      ],
+      "data_classification": "TENANT_CONFIDENTIAL"
+    }
+  ],
+  "provider": {
+    "provider_key": "baobab-payments.sandbox",
+    "name": "Sandbox payment provider (non-production only)",
+    "provider_type": "BAOBAB_ENGINE",
+    "engine_key": "sandbox-payments",
+    "lifecycle": "ACTIVE",
+    "ownership": "baobab-payments",
+    "simulated": true,
+    "production_permitted": false
+  },
+  "support": [
+    {
+      "capability_key": "payment.intent.create",
+      "contract_versions": [
+        1
+      ]
+    },
+    {
+      "capability_key": "payment.payment.authorize",
+      "contract_versions": [
+        1
+      ]
+    },
+    {
+      "capability_key": "payment.payment.capture",
+      "contract_versions": [
+        1
+      ]
+    },
+    {
+      "capability_key": "payment.refund.create",
+      "contract_versions": [
+        1
+      ]
+    }
+  ]
+}

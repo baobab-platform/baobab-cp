@@ -18,6 +18,7 @@ The organisation model is migrations **000045-000049**. They are applied by `cmd
 | 000048 | partial GIN index on `audit_events.payload` (organisation actions only) | **maintenance window**: see §3 |
 | 000049 | the section 173 indexes and the `audit_events` append-only triggers | yes on registry tables of normal size; the triggers take a brief `ACCESS EXCLUSIVE` lock on `audit_events` |
 | 000051 | ORG-11 `product.subscription_classification` (immutable) and the current classification columns on `product.product_subscription` | yes: a new table and two nullable columns with no backfill; the composite foreign key validates against an empty table |
+| 000052 | ORG-11 `product.billing_projection_sync`: which revision of each classified subscription the billing projection reflects | yes: a new table with no backfill; existing classified subscriptions are projected by the first pass |
 
 After the migrations:
 
@@ -204,10 +205,45 @@ Refusals fail closed:
 
 Each classification writes an audit entry (`product_subscription.classified` or `.reclassified`, with the reason and the evidence) and emits `com.baobab-platform.product.subscription.classified.v1`. The event carries identifiers and state only.
 
+### 10.1 Billing projection
+
+When `BILLING_ENGINE_URL` is set, the Control Plane projects every classified ProductSubscription into `baobab-subscriptions`. The contract is Shared `contracts/subscriptions/v1`.
+
+- **Revision.** Each `authoritative_revision` is the subscription's `version`. The engine refuses an older revision with `STALE_AUTHORITATIVE_REVISION`, so a replay never regresses the projection.
+- **Lifecycle.** The subscription status drives the lifecycle: SUSPENDED suspends the projection, CANCELLED or EXPIRED terminates it, and ACTIVE or PENDING resumes it.
+- **Idempotency.** Each call uses one idempotency key per subscription, revision and action.
+- **Authentication.** The Control Plane authenticates with the platform-projected workload token in `BILLING_WORKLOAD_TOKEN_FILE`, which it reads on every call. No static secret is configured.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `BILLING_ENGINE_URL` | unset (projection off) | The Baobab Billing API. It must use HTTPS; HTTP is allowed only on localhost. |
+| `BILLING_WORKLOAD_TOKEN_FILE` | required when the URL is set | The workload token for audience `baobab-subscriptions`, with scopes `billing:manage` and `billing:read`. |
+| `BILLING_SYNC_INTERVAL` | `30s` | The reconciliation pass interval. |
+| `BAOBAB_ENVIRONMENT` | unset = production | For engine registration, only `development`, `test`, `integration` and `sandbox` count as non-production. |
+
+`product.billing_projection_sync` shows where each subscription stands:
+
+- `synced_revision` below the subscription's `version` means the projection is behind.
+- `last_error_code` and `attempts` show failures. Failures back off from 30s up to 1h.
+
+| Error code | Meaning | Operator action |
+|---|---|---|
+| `BILLING_CONTRACT_VIOLATION` | The engine answered outside the Shared contract, for example an INTERNAL answer with a charge. | Check the engine's contract pin. |
+| `BILLING_PROJECTION_MISMATCH` | The engine answered for another subscription, revision or type. | Treat as an engine defect. |
+| `STALE_AUTHORITATIVE_REVISION` | The engine holds a newer revision than the Control Plane. | Investigate. |
+
+Nothing in this table is billing data.
+
+**Engine registration.** At startup, the Control Plane registers every Shared `capability/v1` EngineRegistration it embeds. It records the engine, its capabilities, its provider and the provider's support in the capability registry. Every engine goes through the same path, and none is special-cased by name.
+
+- In production, a provider with `production_permitted: false` is refused and not registered. The temporary billing and sandbox payment providers are both refused this way.
+- A provider key that is already registered for another engine is refused.
+
+The certification record is `docs/readiness/org-11-billing-projection-certification.md`.
+
 **Not built yet (tracked, deliberate):**
 
 - **Classification sources `MIGRATION` and `MANUAL_GOVERNANCE`.** The schema accepts them; there is no route for them yet.
-- **The billing projection call.** The call to `baobab-subscriptions` is not built. The contract is `contracts/subscriptions/v1`, and the Control Plane will assert tenant context over workload identity.
 - **Staff-assisted applications.** There is no route yet for staff to open an `ASSISTED_ENTERPRISE` or `INTERNAL_GROUP` ClientApplication. The channels remain valid and server-controlled.
 - **Application expiry.** The worker that moves stale DRAFT and INFORMATION_REQUIRED applications to EXPIRED is not built. It is a Control Plane worker, and never an engine scheduler.
 - **Onboarding on approval.** `APPROVED` does not create a TenantOnboardingRequest. Approval activates nothing (ADR-BCP-017 section 22), and onboarding stays an explicit, separate step.

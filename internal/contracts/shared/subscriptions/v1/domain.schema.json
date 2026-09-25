@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/subscriptions/v1/domain.schema.json",
+  "title": "Baobab Subscription Billing Domain Definitions (ADR-SUB-0001, ADR-SHARED-011)",
+  "description": "Identifiers and vocabularies of the Baobab Billing API. Billing is a projection of a Control Plane ProductSubscription: it never redefines the subscription, its classification, its tenant or its entitlement.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "billingSubscriptionId": {
+      "type": "string",
+      "pattern": "^bsub_[a-z0-9]+$",
+      "minLength": 6,
+      "maxLength": 63,
+      "description": "baobab-subscriptions-minted opaque identifier of a billing projection. Never a Kill Bill identifier."
+    },
+    "usageRecordId": {
+      "type": "string",
+      "pattern": "^usage_[a-z0-9]+$",
+      "minLength": 7,
+      "maxLength": 63,
+      "description": "baobab-subscriptions-minted opaque identifier of one usage record."
+    },
+    "billingState": {
+      "type": "string",
+      "enum": [
+        "PENDING_CONFIGURATION",
+        "PROVISIONING",
+        "ACTIVE",
+        "SUSPENDED",
+        "TERMINATING",
+        "TERMINATED"
+      ],
+      "description": "The billing projection's business lifecycle (ADR-SUB-0003 section 5). PENDING_CONFIGURATION: a valid upstream ProductSubscription exists but billing cannot yet be established (the blockers say why). PROVISIONING: configuration exists and provider resources are being established. ACTIVE: billing is operational as its policy requires (for INTERNAL: metering at zero charge, with no monetary provider). SUSPENDED: billing deliberately suspended by a governed instruction; it does not revoke entitlement. TERMINATING: termination is in progress. TERMINATED: final for this projection. Infrastructure conditions never appear here: they are operationalCondition."
+    },
+    "readinessStatus": {
+      "type": "string",
+      "enum": [
+        "READY",
+        "BLOCKED"
+      ]
+    },
+    "billingBlocker": {
+      "type": "string",
+      "enum": [
+        "CLASSIFICATION_MISSING",
+        "CLASSIFICATION_UNSUPPORTED",
+        "CLASSIFICATION_REVISION_CONFLICT",
+        "BILLING_POLICY_MISSING",
+        "BILLING_POLICY_UNSUPPORTED",
+        "PRICING_CONFIGURATION_MISSING",
+        "CURRENCY_CONFIGURATION_MISSING",
+        "BILLING_ACCOUNT_MISSING",
+        "BILLING_PROVIDER_NOT_CONFIGURED",
+        "PAYMENT_PATH_NOT_READY",
+        "PAYMENT_METHOD_REQUIRED",
+        "USAGE_METERING_UNAVAILABLE",
+        "PROJECTION_SUSPENDED",
+        "PROJECTION_TERMINATED"
+      ],
+      "description": "A machine-readable reason billing cannot currently do what its policy requires (ADR-SUB-0006 section 58). Automation depends on these codes, never on message text. Precise blockers are preferred to fake readiness."
+    },
+    "billingProviderKind": {
+      "type": "string",
+      "enum": [
+        "TEMPORARY",
+        "KILL_BILL"
+      ],
+      "description": "TEMPORARY: the development/integration provider (ADR-SUB-0001 section 6); always simulated. KILL_BILL: the real adapter (not yet implemented)."
+    },
+    "usageMetricKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 128,
+      "description": "Implementation-neutral usage metric, e.g. api.calls, storage.gb-hours, events.published."
+    },
+    "operationalCondition": {
+      "type": "string",
+      "enum": [
+        "HEALTHY",
+        "DEGRADED",
+        "RECONCILIATION_REQUIRED",
+        "RETRYING",
+        "BLOCKED"
+      ],
+      "description": "Operational condition, kept separate from the business lifecycle (ADR-SUB-0003 section 11): a provider outage makes an ACTIVE projection DEGRADED, never changes its billing_state."
+    }
+  }
+}
