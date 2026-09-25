@@ -3,8 +3,10 @@ package contracts
 import (
 	"bytes"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -62,5 +64,85 @@ func TestSchemaValidationReportsPointers(t *testing.T) {
 	}
 	if _, err := Compile("admission/v1/application.schema.json#/$defs/NoSuchDefinition"); err == nil {
 		t.Fatal("an unknown $def must not compile")
+	}
+}
+
+var (
+	// A contract path cited in source: in a string, after contracts/ or
+	// after the canonical contract host.
+	sourceContractRef = regexp.MustCompile(`(?:contracts\.baobab-platform\.com/|contracts/|")([a-z][a-z-]*/v[0-9]+/[A-Za-z0-9._-]+\.(?:json|yaml))`)
+	// A contract path assembled with filepath.Join(..., "<domain>", "v<n>", "<file>").
+	joinedContractRef = regexp.MustCompile(`Join\([^)]*?"([a-z][a-z-]*)",\s*"(v[0-9]+)",\s*"([A-Za-z0-9._-]+\.(?:json|yaml))"`)
+	lockedContract    = regexp.MustCompile(`(?m)^  - (contracts/\S+)$`)
+)
+
+// TestSourceContractReferencesAreDeclared keeps contracts.lock.yaml an
+// honest dependency declaration: every Shared contract this repository's
+// Go code or tests cite must be listed there, and (when a pinned Shared
+// checkout is available) must exist at the pinned commit.
+func TestSourceContractReferencesAreDeclared(t *testing.T) {
+	root := filepath.Join("..", "..")
+	lockRaw, err := os.ReadFile(filepath.Join(root, "contracts.lock.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := map[string]bool{}
+	for _, m := range lockedContract.FindAllStringSubmatch(string(lockRaw), -1) {
+		declared[m[1]] = true
+	}
+	cited := map[string]string{} // contract -> first file citing it
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if name := d.Name(); name == ".git" || name == ".shared-contracts" || path == filepath.Join(root, "internal", "contracts", "shared") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		note := func(ref string) {
+			if _, ok := cited[ref]; !ok {
+				cited[ref] = path
+			}
+		}
+		for _, m := range sourceContractRef.FindAllStringSubmatch(string(raw), -1) {
+			note("contracts/" + m[1])
+		}
+		for _, m := range joinedContractRef.FindAllStringSubmatch(string(raw), -1) {
+			note("contracts/" + m[1] + "/" + m[2] + "/" + m[3])
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cited) == 0 {
+		t.Fatal("found no contract references; the scan is broken")
+	}
+	shared := os.Getenv("SHARED_CONTRACTS_DIR")
+	for ref, file := range cited {
+		if !declared[ref] {
+			t.Errorf("%s cites %s, which contracts.lock.yaml does not declare", file, ref)
+		}
+		if shared != "" {
+			if _, err := os.Stat(filepath.Join(shared, ref)); err != nil {
+				t.Errorf("%s cites %s, which the pinned Shared commit does not have", file, ref)
+			}
+		}
+	}
+	if shared != "" {
+		for ref := range declared {
+			if _, err := os.Stat(filepath.Join(shared, ref)); err != nil {
+				t.Errorf("contracts.lock.yaml declares %s, which the pinned Shared commit does not have", ref)
+			}
+		}
 	}
 }

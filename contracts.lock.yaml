@@ -54,6 +54,23 @@ contracts:
   - contracts/identity/v1/principal.schema.json
   - contracts/identity/v1/external-identity.schema.json
   - contracts/identity/v1/external-reference.schema.json
+  - contracts/events/v1/envelope.schema.json
+  - contracts/control-plane/v1/asyncapi.yaml
+  - contracts/control-plane/v1/provisioning-started.schema.json
+  - contracts/trade-lane/v1/events.schema.json
+  - contracts/trade-lane/v1/asyncapi.yaml
+  - contracts/organisation/v1/mapping.schema.json
+  - contracts/organisation/v1/events.schema.json
+  - contracts/organisation/v1/asyncapi.yaml
+  - contracts/legal-entity/registry.yaml
+  - contracts/admission/v1/asyncapi.yaml
+  - contracts/capability/v1/composition.schema.json
+  - contracts/capability/v1/grant.schema.json
+  - contracts/capability/v1/scope.schema.json
+  - contracts/capability/v1/scope-specificity.yaml
+  - contracts/product/v1/asyncapi.yaml
+  - contracts/identity/v1/human-identity.schema.json
+  - contracts/identity/v1/workload-registry.yaml
 policy:
   updates: explicit_pull_request
   compatibility: validate_before_merge
