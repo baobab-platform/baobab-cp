@@ -243,6 +243,15 @@ func TestInternalEligibilityFollowsVerifiedDirectedOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("two-hop verified chain from verified owner", true)
+	// The basis an INTERNAL classification records (ADR-BCP-017 section 13)
+	// is exactly the qualifying relationship.
+	basis, err := resolver.InternalEligibilityBasis(e.ctx, sub, later)
+	if err != nil || len(basis) != 1 || basis[0].ID != affiliateID {
+		t.Fatalf("eligibility basis = %+v, %v; want the affiliate relationship %s", basis, err, affiliateID)
+	}
+	if basis, err := resolver.InternalEligibilityBasis(e.ctx, sub, e.at.Add(-time.Hour)); err != nil || len(basis) != 0 {
+		t.Fatalf("before the facts took effect there is no basis: %+v %v", basis, err)
+	}
 
 	// Direction matters: an organisation that owns the platform owner is not
 	// thereby first-party.

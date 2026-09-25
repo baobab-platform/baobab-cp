@@ -56,6 +56,15 @@ type IdentityService struct {
 // provisioning policy to domain-specific ADRs that don't exist yet.
 func WorkloadOnlyProvisioningPolicy(actorType string) bool { return actorType == "workload" }
 
+// ApplicantProvisioningPolicy allows automatic Principal provisioning only
+// for human actors. ADR-BCP-017 section 5 is the domain ADR ADR-0004 §13
+// defers to for applicants: registering to apply establishes an
+// authenticated applicant principal and nothing else -- no tenant,
+// membership, role or capability. It is used only on the applicant routes
+// (application:read/application:write), after OIDC verification and the
+// scope check.
+func ApplicantProvisioningPolicy(actorType string) bool { return actorType == "human" }
+
 // Resolve returns the Principal for (issuer, subject), provisioning one on
 // first authentication if actorType's policy allows it.
 func (s IdentityService) Resolve(ctx context.Context, issuer, subject, actorType string) (domain.Principal, error) {

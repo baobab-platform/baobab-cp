@@ -5,7 +5,7 @@ INFRASTRUCTURE_DIR ?= ../infrastructure
 INFRA_COMPOSE := $(INFRASTRUCTURE_DIR)/compose/compose.yaml
 INFRA_ENV := $(INFRASTRUCTURE_DIR)/compose/.env
 
-.PHONY: build test test-integration lint run migrate migrate-up dev-up dev-down dev-logs dev-up-infra dev-down-infra dev-logs-infra dev-env-infra
+.PHONY: build test test-integration lint run sync-shared-contracts migrate migrate-up dev-up dev-down dev-logs dev-up-infra dev-down-infra dev-logs-infra dev-env-infra
 build:
 	go build ./cmd/controlplane
 test:
@@ -16,6 +16,12 @@ test-integration:
 	go test -race ./...
 lint:
 	go vet ./...
+# Refresh internal/contracts/shared from a baobab-platform/shared checkout at
+# the commit contracts.lock.yaml pins (TestEmbeddedContractsMatchShared
+# fails until they match).
+sync-shared-contracts:
+	@test -n "$(SHARED_CONTRACTS_DIR)" || { echo "error: set SHARED_CONTRACTS_DIR to a baobab-platform/shared checkout" >&2; exit 1; }
+	cd internal/contracts/shared && for f in $$(find . -type f -name '*.json'); do cp "$(SHARED_CONTRACTS_DIR)/contracts/$$f" "$$f"; done
 run:
 	go run ./cmd/controlplane
 migrate:

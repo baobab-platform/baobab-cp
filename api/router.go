@@ -17,6 +17,7 @@ import (
 	"github.com/nabhold/baobab-cp/internal/metrics"
 	"github.com/nabhold/baobab-cp/internal/repository"
 	"github.com/nabhold/baobab-cp/internal/service"
+	"github.com/nabhold/baobab-cp/internal/service/application"
 	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
 	"github.com/nabhold/baobab-cp/internal/store"
 )
@@ -48,6 +49,10 @@ type Dependencies struct {
 	// OrganisationObservability backs the relationship drift and
 	// organisation audit lineage routes (ADR-BCP-018 ORG-15). Nil skips them.
 	OrganisationObservability repository.OrganisationObservabilityRepository
+	// Applications backs the ADR-BCP-017 client application routes. Nil
+	// skips them. Callers are resolved to Control Plane principals through
+	// Identities.
+	Applications *application.Service
 	// Metrics is served on GET /metrics to workloads holding metrics:read.
 	// Nil serves nothing.
 	Metrics  *metrics.Registry
@@ -185,6 +190,31 @@ func New(dependencies Dependencies) http.Handler {
 		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-drift", obs.drift)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/audit", obs.audit)
+	}
+	if dependencies.Applications != nil {
+		// ADR-BCP-017: applicants reach only their own applications; review
+		// and decision are separate privileged scopes (ADR-BCP-020 34-35).
+		apps := clientApplicationHandler{svc: dependencies.Applications, identities: a.identities}
+		applicantRead := a.authorize(a.adminVerifier, "human", "application:read")
+		applicantWrite := a.authorize(a.adminVerifier, "human", "application:write")
+		r.With(applicantWrite).Post("/v1/client-applications", apps.create)
+		r.With(applicantRead).Get("/v1/client-applications", apps.listMine)
+		r.With(applicantRead).Get("/v1/client-applications/{applicationID}", apps.getMine)
+		r.With(applicantWrite).Patch("/v1/client-applications/{applicationID}", apps.update())
+		r.With(applicantWrite).Post("/v1/client-applications/{applicationID}/submit", apps.submit())
+		r.With(applicantWrite).Post("/v1/client-applications/{applicationID}/response", apps.respondToRequest())
+		r.With(applicantWrite).Post("/v1/client-applications/{applicationID}/withdraw", apps.withdraw())
+
+		review := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)}
+		r.With(review...).Get("/v1/admission/applications", apps.queue)
+		r.With(review...).Get("/v1/admission/applications/{applicationID}", apps.get)
+		r.With(review...).Get("/v1/admission/applications/{applicationID}/decision", apps.getDecision)
+		r.With(review...).Post("/v1/admission/applications/{applicationID}/begin-validation", apps.beginValidation())
+		r.With(review...).Post("/v1/admission/applications/{applicationID}/information-request", apps.requestInformation())
+		r.With(review...).Post("/v1/admission/applications/{applicationID}/begin-review", apps.beginReview())
+		r.With(review...).Post("/v1/admission/applications/{applicationID}/cancel", apps.cancel())
+		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
+			Post("/v1/admission/applications/{applicationID}/decision", apps.decide())
 	}
 	if dependencies.Metrics != nil {
 		// Scraped by a monitoring workload; labels are bounded vocabularies

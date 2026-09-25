@@ -22,19 +22,25 @@ type EligibilityResolver struct {
 // denied. Infrastructure errors are returned as a non-nil error and never
 // read as eligibility.
 func (r *EligibilityResolver) ResolveInternalEligibility(ctx context.Context, organisationID string, at time.Time) (bool, error) {
+	basis, err := r.InternalEligibilityBasis(ctx, organisationID, at)
+	return len(basis) > 0, err
+}
+
+// InternalEligibilityBasis returns the platform relationships that make
+// organisationID INTERNAL-eligible at at, or none when it is not. It is the
+// evidence an INTERNAL subscription classification records (ADR-BCP-017
+// section 13). Infrastructure errors are never read as eligibility.
+func (r *EligibilityResolver) InternalEligibilityBasis(ctx context.Context, organisationID string, at time.Time) ([]domain.PlatformRelationship, error) {
 	if organisationID == "" {
-		return false, nil
+		return nil, nil
 	}
 	if at.IsZero() {
 		at = time.Now().UTC()
 	}
-	platformID := r.PlatformID
-	if platformID == "" {
-		platformID = DefaultPlatformID
-	}
+	platformID := r.Platform()
 	prs, err := r.Orgs.ListPlatformRelationships(ctx, organisationID, at)
 	if err != nil {
-		return false, fmt.Errorf("list platform relationships: %w", err)
+		return nil, fmt.Errorf("list platform relationships: %w", err)
 	}
 	var onPlatform []domain.PlatformRelationship
 	for _, pr := range prs {
@@ -43,20 +49,28 @@ func (r *EligibilityResolver) ResolveInternalEligibility(ctx context.Context, or
 		}
 	}
 	if len(onPlatform) == 0 {
-		return false, nil
+		return nil, nil
 	}
 	ancestry, err := r.Orgs.ListCorporateControlAncestry(ctx, organisationID, at)
 	if err != nil {
-		return false, fmt.Errorf("list corporate control ancestry: %w", err)
+		return nil, fmt.Errorf("list corporate control ancestry: %w", err)
 	}
 	owners, err := r.Orgs.ListPlatformOwnerOrganisations(ctx, platformID, at)
 	if err != nil {
-		return false, fmt.Errorf("list platform owners: %w", err)
+		return nil, fmt.Errorf("list platform owners: %w", err)
 	}
-	return domain.DeriveInternalEligibility(domain.InternalEligibilityEvidence{
+	return domain.QualifyingPlatformRelationships(domain.InternalEligibilityEvidence{
 		OrganisationID:         organisationID,
 		PlatformRelationships:  onPlatform,
 		CorporateRelationships: ancestry,
 		EvaluatedAt:            at,
 	}, owners), nil
+}
+
+// Platform is the platform whose owners qualify.
+func (r *EligibilityResolver) Platform() string {
+	if r.PlatformID == "" {
+		return DefaultPlatformID
+	}
+	return r.PlatformID
 }
