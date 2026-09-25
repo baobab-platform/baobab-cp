@@ -8,6 +8,7 @@ import (
 
 	"github.com/nabhold/baobab-cp/internal/auth"
 	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/nabhold/baobab-cp/internal/metrics"
 	"github.com/nabhold/baobab-cp/internal/repository"
 	"github.com/nabhold/baobab-cp/internal/store"
 )
@@ -129,6 +130,7 @@ func (s ContextResolutionService) ResolveWithIamOrganisationKind(ctx context.Con
 	}
 	organisationID, err := s.IamOrganisations.ResolveIamOrganisation(ctx, ev, now)
 	if err != nil {
+		metrics.RelationshipResolutionFailures.Inc(metrics.OutcomeIamNotLinked)
 		return nil, domain.Context{}, fmt.Errorf("%w: %v", ErrOrganisationNotResolved, err)
 	}
 	source := domain.ContextSource{
@@ -143,10 +145,12 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 	// malformed request costs nothing and never reaches the registry.
 	if expectedOrganisationType != "" {
 		if organisationID == "" {
-			return nil, domain.Context{}, errors.New("organisation_id is required when expected_organisation_type is supplied")
+			return nil, domain.Context{}, recordOrganisationFailure(organisationFailure(metrics.OutcomeInvalidRequest,
+				errors.New("organisation_id is required when expected_organisation_type is supplied")))
 		}
 		if !domain.OrganisationEntityTypes[expectedOrganisationType] {
-			return nil, domain.Context{}, errors.New("expected_organisation_type is not a registered organisation entity type")
+			return nil, domain.Context{}, recordOrganisationFailure(organisationFailure(metrics.OutcomeInvalidRequest,
+				errors.New("expected_organisation_type is not a registered organisation entity type")))
 		}
 	}
 	if s.Tenants == nil {
@@ -188,30 +192,9 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 	// (ADR-BCP-018 ORG-14, domain.AttestOrganisation), mirroring AuthoritativeContextResolver.Resolve's identical
 	// OrganisationID stage (internal/provisioning/context_resolver.go).
 	if organisationID != "" {
-		if s.Canonical == nil {
-			return nil, domain.Context{}, errors.New("canonical entity repository is required to verify organisation_id")
-		}
-		if s.Mappings == nil {
-			return nil, domain.Context{}, errors.New("tenant organisation mappings are required to verify organisation_id")
-		}
-		organisation, err := s.Canonical.GetCanonicalEntity(ctx, organisationID)
+		organisation, err := s.attestRequestedOrganisation(ctx, tenantID, organisationID, expectedOrganisationType, now)
 		if err != nil {
-			return nil, domain.Context{}, fmt.Errorf("resolve organisation: %w", err)
-		}
-		mappings, err := s.Mappings.ListTenantOrganisationMappings(ctx, tenantID, now)
-		if err != nil {
-			return nil, domain.Context{}, fmt.Errorf("resolve tenant organisation mappings: %w", err)
-		}
-		if err := domain.AttestOrganisation(organisation, tenantID, mappings, now); err != nil {
-			return nil, domain.Context{}, err
-		}
-		// ADR-BCP-024: the kind is compared only after attestation, so a
-		// caller learns nothing about an organisation its tenant is not
-		// attested for.
-		if expectedOrganisationType != "" {
-			if err := s.attestKind(ctx, organisation, tenantID, expectedOrganisationType, now); err != nil {
-				return nil, domain.Context{}, err
-			}
+			return nil, domain.Context{}, recordOrganisationFailure(err)
 		}
 		trustedContext.OrganisationID = organisation.ID
 		trustedContext.Provenance["organisation_id"] = domain.ContextSource{
@@ -247,5 +230,80 @@ func (s ContextResolutionService) attestKind(ctx context.Context, organisation d
 			return nil
 		}
 	}
-	return errors.New("requested organisation does not match expected_organisation_type")
+	return ErrOrganisationKindMismatch
+}
+
+// ErrOrganisationKindMismatch: the attested organisation is not of the
+// expected kind (ADR-BCP-024).
+var ErrOrganisationKindMismatch = errors.New("requested organisation does not match expected_organisation_type")
+
+// attestRequestedOrganisation is the organisation stage of resolution
+// (ADR-BCP-016, ADR-BCP-018 ORG-14, ADR-BCP-024). Every failure carries the
+// outcome relationship_resolution_failure_total counts it under.
+func (s ContextResolutionService) attestRequestedOrganisation(ctx context.Context, tenantID, organisationID, expected string, now time.Time) (domain.CanonicalEntity, error) {
+	if s.Canonical == nil {
+		return domain.CanonicalEntity{}, organisationFailure(metrics.OutcomeLookupFailed, errors.New("canonical entity repository is required to verify organisation_id"))
+	}
+	if s.Mappings == nil {
+		return domain.CanonicalEntity{}, organisationFailure(metrics.OutcomeLookupFailed, errors.New("tenant organisation mappings are required to verify organisation_id"))
+	}
+	organisation, err := s.Canonical.GetCanonicalEntity(ctx, organisationID)
+	if err != nil {
+		return domain.CanonicalEntity{}, organisationFailure(metrics.OutcomeNotFound, fmt.Errorf("resolve organisation: %w", err))
+	}
+	mappings, err := s.Mappings.ListTenantOrganisationMappings(ctx, tenantID, now)
+	if err != nil {
+		return domain.CanonicalEntity{}, organisationFailure(metrics.OutcomeLookupFailed, fmt.Errorf("resolve tenant organisation mappings: %w", err))
+	}
+	if err := domain.AttestOrganisation(organisation, tenantID, mappings, now); err != nil {
+		outcome := metrics.OutcomeLookupFailed
+		switch {
+		case errors.Is(err, domain.ErrOrganisationNotMappedToTenant):
+			outcome = metrics.OutcomeNotMapped
+		case errors.Is(err, domain.ErrOrganisationNotActive):
+			outcome = metrics.OutcomeInactive
+		case errors.Is(err, domain.ErrOrganisationNotOrganisationKind):
+			outcome = metrics.OutcomeNotOrganisation
+		}
+		return domain.CanonicalEntity{}, organisationFailure(outcome, err)
+	}
+	// ADR-BCP-024: the kind is compared only after attestation, so a caller
+	// learns nothing about an organisation its tenant is not attested for.
+	if expected != "" {
+		if err := s.attestKind(ctx, organisation, tenantID, expected, now); err != nil {
+			outcome := metrics.OutcomeWrongKind
+			if !errors.Is(err, ErrOrganisationKindMismatch) {
+				outcome = metrics.OutcomeLookupFailed
+			}
+			return domain.CanonicalEntity{}, organisationFailure(outcome, err)
+		}
+	}
+	return organisation, nil
+}
+
+// outcomeError labels a failure with its relationship_resolution_failure_total
+// outcome; it unwraps to the underlying error.
+type outcomeError struct {
+	outcome string
+	err     error
+}
+
+func (e outcomeError) Error() string { return e.err.Error() }
+func (e outcomeError) Unwrap() error { return e.err }
+
+func organisationFailure(outcome string, err error) error {
+	return outcomeError{outcome: outcome, err: err}
+}
+
+// recordOrganisationFailure counts err under its outcome, and as a denied
+// cross-tenant access when the organisation is not attested for the tenant.
+func recordOrganisationFailure(err error) error {
+	var oe outcomeError
+	if errors.As(err, &oe) {
+		metrics.RelationshipResolutionFailures.Inc(oe.outcome)
+		if oe.outcome == metrics.OutcomeNotMapped {
+			metrics.CrossTenantGroupAccessDenied.Inc()
+		}
+	}
+	return err
 }

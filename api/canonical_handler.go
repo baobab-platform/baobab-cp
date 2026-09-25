@@ -63,7 +63,12 @@ func (h canonicalHandler) lifecycle(action string) http.HandlerFunc {
 		case "activate":
 			entity, err = h.service.Activate(r.Context(), id, version)
 		case "suspend":
-			entity, err = h.service.Suspend(r.Context(), id, version)
+			actor, ok := iamAuditActor(r)
+			if !ok {
+				problem(w, r, http.StatusUnauthorized, "AUTH_TOKEN_REQUIRED", "verified identity is required", false)
+				return
+			}
+			entity, err = h.service.SuspendAs(r.Context(), id, version, actor)
 		case "retire":
 			entity, err = h.service.Retire(r.Context(), id, version)
 		}
