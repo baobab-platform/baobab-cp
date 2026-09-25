@@ -20,6 +20,9 @@ const (
 	PlatformAccountMembershipChanged   = "com.baobab-platform.control-plane.platform-account-membership.changed.v1"
 	TenantOrganisationMappingActivated = "com.baobab-platform.control-plane.tenant-organisation-mapping.activated.v1"
 	TenantLegalEntityMappingActivated  = "com.baobab-platform.control-plane.tenant-legal-entity-mapping.activated.v1"
+	PlatformAccountStatusChanged       = "com.baobab-platform.control-plane.platform-account.status-changed.v1"
+	TenantPlatformAccountBound         = "com.baobab-platform.control-plane.tenant-platform-account-binding.bound.v1"
+	TenantPlatformAccountBindingEnded  = "com.baobab-platform.control-plane.tenant-platform-account-binding.ended.v1"
 )
 
 // organisationPayloadDefs maps each event type to its payload $def in
@@ -38,6 +41,9 @@ var organisationPayloadDefs = map[string]string{
 	PlatformAccountMembershipChanged:   "PlatformAccountMembershipChanged",
 	TenantOrganisationMappingActivated: "TenantOrganisationMappingActivated",
 	TenantLegalEntityMappingActivated:  "TenantLegalEntityMappingActivated",
+	PlatformAccountStatusChanged:       "PlatformAccountStatusChanged",
+	TenantPlatformAccountBound:         "TenantPlatformAccountBound",
+	TenantPlatformAccountBindingEnded:  "TenantPlatformAccountBindingEnded",
 }
 
 const organisationEventsSchema = "https://contracts.baobab-platform.com/organisation/v1/events.schema.json"

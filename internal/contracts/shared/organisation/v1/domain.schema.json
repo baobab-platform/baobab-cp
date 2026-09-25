@@ -49,6 +49,13 @@
       "maxLength": 63,
       "description": "Opaque Control Plane-minted PlatformAccountMembership identifier. Must not embed organisation names, countries, markets or brands."
     },
+    "tenantPlatformAccountBindingId": {
+      "type": "string",
+      "pattern": "^tpab_[a-z0-9]+$",
+      "minLength": 6,
+      "maxLength": 63,
+      "description": "Opaque Control Plane-minted TenantPlatformAccountBinding identifier. Must not embed organisation names, countries, markets or brands."
+    },
     "tenantOrganisationMappingId": {
       "type": "string",
       "pattern": "^tom_[a-z0-9]+$",

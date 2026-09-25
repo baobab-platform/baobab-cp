@@ -19,6 +19,7 @@ The organisation model is migrations **000045-000049**. They are applied by `cmd
 | 000049 | the section 173 indexes and the `audit_events` append-only triggers | yes on registry tables of normal size; the triggers take a brief `ACCESS EXCLUSIVE` lock on `audit_events` |
 | 000051 | ORG-11 `product.subscription_classification` (immutable) and the current classification columns on `product.product_subscription` | yes: a new table and two nullable columns with no backfill; the composite foreign key validates against an empty table |
 | 000052 | ORG-11 `product.billing_projection_sync`: which revision of each classified subscription the billing projection reflects | yes: a new table with no backfill; existing classified subscriptions are projected by the first pass |
+| 000053 | ORG-07 `registry.tenant_platform_account_binding` (explicit tenant ↔ PlatformAccount binding, at most one ACTIVE per tenant, history immutable) and a trigger keeping CLOSED accounts closed | yes: a new table with no backfill; the trigger only refuses reopening a CLOSED account |
 
 After the migrations:
 
@@ -247,3 +248,38 @@ The certification record is `docs/readiness/org-11-billing-projection-certificat
 - **Staff-assisted applications.** There is no route yet for staff to open an `ASSISTED_ENTERPRISE` or `INTERNAL_GROUP` ClientApplication. The channels remain valid and server-controlled.
 - **Application expiry.** The worker that moves stale DRAFT and INFORMATION_REQUIRED applications to EXPIRED is not built. It is a Control Plane worker, and never an engine scheduler.
 - **Onboarding on approval.** `APPROVED` does not create a TenantOnboardingRequest. Approval activates nothing (ADR-BCP-017 section 22), and onboarding stays an explicit, separate step.
+
+## 11. PlatformAccount lifecycle and tenant bindings (gate ORG-07)
+
+A PlatformAccount is a commercial and administrative grouping (ADR-BCP-018 §41). It is never a tenant or an authorization boundary. A tenant's binding records which account's commercial terms the tenant consumes under (§45, §48, §119). The contract is Shared `contracts/organisation/v1/platform.schema.json`.
+
+| Route | Scope (platform admin, registered principal) | Effect |
+|---|---|---|
+| `GET /v1/platform-accounts/{id}` | `canonical:read` | The account and its status. |
+| `POST /v1/platform-accounts/{id}/status` | `canonical:write` | Applies a §83 transition. The body is `status` (ACTIVE, SUSPENDED or CLOSED), `reason` and an optional `evidence_reference`. |
+| `POST /v1/tenants/{tenantID}/platform-account-binding` | `tenant:write` | Binds the tenant. The body is `platform_account_id`, `reason` and an optional `evidence_reference`. Binding again to the same account returns the existing binding with 200. |
+| `POST /v1/tenants/{tenantID}/platform-account-binding/end` | `tenant:write` | Ends the tenant's ACTIVE binding. The body is `reason`. |
+| `GET /v1/tenants/{tenantID}/platform-account-bindings` | `tenant:read` | The tenant's bindings, newest first. |
+
+Rules:
+
+- **Lifecycle.** The account moves `PENDING → ACTIVE ⇄ SUSPENDED`, and from any of these to `CLOSED`.
+  - CLOSED is final. The database refuses to reopen a CLOSED account.
+  - Closing deletes no tenant, organisation, relationship or audit record.
+  - A SUSPENDED account accepts no new bindings. Existing bindings stand, and no tenant's access changes.
+- **Closing needs no ACTIVE bindings** (`PLATFORM_ACCOUNT_HAS_ACTIVE_BINDINGS`). End each binding first; nothing cascades.
+- **At most one ACTIVE binding per tenant.** To move a tenant, end its binding (`/end`), then bind again. Binding elsewhere while bound is refused with `TENANT_ALREADY_BOUND`. A tenant with no binding is valid (§152).
+- **A binding is justified, never inferred.** It is refused unless the account is ACTIVE and the tenant's ACTIVE primary organisation holds a live membership in it:
+  - `PLATFORM_ACCOUNT_NOT_ACTIVE`: the account is not ACTIVE;
+  - `TENANT_ORGANISATION_REQUIRED`: the tenant has no ACTIVE primary organisation;
+  - `ORGANISATION_NOT_ACCOUNT_MEMBER`: that organisation holds no live membership in the account.
+
+  An account membership alone never creates a binding.
+- **The principal comes from the caller.** `bound_by` and `ended_by` are the caller's Control Plane principal, never taken from the request.
+- **History is evidence.** An ENDED binding never changes and no binding row is deleted; the database enforces both.
+- **Never an access path** (§45, §141). Context resolution, authorization, capabilities and products never read bindings. A test fails if any of those packages does.
+
+Each change writes an audit entry and emits one of these events, whose payloads carry identifiers and state only:
+- `com.baobab-platform.control-plane.platform-account.status-changed.v1`
+- `com.baobab-platform.control-plane.tenant-platform-account-binding.bound.v1`
+- `com.baobab-platform.control-plane.tenant-platform-account-binding.ended.v1`

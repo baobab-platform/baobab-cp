@@ -428,6 +428,59 @@ type PlatformAccountMembership struct {
 	Metadata          map[string]any `json:"metadata,omitempty"`
 }
 
+// PlatformAccount lifecycle (ADR-BCP-018 section 83).
+const (
+	PlatformAccountPending   = "PENDING"
+	PlatformAccountActive    = "ACTIVE"
+	PlatformAccountSuspended = "SUSPENDED"
+	PlatformAccountClosed    = "CLOSED"
+)
+
+// platformAccountTransitions is Shared platform.schema.json
+// platformAccountTransitions: CLOSED is final.
+var platformAccountTransitions = map[string][]string{
+	PlatformAccountPending:   {PlatformAccountActive, PlatformAccountClosed},
+	PlatformAccountActive:    {PlatformAccountSuspended, PlatformAccountClosed},
+	PlatformAccountSuspended: {PlatformAccountActive, PlatformAccountClosed},
+	PlatformAccountClosed:    {},
+}
+
+// PlatformAccountTransitionAllowed reports whether an account may move
+// from one status to another.
+func PlatformAccountTransitionAllowed(from, to string) bool {
+	for _, next := range platformAccountTransitions[from] {
+		if next == to {
+			return true
+		}
+	}
+	return false
+}
+
+// Tenant PlatformAccount binding statuses.
+const (
+	TenantPlatformAccountBindingActive = "ACTIVE"
+	TenantPlatformAccountBindingEnded  = "ENDED"
+)
+
+// TenantPlatformAccountBinding is the explicit, effective-dated binding of a
+// tenant to the PlatformAccount whose commercial terms it consumes under
+// (ADR-BCP-018 sections 45, 48, 119). At most one is ACTIVE per tenant.
+// Commercial provenance only: nothing resolves access through it.
+type TenantPlatformAccountBinding struct {
+	ID                string     `json:"id"`
+	TenantID          string     `json:"tenant_id"`
+	PlatformAccountID string     `json:"platform_account_id"`
+	OrganisationID    string     `json:"organisation_id"`
+	Status            string     `json:"status"`
+	Reason            string     `json:"reason"`
+	EvidenceReference string     `json:"evidence_reference,omitempty"`
+	BoundBy           string     `json:"bound_by"`
+	EffectiveFrom     time.Time  `json:"effective_from"`
+	EffectiveTo       *time.Time `json:"effective_to,omitempty"`
+	EndReason         string     `json:"end_reason,omitempty"`
+	EndedBy           string     `json:"ended_by,omitempty"`
+}
+
 // Tenant mapping roles (shared contracts/organisation/v1/mapping.schema.json).
 const (
 	TenantOrgRolePrimary    = "PRIMARY_ORGANISATION"
