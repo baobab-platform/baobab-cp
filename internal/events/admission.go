@@ -11,6 +11,10 @@ const (
 	ClientApplicationWithdrawn            = "com.baobab-platform.control-plane.client-application.withdrawn.v1"
 	ClientApplicationApproved             = "com.baobab-platform.control-plane.client-application.approved.v1"
 	ClientApplicationRejected             = "com.baobab-platform.control-plane.client-application.rejected.v1"
+	TenantOnboardingRequested             = "com.baobab-platform.control-plane.tenant-onboarding.requested.v1"
+	TenantOnboardingAuthorised            = "com.baobab-platform.control-plane.tenant-onboarding.authorised.v1"
+	TenantOnboardingFulfilled             = "com.baobab-platform.control-plane.tenant-onboarding.fulfilled.v1"
+	TenantOnboardingCancelled             = "com.baobab-platform.control-plane.tenant-onboarding.cancelled.v1"
 )
 
 // admissionPayloadDefs maps each event type to its payload $def in
@@ -22,6 +26,10 @@ var admissionPayloadDefs = map[string]string{
 	ClientApplicationWithdrawn:            "ClientApplicationWithdrawn",
 	ClientApplicationApproved:             "ClientApplicationApproved",
 	ClientApplicationRejected:             "ClientApplicationRejected",
+	TenantOnboardingRequested:             "TenantOnboardingRequested",
+	TenantOnboardingAuthorised:            "TenantOnboardingAuthorised",
+	TenantOnboardingFulfilled:             "TenantOnboardingFulfilled",
+	TenantOnboardingCancelled:             "TenantOnboardingCancelled",
 }
 
 const admissionEventsSchema = "https://contracts.baobab-platform.com/admission/v1/events.schema.json"

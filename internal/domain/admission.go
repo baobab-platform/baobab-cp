@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	ClientApplicationIDPrefix = "capp"
-	AdmissionDecisionIDPrefix = "adm"
+	ClientApplicationIDPrefix       = "capp"
+	AdmissionDecisionIDPrefix       = "adm"
+	TenantOnboardingRequestIDPrefix = "tor"
 )
 
 type ApplicationStatus string
@@ -246,4 +247,47 @@ type AdmissionDecision struct {
 // Summary is the applicant-visible part of the decision.
 func (d AdmissionDecision) Summary() DecisionSummary {
 	return DecisionSummary{AdmissionDecisionID: d.ID, Decision: d.Decision, DecidedAt: d.DecidedAt, Reason: d.Reason}
+}
+
+// TenantOnboardingRequest statuses (Shared admission/v1 onboarding-lifecycle.yaml).
+const (
+	OnboardingRequested  = "REQUESTED"
+	OnboardingAuthorised = "AUTHORISED"
+	OnboardingFulfilled  = "FULFILLED"
+	OnboardingCancelled  = "CANCELLED"
+)
+
+// OnboardingDesiredState is what provisioning works from (ADR-BCP-017
+// section 24). SubscriptionType, MarketScope, ProductRequirements and
+// IsolationStrategy come from the AdmissionDecision.
+type OnboardingDesiredState struct {
+	DisplayName         string           `json:"display_name"`
+	ResidencyRegion     string           `json:"residency_region"`
+	IsolationStrategy   string           `json:"isolation_strategy"`
+	SubscriptionType    SubscriptionType `json:"subscription_type"`
+	MarketScope         []string         `json:"market_scope"`
+	ProductRequirements []string         `json:"product_requirements"`
+}
+
+// TenantOnboardingRequest is the governed handoff from an APPROVED
+// AdmissionDecision to provisioning (ADR-BCP-017 sections 22-24). Approval
+// activates nothing; a request exists only when someone makes one, and
+// provisioning may fulfil it only after a second principal authorised it.
+type TenantOnboardingRequest struct {
+	ID                  string                 `json:"tenant_onboarding_request_id"`
+	ClientApplicationID string                 `json:"client_application_id"`
+	AdmissionDecisionID string                 `json:"admission_decision_id"`
+	Status              string                 `json:"status"`
+	DesiredState        OnboardingDesiredState `json:"desired_state"`
+	Reason              string                 `json:"reason"`
+	CorrelationID       string                 `json:"correlation_id"`
+	RequestedBy         string                 `json:"requested_by"`
+	RequestedAt         time.Time              `json:"requested_at"`
+	AuthorisedBy        string                 `json:"authorised_by,omitempty"`
+	AuthorisedAt        *time.Time             `json:"authorised_at,omitempty"`
+	TenantID            string                 `json:"tenant_id,omitempty"`
+	FulfilledAt         *time.Time             `json:"fulfilled_at,omitempty"`
+	CancelledBy         string                 `json:"cancelled_by,omitempty"`
+	CancelledAt         *time.Time             `json:"cancelled_at,omitempty"`
+	CancellationReason  string                 `json:"cancellation_reason,omitempty"`
 }

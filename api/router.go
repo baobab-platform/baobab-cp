@@ -17,6 +17,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/service"
 	"github.com/baobab-platform/baobab-cp/internal/service/application"
+	"github.com/baobab-platform/baobab-cp/internal/service/onboarding"
 	svcorg "github.com/baobab-platform/baobab-cp/internal/service/organisation"
 	"github.com/baobab-platform/baobab-cp/internal/service/subscription"
 	"github.com/baobab-platform/baobab-cp/internal/store"
@@ -53,6 +54,10 @@ type Dependencies struct {
 	// PlatformAccounts backs the PlatformAccount lifecycle and the explicit
 	// tenant PlatformAccount binding routes (ADR-BCP-018 ORG-07). Nil skips them.
 	PlatformAccounts repository.PlatformAccountRepository
+	// Onboarding backs the TenantOnboardingRequest handoff from an APPROVED
+	// admission decision to provisioning (ADR-BCP-017 section 22). Nil
+	// skips the routes.
+	Onboarding *onboarding.Service
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -234,6 +239,20 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
 			Post("/v1/admission/applications/{applicationID}/decision", apps.decide())
 	}
+	if dependencies.Onboarding != nil {
+		// ADR-BCP-017 sections 22, 39: requesting and authorising onboarding
+		// are separate privileges; both may read requests.
+		ob := tenantOnboardingHandler{svc: dependencies.Onboarding, identities: a.identities}
+		request := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "onboarding:request"), a.requireAdminRole(nil, true)}
+		authorise := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "onboarding:authorise"), a.requireAdminRole(nil, true)}
+		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "onboarding:request|onboarding:authorise"), a.requireAdminRole(nil, true)}
+		r.With(request...).Post("/v1/tenant-onboarding-requests", ob.request())
+		r.With(read...).Get("/v1/tenant-onboarding-requests", ob.list)
+		r.With(read...).Get("/v1/tenant-onboarding-requests/{requestID}", ob.get)
+		r.With(authorise...).Post("/v1/tenant-onboarding-requests/{requestID}/authorisation", ob.authorise())
+		r.With(request...).Post("/v1/tenant-onboarding-requests/{requestID}/cancellation", ob.cancel())
+		r.With(request...).Post("/v1/tenant-onboarding-requests/{requestID}/fulfilment", ob.fulfil())
+	}
 	if dependencies.Classifications != nil {
 		// ADR-BCP-018 ORG-11: classification is a privileged platform
 		// decision; reading why a subscription is INTERNAL is a separate,
@@ -288,7 +307,7 @@ func (a *API) authorize(verifier auth.TokenVerifier, actorType, requiredScope st
 			// reject every real workload request outright. Each handler
 			// reconciles the effective tenant via resolveWorkloadTenant
 			// instead, once it has the request body to consult.
-			if principal.ActorType != actorType || !principal.HasScope(requiredScope) || (actorType == "workload" && principal.ClientID == "") {
+			if principal.ActorType != actorType || !hasAnyScope(principal, requiredScope) || (actorType == "workload" && principal.ClientID == "") {
 				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
 				return
 			}
@@ -305,6 +324,17 @@ func (a *API) authorize(verifier auth.TokenVerifier, actorType, requiredScope st
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// hasAnyScope accepts a single scope or alternatives written "a|b" (scope
+// names never contain "|"), for read routes several privileges may use.
+func hasAnyScope(principal auth.Principal, required string) bool {
+	for _, scope := range strings.Split(required, "|") {
+		if principal.HasScope(scope) {
+			return true
+		}
+	}
+	return false
 }
 
 // RolePlatformAdmin and RoleTenantAdmin are the Keycloak realm roles Gate

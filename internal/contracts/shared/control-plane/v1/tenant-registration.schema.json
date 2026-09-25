@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/tenant-registration.schema.json",
+  "title": "Register tenant command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["legal_entity_id", "display_name", "isolation_strategy", "residency_region"],
+  "properties": {
+    "legal_entity_id": { "$ref": "domain.schema.json#/$defs/legalEntityIdInput" },
+    "display_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "isolation_strategy": {
+      "type": "string",
+      "enum": ["schema_per_tenant", "row_level_security"]
+    },
+    "residency_region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}-[a-z]+-[0-9]+$"
+    },
+    "requested_products": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "domain.schema.json#/$defs/productId" },
+      "default": []
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "maxLength": 255 },
+      "maxProperties": 20,
+      "default": {}
+    }
+  }
+}

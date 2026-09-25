@@ -1,0 +1,392 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/admission/v1/onboarding.schema.json",
+  "title": "Baobab Tenant Onboarding Request (ADR-BCP-017 sections 22-24, 39-41, 46)",
+  "description": "Definition library for the governed handoff from an APPROVED AdmissionDecision to tenant provisioning.\nValidate resources against fragment URIs (e.g. #/$defs/TenantOnboardingRequest), not the document root.\n\nApproval activates nothing (section 22). A TenantOnboardingRequest is created from an APPROVED decision by an explicit action of a platform onboarding requester who is neither the applicant nor the decider, and must then be authorised by a different principal before provisioning may fulfil it. Its desired state takes the subscription type, market scope, product requirements and isolation from the decision, never from applicant evidence (section 24). At most one live request exists per decision (section 46). The lifecycle is onboarding-lifecycle.yaml.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "tenantOnboardingRequestId": {
+      "type": "string",
+      "pattern": "^tor_[a-z0-9]+$",
+      "minLength": 5,
+      "maxLength": 63,
+      "description": "Opaque Control Plane-minted TenantOnboardingRequest identifier."
+    },
+    "onboardingRequestStatus": {
+      "type": "string",
+      "enum": [
+        "REQUESTED",
+        "AUTHORISED",
+        "FULFILLED",
+        "CANCELLED"
+      ],
+      "description": "REQUESTED: created from an APPROVED decision, awaiting authorisation. AUTHORISED: a second principal authorised provisioning. FULFILLED: provisioning registered the tenant it produced. CANCELLED: withdrawn before fulfilment. FULFILLED and CANCELLED are final."
+    },
+    "OnboardingDesiredState": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The validated desired state provisioning works from (section 24). subscription_type, market_scope, product_requirements and isolation_strategy come from the AdmissionDecision; display_name and residency_region are supplied by the requester and pass normal tenant registration validation.",
+      "required": [
+        "display_name",
+        "residency_region",
+        "isolation_strategy",
+        "subscription_type",
+        "market_scope",
+        "product_requirements"
+      ],
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "residency_region": {
+          "$ref": "../../control-plane/v1/tenant-registration.schema.json#/properties/residency_region"
+        },
+        "isolation_strategy": {
+          "$ref": "decision.schema.json#/$defs/isolationStrategy"
+        },
+        "subscription_type": {
+          "$ref": "decision.schema.json#/$defs/subscriptionType"
+        },
+        "market_scope": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "application.schema.json#/$defs/countryCode"
+          }
+        },
+        "product_requirements": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+            "maxLength": 63
+          }
+        }
+      }
+    },
+    "TenantOnboardingRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The declarative request to onboard a tenant, traceable to its admission authority (sections 23, 41).",
+      "required": [
+        "tenant_onboarding_request_id",
+        "client_application_id",
+        "admission_decision_id",
+        "status",
+        "desired_state",
+        "reason",
+        "correlation_id",
+        "requested_by",
+        "requested_at"
+      ],
+      "properties": {
+        "tenant_onboarding_request_id": {
+          "$ref": "#/$defs/tenantOnboardingRequestId"
+        },
+        "client_application_id": {
+          "$ref": "application.schema.json#/$defs/clientApplicationId"
+        },
+        "admission_decision_id": {
+          "$ref": "decision.schema.json#/$defs/admissionDecisionId"
+        },
+        "status": {
+          "$ref": "#/$defs/onboardingRequestStatus"
+        },
+        "desired_state": {
+          "$ref": "#/$defs/OnboardingDesiredState"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Stable correlation across admission, onboarding and provisioning (section 41)."
+        },
+        "requested_by": {
+          "$ref": "application.schema.json#/$defs/principalId",
+          "description": "The onboarding requester: never the applicant or the decider."
+        },
+        "requested_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "authorised_by": {
+          "$ref": "application.schema.json#/$defs/principalId",
+          "description": "The onboarding authoriser: never the requester or the applicant."
+        },
+        "authorised_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId",
+          "description": "The tenant provisioning produced from this request."
+        },
+        "fulfilled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "cancelled_by": {
+          "$ref": "application.schema.json#/$defs/principalId"
+        },
+        "cancelled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "cancellation_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "REQUESTED"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "authorised_by"
+                  ]
+                },
+                {
+                  "required": [
+                    "authorised_at"
+                  ]
+                },
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "fulfilled_at"
+                  ]
+                },
+                {
+                  "required": [
+                    "cancelled_by"
+                  ]
+                },
+                {
+                  "required": [
+                    "cancelled_at"
+                  ]
+                },
+                {
+                  "required": [
+                    "cancellation_reason"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "AUTHORISED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "authorised_by",
+              "authorised_at"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "fulfilled_at"
+                  ]
+                },
+                {
+                  "required": [
+                    "cancelled_by"
+                  ]
+                },
+                {
+                  "required": [
+                    "cancelled_at"
+                  ]
+                },
+                {
+                  "required": [
+                    "cancellation_reason"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "FULFILLED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "authorised_by",
+              "authorised_at",
+              "tenant_id",
+              "fulfilled_at"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "cancelled_by"
+                  ]
+                },
+                {
+                  "required": [
+                    "cancelled_at"
+                  ]
+                },
+                {
+                  "required": [
+                    "cancellation_reason"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "CANCELLED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "cancelled_by",
+              "cancelled_at",
+              "cancellation_reason"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "fulfilled_at"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "TenantOnboardingRequestCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Create the onboarding request for an APPROVED decision. Only the requester-supplied part of the desired state is accepted; everything else comes from the decision. isolation_strategy may be given only when the decision did not set one. Repeating the command for a decision with a live request returns that request.",
+      "required": [
+        "admission_decision_id",
+        "display_name",
+        "residency_region",
+        "reason"
+      ],
+      "properties": {
+        "admission_decision_id": {
+          "$ref": "decision.schema.json#/$defs/admissionDecisionId"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "residency_region": {
+          "$ref": "../../control-plane/v1/tenant-registration.schema.json#/properties/residency_region"
+        },
+        "isolation_strategy": {
+          "$ref": "decision.schema.json#/$defs/isolationStrategy"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "OnboardingAuthorisationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Authorise a REQUESTED onboarding request. The authoriser is the caller, never the requester or the applicant.",
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "OnboardingCancellationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cancel a REQUESTED or AUTHORISED request. The admission decision is never rewritten (section 44).",
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "OnboardingFulfilmentCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Record the tenant provisioning produced from an AUTHORISED request. Fulfilment registers traceability; it activates nothing (section 22).",
+      "required": [
+        "tenant_id"
+      ],
+      "properties": {
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        }
+      }
+    }
+  }
+}

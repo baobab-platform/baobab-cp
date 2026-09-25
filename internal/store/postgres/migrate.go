@@ -88,6 +88,7 @@ var canonicalMigrationNames = []string{
 	"000051_adr_bcp_018_org11_subscription_classification.sql",
 	"000052_adr_bcp_018_org11_billing_projection_sync.sql",
 	"000053_adr_bcp_018_org07_tenant_platform_account_binding.sql",
+	"000054_adr_bcp_017_tenant_onboarding_request.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
