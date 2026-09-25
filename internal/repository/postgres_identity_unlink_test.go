@@ -47,7 +47,6 @@ func TestPostgresUnlinkExternalIdentityAuditedEnforcesLastCredentialGuard(t *tes
 	secondaryIssuer, secondarySubject := "https://accounts.google.com", "google-sub-unlink-test"
 
 	cleanup := func() {
-		admin.Exec(ctx, `DELETE FROM audit_events WHERE target=$1`, "principal:"+principalID)
 		admin.Exec(ctx, `DELETE FROM identity.external_identity WHERE principal_id=$1::uuid`, principalID)
 		admin.Exec(ctx, `DELETE FROM identity.principal WHERE principal_id=$1`, principalID)
 	}

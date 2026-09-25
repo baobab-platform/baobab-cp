@@ -199,7 +199,6 @@ func TestPostgresMergeTransfersAndReconcilesWorkforceMemberships(t *testing.T) {
 
 	cleanup := func() {
 		admin.Exec(ctx, `DELETE FROM identity.workforce_membership WHERE principal_id = ANY($1::uuid[])`, []string{sourceID, targetID})
-		admin.Exec(ctx, `DELETE FROM audit_events WHERE target = ANY($1)`, []string{"principal:" + sourceID, "principal:" + targetID})
 		admin.Exec(ctx, `DELETE FROM identity.principal WHERE principal_id = ANY($1::uuid[])`, []string{sourceID, targetID})
 		admin.Exec(ctx, `DELETE FROM tenants WHERE tenant_id = ANY($1)`, []string{sharedTenantID, onlySourceTenantID})
 		admin.Exec(ctx, `DELETE FROM legal_entities WHERE legal_entity_id = $1`, legalEntityID)

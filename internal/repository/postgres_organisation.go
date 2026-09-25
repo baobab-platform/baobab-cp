@@ -224,27 +224,45 @@ func (r *PostgresRepository) ListCorporateRelationshipsByOrganisation(ctx contex
 		ORDER BY effective_from, corporate_relationship_id`, organisationID, at)
 }
 
-func (r *PostgresRepository) ListCorporateControlAncestry(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateRelationship, error) {
-	// UNION (not UNION ALL) plus the depth bound terminates on cycles.
-	return r.queryCorporateRelationships(ctx, `
-		WITH RECURSIVE consequential AS (
-			SELECT corporate_relationship_id, source_organisation_id, target_organisation_id
-			FROM registry.corporate_relationship
-			WHERE relationship_type IN ('OWNS','CONTROLS') AND verification_state='VERIFIED'
-			  AND (status='ACTIVE' OR (status='ENDED' AND effective_to IS NOT NULL)) AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
-		), ancestry(id, source, depth) AS (
-			SELECT corporate_relationship_id, source_organisation_id, 1
-			FROM consequential WHERE target_organisation_id = $1::uuid
+// consequentialControlSQL selects, on alias cr, verified OWNS/CONTROLS facts
+// in force at $2 (an ENDED fact still counts for dates before its end).
+const consequentialControlSQL = `cr.relationship_type IN ('OWNS','CONTROLS') AND cr.verification_state = 'VERIFIED'
+	AND (cr.status = 'ACTIVE' OR (cr.status = 'ENDED' AND cr.effective_to IS NOT NULL))
+	AND cr.effective_from <= $2 AND (cr.effective_to IS NULL OR cr.effective_to > $2)`
+
+// corporateControlWalkSQL walks consequential control from $1 along
+// corporate relationships, matching "from" to the organisation reached so
+// far and continuing at "next". Each step is an index lookup
+// (corporate_relationship_target_idx or _source_idx), so the cost follows
+// the organisation's own ancestry or descendants, not the size of the
+// platform's corporate graph (section 173). UNION (not UNION ALL) plus the
+// depth bound $3 terminates on cycles. The rows are then fetched by primary
+// key: "= ANY (ARRAY(...))" keeps the planner from hash-joining the whole
+// table on its (poor) estimate of a recursive CTE's size.
+func corporateControlWalkSQL(from, next string) string {
+	return `
+		WITH RECURSIVE walk(id, reached, depth) AS (
+			SELECT cr.corporate_relationship_id, cr.` + next + `, 1
+			FROM registry.corporate_relationship cr
+			WHERE cr.` + from + ` = $1::uuid AND ` + consequentialControlSQL + `
 			UNION
-			SELECT c.corporate_relationship_id, c.source_organisation_id, a.depth + 1
-			FROM consequential c JOIN ancestry a ON c.target_organisation_id = a.source
-			WHERE a.depth < $3
+			SELECT cr.corporate_relationship_id, cr.` + next + `, w.depth + 1
+			FROM walk w JOIN registry.corporate_relationship cr ON cr.` + from + ` = w.reached
+			WHERE w.depth < $3 AND ` + consequentialControlSQL + `
 		)
-		SELECT `+corporateRelationshipColumns+`
+		SELECT ` + corporateRelationshipColumns + `
 		FROM registry.corporate_relationship
-		WHERE corporate_relationship_id IN (SELECT id FROM ancestry)
-		ORDER BY effective_from, corporate_relationship_id`,
-		organisationID, at, domain.MaxCorporateControlDepth)
+		WHERE corporate_relationship_id = ANY (ARRAY(SELECT id FROM walk))
+		ORDER BY effective_from, corporate_relationship_id`
+}
+
+var (
+	corporateControlAncestrySQL    = corporateControlWalkSQL("target_organisation_id", "source_organisation_id")
+	corporateControlDescendantsSQL = corporateControlWalkSQL("source_organisation_id", "target_organisation_id")
+)
+
+func (r *PostgresRepository) ListCorporateControlAncestry(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateRelationship, error) {
+	return r.queryCorporateRelationships(ctx, corporateControlAncestrySQL, organisationID, at, domain.MaxCorporateControlDepth)
 }
 
 // --- CorporateGroup ------------------------------------------------------
