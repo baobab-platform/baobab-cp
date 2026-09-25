@@ -42,31 +42,39 @@ var openStatuses = []domain.ApplicationStatus{domain.ApplicationSubmitted, domai
 // already have one, so every review and decision is attributable to a
 // canonical principal, never to an IAM-internal id (section 58).
 func (h clientApplicationHandler) actor(w http.ResponseWriter, r *http.Request, applicant bool) (application.Actor, bool) {
+	principalID, audit, ok := resolveActor(w, r, h.identities, applicant)
+	return application.Actor{PrincipalID: principalID, Audit: audit}, ok
+}
+
+// resolveActor resolves the authenticated caller to its Control Plane
+// principal and audit identity. provision lets an applicant's first request
+// create its principal; privileged staff are never provisioned here.
+func resolveActor(w http.ResponseWriter, r *http.Request, identities repository.IdentityRepository, provision bool) (string, repository.AuditActor, bool) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
-	if !ok || h.identities == nil {
+	if !ok || identities == nil {
 		problem(w, r, http.StatusServiceUnavailable, "AUTH_VERIFIER_UNAVAILABLE", "authorization is temporarily unavailable", true)
-		return application.Actor{}, false
+		return "", repository.AuditActor{}, false
 	}
 	var (
 		resolved domain.Principal
 		err      error
 	)
-	if applicant {
-		resolved, err = service.IdentityService{Repository: h.identities, Provision: service.ApplicantProvisioningPolicy}.
+	if provision {
+		resolved, err = service.IdentityService{Repository: identities, Provision: service.ApplicantProvisioningPolicy}.
 			Resolve(r.Context(), principal.Issuer, principal.Subject, principal.ActorType)
 	} else {
-		resolved, err = h.identities.ResolveIdentity(r.Context(), principal.Issuer, principal.Subject)
+		resolved, err = identities.ResolveIdentity(r.Context(), principal.Issuer, principal.Subject)
 	}
 	switch {
 	case errors.Is(err, repository.ErrIdentityNotFound) || errors.Is(err, service.ErrProvisioningNotAllowed):
 		problem(w, r, http.StatusForbidden, "PRINCIPAL_NOT_REGISTERED", "the caller has no Control Plane principal", false)
-		return application.Actor{}, false
+		return "", repository.AuditActor{}, false
 	case err != nil:
 		problem(w, r, http.StatusServiceUnavailable, "IDENTITY_UNAVAILABLE", "the caller's identity could not be resolved", true)
-		return application.Actor{}, false
+		return "", repository.AuditActor{}, false
 	}
-	return application.Actor{PrincipalID: resolved.ID, Audit: repository.AuditActor{ActorID: resolved.ID, ActorType: principal.ActorType,
-		ClientID: principal.ClientID, TokenID: principal.TokenID, CorrelationID: correlationID(r)}}, true
+	return resolved.ID, repository.AuditActor{ActorID: resolved.ID, ActorType: principal.ActorType,
+		ClientID: principal.ClientID, TokenID: principal.TokenID, CorrelationID: correlationID(r)}, true
 }
 
 func readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {

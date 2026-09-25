@@ -74,6 +74,8 @@ type AdmissionRepository interface {
 	ListClientApplications(ctx context.Context, q ClientApplicationQuery) ([]domain.ClientApplication, error)
 	UpdateClientApplication(ctx context.Context, id string, actor AuditActor, apply ApplicationMutation) (domain.ClientApplication, error)
 	GetAdmissionDecision(ctx context.Context, clientApplicationID string) (*domain.AdmissionDecision, error)
+	// GetAdmissionDecisionByID returns the decision, or nil when there is none.
+	GetAdmissionDecisionByID(ctx context.Context, admissionDecisionID string) (*domain.AdmissionDecision, error)
 }
 
 const clientApplicationColumns = `a.client_application_id::text, a.reference, a.status, a.application_channel, a.version,
@@ -335,17 +337,31 @@ func (r *PostgresRepository) GetAdmissionDecision(ctx context.Context, clientApp
 	if err != nil {
 		return nil, ErrClientApplicationNotFound
 	}
+	return r.admissionDecision(ctx, `client_application_id = $1::uuid`, rowID)
+}
+
+// GetAdmissionDecisionByID returns the decision, or nil when there is none.
+func (r *PostgresRepository) GetAdmissionDecisionByID(ctx context.Context, admissionDecisionID string) (*domain.AdmissionDecision, error) {
+	rowID, err := domain.ParseResourceID(domain.AdmissionDecisionIDPrefix, admissionDecisionID)
+	if err != nil {
+		return nil, nil
+	}
+	return r.admissionDecision(ctx, `admission_decision_id = $1::uuid`, rowID)
+}
+
+func (r *PostgresRepository) admissionDecision(ctx context.Context, where, rowID string) (*domain.AdmissionDecision, error) {
 	var (
-		d                                    domain.AdmissionDecision
-		decisionRow, subscription, isolation *string
-		eligibility                          []byte
+		d                                                    domain.AdmissionDecision
+		decisionRow, applicationRow, subscription, isolation *string
+		eligibility                                          []byte
 	)
-	err = r.pool.QueryRow(ctx, `
-		SELECT admission_decision_id::text, decision, reason, decided_by::text, decided_at, approved_subscription_type,
-			internal_eligibility, COALESCE(approved_market_scope, '{}'), COALESCE(approved_product_requirements, '{}'),
-			approved_isolation_requirements, COALESCE(conditions, '{}'), COALESCE(evidence_references, '{}')
-		FROM admission.admission_decision WHERE client_application_id = $1::uuid`, rowID).Scan(
-		&decisionRow, &d.Decision, &d.Reason, &d.DecidedBy, &d.DecidedAt, &subscription, &eligibility,
+	err := r.pool.QueryRow(ctx, `
+		SELECT admission_decision_id::text, client_application_id::text, decision, reason, decided_by::text, decided_at,
+			approved_subscription_type, internal_eligibility, COALESCE(approved_market_scope, '{}'),
+			COALESCE(approved_product_requirements, '{}'), approved_isolation_requirements, COALESCE(conditions, '{}'),
+			COALESCE(evidence_references, '{}')
+		FROM admission.admission_decision WHERE `+where, rowID).Scan(
+		&decisionRow, &applicationRow, &d.Decision, &d.Reason, &d.DecidedBy, &d.DecidedAt, &subscription, &eligibility,
 		&d.ApprovedMarketScope, &d.ApprovedProductRequirements, &isolation, &d.Conditions, &d.EvidenceReferences)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -356,7 +372,9 @@ func (r *PostgresRepository) GetAdmissionDecision(ctx context.Context, clientApp
 	if d.ID, err = domain.FormatResourceID(domain.AdmissionDecisionIDPrefix, *decisionRow); err != nil {
 		return nil, err
 	}
-	d.ClientApplicationID = clientApplicationID
+	if d.ClientApplicationID, err = domain.FormatResourceID(domain.ClientApplicationIDPrefix, *applicationRow); err != nil {
+		return nil, err
+	}
 	d.DecidedAt = d.DecidedAt.UTC()
 	if subscription != nil {
 		d.ApprovedSubscriptionType = domain.SubscriptionType(*subscription)

@@ -19,6 +19,7 @@ import (
 	"github.com/nabhold/baobab-cp/internal/service"
 	"github.com/nabhold/baobab-cp/internal/service/application"
 	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
+	"github.com/nabhold/baobab-cp/internal/service/subscription"
 	"github.com/nabhold/baobab-cp/internal/store"
 )
 
@@ -53,6 +54,10 @@ type Dependencies struct {
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
 	Applications *application.Service
+	// Classifications backs the ProductSubscription classification routes
+	// (ADR-BCP-018 ORG-11). Nil skips them. Callers are resolved to
+	// registered Control Plane principals through Identities.
+	Classifications *subscription.Classifier
 	// Metrics is served on GET /metrics to workloads holding metrics:read.
 	// Nil serves nothing.
 	Metrics  *metrics.Registry
@@ -215,6 +220,18 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(review...).Post("/v1/admission/applications/{applicationID}/cancel", apps.cancel())
 		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
 			Post("/v1/admission/applications/{applicationID}/decision", apps.decide())
+	}
+	if dependencies.Classifications != nil {
+		// ADR-BCP-018 ORG-11: classification is a privileged platform
+		// decision; reading why a subscription is INTERNAL is a separate,
+		// read-only privilege (ADR-SHARED-011 section 1a).
+		cls := subscriptionClassificationHandler{svc: dependencies.Classifications, identities: a.identities}
+		classify := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "subscription:classify"), a.requireAdminRole(nil, true)}
+		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "subscription:read"), a.requireAdminRole(nil, true)}
+		r.With(classify...).Post("/v1/product-subscriptions/{subscriptionID}/classification", cls.classify())
+		r.With(classify...).Post("/v1/product-subscriptions/{subscriptionID}/reclassification", cls.reclassify())
+		r.With(read...).Get("/v1/product-subscriptions/{subscriptionID}/classification", cls.explain)
+		r.With(read...).Get("/v1/tenants/{tenantID}/products/{productID}/classification", cls.explainTenantProduct)
 	}
 	if dependencies.Metrics != nil {
 		// Scraped by a monitoring workload; labels are bounded vocabularies

@@ -17,6 +17,7 @@ The organisation model is migrations **000045-000049**. They are applied by `cmd
 | 000047 | counterparty roles, resolution candidates | yes |
 | 000048 | partial GIN index on `audit_events.payload` (organisation actions only) | **maintenance window**: see §3 |
 | 000049 | the section 173 indexes and the `audit_events` append-only triggers | yes on registry tables of normal size; the triggers take a brief `ACCESS EXCLUSIVE` lock on `audit_events` |
+| 000051 | ORG-11 `product.subscription_classification` (immutable) and the current classification columns on `product.product_subscription` | yes: a new table and two nullable columns with no backfill; the composite foreign key validates against an empty table |
 
 After the migrations:
 
@@ -152,6 +153,7 @@ Counters are per process, so aggregate with `sum by (...)` across replicas. Gaug
 | `RELATIONSHIP_PAST_EFFECTIVE_TO` | WARNING | End the relationship formally so its status matches its dates. |
 | `ACCOUNT_MEMBERSHIP_ON_INACTIVE_ACCOUNT` | WARNING | End the memberships. The account's tenants are **not** deleted (section 170). |
 | `COUNTERPARTY_ROLE_ON_INACTIVE_ORGANISATION` | INFO | End the role at the tenant's request, or leave it as history. |
+| `INTERNAL_CLASSIFICATION_BASIS_NOT_IN_FORCE` | CRITICAL | An INTERNAL ProductSubscription's recorded eligibility basis is no longer in force (a divestiture, an ended or unverified relationship). Read `GET /v1/product-subscriptions/{id}/classification` to confirm `NOT_ELIGIBLE`, then reclassify it through governance (§10). Never delete the tenant or subscription. |
 
 To see how a record reached its state, use `GET /v1/organisations/{id}/audit` (section 131 lineage, newest first).
 
@@ -178,4 +180,34 @@ To see how a record reached its state, use `GET /v1/organisations/{id}/audit` (s
 | PlatformAccount closed: tenant not deleted; subsidiary added to group: no tenant created | No code path deletes or creates tenants from account or group changes | By construction; drift reports memberships left on closed accounts; no dedicated test yet |
 | Explicit delegated cross-tenant grant: evaluate the grant | Not implemented; cross-tenant access is denied | **Gap**: delegation is future work |
 | GitHub organisation renamed: no legal identity mutation | External references are separate from legal identity | **Gap**: no GitHub integration exists yet |
-| Tenant receives INTERNAL subscription classification (section 131 question) | Blocked on gate ORG-11 (subscription classification) | **Gap** |
+| Tenant receives INTERNAL subscription classification (section 131 question) | ORG-11: INTERNAL is recorded only from the Control Plane's own eligibility evaluation, with its basis, provenance and history; the explanation answers the question; a lapsed basis is CRITICAL drift | `TestInternalClassificationAcceptance`, `TestExternalClientIsNeverInternal`, `TestDivestitureDriftAndReclassification` |
+| Classification edited or erased to hide how a tenant became INTERNAL | Classification records are immutable at the database; reclassification appends | `TestClassificationRecordsAreImmutable` |
+| A tenant's own staff, or the applicant, classifies its subscription | Separation of duties in the classifier; privileged scopes and a registered principal at the route | `TestExternalClientIsNeverInternal`, `TestInternalClassificationAcceptance`, `TestSubscriptionClassificationRoutesAreScoped` |
+
+## 10. Subscription classification (gate ORG-11)
+
+The Control Plane classifies every ProductSubscription and records why (ADR-BCP-017 sections 10-13 and 48, ADR-SHARED-011). A classification changes charge policy only. CapabilityGrants stay ProductSubscription → ProductVersion → CapabilityComposition → CapabilityGrant.
+
+| Route | Scope (platform admin, registered principal) | Effect |
+|---|---|---|
+| `POST /v1/product-subscriptions/{id}/classification` | `subscription:classify` | The first classification, from an APPROVED AdmissionDecision that admitted the tenant's ACTIVE primary organisation. Body: `admission_decision_id`, `reason`. For INTERNAL, eligibility is re-evaluated now and fails closed. A replay returns the existing record. |
+| `POST /v1/product-subscriptions/{id}/reclassification` | `subscription:classify` | Appends a record of another type. Body: `subscription_type`, `classification_reference` (the governing change), `reason`. INTERNAL needs eligibility now. |
+| `GET /v1/product-subscriptions/{id}/classification` | `subscription:read` | The explanation: current record, history, INTERNAL eligibility re-evaluated now, the Shared billing policy. |
+| `GET /v1/tenants/{tenantID}/products/{productID}/classification` | `subscription:read` | The same, by tenant and product. |
+
+Refusals fail closed:
+
+- `ADMISSION_DECISION_NOT_FOR_TENANT`: the decision did not admit this tenant's organisation.
+- `NOT_INTERNAL_ELIGIBLE`: the Control Plane does not find the organisation eligible now.
+- `SELF_CLASSIFICATION_FORBIDDEN`: the caller applied for the decision or works for the tenant.
+- `CLASSIFICATION_UNAVAILABLE` (503): eligibility could not be evaluated. Retry. This is never read as "eligible" or as "not eligible".
+
+Each classification writes an audit entry (`product_subscription.classified` or `.reclassified`, with the reason and the evidence) and emits `com.baobab-platform.product.subscription.classified.v1`. The event carries identifiers and state only.
+
+**Not built yet (tracked, deliberate):**
+
+- **Classification sources `MIGRATION` and `MANUAL_GOVERNANCE`.** The schema accepts them; there is no route for them yet.
+- **The billing projection call.** The call to `baobab-subscriptions` is not built. The contract is `contracts/subscriptions/v1`, and the Control Plane will assert tenant context over workload identity.
+- **Staff-assisted applications.** There is no route yet for staff to open an `ASSISTED_ENTERPRISE` or `INTERNAL_GROUP` ClientApplication. The channels remain valid and server-controlled.
+- **Application expiry.** The worker that moves stale DRAFT and INFORMATION_REQUIRED applications to EXPIRED is not built. It is a Control Plane worker, and never an engine scheduler.
+- **Onboarding on approval.** `APPROVED` does not create a TenantOnboardingRequest. Approval activates nothing (ADR-BCP-017 section 22), and onboarding stays an explicit, separate step.

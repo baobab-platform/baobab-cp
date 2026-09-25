@@ -1,0 +1,75 @@
+# billing-policy.yaml (ADR-SHARED-011; ADR-BCP-017 section 11; ADR-BCP-005)
+#
+# What each subscription type means for billing. Each entry validates
+# against subscription.schema.json#/$defs/billingPolicy. baobab-cp serves
+# it in ClassificationExplanation; baobab-subscriptions applies it to
+# billing projections. Neither infers a subscription type: the Control
+# Plane classifies, and this table only says what the classification costs.
+#
+# Only monetary charge and payment execution vary. Usage metering,
+# entitlement control, audit, readiness and isolation are on for every
+# type: INTERNAL != unmetered, INTERNAL != uncontrolled.
+#
+# Any zero-charge type beyond INTERNAL and TRIAL requires a governed change
+# to this file.
+version: 1
+policies:
+  INTERNAL:
+    # ADR-BCP-017 section 11: Nabhold Group entities, free of charge,
+    # normal governed tenants otherwise. Never reaches baobab-payments.
+    monetary_charge: ZERO
+    billing_required: false
+    usage_metering: true
+    entitlement_control: true
+    audit: true
+    readiness_control: true
+    isolation_control: true
+    payment_execution: NEVER
+  COMMERCIAL:
+    monetary_charge: PRICED
+    billing_required: true
+    usage_metering: true
+    entitlement_control: true
+    audit: true
+    readiness_control: true
+    isolation_control: true
+    payment_execution: REQUIRED
+  TRIAL:
+    # Time-bound evaluation (ADR-BCP-005); its duration is product terms.
+    monetary_charge: ZERO
+    billing_required: false
+    usage_metering: true
+    entitlement_control: true
+    audit: true
+    readiness_control: true
+    isolation_control: true
+    payment_execution: NEVER
+  PARTNER:
+    # Priced by the governed partner arrangement.
+    monetary_charge: PRICED
+    billing_required: true
+    usage_metering: true
+    entitlement_control: true
+    audit: true
+    readiness_control: true
+    isolation_control: true
+    payment_execution: REQUIRED
+  MANUAL:
+    monetary_charge: PRICED
+    billing_required: true
+    usage_metering: true
+    entitlement_control: true
+    audit: true
+    readiness_control: true
+    isolation_control: true
+    payment_execution: REQUIRED
+  MIGRATION:
+    # Transitional; priced per the migration terms until reclassified.
+    monetary_charge: PRICED
+    billing_required: true
+    usage_metering: true
+    entitlement_control: true
+    audit: true
+    readiness_control: true
+    isolation_control: true
+    payment_execution: REQUIRED

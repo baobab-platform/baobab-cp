@@ -19,6 +19,11 @@ const (
 	DriftIamReferenceToInactiveOrg      = "IAM_REFERENCE_TO_INACTIVE_ORGANISATION"
 	DriftAccountMembershipOnInactive    = "ACCOUNT_MEMBERSHIP_ON_INACTIVE_ACCOUNT"
 	DriftCounterpartyRoleOnInactiveOrg  = "COUNTERPARTY_ROLE_ON_INACTIVE_ORGANISATION"
+	// ADR-BCP-018 ORG-11: an INTERNAL subscription whose recorded
+	// eligibility basis is no longer in force (a divestiture, an ended or
+	// unverified relationship). Resolved by governed review or
+	// reclassification, never by deleting the tenant or subscription.
+	DriftInternalClassificationBasisNotInForce = "INTERNAL_CLASSIFICATION_BASIS_NOT_IN_FORCE"
 )
 
 // ADR-BCP-008 section 16 severities, most severe first.

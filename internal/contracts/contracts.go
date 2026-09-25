@@ -5,8 +5,9 @@
 // Shared commit pinned in contracts.lock.yaml (TestEmbeddedContractsMatchShared
 // fails on any drift; `make sync-shared-contracts` refreshes them). Only
 // the files a runtime-validated contract needs, plus the files they $ref,
-// are embedded. They are registered under their own $id, so cross-file
-// $refs resolve offline.
+// are embedded, along with the policy documents (YAML) the Control Plane
+// applies. The JSON Schemas are registered under their own $id, so
+// cross-file $refs resolve offline.
 package contracts
 
 import (
@@ -64,6 +65,9 @@ func load() (*jsonschema.Compiler, error) {
 			return
 		}
 		for _, path := range paths {
+			if !strings.HasSuffix(path, ".json") {
+				continue // policy documents (YAML) are read, not compiled
+			}
 			data, err := ReadEmbedded(path)
 			if err != nil {
 				compileErr = err

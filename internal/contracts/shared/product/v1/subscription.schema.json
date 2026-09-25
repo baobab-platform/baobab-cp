@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/product/v1/subscription.schema.json",
+  "title": "ProductSubscription and EntitlementProjection",
+  "description": "ProductSubscription answers exactly one question: which ProductVersion, with which additional profiles/add-ons, has this tenant subscribed to? It never grants capabilities directly -- baobab-platform/baobab-cp expands it into CapabilityGrant rows (capability/v1/grant.schema.json, source=PRODUCT_SUBSCRIPTION, source_reference=subscription_id), and EntitlementProjection is the read-model record of that expansion (Technical Specification SS31, SS91).",
+  "$defs": {
+    "productSubscription": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "tenant_id", "product_id", "product_version_id", "status", "source", "effective_from", "version"],
+      "properties": {
+        "subscription_id": { "$ref": "domain.schema.json#/$defs/subscriptionId" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "product_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/productId" },
+        "product_version_id": { "$ref": "domain.schema.json#/$defs/productVersionId" },
+        "subscription_profiles": {
+          "type": "array",
+          "items": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityCompositionKey" },
+          "default": [],
+          "description": "Additional profile/add-on compositions selected for this subscription beyond its ProductVersion's base composition, e.g. [\"profile.b2b\", \"profile.crossborder\", \"profile.commodity-trade\", \"profile.supplier-management\"] for the ZuriBeans acceptance fixture. Composition expansion (including includes_compositions) is a baobab-cp runtime responsibility, not encoded here."
+        },
+        "status": { "$ref": "domain.schema.json#/$defs/subscriptionStatus" },
+        "source": { "$ref": "domain.schema.json#/$defs/subscriptionSource" },
+        "source_reference": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Opaque reference to the originating record, e.g. a contract_id when source=CONTRACT. Required whenever source is not ONBOARDING."
+        },
+        "effective_from": { "type": "string", "format": "date-time" },
+        "effective_to": { "type": ["string", "null"], "format": "date-time" },
+        "cancelled_at": { "type": ["string", "null"], "format": "date-time" },
+        "cancellation_reason": { "type": ["string", "null"], "maxLength": 500 },
+        "classification": {
+          "$ref": "#/$defs/subscriptionClassification",
+          "description": "The subscription's current commercial classification and where it came from (ADR-SHARED-011). Absent only while a subscription has not been classified yet; its history is the SubscriptionClassificationRecord series."
+        },
+        "version": { "type": "integer", "minimum": 1 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "if": {
+        "properties": { "source": { "not": { "const": "ONBOARDING" } } }
+      },
+      "then": { "required": ["source_reference"] }
+    },
+    "subscriptionClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification_id", "subscription_type", "classification_source", "classification_reference", "classified_at"],
+      "description": "The current classification of a ProductSubscription: type plus provenance. The full explanation (eligibility evidence, history) is the SubscriptionClassificationRecord this classification_id names.",
+      "properties": {
+        "classification_id": { "$ref": "domain.schema.json#/$defs/subscriptionClassificationId" },
+        "subscription_type": { "$ref": "domain.schema.json#/$defs/subscriptionType" },
+        "classification_source": { "$ref": "domain.schema.json#/$defs/classificationSource" },
+        "classification_reference": { "$ref": "#/$defs/classificationReference" },
+        "classified_at": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [{ "$ref": "#/$defs/classificationReferenceRule" }]
+    },
+    "classificationReference": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "minLength": 3,
+      "maxLength": 128,
+      "description": "Opaque reference to the governing record: an admission_decision_id for ADMISSION_DECISION; the governing change, migration batch or decision reference otherwise."
+    },
+    "classificationReferenceRule": {
+      "description": "An ADMISSION_DECISION classification references an admission/v1 AdmissionDecision.",
+      "if": { "required": ["classification_source"], "properties": { "classification_source": { "const": "ADMISSION_DECISION" } } },
+      "then": { "properties": { "classification_reference": { "$ref": "../../admission/v1/decision.schema.json#/$defs/admissionDecisionId" } } }
+    },
+    "SubscriptionClassificationRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification_id", "subscription_id", "tenant_id", "subscription_type", "classification_source",
+        "classification_reference", "reason", "classified_at", "classified_by"],
+      "description": "One immutable classification or reclassification of a ProductSubscription (ADR-BCP-017 sections 13, 48; ADR-BCP-018 ORG-11). Reclassification appends a record to the same subscription; it never replaces tenant, organisation or subscription identity. An INTERNAL record always carries server-evaluated InternalEligibilityEvidence, and no other type carries it.",
+      "properties": {
+        "classification_id": { "$ref": "domain.schema.json#/$defs/subscriptionClassificationId" },
+        "subscription_id": { "$ref": "domain.schema.json#/$defs/subscriptionId" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "subscription_type": { "$ref": "domain.schema.json#/$defs/subscriptionType" },
+        "previous_subscription_type": {
+          "$ref": "domain.schema.json#/$defs/subscriptionType",
+          "description": "Present on a reclassification: the type this record replaced."
+        },
+        "classification_source": { "$ref": "domain.schema.json#/$defs/classificationSource" },
+        "classification_reference": { "$ref": "#/$defs/classificationReference" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "classified_at": { "type": "string", "format": "date-time" },
+        "classified_by": {
+          "$ref": "../../admission/v1/application.schema.json#/$defs/principalId",
+          "description": "The Control Plane principal accountable for the classification. Never an IAM-internal id."
+        },
+        "internal_eligibility": { "$ref": "../../admission/v1/decision.schema.json#/$defs/InternalEligibilityEvidence" }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/classificationReferenceRule" },
+        {
+          "if": { "required": ["subscription_type"], "properties": { "subscription_type": { "const": "INTERNAL" } } },
+          "then": { "required": ["internal_eligibility"] },
+          "else": { "not": { "required": ["internal_eligibility"] } }
+        },
+        {
+          "if": { "required": ["classification_source"], "properties": { "classification_source": { "const": "RECLASSIFICATION" } } },
+          "then": { "required": ["previous_subscription_type"] }
+        }
+      ]
+    },
+    "billingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["monetary_charge", "billing_required", "usage_metering", "entitlement_control", "audit",
+        "readiness_control", "isolation_control", "payment_execution"],
+      "description": "What a subscription type means for billing (billing-policy.yaml). Only monetary charge and payment execution vary: metering, entitlement control, audit, readiness and isolation are always on.",
+      "properties": {
+        "monetary_charge": { "$ref": "domain.schema.json#/$defs/monetaryCharge" },
+        "billing_required": { "type": "boolean" },
+        "usage_metering": { "const": true },
+        "entitlement_control": { "const": true },
+        "audit": { "const": true },
+        "readiness_control": { "const": true },
+        "isolation_control": { "const": true },
+        "payment_execution": { "$ref": "domain.schema.json#/$defs/paymentExecution" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "monetary_charge": { "const": "ZERO" } } },
+          "then": { "properties": { "billing_required": { "const": false }, "payment_execution": { "const": "NEVER" } } },
+          "else": { "properties": { "billing_required": { "const": true } } }
+        }
+      ]
+    },
+    "ClassificationExplanation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "tenant_id", "product_id", "current", "billing_policy", "policy_reference", "history"],
+      "description": "Answers 'why is this subscription classified as it is?' (ADR-BCP-018 ORG-11) from Control Plane records alone: the current classification record and its provenance, the eligibility re-evaluated now for INTERNAL (so drift is visible), the billing policy that applies, and the full history. For platform operators only; it names relationship identifiers, never the corporate graph.",
+      "properties": {
+        "subscription_id": { "$ref": "domain.schema.json#/$defs/subscriptionId" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "product_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/productId" },
+        "current": { "$ref": "#/$defs/SubscriptionClassificationRecord" },
+        "current_eligibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eligibility_status", "basis_relationship_ids", "evaluated_at"],
+          "description": "INTERNAL only: eligibility re-evaluated at evaluated_at. NOT_ELIGIBLE is drift: the classification needs governed review or reclassification, never silent deletion.",
+          "properties": {
+            "eligibility_status": { "enum": ["ELIGIBLE", "NOT_ELIGIBLE"] },
+            "basis_relationship_ids": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "../../organisation/v1/domain.schema.json#/$defs/platformRelationshipId" }
+            },
+            "evaluated_at": { "type": "string", "format": "date-time" }
+          }
+        },
+        "billing_policy": { "$ref": "#/$defs/billingPolicy" },
+        "policy_reference": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The governing policy, e.g. 'ADR-BCP-017 section 11 / ADR-BCP-018 ORG-11 INTERNAL policy'."
+        },
+        "history": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/SubscriptionClassificationRecord" },
+          "description": "Every classification of this subscription, newest first; the first item is current."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "current": { "properties": { "subscription_type": { "const": "INTERNAL" } } } } },
+          "then": { "required": ["current_eligibility"] },
+          "else": { "not": { "required": ["current_eligibility"] } }
+        }
+      ]
+    },
+    "entitlementProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entitlement_projection_id", "subscription_id", "tenant_id", "capability_key", "scope_id", "status"],
+      "properties": {
+        "entitlement_projection_id": { "$ref": "domain.schema.json#/$defs/entitlementProjectionId" },
+        "subscription_id": { "$ref": "domain.schema.json#/$defs/subscriptionId" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "capability_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey",
+          "description": "One capability this subscription's composition graph expands to, per member criticality in composition.schema.json."
+        },
+        "scope_id": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityScopeId" },
+        "status": { "$ref": "domain.schema.json#/$defs/entitlementProjectionStatus" },
+        "grant_id": {
+          "description": "The CapabilityGrant this projection materialised, once status=MATERIALIZED. Null while PENDING or FAILED.",
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityGrantId" }
+          ]
+        },
+        "failure_reason": {
+          "type": ["string", "null"],
+          "maxLength": 500,
+          "description": "Set only when status=FAILED, e.g. the composition member's capability_key is not registered."
+        },
+        "computed_at": { "type": "string", "format": "date-time" }
+      },
+      "if": {
+        "properties": { "status": { "const": "MATERIALIZED" } }
+      },
+      "then": { "required": ["grant_id"] }
+    }
+  }
+}

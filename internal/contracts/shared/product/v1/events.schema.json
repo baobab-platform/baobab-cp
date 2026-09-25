@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/product/v1/events.schema.json",
+  "title": "Product and subscription lifecycle event payloads",
+  "description": "Data payloads for product/subscription lifecycle events, carried inside contracts/events/v1/envelope.schema.json's data field. Mirrors capability/v1/events.schema.json's one-payload-per-aggregate-type pattern.",
+  "$defs": {
+    "productLifecycleEventData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id"],
+      "properties": {
+        "product_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/productId" },
+        "lifecycle": { "$ref": "domain.schema.json#/$defs/productLifecycle" },
+        "previous_lifecycle": { "$ref": "domain.schema.json#/$defs/productLifecycle" }
+      }
+    },
+    "productVersionLifecycleEventData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_version_id", "product_id", "version"],
+      "properties": {
+        "product_version_id": { "$ref": "domain.schema.json#/$defs/productVersionId" },
+        "product_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/productId" },
+        "version": { "$ref": "domain.schema.json#/$defs/productVersionSemver" },
+        "composition_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityCompositionKey" },
+        "lifecycle": { "$ref": "domain.schema.json#/$defs/productLifecycle" }
+      }
+    },
+    "subscriptionLifecycleEventData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "tenant_id", "product_id"],
+      "properties": {
+        "subscription_id": { "$ref": "domain.schema.json#/$defs/subscriptionId" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "product_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/productId" },
+        "product_version_id": { "$ref": "domain.schema.json#/$defs/productVersionId" },
+        "status": { "$ref": "domain.schema.json#/$defs/subscriptionStatus" },
+        "cancellation_reason": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "entitlementProjectionEventData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entitlement_projection_id", "subscription_id", "tenant_id", "capability_key", "status"],
+      "properties": {
+        "entitlement_projection_id": { "$ref": "domain.schema.json#/$defs/entitlementProjectionId" },
+        "subscription_id": { "$ref": "domain.schema.json#/$defs/subscriptionId" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
+        "status": { "$ref": "domain.schema.json#/$defs/entitlementProjectionStatus" },
+        "grant_id": { "type": "string" },
+        "failure_reason": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "subscriptionClassifiedEventData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "tenant_id", "classification_id", "subscription_type", "classification_source", "classified_at"],
+      "description": "A ProductSubscription was classified or reclassified (ADR-SHARED-011). Identifiers and state only: no reason, principal or eligibility evidence, which the Control Plane serves to authorised operators.",
+      "properties": {
+        "subscription_id": { "$ref": "domain.schema.json#/$defs/subscriptionId" },
+        "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId" },
+        "classification_id": { "$ref": "domain.schema.json#/$defs/subscriptionClassificationId" },
+        "subscription_type": { "$ref": "domain.schema.json#/$defs/subscriptionType" },
+        "previous_subscription_type": { "$ref": "domain.schema.json#/$defs/subscriptionType" },
+        "classification_source": { "$ref": "domain.schema.json#/$defs/classificationSource" },
+        "classified_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

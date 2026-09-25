@@ -19,6 +19,7 @@ import (
 	"github.com/nabhold/baobab-cp/internal/service"
 	"github.com/nabhold/baobab-cp/internal/service/application"
 	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
+	"github.com/nabhold/baobab-cp/internal/service/subscription"
 	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
@@ -74,8 +75,11 @@ func main() {
 	metrics.Default.Register(&metrics.CachedCollector{Collector: resolverrepo.OrganisationMetricsCollector{Repo: resolverRepository}, TTL: 30 * time.Second})
 	// ADR-BCP-017: INTERNAL classification is evaluated by the Control Plane
 	// from governed relationships on the default platform.
-	applications := &application.Service{Repo: resolverRepository, Eligibility: &svcorg.EligibilityResolver{Orgs: resolverRepository}}
-	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, ExternalReferences: resolverRepository, OrganisationMappings: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, OrganisationObservability: resolverRepository, Metrics: metrics.Default, Applications: applications}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	eligibility := &svcorg.EligibilityResolver{Orgs: resolverRepository}
+	applications := &application.Service{Repo: resolverRepository, Eligibility: eligibility}
+	classifications := &subscription.Classifier{Repo: resolverRepository, Admissions: resolverRepository, Orgs: resolverRepository,
+		Memberships: resolverRepository, Eligibility: eligibility}
+	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, ExternalReferences: resolverRepository, OrganisationMappings: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, OrganisationObservability: resolverRepository, Metrics: metrics.Default, Applications: applications, Classifications: classifications}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		slog.Info("control plane listening", "address", cfg.HTTPAddress)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

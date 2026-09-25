@@ -21,7 +21,7 @@ lint:
 # fails until they match).
 sync-shared-contracts:
 	@test -n "$(SHARED_CONTRACTS_DIR)" || { echo "error: set SHARED_CONTRACTS_DIR to a baobab-platform/shared checkout" >&2; exit 1; }
-	cd internal/contracts/shared && for f in $$(find . -type f -name '*.json'); do cp "$(SHARED_CONTRACTS_DIR)/contracts/$$f" "$$f"; done
+	cd internal/contracts/shared && for f in $$(find . -type f \( -name '*.json' -o -name '*.yaml' \)); do cp "$(SHARED_CONTRACTS_DIR)/contracts/$$f" "$$f"; done
 run:
 	go run ./cmd/controlplane
 migrate:
