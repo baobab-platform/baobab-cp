@@ -65,8 +65,8 @@ func load() (*jsonschema.Compiler, error) {
 			return
 		}
 		for _, path := range paths {
-			if !strings.HasSuffix(path, ".json") {
-				continue // policy documents (YAML) are read, not compiled
+			if !strings.HasSuffix(path, ".schema.json") {
+				continue // policy documents and registrations are read, not compiled
 			}
 			data, err := ReadEmbedded(path)
 			if err != nil {

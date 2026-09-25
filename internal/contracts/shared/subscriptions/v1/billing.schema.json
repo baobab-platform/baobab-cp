@@ -1,0 +1,611 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/subscriptions/v1/billing.schema.json",
+  "title": "Baobab Billing API Resources (ADR-SUB-0001)",
+  "description": "Definition library for the Baobab Billing API served by baobab-subscriptions.\nValidate resources against fragment URIs (e.g. #/$defs/BillingProjection).\n\nOnly the Control Plane, authenticated as a workload, creates projections: tenant, legal entity, PlatformAccount and classification are asserted by it and never accepted from browsers. Every mutation takes an Idempotency-Key. Kill Bill objects are never part of this contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "classificationProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification_id",
+        "classification_source",
+        "classification_reference",
+        "classified_at"
+      ],
+      "description": "The Control Plane classification this projection bills (product/v1 subscriptionClassification without the type, which is subscription_type). The engine records it; it never evaluates it.",
+      "properties": {
+        "classification_id": {
+          "$ref": "../../product/v1/domain.schema.json#/$defs/subscriptionClassificationId"
+        },
+        "classification_source": {
+          "$ref": "../../product/v1/domain.schema.json#/$defs/classificationSource"
+        },
+        "classification_reference": {
+          "$ref": "../../product/v1/subscription.schema.json#/$defs/classificationReference"
+        },
+        "classified_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "billingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "monetary_charge",
+        "billing_required",
+        "usage_metering",
+        "payment_execution"
+      ],
+      "description": "The billing-policy.yaml entry for the projection's subscription_type, as applied.",
+      "properties": {
+        "monetary_charge": {
+          "$ref": "../../product/v1/domain.schema.json#/$defs/monetaryCharge"
+        },
+        "billing_required": {
+          "type": "boolean"
+        },
+        "usage_metering": {
+          "const": true
+        },
+        "payment_execution": {
+          "$ref": "../../product/v1/domain.schema.json#/$defs/paymentExecution"
+        }
+      }
+    },
+    "EnsureBillingProjectionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "product_subscription_id",
+        "authoritative_revision",
+        "product_id",
+        "subscription_type",
+        "classification"
+      ],
+      "description": "The Control Plane asks for the billing projection of one classified ProductSubscription. Repeating it converges; a changed classification (reclassification) updates the projection's type, policy and provenance in place, never its identity.",
+      "properties": {
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "product_subscription_id": {
+          "$ref": "../../product/v1/domain.schema.json#/$defs/subscriptionId"
+        },
+        "authoritative_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The Control Plane ProductSubscription revision this state reflects (ADR-SUB-0003 section 16). A request carrying a revision lower than the one applied never regresses the projection."
+        },
+        "product_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/productId"
+        },
+        "platform_account_id": {
+          "$ref": "../../organisation/v1/domain.schema.json#/$defs/platformAccountId",
+          "description": "CP-owned commercial grouping, where billing groups accounts. Referenced, never owned."
+        },
+        "legal_entity_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "minLength": 2,
+          "maxLength": 63,
+          "description": "The contracting legal entity, where relevant. Asserted by the Control Plane."
+        },
+        "subscription_type": {
+          "$ref": "../../product/v1/domain.schema.json#/$defs/subscriptionType"
+        },
+        "classification": {
+          "$ref": "#/$defs/classificationProvenance"
+        }
+      }
+    },
+    "BillingProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "billing_subscription_id",
+        "tenant_id",
+        "product_subscription_id",
+        "product_id",
+        "authoritative_revision",
+        "subscription_type",
+        "classification",
+        "billing_policy",
+        "billing_state",
+        "operational_condition",
+        "readiness",
+        "provider",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
+      "description": "How baobab-subscriptions bills one ProductSubscription. It references the subscription and its classification; it does not duplicate Control Plane authority.",
+      "properties": {
+        "billing_subscription_id": {
+          "$ref": "domain.schema.json#/$defs/billingSubscriptionId"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "product_subscription_id": {
+          "$ref": "../../product/v1/domain.schema.json#/$defs/subscriptionId"
+        },
+        "authoritative_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The Control Plane ProductSubscription revision this state reflects (ADR-SUB-0003 section 16). A request carrying a revision lower than the one applied never regresses the projection."
+        },
+        "product_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/productId"
+        },
+        "platform_account_id": {
+          "$ref": "../../organisation/v1/domain.schema.json#/$defs/platformAccountId",
+          "description": "CP-owned commercial grouping, where billing groups accounts. Referenced, never owned."
+        },
+        "legal_entity_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "minLength": 2,
+          "maxLength": 63,
+          "description": "The contracting legal entity, where relevant. Asserted by the Control Plane."
+        },
+        "subscription_type": {
+          "$ref": "../../product/v1/domain.schema.json#/$defs/subscriptionType"
+        },
+        "classification": {
+          "$ref": "#/$defs/classificationProvenance"
+        },
+        "billing_policy": {
+          "$ref": "#/$defs/billingPolicy"
+        },
+        "billing_state": {
+          "$ref": "domain.schema.json#/$defs/billingState"
+        },
+        "operational_condition": {
+          "$ref": "domain.schema.json#/$defs/operationalCondition"
+        },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "facts",
+            "blockers"
+          ],
+          "description": "Readiness as separate facts (ADR-SUB-0003 section 46, ADR-SUB-0006 section 57), not one boolean. READY has no blockers; BLOCKED has at least one.",
+          "properties": {
+            "status": {
+              "$ref": "domain.schema.json#/$defs/readinessStatus"
+            },
+            "facts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "classification_valid",
+                "projection_valid",
+                "metering_available",
+                "billing_configuration_complete",
+                "provider_ready",
+                "payment_path_ready"
+              ],
+              "properties": {
+                "classification_valid": {
+                  "type": "boolean"
+                },
+                "projection_valid": {
+                  "type": "boolean"
+                },
+                "metering_available": {
+                  "type": "boolean"
+                },
+                "billing_configuration_complete": {
+                  "type": "boolean"
+                },
+                "provider_ready": {
+                  "type": "boolean"
+                },
+                "payment_path_ready": {
+                  "type": "boolean"
+                }
+              },
+              "description": "billing_configuration_complete: pricing, currency and billing account are resolvable where the policy requires them. provider_ready: a production-capable billing provider holds the projection where the policy requires one. payment_path_ready: a real payment path exists where the policy requires payment. For zero-charge policies the last three are not required for READY."
+            },
+            "blockers": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "domain.schema.json#/$defs/billingBlocker"
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "READY"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "blockers": {
+                    "maxItems": 0
+                  },
+                  "facts": {
+                    "properties": {
+                      "classification_valid": {
+                        "const": true
+                      },
+                      "projection_valid": {
+                        "const": true
+                      },
+                      "metering_available": {
+                        "const": true
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "blockers": {
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "simulated"
+          ],
+          "properties": {
+            "kind": {
+              "$ref": "domain.schema.json#/$defs/billingProviderKind"
+            },
+            "simulated": {
+              "type": "boolean",
+              "description": "True for every TEMPORARY projection: it represents no real billing account and moves no money."
+            },
+            "provider_reference": {
+              "type": "string",
+              "maxLength": 255,
+              "description": "Opaque provider-side reference, when a real provider holds one."
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "TEMPORARY"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "simulated": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "description": "INTERNAL: zero charge, no billing, metered, never payments (ADR-BCP-017 section 11).",
+          "if": {
+            "properties": {
+              "subscription_type": {
+                "const": "INTERNAL"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "billing_policy": {
+                "properties": {
+                  "monetary_charge": {
+                    "const": "ZERO"
+                  },
+                  "billing_required": {
+                    "const": false
+                  },
+                  "payment_execution": {
+                    "const": "NEVER"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "Billing that requires money is never ACTIVE or READY on a simulated provider, and says so: no fake financial readiness.",
+          "if": {
+            "properties": {
+              "billing_policy": {
+                "properties": {
+                  "billing_required": {
+                    "const": true
+                  }
+                }
+              },
+              "provider": {
+                "properties": {
+                  "simulated": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "billing_state": {
+                "not": {
+                  "const": "ACTIVE"
+                }
+              },
+              "readiness": {
+                "properties": {
+                  "status": {
+                    "const": "BLOCKED"
+                  },
+                  "facts": {
+                    "properties": {
+                      "provider_ready": {
+                        "const": false
+                      }
+                    }
+                  },
+                  "blockers": {
+                    "contains": {
+                      "const": "BILLING_PROVIDER_NOT_CONFIGURED"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "billing_state": {
+                "const": "SUSPENDED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "readiness": {
+                "properties": {
+                  "blockers": {
+                    "contains": {
+                      "const": "PROJECTION_SUSPENDED"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "billing_state": {
+                "enum": [
+                  "TERMINATING",
+                  "TERMINATED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "readiness": {
+                "properties": {
+                  "blockers": {
+                    "contains": {
+                      "const": "PROJECTION_TERMINATED"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "Billing that requires money is READY only when configuration, provider and payment path are all ready.",
+          "if": {
+            "properties": {
+              "billing_policy": {
+                "properties": {
+                  "billing_required": {
+                    "const": true
+                  }
+                }
+              },
+              "readiness": {
+                "properties": {
+                  "status": {
+                    "const": "READY"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "readiness": {
+                "properties": {
+                  "facts": {
+                    "properties": {
+                      "billing_configuration_complete": {
+                        "const": true
+                      },
+                      "provider_ready": {
+                        "const": true
+                      },
+                      "payment_path_ready": {
+                        "const": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "BillingProjectionCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "authoritative_revision",
+        "reason"
+      ],
+      "description": "Suspend, resume or terminate a projection by a governed Control Plane instruction (ADR-SUB-0003 sections 34-36). Commands name the tenant they act for, and the authoritative revision they reflect; another tenant's projection is not found, and an older revision never undoes a newer instruction.",
+      "properties": {
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "authoritative_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The Control Plane ProductSubscription revision this state reflects (ADR-SUB-0003 section 16). A request carrying a revision lower than the one applied never regresses the projection."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "RecordUsageRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "metric_key",
+        "quantity",
+        "unit",
+        "occurred_at",
+        "source_reference"
+      ],
+      "description": "One usage observation. Metered for every subscription type; billable only where the policy charges.",
+      "properties": {
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "metric_key": {
+          "$ref": "domain.schema.json#/$defs/usageMetricKey"
+        },
+        "quantity": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "UsageRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "usage_record_id",
+        "billing_subscription_id",
+        "product_subscription_id",
+        "tenant_id",
+        "metric_key",
+        "quantity",
+        "unit",
+        "occurred_at",
+        "recorded_at",
+        "source_reference",
+        "billable"
+      ],
+      "properties": {
+        "usage_record_id": {
+          "$ref": "domain.schema.json#/$defs/usageRecordId"
+        },
+        "billing_subscription_id": {
+          "$ref": "domain.schema.json#/$defs/billingSubscriptionId"
+        },
+        "product_subscription_id": {
+          "$ref": "../../product/v1/domain.schema.json#/$defs/subscriptionId"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "metric_key": {
+          "$ref": "domain.schema.json#/$defs/usageMetricKey"
+        },
+        "quantity": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "billable": {
+          "type": "boolean",
+          "description": "False when the projection's policy charges nothing (INTERNAL, TRIAL): metered, not billed."
+        }
+      }
+    }
+  }
+}

@@ -24,6 +24,18 @@ type Config struct {
 	// Load defaults it to a bounded value rather than leaving rows to
 	// accumulate forever when the operator sets nothing.
 	PlatformContextTTL time.Duration
+	// Environment names the deployment (BAOBAB_ENVIRONMENT). Anything other
+	// than development, test, integration or sandbox -- including unset --
+	// is production for engine registration: providers not permitted in
+	// production are refused (ADR-SHARED-011).
+	Environment string
+	// BillingEngineURL, when set, enables the billing projection of
+	// classified ProductSubscriptions into baobab-subscriptions (ADR-BCP-018
+	// gate ORG-11). BillingWorkloadTokenFile is the platform-projected
+	// workload token for the engine's audience; there is no static secret.
+	BillingEngineURL         string
+	BillingWorkloadTokenFile string
+	BillingSyncInterval      time.Duration
 }
 
 func Load() (Config, error) {
@@ -43,6 +55,23 @@ func Load() (Config, error) {
 		return Config{}, errors.New("PLATFORM_CONTEXT_TTL must be a positive Go duration (e.g. \"15m\")")
 	}
 	c.PlatformContextTTL = ttl
+	c.Environment = strings.ToLower(strings.TrimSpace(os.Getenv("BAOBAB_ENVIRONMENT")))
+	if raw := strings.TrimSpace(os.Getenv("BILLING_ENGINE_URL")); raw != "" {
+		engine, err := url.Parse(raw)
+		if err != nil || engine.Host == "" || (engine.Scheme != "https" && !localIssuer(engine)) {
+			return Config{}, errors.New("BILLING_ENGINE_URL must use HTTPS (HTTP is allowed only for localhost development)")
+		}
+		c.BillingEngineURL = raw
+		c.BillingWorkloadTokenFile = os.Getenv("BILLING_WORKLOAD_TOKEN_FILE")
+		if c.BillingWorkloadTokenFile == "" {
+			return Config{}, errors.New("BILLING_WORKLOAD_TOKEN_FILE is required when BILLING_ENGINE_URL is set")
+		}
+		interval, err := time.ParseDuration(env("BILLING_SYNC_INTERVAL", "30s"))
+		if err != nil || interval < time.Second {
+			return Config{}, errors.New("BILLING_SYNC_INTERVAL must be a Go duration of at least 1s")
+		}
+		c.BillingSyncInterval = interval
+	}
 	for name, rawIssuer := range map[string]string{"ADMIN_OIDC_ISSUER": c.AdminOIDCIssuer, "WORKLOAD_OIDC_ISSUER": c.WorkloadOIDCIssuer} {
 		issuer, err := url.Parse(rawIssuer)
 		if err != nil || issuer.Host == "" || (issuer.Scheme != "https" && !localIssuer(issuer)) {

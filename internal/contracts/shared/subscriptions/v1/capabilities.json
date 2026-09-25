@@ -1,0 +1,74 @@
+{
+  "repository": "baobab-subscriptions",
+  "capabilities": [
+    {
+      "capability_key": "billing.subscription.manage",
+      "name": "Manage subscription billing",
+      "description": "Ensure, read, suspend and cancel the billing projection of a classified Control Plane ProductSubscription.",
+      "domain": "billing",
+      "owner": "baobab-subscriptions",
+      "lifecycle": "ACTIVE",
+      "maturity": "EXPERIMENTAL",
+      "contracts": [
+        {
+          "major": 1,
+          "request_schema": "billing.schema.json#/$defs/EnsureBillingProjectionRequest",
+          "response_schema": "billing.schema.json#/$defs/BillingProjection",
+          "error_schema": "../../errors/v1/problem-details.schema.json",
+          "event_schemas": [
+            "events.schema.json#/$defs/BillingSubscriptionCreated",
+            "events.schema.json#/$defs/BillingSubscriptionSuspended",
+            "events.schema.json#/$defs/BillingSubscriptionResumed",
+            "events.schema.json#/$defs/BillingSubscriptionTerminated"
+          ]
+        }
+      ],
+      "data_classification": "TENANT_CONFIDENTIAL"
+    },
+    {
+      "capability_key": "billing.usage.record",
+      "name": "Record usage",
+      "description": "Meter usage against a billing projection; billable only where the subscription's policy charges.",
+      "domain": "billing",
+      "owner": "baobab-subscriptions",
+      "lifecycle": "ACTIVE",
+      "maturity": "EXPERIMENTAL",
+      "contracts": [
+        {
+          "major": 1,
+          "request_schema": "billing.schema.json#/$defs/RecordUsageRequest",
+          "response_schema": "billing.schema.json#/$defs/UsageRecord",
+          "error_schema": "../../errors/v1/problem-details.schema.json",
+          "event_schemas": [
+            "events.schema.json#/$defs/UsageRecorded"
+          ]
+        }
+      ],
+      "data_classification": "TENANT_CONFIDENTIAL"
+    }
+  ],
+  "provider": {
+    "provider_key": "baobab-subscriptions.temporary-billing",
+    "name": "Temporary billing provider (development/integration only)",
+    "provider_type": "BAOBAB_ENGINE",
+    "engine_key": "temporary-billing",
+    "lifecycle": "ACTIVE",
+    "ownership": "baobab-subscriptions",
+    "simulated": true,
+    "production_permitted": false
+  },
+  "support": [
+    {
+      "capability_key": "billing.subscription.manage",
+      "contract_versions": [
+        1
+      ]
+    },
+    {
+      "capability_key": "billing.usage.record",
+      "contract_versions": [
+        1
+      ]
+    }
+  ]
+}

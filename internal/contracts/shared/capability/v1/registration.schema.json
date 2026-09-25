@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/capability/v1/registration.schema.json",
+  "title": "Engine Capability Registration (ADR-SHARED-011)",
+  "description": "Definition library for an engine's published capability registration: the capabilities it implements and the provider it registers, without the identifiers the Control Plane mints on registration (capability_id, provider_id). The Control Plane registers these through its normal capability registry, provider and binding mechanisms; nothing is special-cased by engine name. Validate against #/$defs/EngineRegistration.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "EngineRegistration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "capabilities",
+        "provider",
+        "support"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "maxLength": 63,
+          "description": "The owning repository, e.g. baobab-subscriptions."
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "capability_key",
+              "name",
+              "domain",
+              "owner",
+              "lifecycle",
+              "maturity",
+              "contracts"
+            ],
+            "properties": {
+              "capability_key": {
+                "$ref": "domain.schema.json#/$defs/capabilityKey"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "domain": {
+                "$ref": "domain.schema.json#/$defs/capabilityDomain"
+              },
+              "owner": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "maxLength": 63
+              },
+              "lifecycle": {
+                "$ref": "domain.schema.json#/$defs/capabilityLifecycle"
+              },
+              "maturity": {
+                "$ref": "domain.schema.json#/$defs/capabilityMaturity"
+              },
+              "contracts": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "capability.schema.json#/$defs/capabilityContractVersion"
+                }
+              },
+              "data_classification": {
+                "enum": [
+                  "PUBLIC",
+                  "INTERNAL",
+                  "TENANT_CONFIDENTIAL",
+                  "RESTRICTED"
+                ]
+              }
+            }
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "provider_key",
+            "name",
+            "provider_type",
+            "engine_key",
+            "lifecycle",
+            "ownership",
+            "simulated"
+          ],
+          "properties": {
+            "provider_key": {
+              "$ref": "domain.schema.json#/$defs/capabilityProviderKey"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "provider_type": {
+              "$ref": "domain.schema.json#/$defs/capabilityProviderType"
+            },
+            "engine_key": {
+              "$ref": "domain.schema.json#/$defs/engineKey"
+            },
+            "lifecycle": {
+              "$ref": "domain.schema.json#/$defs/capabilityLifecycle"
+            },
+            "ownership": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "maxLength": 63
+            },
+            "simulated": {
+              "type": "boolean",
+              "description": "True when the provider only simulates the capability (development/integration only). A simulated provider must never be bound for production traffic."
+            },
+            "production_permitted": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "simulated": {
+                    "const": true
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "production_permitted": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "support": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "capability_key",
+              "contract_versions"
+            ],
+            "properties": {
+              "capability_key": {
+                "$ref": "domain.schema.json#/$defs/capabilityKey"
+              },
+              "contract_versions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
