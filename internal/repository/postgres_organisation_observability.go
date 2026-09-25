@@ -109,7 +109,28 @@ const relationshipDriftSQL = `
 		r.counterparty_role_id, r.tenant_id::text, ARRAY[r.organisation_id], NULL, '{}'::uuid[],
 		r.role || ' role ACTIVE; organisation ' || i.state, 'an ACTIVE counterparty role belongs to an ACTIVE organisation'
 	FROM registry.counterparty_role r JOIN inactive_org i ON i.org = r.organisation_id
-	WHERE r.status = 'ACTIVE'`
+	WHERE r.status = 'ACTIVE'
+	UNION ALL
+	SELECT 'INTERNAL_CLASSIFICATION_BASIS_NOT_IN_FORCE', 'STATE_MISMATCH', 'CRITICAL', 'PRODUCT_SUBSCRIPTION', 'sub',
+		ps.subscription_id, ps.tenant_id, array_remove(ARRAY[CASE WHEN sc.internal_eligibility->>'organisation_id' ~ ` + uuidTextPattern + `
+			THEN (sc.internal_eligibility->>'organisation_id')::uuid END], NULL), 'prel', basis.ids,
+		'INTERNAL; no recorded eligibility basis in force', 'an INTERNAL subscription rests on an in-force VERIFIED eligibility basis'
+	FROM product.product_subscription ps
+	JOIN product.subscription_classification sc ON sc.classification_id = ps.classification_id
+	CROSS JOIN LATERAL (SELECT COALESCE(array_agg(substr(b, 6)::uuid), '{}'::uuid[]) AS ids
+		FROM jsonb_array_elements_text(sc.internal_eligibility->'basis_relationship_ids') AS b
+		WHERE b ~ '^prel_[0-9a-f]{32}$') basis
+	WHERE ps.subscription_type = 'INTERNAL' AND ps.status NOT IN ('CANCELLED','EXPIRED')
+	  AND NOT EXISTS (SELECT 1 FROM registry.platform_relationship pr
+		LEFT JOIN registry.corporate_relationship cr ON cr.corporate_relationship_id = pr.basis_relationship_id
+		WHERE pr.platform_relationship_id = ANY (basis.ids)
+		  AND pr.status = 'ACTIVE' AND pr.verification_state = 'VERIFIED'
+		  AND pr.effective_from <= $1 AND (pr.effective_to IS NULL OR pr.effective_to > $1)
+		  AND (pr.relationship_type <> 'PLATFORM_GROUP_AFFILIATE' OR COALESCE(` + inForceSQL + `
+			AND cr.relationship_type IN ('OWNS','CONTROLS') AND cr.target_organisation_id = pr.organisation_id, false)))`
+
+// uuidTextPattern matches a canonical uuid in text.
+const uuidTextPattern = `'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`
 
 const driftSeverityOrderSQL = `CASE severity WHEN 'CRITICAL' THEN 0 WHEN 'DEGRADED' THEN 1 WHEN 'WARNING' THEN 2 ELSE 3 END`
 

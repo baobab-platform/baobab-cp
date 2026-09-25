@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/product/v1/domain.schema.json",
+  "title": "Baobab-Platform product and subscription domain identifiers and enumerations",
+  "description": "Canonical identifiers and enumerations for Product, ProductVersion, ProductSubscription and EntitlementProjection (Technical Specification SS31, SS88, SS91). This package defines vocabulary only; baobab-platform/baobab-cp is the runtime authority that persists, evaluates and materialises these concepts into CapabilityGrant records.",
+  "$defs": {
+    "productVersionId": {
+      "type": "string",
+      "pattern": "^prodver_[a-z0-9]+$",
+      "minLength": 10,
+      "maxLength": 63,
+      "description": "Control Plane-minted opaque identifier for a ProductVersion. Never derived from product_id or the version string."
+    },
+    "subscriptionId": {
+      "type": "string",
+      "pattern": "^sub_[a-z0-9]+$",
+      "minLength": 6,
+      "maxLength": 63,
+      "description": "Control Plane-minted opaque identifier for a ProductSubscription."
+    },
+    "entitlementProjectionId": {
+      "type": "string",
+      "pattern": "^entproj_[a-z0-9]+$",
+      "minLength": 10,
+      "maxLength": 63,
+      "description": "Control Plane-minted opaque identifier for an EntitlementProjection row."
+    },
+    "productVersionSemver": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of a ProductVersion. Published versions are immutable; a change is a new version, never an in-place edit (mirrors ADR-BCP-005 SS114's rule for CapabilityComposition)."
+    },
+    "productLifecycle": {
+      "type": "string",
+      "enum": ["DRAFT", "ACTIVE", "SUSPENDED", "DEPRECATED", "RETIRED"],
+      "description": "Operational lifecycle of a Product or ProductVersion. Deliberately the same five values as capability/v1/domain.schema.json's capabilityLifecycle -- the concept is identical -- but declared locally rather than cross-referenced, since Product is not itself a Capability."
+    },
+    "subscriptionStatus": {
+      "type": "string",
+      "enum": ["DRAFT", "PENDING", "ACTIVE", "SUSPENDED", "CANCELLED", "EXPIRED"],
+      "description": "Lifecycle state of a ProductSubscription."
+    },
+    "subscriptionSource": {
+      "type": "string",
+      "enum": ["ONBOARDING", "CONTRACT", "TRIAL", "MANUAL_APPROVAL", "MIGRATION"],
+      "description": "How a ProductSubscription came to exist. Distinct from, but the usual origin cited by, capability/v1's capabilityGrantSource=PRODUCT_SUBSCRIPTION source_reference."
+    },
+    "entitlementProjectionStatus": {
+      "type": "string",
+      "enum": ["PENDING", "MATERIALIZED", "FAILED"],
+      "description": "Whether a subscription-to-capability-grant expansion row has been turned into a real CapabilityGrant yet."
+    },
+    "subscriptionType": {
+      "type": "string",
+      "enum": ["COMMERCIAL", "INTERNAL", "TRIAL", "PARTNER", "MANUAL", "MIGRATION"],
+      "description": "Commercial classification of a ProductSubscription: the ADR-BCP-005 vocabulary, identical to admission/v1 subscriptionType (ADR-SHARED-011). There is no INTERNAL_GROUP. INTERNAL means zero monetary charge, never zero governance: it still grants through ProductVersion -> CapabilityComposition -> CapabilityGrant, and stays metered, audited, readiness- and isolation-controlled."
+    },
+    "classificationSource": {
+      "type": "string",
+      "enum": ["ADMISSION_DECISION", "RECLASSIFICATION", "MIGRATION", "MANUAL_GOVERNANCE"],
+      "description": "Where a subscription classification came from. ADMISSION_DECISION: the classification_reference is the admission/v1 admission_decision_id. RECLASSIFICATION: a governed change of an existing subscription's classification. MIGRATION: carried over from a pre-existing system. MANUAL_GOVERNANCE: an explicit governed administrative decision."
+    },
+    "subscriptionClassificationId": {
+      "type": "string",
+      "pattern": "^subcls_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63,
+      "description": "Control Plane-minted opaque identifier for one SubscriptionClassificationRecord."
+    },
+    "monetaryCharge": {
+      "type": "string",
+      "enum": ["ZERO", "PRICED"],
+      "description": "Whether a subscription type carries a monetary platform charge."
+    },
+    "paymentExecution": {
+      "type": "string",
+      "enum": ["NEVER", "REQUIRED"],
+      "description": "Whether billing a subscription of this type may require payment execution through baobab-payments."
+    }
+  }
+}
