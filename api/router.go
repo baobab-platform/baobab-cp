@@ -50,6 +50,9 @@ type Dependencies struct {
 	// OrganisationObservability backs the relationship drift and
 	// organisation audit lineage routes (ADR-BCP-018 ORG-15). Nil skips them.
 	OrganisationObservability repository.OrganisationObservabilityRepository
+	// PlatformAccounts backs the PlatformAccount lifecycle and the explicit
+	// tenant PlatformAccount binding routes (ADR-BCP-018 ORG-07). Nil skips them.
+	PlatformAccounts repository.PlatformAccountRepository
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -190,6 +193,16 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates", cp.listCandidates)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates/{candidateID}", cp.getCandidate)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/organisation-resolution-candidates/{candidateID}/decision", cp.decide)
+	}
+	if dependencies.PlatformAccounts != nil {
+		// ADR-BCP-018 ORG-07: the account lifecycle is canonical registry
+		// state (canonical:*); a tenant's binding is tenant state (tenant:*).
+		accounts := platformAccountHandler{repo: dependencies.PlatformAccounts, identities: a.identities}
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/platform-accounts/{accountID}", accounts.get)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/platform-accounts/{accountID}/status", accounts.changeStatus)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/platform-account-binding", accounts.bind)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/platform-account-binding/end", accounts.end)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(nil, true)).Get("/v1/tenants/{tenantID}/platform-account-bindings", accounts.list)
 	}
 	if dependencies.OrganisationObservability != nil {
 		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}

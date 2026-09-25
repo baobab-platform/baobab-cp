@@ -11,17 +11,18 @@ import (
 // an opaque prefix plus the uuid's 32 lowercase hex digits, so the external
 // identifier never embeds names, countries, markets or brands.
 const (
-	CorporateRelationshipIDPrefix     = "crel"
-	CorporateGroupIDPrefix            = "cgrp"
-	CorporateGroupMembershipIDPrefix  = "cgm"
-	PlatformRelationshipIDPrefix      = "prel"
-	PlatformAccountIDPrefix           = "pacct"
-	PlatformAccountMembershipIDPrefix = "pam"
-	TenantOrganisationMappingIDPrefix = "tom"
-	TenantLegalEntityMappingIDPrefix  = "tlem"
-	IamOrganisationReferenceIDPrefix  = "iamorg"
-	CounterpartyRoleIDPrefix          = "crole"
-	ResolutionCandidateIDPrefix       = "orc"
+	CorporateRelationshipIDPrefix        = "crel"
+	CorporateGroupIDPrefix               = "cgrp"
+	CorporateGroupMembershipIDPrefix     = "cgm"
+	PlatformRelationshipIDPrefix         = "prel"
+	PlatformAccountIDPrefix              = "pacct"
+	PlatformAccountMembershipIDPrefix    = "pam"
+	TenantPlatformAccountBindingIDPrefix = "tpab"
+	TenantOrganisationMappingIDPrefix    = "tom"
+	TenantLegalEntityMappingIDPrefix     = "tlem"
+	IamOrganisationReferenceIDPrefix     = "iamorg"
+	CounterpartyRoleIDPrefix             = "crole"
+	ResolutionCandidateIDPrefix          = "orc"
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
