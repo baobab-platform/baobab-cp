@@ -244,6 +244,18 @@ func TestPostgresControlAncestryIsDirectedMultiHopAndCycleSafe(t *testing.T) {
 	if got, err := f.repo.ListCorporateControlAncestry(f.ctx, stranger, f.at.Add(time.Hour)); err != nil || len(got) != 0 {
 		t.Fatalf("stranger ancestry = %v, %v; want none", got, err)
 	}
+	// Descendants mirror ancestry: the cycle is walked once, and the
+	// unverified edge controls nothing.
+	down, err := f.repo.ListCorporateControlDescendants(f.ctx, owner, f.at.Add(time.Hour))
+	if err != nil || len(down) != 3 {
+		t.Fatalf("owner descendants = %v, %v; want e1, e2 and the cycle edge", down, err)
+	}
+	if got, err := f.repo.ListCorporateControlDescendants(f.ctx, stranger, f.at.Add(time.Hour)); err != nil || len(got) != 0 {
+		t.Fatalf("stranger descendants = %v, %v; an unverified edge controls nothing", got, err)
+	}
+	if got, err := f.repo.ListCorporateControlDescendants(f.ctx, owner, f.at.Add(-time.Hour)); err != nil || len(got) != 0 {
+		t.Fatalf("descendants before the facts took effect = %v, %v; want none", got, err)
+	}
 }
 
 func TestPostgresLegalEntityProfileIsNeverRepointed(t *testing.T) {

@@ -46,7 +46,6 @@ func TestPostgresLinkExternalIdentityAuditedWritesAtomically(t *testing.T) {
 	issuer, subject := "https://accounts.google.com", "google-sub-audited-test"
 
 	cleanup := func() {
-		admin.Exec(ctx, `DELETE FROM audit_events WHERE target=$1`, "principal:"+principalID)
 		admin.Exec(ctx, `DELETE FROM identity.external_identity WHERE issuer=$1 AND subject=$2`, issuer, subject)
 		admin.Exec(ctx, `DELETE FROM identity.principal WHERE principal_id=$1`, principalID)
 	}

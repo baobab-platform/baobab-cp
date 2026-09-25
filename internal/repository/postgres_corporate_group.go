@@ -35,26 +35,7 @@ func (r *PostgresRepository) GetCorporateGroup(ctx context.Context, id string) (
 }
 
 func (r *PostgresRepository) ListCorporateControlDescendants(ctx context.Context, organisationID string, at time.Time) ([]domain.CorporateRelationship, error) {
-	// Mirror of ListCorporateControlAncestry, walking source -> target.
-	return r.queryCorporateRelationships(ctx, `
-		WITH RECURSIVE consequential AS (
-			SELECT corporate_relationship_id, source_organisation_id, target_organisation_id
-			FROM registry.corporate_relationship
-			WHERE relationship_type IN ('OWNS','CONTROLS') AND verification_state='VERIFIED'
-			  AND (status='ACTIVE' OR (status='ENDED' AND effective_to IS NOT NULL)) AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
-		), descendants(id, target, depth) AS (
-			SELECT corporate_relationship_id, target_organisation_id, 1
-			FROM consequential WHERE source_organisation_id = $1::uuid
-			UNION
-			SELECT c.corporate_relationship_id, c.target_organisation_id, d.depth + 1
-			FROM consequential c JOIN descendants d ON c.source_organisation_id = d.target
-			WHERE d.depth < $3
-		)
-		SELECT `+corporateRelationshipColumns+`
-		FROM registry.corporate_relationship
-		WHERE corporate_relationship_id IN (SELECT id FROM descendants)
-		ORDER BY effective_from, corporate_relationship_id`,
-		organisationID, at, domain.MaxCorporateControlDepth)
+	return r.queryCorporateRelationships(ctx, corporateControlDescendantsSQL, organisationID, at, domain.MaxCorporateControlDepth)
 }
 
 func (r *PostgresRepository) ListCorporateGroupMembers(ctx context.Context, groupID string, at time.Time) ([]domain.CorporateGroupMembership, error) {

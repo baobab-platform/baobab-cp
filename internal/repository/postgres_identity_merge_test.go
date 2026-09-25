@@ -49,7 +49,6 @@ func TestPostgresMergePrincipalsAuditedTransfersAndArchives(t *testing.T) {
 	targetIssuer, targetSubject := "https://iam.nabhold.com/realms/baobab", "keycloak-sub-merge-test"
 
 	cleanup := func() {
-		admin.Exec(ctx, `DELETE FROM audit_events WHERE target=$1 OR target=$2`, "principal:"+sourceID, "principal:"+targetID)
 		admin.Exec(ctx, `DELETE FROM identity.identity_reference WHERE principal_id=ANY($1::uuid[])`, []string{sourceID, targetID})
 		admin.Exec(ctx, `DELETE FROM identity.external_identity WHERE principal_id=ANY($1::uuid[])`, []string{sourceID, targetID})
 		admin.Exec(ctx, `DELETE FROM identity.principal WHERE principal_id=ANY($1::uuid[])`, []string{sourceID, targetID})

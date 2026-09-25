@@ -83,6 +83,7 @@ var canonicalMigrationNames = []string{
 	"000046_adr_bcp_018_iam_organisation_reference.sql",
 	"000047_adr_bcp_018_counterparty.sql",
 	"000048_adr_bcp_018_observability.sql",
+	"000049_adr_bcp_018_production_readiness.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
