@@ -2,9 +2,9 @@
 
 **Status:** Accepted  
 **Date:** 2026-09-01  
-**Repository:** `nabhold/baobab-cp`  
+**Repository:** `baobab-platform/baobab-cp`  
 **Depends on:** ADR-0003; Shared ADR-0003 and ADR-0004  
-**Contract:** `nabhold/shared/contracts/control-plane/v1/context-resolution.schema.json`
+**Contract:** `baobab-platform/shared/contracts/control-plane/v1/context-resolution.schema.json`
 
 ## Context
 

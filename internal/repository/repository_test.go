@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/resolver"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
 )
 
 func TestInMemoryRepositoryLoadsResolverData(t *testing.T) {
@@ -983,7 +983,7 @@ func TestInMemoryRepositoryWorkforceMembership(t *testing.T) {
 
 // TestInMemoryRepositoryMergeTransfersAndReconcilesWorkforceMemberships is
 // Gate IAM-5 phase 3's regression test for a review finding on
-// nabhold/baobab-cp#104: MergePrincipalsAudited transferred external
+// baobab-platform/baobab-cp#104: MergePrincipalsAudited transferred external
 // identities and identity references but not workforce memberships,
 // stranding an administrator's tenant access on the archived source
 // principal once its (issuer, subject) resolved to the target instead.

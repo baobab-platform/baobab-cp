@@ -5,14 +5,14 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service"
 )
 
 // CapabilityResolveHandler exposes ADR-BCP-003's capability resolution
 // ("POST /v1/capabilities/resolve") atop an already-resolved Context,
-// redeemed by context_id (nabhold/shared's resolutionRequest contract)
+// redeemed by context_id (baobab-platform/shared's resolutionRequest contract)
 // rather than accepting an inline context -- the caller is expected to have
 // called PlatformContextHandler.Resolve first.
 type CapabilityResolveHandler struct {

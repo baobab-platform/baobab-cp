@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 // CanonicalEntityRepository persists canonical registry entities.

@@ -174,12 +174,12 @@ The project currently uses—or intends to use—the following primary technolog
 | HTTP | `net/http` + `chi` |
 | Database | PostgreSQL 17 |
 | Containerisation | Docker |
-| Infrastructure as Code | Terraform (`nabhold/infrastructure`) |
+| Infrastructure as Code | Terraform (`baobab-platform/infrastructure`) |
 | Cloud Platform | AWS |
 | Version Control | Git |
 | CI/CD | GitHub Actions |
 
-`nabhold/baobab-cp` is a single-language Go service; the wider Nabhold platform's other
+`baobab-platform/baobab-cp` is a single-language Go service; the wider Nabhold platform's other
 repositories (digital estates, `baobab-trade`, `baobab-erp`, `baobab-pulse`) use their own
 appropriate stacks and are governed by their own coding standards, not this document. See
 the root [`README.md`](../README.md) for this repository's actual tech stack and structure.

@@ -1,7 +1,7 @@
 # Control-plane security model
 
 The canonical trust-boundary contract is
-`nabhold/shared/docs/security/control-plane-trust-boundaries.md`. This document
+`baobab-platform/shared/docs/security/control-plane-trust-boundaries.md`. This document
 records the runtime obligations of `baobab-cp`.
 
 ## Authentication and authorisation
@@ -14,7 +14,7 @@ records the runtime obligations of `baobab-cp`.
   platform policy; authentication alone never grants administration authority.
 - Use workload identity between deployed services. Static shared API keys are
   not the production default.
-- APISIX and `nabhold/infrastructure` own workload mTLS termination. The
+- APISIX and `baobab-platform/infrastructure` own workload mTLS termination. The
   application still requires a verified workload token and never treats
   caller-supplied identity headers as authoritative.
 - Context resolution additionally requires a workload actor, `azp` service

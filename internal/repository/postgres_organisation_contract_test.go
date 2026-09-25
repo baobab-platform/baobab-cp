@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/contracttest"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/events"
+	"github.com/baobab-platform/baobab-cp/internal/contracttest"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/events"
 )
 
 // TestPostgresOrganisationEventsConformToSharedContract drives every

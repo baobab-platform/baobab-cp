@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service"
 )
 
 // PlatformContextHandler exposes ADR-BCP-004's context resolution as its own
@@ -24,7 +24,7 @@ import (
 //
 // A resolved Context is persisted via repository.ContextWriter so its
 // context_id can be redeemed later by CapabilityResolveHandler, per
-// nabhold/shared's resolutionRequest contract requiring a pre-resolved
+// baobab-platform/shared's resolutionRequest contract requiring a pre-resolved
 // context_id rather than an inline context.
 type PlatformContextHandler struct {
 	ContextResolution service.ContextResolutionService

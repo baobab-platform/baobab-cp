@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 )
 
 // EntitlementResolutionQuery answers exactly one question, strictly before

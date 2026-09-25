@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/contracttest"
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/contracttest"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 func iamLink(org, issuer, providerOrgID string, from time.Time) domain.IamOrganisationReference {

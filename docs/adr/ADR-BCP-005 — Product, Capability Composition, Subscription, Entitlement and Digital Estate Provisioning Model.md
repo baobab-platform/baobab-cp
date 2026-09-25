@@ -3,10 +3,10 @@
 **Status:** Proposed — Normative Platform Architecture  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
-**Repository:** `nabhold/baobab-cp`  
-**Runtime Authority:** `nabhold/baobab-cp`  
-**Contract Authority:** `nabhold/shared`  
-**Identity Authority:** `nabhold/baobab-iam`  
+**Repository:** `baobab-platform/baobab-cp`  
+**Runtime Authority:** `baobab-platform/baobab-cp`  
+**Contract Authority:** `baobab-platform/shared`  
+**Identity Authority:** `baobab-platform/baobab-iam`  
 **Depends On:**
 - ADR-BCP-001 — Baobab Control Plane Parent Implementation Contract and Derived Artefacts
 - ADR-BCP-002 — Capability-Centric Baobab Platform Architecture and Digital Estate Consumption Model
@@ -302,7 +302,7 @@ Baobab XBT v1
 solution.baobab-xbt@1.0
 ```
 
-The composition SHALL remain defined canonically in `nabhold/shared`.
+The composition SHALL remain defined canonically in `baobab-platform/shared`.
 
 CP SHALL materialise runtime relationships from that contract.
 

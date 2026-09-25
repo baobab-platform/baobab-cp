@@ -3,7 +3,7 @@ package reconcile
 import (
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 func TestReconcileTenantState(t *testing.T) {

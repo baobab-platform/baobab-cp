@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/nabhold/baobab-cp/internal/domain"
 )
 
 // ADR-BCP-018 gate ORG-16 — production readiness (sections 171-176)

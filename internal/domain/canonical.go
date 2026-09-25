@@ -147,7 +147,7 @@ func isValidResolutionMode(mode string) bool {
 	}
 }
 
-// Mapping's fields mirror nabhold/shared's contracts/control-plane/v1/
+// Mapping's fields mirror baobab-platform/shared's contracts/control-plane/v1/
 // canonical-mapping.schema.json #/$defs/mapping field-for-field (names,
 // required-ness) per docs/reconciliation/platform-resolution-spine-audit.md
 // Gate 1 ("consolidate canonical Go model and shared wire schemas"); see

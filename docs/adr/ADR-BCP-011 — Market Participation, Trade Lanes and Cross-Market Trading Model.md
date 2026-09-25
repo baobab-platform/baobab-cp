@@ -3,11 +3,11 @@
 **Status:** Accepted — Normative Platform Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
-**Repository:** `nabhold/baobab-cp`  
-**Runtime Authority:** `nabhold/baobab-cp`  
-**Contract Authority:** `nabhold/shared`  
-**Identity Authority:** `nabhold/baobab-iam`  
-**Primary Domain Providers:** `nabhold/baobab-trade`, `nabhold/baobab-erp`  
+**Repository:** `baobab-platform/baobab-cp`  
+**Runtime Authority:** `baobab-platform/baobab-cp`  
+**Contract Authority:** `baobab-platform/shared`  
+**Identity Authority:** `baobab-platform/baobab-iam`  
+**Primary Domain Providers:** `baobab-platform/baobab-trade`, `baobab-platform/baobab-erp`  
 **Reference Tenant:** ZuriBeans  
 
 **Depends On:**
@@ -1836,7 +1836,7 @@ It SHALL NOT weaken tenant isolation.
 
 # 52. Shared Contract Requirements
 
-`nabhold/shared` SHALL become contract authority for canonical DTO/event/schema definitions including, at minimum:
+`baobab-platform/shared` SHALL become contract authority for canonical DTO/event/schema definitions including, at minimum:
 
 ```text
 MarketParticipation
@@ -2826,15 +2826,15 @@ Additionally, the original fourteen-ADR programme includes this ADR and the Mark
 
 | Repository | Required change |
 |---|---|
-| `nabhold/shared` | Canonical schemas, enums, events, OpenAPI/AsyncAPI contracts |
-| `nabhold/baobab-cp` | MarketParticipation, TradeLane, resolution, provisioning, readiness |
-| `nabhold/baobab-iam` | Principal/context integration; no trade-domain ownership |
-| `nabhold/baobab-trade` | Consume resolved lane/participation context |
-| `nabhold/baobab-erp` | Consume legal-entity/cross-market context for accounting |
-| `nabhold/zuribeans` | Request/consume platform context; no duplicated lane authority |
-| `nabhold/baobab-cms` | Optional market/lane content projection |
-| `nabhold/baobab-pulse` | Optional lane intelligence and analytics |
-| `nabhold/infrastructure` | Provider/environment readiness integration |
+| `baobab-platform/shared` | Canonical schemas, enums, events, OpenAPI/AsyncAPI contracts |
+| `baobab-platform/baobab-cp` | MarketParticipation, TradeLane, resolution, provisioning, readiness |
+| `baobab-platform/baobab-iam` | Principal/context integration; no trade-domain ownership |
+| `baobab-platform/baobab-trade` | Consume resolved lane/participation context |
+| `baobab-platform/baobab-erp` | Consume legal-entity/cross-market context for accounting |
+| `baobab-platform/zuribeans` | Request/consume platform context; no duplicated lane authority |
+| `baobab-platform/baobab-cms` | Optional market/lane content projection |
+| `baobab-platform/baobab-pulse` | Optional lane intelligence and analytics |
+| `baobab-platform/infrastructure` | Provider/environment readiness integration |
 
 ---
 

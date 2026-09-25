@@ -3,12 +3,12 @@
 **Status:** Accepted — Normative Platform Architecture  
 **Date:** 2026-09-12  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
-**Repository:** `nabhold/baobab-cp`  
-**Runtime Context Authority:** `nabhold/baobab-cp`  
-**Contract Authority:** `nabhold/shared`  
-**Commercial Inventory Authority:** `nabhold/baobab-trade`  
-**Financial Inventory Authority:** `nabhold/baobab-erp`  
-**Identity Authority:** `nabhold/baobab-iam`  
+**Repository:** `baobab-platform/baobab-cp`  
+**Runtime Context Authority:** `baobab-platform/baobab-cp`  
+**Contract Authority:** `baobab-platform/shared`  
+**Commercial Inventory Authority:** `baobab-platform/baobab-trade`  
+**Financial Inventory Authority:** `baobab-platform/baobab-erp`  
+**Identity Authority:** `baobab-platform/baobab-iam`  
 **Reference Tenant:** ZuriBeans
 
 ## Depends On
@@ -2197,7 +2197,7 @@ A stale availability projection SHOULD NOT be treated as authoritative indefinit
 
 # 98. Shared Contract Requirements
 
-`nabhold/shared` SHALL define canonical contracts for at least:
+`baobab-platform/shared` SHALL define canonical contracts for at least:
 
 ```text
 InventoryPosition
@@ -2611,13 +2611,13 @@ Removing it from the model would not remove it from ZuriBeans operations; it wou
 
 | Repository | Responsibility |
 |---|---|
-| `nabhold/shared` | Canonical inventory contracts/events |
-| `nabhold/baobab-cp` | Context, legal owner identity, provider/capability resolution |
-| `nabhold/baobab-trade` | ATP, reservations, allocations, commercial projection |
-| `nabhold/baobab-erp` | Financial stock, valuation, receipts/issues, accounting |
-| `nabhold/baobab-iam` | Identity and workload security |
-| `nabhold/zuribeans` | Buyer/supplier/operations UI projections |
-| `nabhold/infrastructure` | RabbitMQ, observability, storage/runtime |
+| `baobab-platform/shared` | Canonical inventory contracts/events |
+| `baobab-platform/baobab-cp` | Context, legal owner identity, provider/capability resolution |
+| `baobab-platform/baobab-trade` | ATP, reservations, allocations, commercial projection |
+| `baobab-platform/baobab-erp` | Financial stock, valuation, receipts/issues, accounting |
+| `baobab-platform/baobab-iam` | Identity and workload security |
+| `baobab-platform/zuribeans` | Buyer/supplier/operations UI projections |
+| `baobab-platform/infrastructure` | RabbitMQ, observability, storage/runtime |
 | Logistics/WMS providers | Physical execution where bound |
 
 ---

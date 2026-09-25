@@ -5,7 +5,7 @@
 --
 -- Migration 000024 added capability.capability.status but locked it to a
 -- four-value set (DRAFT, ACTIVE, DEPRECATED, RETIRED) that omits SUSPENDED
--- -- mirrored in nabhold/shared's contracts/capability/v1/domain.schema.json
+-- -- mirrored in baobab-platform/shared's contracts/capability/v1/domain.schema.json
 -- #/$defs/capabilityLifecycle, which is explicitly five-valued. No maturity
 -- (SS7, distinct from lifecycle) or domain (SS5's namespace segment) column
 -- existed at all.

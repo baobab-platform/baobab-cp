@@ -1,10 +1,10 @@
 -- Gate: introduce CapabilityProvider and ProviderCapabilitySupport as
 -- first-class concepts (ADR-BCP-002 §5.3, ADR-BCP-003 §20-23, ADR-BCP-006
 -- §5-13, ADR-SHARED-007 §31-34) -- confirmed absent from this schema
--- entirely during the Capability Platform Phase-0 audit (nabhold/baobab-cp
+-- entirely during the Capability Platform Phase-0 audit (baobab-platform/baobab-cp
 -- #73). Also locks capability_binding.binding_mode to the canonical
 -- five-value set (BCP-TS-ONBOARDING-001 CR-002, mirrored in
--- nabhold/shared's contracts/capability/v1/domain.schema.json) and adds
+-- baobab-platform/shared's contracts/capability/v1/domain.schema.json) and adds
 -- the provider_id column CR-005 requires between a binding and its
 -- implementation.
 
@@ -80,7 +80,7 @@ ALTER TABLE capability.capability_binding
 -- concrete engine instance -- neither alone is sufficient (ADR-BCP-002
 -- §5.7, ADR-BCP-003 §24). Nullable for now: no provider-registration
 -- workflow exists yet to backfill this for any binding created before
--- this migration (tracked: nabhold/baobab-cp#76, #82). It becomes
+-- this migration (tracked: baobab-platform/baobab-cp#76, #82). It becomes
 -- NOT NULL once that workflow exists and every existing binding has been
 -- assigned a provider.
 ALTER TABLE capability.capability_binding

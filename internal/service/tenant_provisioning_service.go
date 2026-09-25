@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 // ErrTenantProvisioningIdempotencyConflict is returned by Plan when an

@@ -6,10 +6,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/contracttest"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/events"
-	basestore "github.com/nabhold/baobab-cp/internal/store"
+	"github.com/baobab-platform/baobab-cp/internal/contracttest"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/events"
+	basestore "github.com/baobab-platform/baobab-cp/internal/store"
 )
 
 // TestTenantLifecycleEndToEnd is the regression test recorded as backlog item 2
@@ -145,7 +145,7 @@ func TestTenantLifecycleEndToEnd(t *testing.T) {
 // of TestTenantLifecycleEndToEnd's outbox assertions: it registers a tenant
 // against a real PostgreSQL instance, reads back the resulting
 // messaging.outbox payload, and validates it against the actual
-// contracts/events/v1/envelope.schema.json in a local nabhold/shared
+// contracts/events/v1/envelope.schema.json in a local baobab-platform/shared
 // checkout - proving the event this Store commits is not just internally
 // well-formed but schema-compliant. Set both TEST_DATABASE_URL and
 // SHARED_CONTRACTS_DIR to run it; skipped otherwise.

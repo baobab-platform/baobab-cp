@@ -8,9 +8,9 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	svcorg "github.com/baobab-platform/baobab-cp/internal/service/organisation"
 	"github.com/go-chi/chi/v5"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
 )
 
 type organisationAdmissionHandler struct {

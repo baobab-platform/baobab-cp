@@ -7,15 +7,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/contracttest"
+	"github.com/baobab-platform/baobab-cp/internal/contracttest"
 )
 
 // TestProblemResponseMatchesSharedSchema validates the actual JSON body the
 // problem() helper writes (used by every error response in this package)
-// against nabhold/shared's organisation-wide
+// against baobab-platform/shared's organisation-wide
 // contracts/errors/v1/problem-details.schema.json, per
 // docs/reconciliation/shared-control-plane-audit.md §6/§10.5. Set
-// SHARED_CONTRACTS_DIR to a checkout of nabhold/shared; skipped otherwise.
+// SHARED_CONTRACTS_DIR to a checkout of baobab-platform/shared; skipped otherwise.
 func TestProblemResponseMatchesSharedSchema(t *testing.T) {
 	dir := contracttest.SharedDir(t)
 	schema := contracttest.CompileSchema(t, dir, "errors/v1/problem-details.schema.json")

@@ -19,9 +19,9 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/go-chi/chi/v5"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
 )
 
 type externalReferenceHandler struct {

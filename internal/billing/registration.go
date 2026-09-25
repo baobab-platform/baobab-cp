@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/contracts"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 var registrationSchema = contracts.MustSchema("capability/v1/registration.schema.json#/$defs/EngineRegistration")

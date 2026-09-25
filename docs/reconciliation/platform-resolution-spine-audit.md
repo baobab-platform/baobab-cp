@@ -1,7 +1,7 @@
 # Platform resolution spine: implementation baseline
 
 **Date:** 2026-09-08  
-**Authority:** `nabhold/baobab-cp` (runtime), `nabhold/shared` (contracts)  
+**Authority:** `baobab-platform/baobab-cp` (runtime), `baobab-platform/shared` (contracts)  
 **Repositories inspected:** `baobab-cp`, `shared`, `baobab-erp`, `baobab-trade`,
 `baobab-pulse`
 
@@ -61,7 +61,7 @@ These are P0/P1 correctness defects, not documentation gaps.
   remain distinct.
 - PostgreSQL exclusion constraints remain the last line of defence against overlapping
   active authoritative mappings/bindings.
-- `nabhold/shared` owns wire contracts; `baobab-cp` owns resolution behaviour and state.
+- `baobab-platform/shared` owns wire contracts; `baobab-cp` owns resolution behaviour and state.
 - Peer engines use authenticated APIs/events and never query Control Plane tables.
 - ERPNext references may remain only in historical migration evidence and prohibition
   tests; ERPNext must never be a live engine, binding or fallback.
@@ -128,7 +128,7 @@ here (confirmed via `git log 597cac2..main -- internal/resolver/ internal/reposi
 Verified together: `go build ./...`, `go vet ./...`, `gofmt -l cmd internal api` (pre-existing
 formatting drift in `api/capability_explain_handler.go` noted, unrelated to this remediation
 and not fixed here), and `go test ./... -count=1` all pass against a real local PostgreSQL 16
-and a real `nabhold/shared` checkout (`SHARED_CONTRACTS_DIR`).
+and a real `baobab-platform/shared` checkout (`SHARED_CONTRACTS_DIR`).
 
 **Update**: both items Gate P0's own classification
 (`docs/reconciliation/phase-0-architecture-inventory-and-lock.md`) tracked as open here are

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/contracttest"
+	"github.com/baobab-platform/baobab-cp/internal/contracttest"
 )
 
 // TestEmbeddedContractsMatchShared: the embedded schemas are exactly the

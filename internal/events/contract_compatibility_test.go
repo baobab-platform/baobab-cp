@@ -3,13 +3,13 @@ package events_test
 import (
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/contracttest"
-	"github.com/nabhold/baobab-cp/internal/events"
+	"github.com/baobab-platform/baobab-cp/internal/contracttest"
+	"github.com/baobab-platform/baobab-cp/internal/events"
 )
 
 // TestEnvelopeMatchesSharedSchema validates a constructed events.Envelope
 // against the actual organisation-wide event envelope schema in a local
-// nabhold/shared checkout (ADR-0004). Set SHARED_CONTRACTS_DIR to run it;
+// baobab-platform/shared checkout (ADR-0004). Set SHARED_CONTRACTS_DIR to run it;
 // skipped otherwise. See
 // docs/reconciliation/shared-control-plane-audit.md §5/§6/§10.5.
 func TestEnvelopeMatchesSharedSchema(t *testing.T) {

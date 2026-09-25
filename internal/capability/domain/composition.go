@@ -17,7 +17,7 @@ func ValidCompositionKey(key string) bool {
 
 // CapabilityCompositionType classifies a CapabilityComposition -- governs how
 // it may be combined with others, not runtime behaviour (mirrors
-// nabhold/shared's contracts/capability/v1/domain.schema.json
+// baobab-platform/shared's contracts/capability/v1/domain.schema.json
 // #/$defs/capabilityCompositionType).
 type CapabilityCompositionType string
 
@@ -40,7 +40,7 @@ func (t CapabilityCompositionType) Valid() bool {
 
 // MembershipCriticality is the criticality of one capability's membership
 // within one specific composition -- the same capability can be MANDATORY in
-// one composition and OPTIONAL in another (mirrors nabhold/shared's
+// one composition and OPTIONAL in another (mirrors baobab-platform/shared's
 // #/$defs/capabilityMembershipCriticality).
 type MembershipCriticality string
 
@@ -60,7 +60,7 @@ func (c MembershipCriticality) Valid() bool {
 }
 
 // CompositionMember names one capability's participation in a
-// CapabilityComposition. Mirrors nabhold/shared's
+// CapabilityComposition. Mirrors baobab-platform/shared's
 // contracts/capability/v1/composition.schema.json #/$defs/compositionMember.
 type CompositionMember struct {
 	CapabilityKey       string                `json:"capability_key"`
@@ -84,7 +84,7 @@ func (m CompositionMember) Validate() error {
 // mints no runtime service; expanding a ProductSubscription's ProductVersion
 // composition_key into real CapabilityGrant records is
 // CompositionExpansionService's job (ADR-BCP-005, Programme Gate P4). Mirrors
-// nabhold/shared's contracts/capability/v1/composition.schema.json
+// baobab-platform/shared's contracts/capability/v1/composition.schema.json
 // #/$defs/composition.
 type CapabilityComposition struct {
 	ID              string                    `json:"id,omitempty"`
@@ -94,7 +94,7 @@ type CapabilityComposition struct {
 	Version         string                    `json:"version"`
 	Members         []CompositionMember       `json:"members"`
 	// IncludesCompositions and IncompatibleWith are carried for forward
-	// compatibility with nabhold/shared's schema but are not resolved by
+	// compatibility with baobab-platform/shared's schema but are not resolved by
 	// CompositionExpansionService yet -- graph inclusion/exclusion is
 	// explicitly out of scope for Programme Gate P4's "basics" cut (see the
 	// package doc on composition_service.go). A composition using either

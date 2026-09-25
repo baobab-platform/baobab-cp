@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
 // TestPostgresTenantProvisioningConcurrentUpdatesOnlyOneWins is the ZB-02

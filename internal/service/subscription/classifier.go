@@ -23,9 +23,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/contracts"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 var (

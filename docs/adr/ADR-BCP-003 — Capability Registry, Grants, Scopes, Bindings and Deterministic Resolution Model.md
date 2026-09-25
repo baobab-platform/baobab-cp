@@ -3,9 +3,9 @@
 **Status:** Proposed — Normative Implementation Architecture  
 **Date:** 2026-09-10  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
-**Repository:** `nabhold/baobab-cp`  
-**Primary Runtime Owner:** `nabhold/baobab-cp`  
-**Contract Authority:** `nabhold/shared`  
+**Repository:** `baobab-platform/baobab-cp`  
+**Primary Runtime Owner:** `baobab-platform/baobab-cp`  
+**Contract Authority:** `baobab-platform/shared`  
 **Depends On:**  
 - ADR-BCP-001 — Baobab Control Plane Parent Implementation Contract and Derived Artefacts  
 - ADR-BCP-002 — Capability-Centric Baobab Platform Architecture and Digital Estate Consumption Model  

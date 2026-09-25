@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service"
-	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
 // TestZB02OrchestrationRecoversAfterSimulatedCrash proves spec §65: an

@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 )
 
 // NewTenantManifestRecord builds the persisted snapshot of m/resolved for

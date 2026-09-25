@@ -2,9 +2,9 @@
 
 **Status:** Proposed
 **Date:** 2026-08-31
-**Repository:** `nabhold/baobab-cp`
+**Repository:** `baobab-platform/baobab-cp`
 **Series:** Local ADR register (follows `0001-go-control-plane-runtime.md`, `0002-adopting-zensical.md`)
-**Related:** Platform ADR-020 (Control Plane / Product Plane / Digital Estate architecture), `nabhold/shared` (canonical contracts), `nabhold/infrastructure` (environment provisioning)
+**Related:** Platform ADR-020 (Control Plane / Product Plane / Digital Estate architecture), `baobab-platform/shared` (canonical contracts), `baobab-platform/infrastructure` (environment provisioning)
 
 ---
 
@@ -16,9 +16,9 @@ Constraints already established elsewhere in the ecosystem, which this ADR treat
 
 - No product engine shares a database with another, or with the control plane.
 - `baobab-trade` already implements a control-plane client and **fails closed** if tenant context cannot be resolved — any design here must honour that contract, not redefine it.
-- `nabhold/infrastructure` provisions PostgreSQL, RabbitMQ (with DLQs), APISIX, and Redis; PostgreSQL is authoritative, Redis holds only rebuildable projections; the control plane reconciles APISIX configuration and owns PostgreSQL desired state.
+- `baobab-platform/infrastructure` provisions PostgreSQL, RabbitMQ (with DLQs), APISIX, and Redis; PostgreSQL is authoritative, Redis holds only rebuildable projections; the control plane reconciles APISIX configuration and owns PostgreSQL desired state.
 - Target production region is AWS `af-south-1` (Cape Town).
-- Canonical contracts live in `nabhold/shared`, referenced, not redefined.
+- Canonical contracts live in `baobab-platform/shared`, referenced, not redefined.
 
 ## 2. Decision Summary
 
@@ -40,8 +40,8 @@ It is **not** a request-routing proxy, **not** a business-data store, and **not*
 ### Explicitly does not own
 - Business data of any kind (orders, invoices, research artefacts — these live in `baobab-trade`, `baobab-erp`, `baobab-pulse` respectively).
 - UI or end-user-facing surfaces.
-- Infrastructure provisioning mechanics (Terraform, Compose topologies) — that is `nabhold/infrastructure`'s job; the control plane declares *desired state*, infrastructure tooling and the reconciler realise it.
-- Canonical contract definitions — those are authored in `nabhold/shared`; `baobab-cp` implements against them.
+- Infrastructure provisioning mechanics (Terraform, Compose topologies) — that is `baobab-platform/infrastructure`'s job; the control plane declares *desired state*, infrastructure tooling and the reconciler realise it.
+- Canonical contract definitions — those are authored in `baobab-platform/shared`; `baobab-cp` implements against them.
 
 ## 4. Tenancy Model
 
@@ -84,7 +84,7 @@ Every reconciliation pass is idempotent and safe to re-run; partial failures lea
 
 **Transport:** REST/JSON over HTTPS for all consumer-facing endpoints (tenant CRUD, context resolution, entitlement queries). Chosen over gRPC for v1 because every current consumer (`baobab-trade` on Node, `baobab-erp` on Python, digital-estate frontends) integrates more cheaply against REST/JSON, and the request volume does not yet justify gRPC's operational overhead. This is revisitable once traffic profiling justifies it.
 
-**Contract ownership:** the OpenAPI specification for `baobab-cp`'s public API is authored in `nabhold/shared/contracts/openapi/baobab-cp/`, not in this repository, consistent with the platform's contract-ownership rule.
+**Contract ownership:** the OpenAPI specification for `baobab-cp`'s public API is authored in `baobab-platform/shared/contracts/openapi/baobab-cp/`, not in this repository, consistent with the platform's contract-ownership rule.
 
 **Primary endpoints:**
 - `POST /v1/context/resolve` — the endpoint `baobab-trade` already depends on. Given an authenticated caller, returns `tenantId`, `entityId`, `lifecycleStatus`, and the caller's product entitlement, or an explicit `403`/`409` if unresolved. **This endpoint must fail closed by contract, not by accident** — any change to it requires an explicit compatibility review under the platform's ADR discipline.
@@ -94,9 +94,9 @@ Every reconciliation pass is idempotent and safe to re-run; partial failures lea
 
 ## 7. Security Model
 
-- **Service-to-service (product engine → control plane):** mutual TLS at the network layer (terminated per `nabhold/infrastructure`'s APISIX gateway policy) plus a short-lived workload identity token. Context-resolution responses are signed by the control plane so a product engine can verify authenticity without a second round trip if it chooses to cache briefly (see §8).
+- **Service-to-service (product engine → control plane):** mutual TLS at the network layer (terminated per `baobab-platform/infrastructure`'s APISIX gateway policy) plus a short-lived workload identity token. Context-resolution responses are signed by the control plane so a product engine can verify authenticity without a second round trip if it chooses to cache briefly (see §8).
 - **Human/administrative access:** OIDC-backed authentication for the control plane's own admin API, distinct from the workload-identity path used by engines.
-- **Secrets:** sourced exclusively from `nabhold/infrastructure`-managed facilities (never committed; `.env` is for local development defaults only, never committed with real values — see the equator-estate finding logged separately in ADR-020 as a cautionary precedent).
+- **Secrets:** sourced exclusively from `baobab-platform/infrastructure`-managed facilities (never committed; `.env` is for local development defaults only, never committed with real values — see the equator-estate finding logged separately in ADR-020 as a cautionary precedent).
 - **Audit:** every provisioning and lifecycle-transition action is written to an append-only audit table before being acknowledged to the caller, satisfying the platform's compliance/audit-schema direction.
 
 ## 8. Consistency and Failure Behaviour
@@ -109,20 +109,20 @@ Context resolution is a hot path — every `baobab-trade` request depends on it,
 
 ## 9. Event Model
 
-- **Transport:** RabbitMQ, per `nabhold/infrastructure`'s provisioned topology, with dead-letter queues for poison messages.
+- **Transport:** RabbitMQ, per `baobab-platform/infrastructure`'s provisioned topology, with dead-letter queues for poison messages.
 - **Delivery guarantee:** transactional outbox pattern — state changes and their corresponding event records are written in the same PostgreSQL transaction; a separate publisher process delivers from the outbox to RabbitMQ, giving at-least-once delivery without dual-write risk.
-- **Schema:** versioned AsyncAPI definitions in `nabhold/shared`, not redefined here. Consumers (e.g. `baobab-erp`'s webhook-based integration) version-check envelopes before processing.
+- **Schema:** versioned AsyncAPI definitions in `baobab-platform/shared`, not redefined here. Consumers (e.g. `baobab-erp`'s webhook-based integration) version-check envelopes before processing.
 
 ## 10. Observability
 
-- OpenTelemetry traces/metrics/logs throughout, exported per the shared observability contract (once established in `nabhold/shared`).
+- OpenTelemetry traces/metrics/logs throughout, exported per the shared observability contract (once established in `baobab-platform/shared`).
 - A named SLO for `/v1/context/resolve` latency and availability, given its position as a hot-path dependency for `baobab-trade` — proposed starting point: p99 < 100ms, 99.9% availability, to be reviewed once real traffic exists.
 - Structured audit logging distinct from operational logging (§7).
 
 ## 11. Alternatives Considered
 
-- **Full Kubernetes CRD/operator model.** Rejected for v1: correct long-term shape, but adds operational machinery (CRDs, a real Kubernetes control loop, RBAC surface) ahead of proven need. `nabhold/infrastructure` already defers Kubernetes adoption until operational need justifies it; this ADR follows the same discipline.
-- **Redis as source of truth for tenant state.** Rejected: contradicts `nabhold/infrastructure`'s own stated principle that PostgreSQL remains authoritative and Redis holds only rebuildable projections.
+- **Full Kubernetes CRD/operator model.** Rejected for v1: correct long-term shape, but adds operational machinery (CRDs, a real Kubernetes control loop, RBAC surface) ahead of proven need. `baobab-platform/infrastructure` already defers Kubernetes adoption until operational need justifies it; this ADR follows the same discipline.
+- **Redis as source of truth for tenant state.** Rejected: contradicts `baobab-platform/infrastructure`'s own stated principle that PostgreSQL remains authoritative and Redis holds only rebuildable projections.
 - **gRPC for all consumer-facing APIs.** Deferred, not rejected outright — revisit once traffic and consumer language mix justify the added complexity.
 - **Weakening fail-closed to fail-open on control-plane outage.** Rejected: `baobab-trade` already depends on fail-closed semantics; changing this unilaterally from the control-plane side would be a breaking, safety-reducing change made without the consumer's consent.
 

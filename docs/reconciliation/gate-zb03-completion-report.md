@@ -61,7 +61,7 @@ fail-closed.
    isolation-certification.md` §3).
 2. **Revocation signal propagation stays synchronous-only, by decision, not oversight.**
    `gate-zb03-authority-contract-freeze.md` §7 recorded this as the permanent posture until a
-   real, measured latency need justifies building `nabhold/shared`'s already-defined
+   real, measured latency need justifies building `baobab-platform/shared`'s already-defined
    (already-unconsumed) revocation event schemas into an actual producer/consumer pair.
 3. **CodeQL "Advanced Security" checks fail structurally on `zuribeans`** (private repo,
    GitHub Advanced Security not enabled at the organization level) — confirmed by the repo

@@ -2,8 +2,8 @@
 
 **Status:** Proposed — Normative Platform Architecture  
 **Date:** 2026-09-11  
-**Repository:** `nabhold/baobab-cp`  
-**Related Repositories:** `nabhold/shared`, `nabhold/baobab-iam`, domain provider repositories  
+**Repository:** `baobab-platform/baobab-cp`  
+**Related Repositories:** `baobab-platform/shared`, `baobab-platform/baobab-iam`, domain provider repositories  
 **Supersedes:** Informal module organisation and ad hoc expansion of Control Plane responsibilities  
 **Related ADRs:** ADR-BCP-001 through ADR-BCP-009, ADR-SHARED-007  
 
@@ -289,7 +289,7 @@ CompatibilityPolicy
 DeprecationPolicy
 ```
 
-The module SHALL work with `nabhold/shared`, which remains the canonical contract authority.
+The module SHALL work with `baobab-platform/shared`, which remains the canonical contract authority.
 
 Example:
 
@@ -1205,7 +1205,7 @@ delivery status
 idempotency metadata
 ```
 
-Canonical event vocabulary remains defined by `nabhold/shared`.
+Canonical event vocabulary remains defined by `baobab-platform/shared`.
 
 ---
 

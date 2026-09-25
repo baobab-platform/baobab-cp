@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/jackc/pgx/v5/pgxpool"
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
 )
 
 // zb02Fixture is the minimum reference/reference-adjacent state every

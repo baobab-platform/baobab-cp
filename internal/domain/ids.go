@@ -6,7 +6,7 @@ import (
 )
 
 // These patterns are copied verbatim from
-// nabhold/shared's contracts/control-plane/v1/domain.schema.json so that every
+// baobab-platform/shared's contracts/control-plane/v1/domain.schema.json so that every
 // layer of this repository checks identifier shape exactly one way instead of
 // re-deriving a slightly different regex per file (see
 // docs/reconciliation/shared-control-plane-audit.md §3).

@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/go-chi/chi/v5"
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
 )
 
 // iamOrganisationSourceAuthority records that an administrator established

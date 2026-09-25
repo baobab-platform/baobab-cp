@@ -5,7 +5,7 @@
 -- 000024 already brought mapping_scope from its original 6 columns up to 16
 -- (legal_entity_id, country_code, digital_estate_id, digital_property_id,
 -- channel_id, currency_code, locale, environment, engine_id,
--- engine_instance_id), but nabhold/shared's contracts/control-plane/v1/
+-- engine_instance_id), but baobab-platform/shared's contracts/control-plane/v1/
 -- canonical-mapping.schema.json #/$defs/mappingScope (and the Baobab
 -- Canonical Mapping Model spec, section 10.2, that schema implements)
 -- defines ~10 more dimensions this table still had no column for at all:
@@ -28,7 +28,7 @@
 -- topology.engine_instance has no equivalent slug column at all, so there
 -- is no consistent fix available purely on the baobab-cp side. That is an
 -- ID-generation-scheme disagreement between this database's registries and
--- nabhold/shared's grammar for this concept, the same class of gap Gate 1
+-- baobab-platform/shared's grammar for this concept, the same class of gap Gate 1
 -- (#61) already found and flagged for Mapping's own mapping_id/tenant_id
 -- (map_.../tn_... vs gen_random_uuid()) -- left for whoever picks up that
 -- coordinated decision, not invented unilaterally here.

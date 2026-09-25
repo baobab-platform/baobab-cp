@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 // TestCorporateGroupDerivation drives ADR-BCP-018 gate ORG-05 against real

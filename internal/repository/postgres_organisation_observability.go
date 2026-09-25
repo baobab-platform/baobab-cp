@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/events"
+	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/jackc/pgx/v5"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/events"
-	"github.com/nabhold/baobab-cp/internal/metrics"
 )
 
 // OrganisationObservabilityRepository reads relationship drift and audit

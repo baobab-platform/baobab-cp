@@ -14,12 +14,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/service/application"
 	"github.com/go-chi/chi/v5"
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service"
-	"github.com/nabhold/baobab-cp/internal/service/application"
 )
 
 type clientApplicationHandler struct {

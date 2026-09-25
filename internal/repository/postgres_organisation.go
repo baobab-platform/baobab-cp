@@ -10,8 +10,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/jackc/pgx/v5"
-	"github.com/nabhold/baobab-cp/internal/domain"
 )
 
 var _ OrganisationRepository = (*PostgresRepository)(nil)

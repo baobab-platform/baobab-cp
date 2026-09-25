@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 )
 
 // PolicyDecision represents the result of checking a capability binding against policy constraints.

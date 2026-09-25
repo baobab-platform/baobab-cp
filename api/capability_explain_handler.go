@@ -5,10 +5,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/resolver"
-	"github.com/nabhold/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
+	"github.com/baobab-platform/baobab-cp/internal/service"
 )
 
 // CapabilityExplainHandler exposes ADR-BCP-004 §77 ("Context Explainability")
@@ -115,7 +115,7 @@ func (h CapabilityExplainHandler) Explain(w http.ResponseWriter, r *http.Request
 		"context_id":          trustedContext.ID,
 		"tenant_id":           trustedContext.TenantID,
 		"canonical_entity_id": req.CanonicalEntityID,
-		"capability_key":       req.CapabilityKey,
+		"capability_key":      req.CapabilityKey,
 	}
 	response["outcome"] = trace.Outcome
 	response["reason"] = trace.Reason

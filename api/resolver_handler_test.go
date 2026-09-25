@@ -8,11 +8,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/resolver"
-	"github.com/nabhold/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
+	"github.com/baobab-platform/baobab-cp/internal/service"
 )
 
 func TestResolverHandlerRejectsCallerSuppliedRegistryState(t *testing.T) {
@@ -216,7 +216,7 @@ func TestResolverHandlerRejectsUnresolvableIdentity(t *testing.T) {
 // successfully resolve.
 // TestResolverHandlerAcceptsRequestSuppliedTenantWhenClaimEmpty is the
 // regression test for the real-world workload path: no workload client in
-// nabhold/baobab-iam mints a tenant_id claim today (see
+// baobab-platform/baobab-iam mints a tenant_id claim today (see
 // resolveWorkloadTenant's doc comment), so this -- not the synthetic
 // principal.TenantID every other test in this file hand-sets -- is what a
 // real workload token looks like. Before this, every such request 403'd at

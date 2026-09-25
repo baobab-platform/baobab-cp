@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/metrics"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/service/application"
+	svcorg "github.com/baobab-platform/baobab-cp/internal/service/organisation"
+	"github.com/baobab-platform/baobab-cp/internal/service/subscription"
+	"github.com/baobab-platform/baobab-cp/internal/store"
 	"github.com/go-chi/chi/v5"
-	"github.com/nabhold/baobab-cp/internal/auth"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/metrics"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service"
-	"github.com/nabhold/baobab-cp/internal/service/application"
-	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
-	"github.com/nabhold/baobab-cp/internal/service/subscription"
-	"github.com/nabhold/baobab-cp/internal/store"
 )
 
 type correlationKey struct{}

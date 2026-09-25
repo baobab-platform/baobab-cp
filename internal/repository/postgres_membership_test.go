@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
 // TestPostgresWorkforceMembershipLifecycle is Gate IAM-5 phase 3's
@@ -157,7 +157,7 @@ func TestPostgresWorkforceMembershipLifecycle(t *testing.T) {
 }
 
 // TestPostgresMergeTransfersAndReconcilesWorkforceMemberships is Gate IAM-5
-// phase 3's regression test for a review finding on nabhold/baobab-cp#104:
+// phase 3's regression test for a review finding on baobab-platform/baobab-cp#104:
 // MergePrincipalsAudited transferred external identities and identity
 // references but not workforce memberships, stranding an administrator's
 // tenant access on the archived source principal once its (issuer, subject)

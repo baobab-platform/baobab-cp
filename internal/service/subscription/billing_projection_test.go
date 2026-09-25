@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/billing"
-	"github.com/nabhold/baobab-cp/internal/contracts"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	"github.com/nabhold/baobab-cp/internal/service/application"
+	"github.com/baobab-platform/baobab-cp/internal/billing"
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service/application"
 )
 
 // ADR-BCP-018 gate ORG-11 end to end: a classified ProductSubscription is

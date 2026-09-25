@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/events"
+	basestore "github.com/baobab-platform/baobab-cp/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/events"
-	basestore "github.com/nabhold/baobab-cp/internal/store"
 )
 
 // defaultEventSource is the stable, absolute producer URI used for every

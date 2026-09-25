@@ -16,7 +16,7 @@ func ValidEntitlementProjectionID(v string) bool {
 
 // EntitlementProjectionStatus tracks whether one composition member's
 // expansion into a CapabilityGrant has been materialized yet (mirrors
-// nabhold/shared's contracts/product/v1/domain.schema.json
+// baobab-platform/shared's contracts/product/v1/domain.schema.json
 // #/$defs/entitlementProjectionStatus).
 type EntitlementProjectionStatus string
 

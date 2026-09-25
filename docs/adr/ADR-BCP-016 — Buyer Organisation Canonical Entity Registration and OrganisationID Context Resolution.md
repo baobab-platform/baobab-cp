@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-17
-**Repository:** `nabhold/baobab-cp`
+**Repository:** `baobab-platform/baobab-cp`
 **Depends on:** ADR-0006, ADR-BCP-004, ADR-BCP-010 §41
 **Related:** ADR-BCP-014
 **Gate:** ZB-03.2 (Canonical identity and organisation spine)
@@ -118,7 +118,7 @@ yet, and ADR-BCP-014 itself does not describe an implementation deadline.
   ownership) is unaffected by this ADR.
 - The platform-wide Organisation-ownership gap this ADR's context
   (`gate-zb03-authority-contract-freeze.md`) and ADR-0006 both flag —
-  `nabhold/shared`'s `contracts/erp/v1/system-of-record.yaml` still keeps
+  `baobab-platform/shared`'s `contracts/erp/v1/system-of-record.yaml` still keeps
   `canonical_owner: unassigned` for the broader Organisation concept — is
   not resolved by this ADR. This ADR resolves only enough of that gap for
   CP to fail closed when verifying a caller-asserted `organisation_id`; it

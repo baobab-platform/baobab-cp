@@ -3,7 +3,7 @@
 This document was the pre-rewrite `baobab` monorepo's root README, describing a
 Python/Django/Celery/Wagtail "Backend Service" under `services/backend`. That
 architecture was superseded by [ADR-0001](../adr/0001-go-control-plane-runtime.md):
-`nabhold/baobab-cp` is a Go control plane, not a Django application, and this repository
+`baobab-platform/baobab-cp` is a Go control plane, not a Django application, and this repository
 contains no `services/backend` directory.
 
 Its full prior content remains available in Git history for anyone doing historical or
@@ -14,4 +14,4 @@ presenting obsolete technology choices as current guidance. See instead:
   responsibilities, tech stack and structure;
 - [`docs/adr/index.md`](../adr/index.md) for the accepted architecture decisions;
 - [`docs/reconciliation/shared-control-plane-audit.md`](../reconciliation/shared-control-plane-audit.md)
-  for the current audit of this repository against `nabhold/shared`'s canonical contracts.
+  for the current audit of this repository against `baobab-platform/shared`'s canonical contracts.

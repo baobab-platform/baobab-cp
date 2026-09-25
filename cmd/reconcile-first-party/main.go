@@ -20,9 +20,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/repository"
-	svcorg "github.com/nabhold/baobab-cp/internal/service/organisation"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
+	svcorg "github.com/baobab-platform/baobab-cp/internal/service/organisation"
 )
 
 // reconcilerActor is the workload identity the audit trail attributes

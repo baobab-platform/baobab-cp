@@ -29,11 +29,11 @@ import (
 	"strings"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
-	"github.com/nabhold/baobab-cp/internal/resolver"
-	"github.com/nabhold/baobab-cp/internal/store"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
+	"github.com/baobab-platform/baobab-cp/internal/store"
 )
 
 // ContextAuthorityRepo is the subset of internal/repository.Repository /

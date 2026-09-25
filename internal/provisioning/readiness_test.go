@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	provisioningdomain "github.com/nabhold/baobab-cp/internal/provisioning/domain"
+	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 )
 
 type readinessCheckFake struct {

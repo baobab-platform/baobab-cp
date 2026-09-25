@@ -31,7 +31,7 @@ func ValidCapabilityKey(key string) bool {
 // CapabilityLifecycle is a Capability's (or CapabilityProvider's, or
 // CapabilityBinding's) operational lifecycle -- distinct from maturity: a
 // capability can be maturity=SUPPORTED and lifecycle=SUSPENDED
-// simultaneously (ADR-BCP-003 §6, mirrored in nabhold/shared's
+// simultaneously (ADR-BCP-003 §6, mirrored in baobab-platform/shared's
 // contracts/capability/v1/domain.schema.json #/$defs/capabilityLifecycle).
 type CapabilityLifecycle string
 
@@ -115,7 +115,7 @@ func (c Capability) IsResolvable() bool {
 
 // DependencyType is whether a depended-upon capability must, may, or
 // conditionally must be satisfied (ADR-BCP-003 §8, mirrored in
-// nabhold/shared's domain.schema.json #/$defs/capabilityDependencyType).
+// baobab-platform/shared's domain.schema.json #/$defs/capabilityDependencyType).
 type DependencyType string
 
 const (
@@ -134,7 +134,7 @@ func (t DependencyType) Valid() bool {
 }
 
 // CapabilityDependency declares that one capability depends on another.
-// Mirrors nabhold/shared's contracts/capability/v1/capability.schema.json
+// Mirrors baobab-platform/shared's contracts/capability/v1/capability.schema.json
 // #/$defs/capabilityDependency (CapabilityKey/DependencyType/
 // VersionConstraint/Condition), plus the owning-capability identity a
 // persisted runtime edge needs that the wire-embedded contract shape does
@@ -221,7 +221,7 @@ func HasCapabilityDependencyCycle(dependencies []CapabilityDependency) bool {
 }
 
 // BindingMode is the canonical, closed set of CapabilityBinding modes
-// (BCP-TS-ONBOARDING-001 CR-002, mirrored in nabhold/shared's
+// (BCP-TS-ONBOARDING-001 CR-002, mirrored in baobab-platform/shared's
 // contracts/capability/v1/domain.schema.json). A superseded seven-value
 // set (including SECONDARY, READ_ONLY, MIGRATION_SOURCE, MIGRATION_TARGET)
 // existed in this repository's earlier migrations and must not be
@@ -240,7 +240,7 @@ const (
 	// execution. A resolution SHALL NOT treat a SHADOW binding as a
 	// valid authoritative result even if it wins ranking; a
 	// SHADOW-only candidate set resolves as if no eligible binding
-	// existed (nabhold/shared's scope-specificity.yaml, "binding mode
+	// existed (baobab-platform/shared's scope-specificity.yaml, "binding mode
 	// preference").
 	BindingModeShadow BindingMode = "SHADOW"
 	// BindingModeMigration is a temporary binding participating in an

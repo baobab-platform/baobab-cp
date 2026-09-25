@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nabhold/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"gopkg.in/yaml.v3"
 )
 

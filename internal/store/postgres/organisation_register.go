@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/events"
+	basestore "github.com/baobab-platform/baobab-cp/internal/store"
 	"github.com/jackc/pgx/v5"
-	"github.com/nabhold/baobab-cp/internal/domain"
-	"github.com/nabhold/baobab-cp/internal/events"
-	basestore "github.com/nabhold/baobab-cp/internal/store"
 )
 
 // registrationSourceAuthority marks facts that exist only because a tenant

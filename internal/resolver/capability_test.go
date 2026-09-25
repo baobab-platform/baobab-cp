@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 )
 
 func TestCapabilityResolverResolveUsesHighestPriorityBinding(t *testing.T) {
@@ -40,7 +40,7 @@ func TestCapabilityResolverResolveUsesHighestPriorityBinding(t *testing.T) {
 
 func TestCapabilityResolverBindingModePrecedesPriority(t *testing.T) {
 	resolver := CapabilityResolverImpl{}
-	// Per nabhold/shared's canonical scope-specificity.yaml, binding_mode
+	// Per baobab-platform/shared's canonical scope-specificity.yaml, binding_mode
 	// preference is resolved BEFORE explicit priority: a PRIMARY binding
 	// SHALL win over a FALLBACK binding even when the FALLBACK carries a
 	// far higher administrative priority. Priority is a tie-breaker of

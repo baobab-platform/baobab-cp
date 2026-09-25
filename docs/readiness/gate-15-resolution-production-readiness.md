@@ -1,6 +1,6 @@
 # Gate 15 production-readiness evidence
 
-This gate does not treat unit tests as sufficient evidence. The dedicated readiness workflow requires a live PostgreSQL 17 service, applies and exercises the real migrations and exclusion constraints, validates repository payloads against the immutable `nabhold/shared` contract revision, runs the race detector and static analysis, and verifies that the performance, resilience, and security evidence remains present.
+This gate does not treat unit tests as sufficient evidence. The dedicated readiness workflow requires a live PostgreSQL 17 service, applies and exercises the real migrations and exclusion constraints, validates repository payloads against the immutable `baobab-platform/shared` contract revision, runs the race detector and static analysis, and verifies that the performance, resilience, and security evidence remains present.
 
 ## Foundational evidence
 

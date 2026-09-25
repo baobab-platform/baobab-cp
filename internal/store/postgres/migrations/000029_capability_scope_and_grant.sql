@@ -1,13 +1,13 @@
 -- Gate: introduce CapabilityScope and CapabilityGrant as first-class
 -- concepts (ADR-BCP-003 SS9-19, SS51-60) -- confirmed absent from this
 -- schema entirely during the Capability Platform Phase-0 audit
--- (nabhold/baobab-cp #73).
+-- (baobab-platform/baobab-cp #73).
 --
 -- CapabilityScope is deliberately distinct from mapping.mapping_scope: the
 -- two share dimension vocabulary but are evaluated by different resolvers
 -- for different purposes (ADR-SHARED-007 SS25). capability.capability_binding
 -- and capability.tenant_capability are NOT repointed at this table by this
--- migration -- that is a larger, separately-tracked change (nabhold/baobab-cp
+-- migration -- that is a larger, separately-tracked change (baobab-platform/baobab-cp
 -- #74) that needs its own backfill/compatibility plan, exactly as
 -- capability_binding.provider_id was left nullable and unbackfilled in
 -- migration 000028 pending a provider-registration workflow.
@@ -17,7 +17,7 @@
 -- engine instance serves the request (ADR-BCP-003 SS9). It is additive: the
 -- existing capability.tenant_capability boolean-enablement table is not
 -- migrated or dropped by this change; replacing it with real
--- CapabilityGrant-backed entitlement is tracked separately (nabhold/baobab-cp
+-- CapabilityGrant-backed entitlement is tracked separately (baobab-platform/baobab-cp
 -- #72's "Eventually" list).
 
 CREATE TABLE IF NOT EXISTS capability.capability_scope (
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS capability.capability_scope (
 CREATE INDEX IF NOT EXISTS capability_scope_tenant_idx
     ON capability.capability_scope(tenant_id);
 
--- CR-002-style closed set mirrored from nabhold/shared's
+-- CR-002-style closed set mirrored from baobab-platform/shared's
 -- contracts/capability/v1/domain.schema.json #/$defs/capabilityGrantSource
 -- and #/$defs/capabilityGrantStatus (ADR-BCP-003 SS10-11).
 CREATE TABLE IF NOT EXISTS capability.capability_grant (

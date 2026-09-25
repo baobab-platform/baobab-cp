@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
-	capabilitydomain "github.com/nabhold/baobab-cp/internal/capability/domain"
-	"github.com/nabhold/baobab-cp/internal/store/postgres"
 )
 
 // TestPostgresCapabilityScopeAndGrantRoundTrip proves CreateCapabilityScope,

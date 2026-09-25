@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nabhold/baobab-cp/internal/contracts"
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
 )
 
 const billingContract = "subscriptions/v1/billing.schema.json#/$defs/"

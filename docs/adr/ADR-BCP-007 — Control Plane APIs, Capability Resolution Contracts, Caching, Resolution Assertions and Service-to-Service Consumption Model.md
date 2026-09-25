@@ -3,10 +3,10 @@
 **Status:** Proposed — Normative Platform Architecture  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
-**Repository:** `nabhold/baobab-cp`  
-**Runtime Authority:** `nabhold/baobab-cp`  
-**Contract Authority:** `nabhold/shared`  
-**Identity Authority:** `nabhold/baobab-iam`
+**Repository:** `baobab-platform/baobab-cp`  
+**Runtime Authority:** `baobab-platform/baobab-cp`  
+**Contract Authority:** `baobab-platform/shared`  
+**Identity Authority:** `baobab-platform/baobab-iam`
 
 **Depends On:**
 
@@ -1593,7 +1593,7 @@ CP SHALL detect and reject invalid concurrent state.
 
 # 83. Contract-First APIs
 
-All externally consumed CP APIs SHALL be defined contract-first in `nabhold/shared`.
+All externally consumed CP APIs SHALL be defined contract-first in `baobab-platform/shared`.
 
 Runtime implementation SHALL conform to those contracts.
 
@@ -2480,7 +2480,7 @@ Runtime discovery SHALL not replace compile-time contract governance.
 
 # 141. SDKs
 
-`nabhold/shared` MAY generate:
+`baobab-platform/shared` MAY generate:
 
 ```text
 Go SDK
@@ -2497,7 +2497,7 @@ Repositories SHOULD prefer generated/approved SDKs over hand-written divergent D
 
 # 142. No Shared Runtime Dependency
 
-Generated contracts/SDKs do not turn `nabhold/shared` into a runtime service.
+Generated contracts/SDKs do not turn `baobab-platform/shared` into a runtime service.
 
 Shared remains contract authority.
 
@@ -3265,7 +3265,7 @@ Upon approval:
 8. caching SHALL be bounded, context-complete and revocation-aware;
 9. batch resolution SHALL prevent N+1 resolution patterns;
 10. signed resolution assertions SHALL remain deferred until justified and security-approved;
-11. all public platform contracts SHALL originate in `nabhold/shared`;
+11. all public platform contracts SHALL originate in `baobab-platform/shared`;
 12. ambiguity, missing entitlement and untrusted context SHALL fail closed.
 
 ---
