@@ -75,7 +75,6 @@ These items are recorded in `docs/runbooks/adr-bcp-018-organisation-operations.m
 - **Classification sources.** There are no routes for `MIGRATION` and `MANUAL_GOVERNANCE`.
 - **Staff-assisted applications.** There is no route to create them.
 - **Application expiry.** There is no expiry worker.
-- **Onboarding on approval.** `APPROVED` does not create a TenantOnboardingRequest.
 
 **Lifecycle**
 - **Status-driven lifecycle calls.** The projector already issues suspend, resume and terminate when a ProductSubscription's status changes. The Control Plane has no route that changes the status yet, so nothing currently triggers these calls.

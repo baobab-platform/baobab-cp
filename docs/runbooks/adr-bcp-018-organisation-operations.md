@@ -20,6 +20,7 @@ The organisation model is migrations **000045-000049**. They are applied by `cmd
 | 000051 | ORG-11 `product.subscription_classification` (immutable) and the current classification columns on `product.product_subscription` | yes: a new table and two nullable columns with no backfill; the composite foreign key validates against an empty table |
 | 000052 | ORG-11 `product.billing_projection_sync`: which revision of each classified subscription the billing projection reflects | yes: a new table with no backfill; existing classified subscriptions are projected by the first pass |
 | 000053 | ORG-07 `registry.tenant_platform_account_binding` (explicit tenant ↔ PlatformAccount binding, at most one ACTIVE per tenant, history immutable) and a trigger keeping CLOSED accounts closed | yes: a new table with no backfill; the trigger only refuses reopening a CLOSED account |
+| 000054 | ADR-BCP-017 `admission.tenant_onboarding_request`: the governed handoff from an APPROVED decision to provisioning, with the lifecycle, one live request per decision and immutability enforced in the database | yes: a new table with no backfill |
 
 After the migrations:
 
@@ -247,7 +248,6 @@ The certification record is `docs/readiness/org-11-billing-projection-certificat
 - **Classification sources `MIGRATION` and `MANUAL_GOVERNANCE`.** The schema accepts them; there is no route for them yet.
 - **Staff-assisted applications.** There is no route yet for staff to open an `ASSISTED_ENTERPRISE` or `INTERNAL_GROUP` ClientApplication. The channels remain valid and server-controlled.
 - **Application expiry.** The worker that moves stale DRAFT and INFORMATION_REQUIRED applications to EXPIRED is not built. It is a Control Plane worker, and never an engine scheduler.
-- **Onboarding on approval.** `APPROVED` does not create a TenantOnboardingRequest. Approval activates nothing (ADR-BCP-017 section 22), and onboarding stays an explicit, separate step.
 
 ## 11. PlatformAccount lifecycle and tenant bindings (gate ORG-07)
 
@@ -283,3 +283,31 @@ Each change writes an audit entry and emits one of these events, whose payloads 
 - `com.baobab-platform.control-plane.platform-account.status-changed.v1`
 - `com.baobab-platform.control-plane.tenant-platform-account-binding.bound.v1`
 - `com.baobab-platform.control-plane.tenant-platform-account-binding.ended.v1`
+
+## 12. Tenant onboarding handoff (ADR-BCP-017 sections 22-24, 39, 46)
+
+Approval activates nothing. An APPROVED AdmissionDecision reaches provisioning only through a `TenantOnboardingRequest`, which is made explicitly and authorised separately. The contract is Shared `contracts/admission/v1/onboarding.schema.json` and `onboarding-lifecycle.yaml`.
+
+| Route | Scope (platform admin, registered principal) | Effect |
+|---|---|---|
+| `POST /v1/tenant-onboarding-requests` | `onboarding:request` | Creates a REQUESTED request from an APPROVED decision. The body is `admission_decision_id`, `display_name`, `residency_region`, `reason`, and `isolation_strategy` only when the decision set none. Repeating it returns the live request with 200. |
+| `POST …/{id}/authorisation` | `onboarding:authorise` | REQUESTED → AUTHORISED. The body is `reason`. |
+| `POST …/{id}/fulfilment` | `onboarding:request` | AUTHORISED → FULFILLED. The body is `tenant_id`, the tenant provisioning produced. |
+| `POST …/{id}/cancellation` | `onboarding:request` | REQUESTED or AUTHORISED → CANCELLED. The body is `reason`. |
+| `GET /v1/tenant-onboarding-requests[?status=]`, `GET …/{id}` | either scope | Reads requests. |
+
+Rules:
+
+- **Separation of duties (§39).** The requester is never the application's applicant or the decision's decider. The authoriser is never the requester or the applicant; the database also refuses a request authorised by its own requester. A refusal is `SEPARATION_OF_DUTIES`.
+- **Desired state comes from the decision (§24).**
+  - Subscription type, market scope and product requirements are copied from the decision. So is isolation, when the decision set it; the request cannot override it (`ISOLATION_SET_BY_DECISION`).
+  - Nothing the applicant supplied is copied.
+- **One live request per decision (§46).** Cancelling frees the decision for a new request. The decision itself is never rewritten (§44).
+- **Fulfilment is traceability, not activation.** Only an AUTHORISED request can be fulfilled.
+  - The tenant's isolation and residency must match the desired state (`DESIRED_STATE_MISMATCH`).
+  - A tenant is produced by at most one request (`TENANT_ALREADY_ONBOARDED`).
+  - Readiness and activation remain the provisioning gates.
+- **History is evidence.** The database permits only the lifecycle transitions and never lets the request's decision, desired state or requester change. No request is deleted.
+- **Traceable (§41).** Every event of a request carries its `correlation_id`, so a tenant can be traced back to its application and decision. The events are `com.baobab-platform.control-plane.tenant-onboarding.requested|authorised|fulfilled|cancelled.v1`, carrying identifiers and state only.
+
+Not built yet: tenant registration does not yet require an AUTHORISED request. Provisioning of pre-ADR tenants (for example the migrated Nabhold group) continues unchanged, and fulfilment links the resulting tenant back to its admission authority.
