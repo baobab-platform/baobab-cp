@@ -307,7 +307,7 @@ Each entitlement is a scope **and** the matching client role of the IAM workforc
 | Admission Reviewer, Admission Decider | none by default | neither | |
 | Tenant Administrator | none | neither | refused by the Control Plane regardless |
 
-- **Toxic combination.** No one person should hold both client roles. baobab-iam's `scripts/check-toxic-role-combinations.sh` reports any person who does, and the IAM runbook says how to resolve it.
+- **Toxic combination.** No one person should hold both client roles. baobab-iam's `scripts/check-role-policy.sh` reports anyone who does. baobab-iam's `docs/operations/cp-onboarding-entitlements-runbook.md` says how to resolve it.
 - **Per-request separation of duties still applies** (below). Even a person holding both roles cannot authorise their own request.
 - **This is transitional.** IAM role bundles are the enforcement mechanism until ADR-BCP-020 AdministrativeGrants replace them. The scope names will not change.
 - **Configuration.** `ADMIN_OIDC_CLIENT_ID` (default `baobab-control-plane-admin`) names the client whose roles are read. Workforce tokens must carry `aud=baobab-control-plane` (`ADMIN_OIDC_AUDIENCE`). The standard OIDC scopes a login token carries (`openid`, `profile`, `email`, …) are ignored.
