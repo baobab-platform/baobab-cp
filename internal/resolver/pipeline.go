@@ -39,6 +39,10 @@ type ResolutionRequest struct {
 	// lifecycle eligibility (ADR-BCP-003 §6). Nil by default and skipped
 	// when nil, mirroring Grants' opt-in rollout mechanism.
 	Capability *capabilitydomain.Capability
+	// MappingScopes holds the governed MappingScopes the candidates name, by
+	// scope_id. A candidate naming a governed scope that is absent here never
+	// applies.
+	MappingScopes map[string]domain.MappingScope
 }
 
 // ResolutionResult is the final output from the composed resolver pipeline.
@@ -75,10 +79,20 @@ func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (R
 		req.Context.Provenance = map[string]ContextSource{}
 	}
 
+	// Only the request tenant's mappings are candidates: another tenant's
+	// mapping of the same canonical entity must neither win nor tie
+	// (Canonical Mapping Model section 47).
+	candidates := make([]domain.Mapping, 0, len(req.Candidates))
+	for _, candidate := range req.Candidates {
+		if candidate.TenantID == req.Context.TenantID {
+			candidates = append(candidates, candidate)
+		}
+	}
 	mappingResult, err := MappingResolverImpl{}.Resolve(ctx, MappingResolutionQuery{
 		CanonicalEntityID: req.CanonicalEntityID,
 		Context:           req.Context,
-		Candidates:        req.Candidates,
+		Candidates:        candidates,
+		GovernedScopes:    req.MappingScopes,
 	})
 	if err != nil {
 		return ResolutionResult{}, resolutionFailure(trace, err)

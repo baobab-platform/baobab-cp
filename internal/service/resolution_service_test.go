@@ -194,3 +194,68 @@ func TestResolutionServiceEnforcesCapabilityLifecycleWhenRegistered(t *testing.T
 		t.Fatal("expected a SUSPENDED registered capability to fail resolution closed")
 	}
 }
+
+// scopedRepository serves governed MappingScopes alongside the in-memory
+// repository, as the Postgres repository does.
+type scopedRepository struct {
+	*repository.Repository
+	scopes map[string]domain.MappingScope
+}
+
+func (r scopedRepository) MappingScopesByKey(_ context.Context, tenantID string, keys []string) (map[string]domain.MappingScope, error) {
+	out := map[string]domain.MappingScope{}
+	for _, key := range keys {
+		if scope, ok := r.scopes[key]; ok && scope.TenantID == tenantID {
+			out[key] = scope
+		}
+	}
+	return out, nil
+}
+
+// TestResolutionServiceEvaluatesGovernedScopesAndTenant: a mapping scoped to
+// a governed MappingScope applies only where the context matches that scope,
+// never as if unscoped, and another tenant's mapping of the same entity is
+// never a candidate (ADR-SHARED-013, Canonical Mapping Model sections 10.3
+// and 47).
+func TestResolutionServiceEvaluatesGovernedScopesAndTenant(t *testing.T) {
+	mapping := func(id, tenant, scope string, priority int) domain.Mapping {
+		return domain.Mapping{ID: id, MappingType: "IDENTITY", TenantID: tenant, CanonicalEntityID: "entity-abc",
+			TargetCanonicalEntityID: "target-" + id, ScopeID: scope, Direction: "SOURCE_TO_TARGET", Cardinality: "ONE_TO_ONE",
+			Authority: "control-plane", Confidence: "CONFIRMED", Status: "ACTIVE", ResolutionPriority: priority,
+			EffectiveFrom: "2025-01-01T00:00:00Z"}
+	}
+	base := repository.NewInMemoryRepository()
+	base.Mappings["entity-abc"] = []domain.Mapping{
+		mapping("map_default", "tenant-123", "", 0),
+		mapping("map_kenya", "tenant-123", "scope_kenya", 0),
+		// Another tenant's mapping outranks every candidate of tenant-123.
+		mapping("map_elsewhere", "tenant-other", "", 1000),
+	}
+	base.Bindings["commerce.order.create"] = []resolver.CapabilityBinding{{CapabilityKey: "commerce.order.create", EngineID: "engine-1", EngineInstanceID: "instance-1", BindingMode: "PRIMARY", Status: "ACTIVE", ContractVersion: "v1"}}
+	base.EngineInstances["engine-1"] = []resolver.EngineInstance{{ID: "instance-1", EngineID: "engine-1", Environment: "production", Status: "ACTIVE"}}
+	scoped := scopedRepository{Repository: base, scopes: map[string]domain.MappingScope{
+		"scope_kenya": {ScopeID: "scope_kenya", TenantID: "tenant-123", MarketID: "market-ke"},
+	}}
+	resolve := func(repo repository.ResolverRepository, market string) string {
+		t.Helper()
+		result, err := ResolutionService{Pipeline: resolver.ResolutionPipeline{}, Repository: repo}.Resolve(context.Background(), ResolutionRequest{
+			TenantID: "tenant-123", CanonicalEntityID: "entity-abc", CapabilityKey: "commerce.order.create",
+			Context: resolver.Context{TenantID: "tenant-123", MarketID: market},
+		})
+		if err != nil {
+			t.Fatalf("resolve in %q: %v", market, err)
+		}
+		return result.Mapping.Mapping.ID
+	}
+	if got := resolve(scoped, "market-ke"); got != "map_kenya" {
+		t.Fatalf("in its market the scoped mapping should outrank the default, got %s", got)
+	}
+	if got := resolve(scoped, "market-ug"); got != "map_default" {
+		t.Fatalf("outside its market the scoped mapping must not apply, got %s", got)
+	}
+	// A repository that cannot load scopes leaves the scoped mapping
+	// inapplicable, never unscoped.
+	if got := resolve(base, "market-ke"); got != "map_default" {
+		t.Fatalf("an unloaded scope must not apply, got %s", got)
+	}
+}

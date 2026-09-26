@@ -17,7 +17,11 @@ type MappingResolutionQuery struct {
 	Context           Context
 	Candidates        []domain.Mapping
 	Scopes            map[string]domain.MappingScope
-	At                time.Time
+	// GovernedScopes holds the governed MappingScopes (scope_ identifiers)
+	// the candidates name. A candidate naming a governed scope applies only
+	// when that scope is here and matches the context.
+	GovernedScopes map[string]domain.MappingScope
+	At             time.Time
 }
 
 type ReverseMappingResolutionQuery struct {
@@ -46,7 +50,7 @@ func (MappingResolverImpl) Resolve(_ context.Context, q MappingResolutionQuery) 
 	if q.CanonicalEntityID == "" {
 		return ResolvedMapping{}, errors.New("canonical_entity_id is required")
 	}
-	return resolveMapping(q.Context, q.Candidates, q.Scopes, q.At, func(mapping domain.Mapping) bool {
+	return resolveMappingGoverned(q.Context, q.Candidates, q.Scopes, q.GovernedScopes, q.At, func(mapping domain.Mapping) bool {
 		return mapping.CanonicalEntityID == q.CanonicalEntityID &&
 			(mapping.Direction == "BIDIRECTIONAL" || mapping.Direction == "CANONICAL_TO_EXTERNAL" || mapping.Direction == "SOURCE_TO_TARGET")
 	})
@@ -72,6 +76,10 @@ type rankedMapping struct {
 }
 
 func resolveMapping(ctx Context, candidates []domain.Mapping, scopes map[string]domain.MappingScope, at time.Time, matches func(domain.Mapping) bool) (ResolvedMapping, error) {
+	return resolveMappingGoverned(ctx, candidates, scopes, nil, at, matches)
+}
+
+func resolveMappingGoverned(ctx Context, candidates []domain.Mapping, scopes, governed map[string]domain.MappingScope, at time.Time, matches func(domain.Mapping) bool) (ResolvedMapping, error) {
 	if len(candidates) == 0 {
 		return ResolvedMapping{}, errors.New("mapping not found")
 	}
@@ -98,6 +106,21 @@ func resolveMapping(ctx Context, candidates []domain.Mapping, scopes map[string]
 			if !at.Before(to) {
 				continue
 			}
+		}
+		// A governed scope (Shared mappingScopeId) is always evaluated, never
+		// read as the legacy tenant or market identifier below: a mapping
+		// whose scope was not loaded, or does not match, does not apply.
+		if domain.ValidMappingScopeID(mapping.ScopeID) {
+			scope, ok := governed[mapping.ScopeID]
+			if !ok {
+				continue
+			}
+			match := DefaultScopeMatcher{}.Match(ctx, scope)
+			if !match.Compatible {
+				continue
+			}
+			eligible = append(eligible, rankedMapping{mapping: mapping, specificity: match.Specificity})
+			continue
 		}
 		specificity := legacyScopeSpecificity(ctx, mapping.ScopeID)
 		if len(scopes) > 0 {

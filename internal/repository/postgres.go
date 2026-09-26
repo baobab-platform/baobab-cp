@@ -228,6 +228,52 @@ func (r *PostgresRepository) ListMappings(ctx context.Context, canonicalEntityID
 	return out, rows.Err()
 }
 
+// MappingScopeLoader loads the governed MappingScopes a tenant's mappings
+// name, by their scope_ identifier.
+type MappingScopeLoader interface {
+	MappingScopesByKey(ctx context.Context, tenantID string, keys []string) (map[string]domain.MappingScope, error)
+}
+
+var _ MappingScopeLoader = (*PostgresRepository)(nil)
+
+// MappingScopesByKey returns the tenant's MappingScopes among keys, keyed by
+// their scope_ identifier. A key of another tenant's scope is omitted.
+func (r *PostgresRepository) MappingScopesByKey(ctx context.Context, tenantID string, keys []string) (map[string]domain.MappingScope, error) {
+	scopes := map[string]domain.MappingScope{}
+	if r == nil || r.pool == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	if len(keys) == 0 {
+		return scopes, nil
+	}
+	rows, err := r.pool.Query(ctx, `SELECT mapping_scope_key, `+mappingScopeSelectColumns+`
+		FROM mapping.mapping_scope WHERE mapping_scope_key = ANY($1) AND tenant_id = $2`, keys, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		scope, err := scanMappingScope(keyedScan{row: rows, key: &key})
+		if err != nil {
+			return nil, err
+		}
+		scopes[key] = scope
+	}
+	return scopes, rows.Err()
+}
+
+// keyedScan scans a leading key column into key and the remaining columns
+// into the destinations it is given.
+type keyedScan struct {
+	row interface{ Scan(dest ...any) error }
+	key *string
+}
+
+func (k keyedScan) Scan(dest ...any) error {
+	return k.row.Scan(append([]any{k.key}, dest...)...)
+}
+
 // CreateMappingScope, GetMappingScope and ListMappingScopes are Gate 2's
 // (docs/reconciliation/platform-resolution-spine-audit.md) first real
 // Postgres-backed persistence for domain.MappingScope -- Gate 1 (#61) gave

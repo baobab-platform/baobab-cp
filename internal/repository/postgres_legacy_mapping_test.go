@@ -153,6 +153,23 @@ func TestLegacyCanonicalMappingsMigrateWithAppliedSemantics(t *testing.T) {
 		t.Fatalf("expected the runtime resolver to resolve the migrated mapping, got %+v, %v", resolved, err)
 	}
 
+	// The runtime resolver loads the governed scopes its candidates name,
+	// only within their tenant.
+	var own, others string
+	if err := admin.QueryRow(ctx, `INSERT INTO mapping.mapping_scope (tenant_id, market_id) VALUES ($1, NULL) RETURNING mapping_scope_key`, tenant).Scan(&own); err != nil {
+		t.Fatal(err)
+	}
+	if err := admin.QueryRow(ctx, `INSERT INTO mapping.mapping_scope (tenant_id) VALUES ($1) RETURNING mapping_scope_key`, otherTenant).Scan(&others); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		admin.Exec(ctx, `DELETE FROM mapping.mapping_scope WHERE mapping_scope_key = ANY($1)`, []string{own, others})
+	})
+	loaded, err := repo.MappingScopesByKey(ctx, tenant, []string{own, others, "scope_absent"})
+	if err != nil || len(loaded) != 1 || loaded[own].TenantID != tenant {
+		t.Fatalf("expected only the tenant's own scope, got %+v, %v", loaded, err)
+	}
+
 	_, err = admin.Exec(ctx, `INSERT INTO mapping.canonical_mapping (source_entity_id, target_entity_id, mapping_type) VALUES ($1, $2, 'ALIAS')`, target, source)
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "25006" {
