@@ -219,7 +219,7 @@ When `BILLING_ENGINE_URL` is set, the Control Plane projects every classified Pr
 | Variable | Default | Meaning |
 |---|---|---|
 | `BILLING_ENGINE_URL` | unset (projection off) | The Baobab Billing API. It must use HTTPS; HTTP is allowed only on localhost. |
-| `BILLING_WORKLOAD_TOKEN_FILE` | required when the URL is set | The workload token for audience `baobab-subscriptions`, with scopes `billing:manage` and `billing:read`. |
+| `BILLING_WORKLOAD_TOKEN_FILE` | required when the URL is set | The token of the `baobab-cp-workload` identity (Shared `identity/v1/workload-registry.yaml`) for audience `baobab-subscriptions`, with scopes `billing:manage` and `billing:read`. It is never a token of the Control Plane's browser or admin clients, which baobab-subscriptions refuses. |
 | `BILLING_SYNC_INTERVAL` | `30s` | The reconciliation pass interval. |
 | `BAOBAB_ENVIRONMENT` | unset = production | For engine registration, only `development`, `test`, `integration` and `sandbox` count as non-production. |
 
