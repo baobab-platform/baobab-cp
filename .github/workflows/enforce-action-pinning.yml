@@ -47,4 +47,4 @@ jobs:
     # the tag object's own SHA), re-verified live via
     # `git ls-remote --tags https://github.com/baobab-platform/shared.git v1.0.0`
     # on 2026-08-25.
-    uses: baobab-platform/shared/.github/workflows/enforce-action-pinning.yml@f7466cc89a17c0b6e02b5a1e5fce3ce76073a718 # v1.4.0
+    uses: baobab-platform/shared/.github/workflows/enforce-action-pinning.yml@80d7f2556ba05d4a9524acd525152892a55316fa # v2.0.0
