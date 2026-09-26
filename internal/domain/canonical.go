@@ -200,9 +200,6 @@ func (m Mapping) Validate() error {
 	if strings.TrimSpace(m.CanonicalEntityID) == "" {
 		return errors.New("canonical_entity_id is required")
 	}
-	if strings.TrimSpace(m.ScopeID) == "" {
-		return errors.New("scope_id is required")
-	}
 	if !isValidMappingDirection(m.Direction) {
 		return errors.New("direction is invalid")
 	}
@@ -212,7 +209,9 @@ func (m Mapping) Validate() error {
 	if strings.TrimSpace(m.Authority) == "" {
 		return errors.New("authority is required")
 	}
-	if !isValidConfidence(m.Confidence) {
+	// scope_id and confidence are optional (Shared control-plane/v1 mapping):
+	// an unscoped mapping applies across its tenant.
+	if m.Confidence != "" && !isValidConfidence(m.Confidence) {
 		return errors.New("confidence is invalid")
 	}
 	if strings.TrimSpace(m.Status) == "" {

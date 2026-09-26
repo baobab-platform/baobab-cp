@@ -76,6 +76,7 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 	if !capabilitydomain.ValidCapabilityKey(req.CapabilityKey) {
 		return ResolutionResult{}, errors.New("capability_key is invalid")
 	}
+	var mappingScopes map[string]domain.MappingScope
 	if s.Repository != nil {
 		mappings, err := s.Repository.ListMappings(ctx, req.CanonicalEntityID)
 		if err != nil {
@@ -93,6 +94,24 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 			}
 		}
 		req.Mappings, req.Bindings, req.EngineInstances = mappings, bindings, instances
+		// Governed mapping scopes are evaluated against the context; a
+		// repository that cannot load them leaves every scoped mapping
+		// inapplicable rather than unscoped.
+		if loader, ok := s.Repository.(repository.MappingScopeLoader); ok {
+			var keys []string
+			for _, mapping := range mappings {
+				if domain.ValidMappingScopeID(mapping.ScopeID) {
+					keys = append(keys, mapping.ScopeID)
+				}
+			}
+			if len(keys) > 0 {
+				scopes, err := loader.MappingScopesByKey(ctx, req.Context.TenantID, keys)
+				if err != nil {
+					return ResolutionResult{}, fmt.Errorf("load mapping scopes: %w", err)
+				}
+				mappingScopes = scopes
+			}
+		}
 	}
 
 	pipelineReq := resolver.ResolutionRequest{
@@ -101,6 +120,7 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 		CapabilityKey:     req.CapabilityKey,
 		Context:           req.Context,
 		Candidates:        req.Mappings,
+		MappingScopes:     mappingScopes,
 		Bindings:          req.Bindings,
 		EngineInstances:   req.EngineInstances,
 	}

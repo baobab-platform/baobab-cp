@@ -61,7 +61,6 @@ type PostgresRepository struct {
 var _ MappingRepository = (*PostgresRepository)(nil)
 var _ CapabilityRepository = (*PostgresRepository)(nil)
 var _ ResolverRepository = (*PostgresRepository)(nil)
-var _ MappingWriter = (*PostgresRepository)(nil)
 var _ CapabilityWriter = (*PostgresRepository)(nil)
 var _ CanonicalEntityRepository = (*PostgresRepository)(nil)
 var _ MappingScopeWriter = (*PostgresRepository)(nil)
@@ -200,156 +199,79 @@ func (r *PostgresRepository) SaveCanonicalEntity(ctx context.Context, entity dom
 	return nil
 }
 
+// ListMappings returns every mapping of a canonical entity from
+// mapping.mapping, the store the administrative API governs (ADR-SHARED-013),
+// in any status: the resolver decides which are in effect. Mappings migrated
+// from mapping.canonical_mapping carry the semantics the resolver applied to
+// them there (migration 000060).
 func (r *PostgresRepository) ListMappings(ctx context.Context, canonicalEntityID string) ([]domain.Mapping, error) {
 	if r == nil || r.pool == nil {
 		return nil, errors.New("repository is not initialized")
 	}
-	rows, err := r.pool.Query(ctx, `
-		SELECT cm.canonical_mapping_id::text, cm.mapping_type, COALESCE(ce.tenant_id, ''),
-		       cm.source_entity_id::text, cm.target_entity_id::text,
-		       COALESCE(ms.mapping_scope_id::text, cm.source_entity_id::text),
-		       UPPER(cm.status), cm.effective_from, cm.effective_to, cm.created_at
-		FROM mapping.canonical_mapping cm
-		JOIN registry.canonical_entity ce ON ce.canonical_entity_id = cm.source_entity_id
-		LEFT JOIN mapping.mapping_scope ms ON ms.tenant_id = ce.tenant_id
-		WHERE ce.tenant_id = $1 OR cm.source_entity_id::text = $1
-		ORDER BY cm.created_at DESC`, canonicalEntityID)
+	if !domain.IsUUID(canonicalEntityID) {
+		return nil, nil
+	}
+	rows, err := r.pool.Query(ctx, `SELECT `+mappingColumns+` FROM mapping.mapping
+		WHERE canonical_entity_id = $1::uuid ORDER BY created_at DESC, mapping_id`, canonicalEntityID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	var out []domain.Mapping
 	for rows.Next() {
-		var m domain.Mapping
-		var effectiveFrom, createdAt time.Time
-		var effectiveTo *time.Time
-		if err := rows.Scan(
-			&m.ID,
-			&m.MappingType,
-			&m.TenantID,
-			&m.CanonicalEntityID,
-			&m.TargetCanonicalEntityID,
-			&m.ScopeID,
-			&m.Status,
-			&effectiveFrom,
-			&effectiveTo,
-			&createdAt,
-		); err != nil {
+		m, err := scanMapping(rows)
+		if err != nil {
 			return nil, err
 		}
-		// Direction/Cardinality/Authority/Confidence/ResolutionPriority/Revision
-		// have no backing columns on mapping.canonical_mapping yet -- see the
-		// Mapping struct's own doc comment (domain/canonical.go) and migration
-		// 000022's comment for the same pre-existing gap.
-		m.Direction = "SOURCE_TO_TARGET"
-		m.Cardinality = "ONE_TO_ONE"
-		m.Authority = "baobab"
-		m.Confidence = "CONFIRMED"
-		m.ResolutionPriority = 0
-		m.Revision = 1
-		m.EffectiveFrom = effectiveFrom.UTC().Format(time.RFC3339)
-		if effectiveTo != nil {
-			m.EffectiveTo = effectiveTo.UTC().Format(time.RFC3339)
-		}
-		m.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 		out = append(out, m)
 	}
-	if err := rows.Err(); err != nil {
+	return out, rows.Err()
+}
+
+// MappingScopeLoader loads the governed MappingScopes a tenant's mappings
+// name, by their scope_ identifier.
+type MappingScopeLoader interface {
+	MappingScopesByKey(ctx context.Context, tenantID string, keys []string) (map[string]domain.MappingScope, error)
+}
+
+var _ MappingScopeLoader = (*PostgresRepository)(nil)
+
+// MappingScopesByKey returns the tenant's MappingScopes among keys, keyed by
+// their scope_ identifier. A key of another tenant's scope is omitted.
+func (r *PostgresRepository) MappingScopesByKey(ctx context.Context, tenantID string, keys []string) (map[string]domain.MappingScope, error) {
+	scopes := map[string]domain.MappingScope{}
+	if r == nil || r.pool == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	if len(keys) == 0 {
+		return scopes, nil
+	}
+	rows, err := r.pool.Query(ctx, `SELECT mapping_scope_key, `+mappingScopeSelectColumns+`
+		FROM mapping.mapping_scope WHERE mapping_scope_key = ANY($1) AND tenant_id = $2`, keys, tenantID)
+	if err != nil {
 		return nil, err
 	}
-	return out, nil
-}
-
-func (r *PostgresRepository) CreateMapping(ctx context.Context, mapping domain.Mapping) error {
-	if r == nil || r.pool == nil {
-		return errors.New("repository is not initialized")
-	}
-	if err := mapping.Validate(); err != nil {
-		return fmt.Errorf("validate mapping: %w", err)
-	}
-	if mapping.ExternalReferenceID != "" {
-		return errors.New("external-reference mappings are not supported by the current canonical schema")
-	}
-	// mapping.Validate() has already confirmed these parse as RFC3339; the
-	// canonical_mapping_source_type_active_excl exclusion constraint (see
-	// migration 000022) is what actually enforces non-overlap - this insert
-	// simply must not silently discard the values, as it previously did.
-	effectiveFrom, err := time.Parse(time.RFC3339, mapping.EffectiveFrom)
-	if err != nil {
-		return fmt.Errorf("parse effective_from: %w", err)
-	}
-	var effectiveTo *time.Time
-	if mapping.EffectiveTo != "" {
-		parsed, err := time.Parse(time.RFC3339, mapping.EffectiveTo)
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		scope, err := scanMappingScope(keyedScan{row: rows, key: &key})
 		if err != nil {
-			return fmt.Errorf("parse effective_to: %w", err)
+			return nil, err
 		}
-		effectiveTo = &parsed
+		scopes[key] = scope
 	}
-	_, err = r.pool.Exec(ctx, `
-		INSERT INTO mapping.canonical_mapping(canonical_mapping_id, source_entity_id, target_entity_id, mapping_type, status, effective_from, effective_to)
-		VALUES ($1::uuid, $2::uuid, $3::uuid, $4, LOWER($5), $6, $7)`, mapping.ID, mapping.CanonicalEntityID, mapping.TargetCanonicalEntityID, mapping.MappingType, mapping.Status, effectiveFrom, effectiveTo)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23P01" {
-			return fmt.Errorf("%w: an active mapping of type %s already exists for this source entity in an overlapping period", ErrMappingOverlap, mapping.MappingType)
-		}
-		return err
-	}
-	return nil
+	return scopes, rows.Err()
 }
 
-func (r *PostgresRepository) GetMapping(ctx context.Context, mappingID string) (domain.Mapping, error) {
-	if r == nil || r.pool == nil {
-		return domain.Mapping{}, errors.New("repository is not initialized")
-	}
-	var mapping domain.Mapping
-	var effectiveFrom, createdAt time.Time
-	var effectiveTo *time.Time
-	err := r.pool.QueryRow(ctx, `
-		SELECT cm.canonical_mapping_id::text, cm.mapping_type, COALESCE(ce.tenant_id, ''),
-		       cm.source_entity_id::text, cm.target_entity_id::text, cm.source_entity_id::text,
-		       UPPER(cm.status), cm.effective_from, cm.effective_to, cm.created_at
-		FROM mapping.canonical_mapping cm
-		JOIN registry.canonical_entity ce ON ce.canonical_entity_id = cm.source_entity_id
-		WHERE cm.canonical_mapping_id=$1::uuid`, mappingID).Scan(
-		&mapping.ID, &mapping.MappingType, &mapping.TenantID,
-		&mapping.CanonicalEntityID, &mapping.TargetCanonicalEntityID, &mapping.ScopeID,
-		&mapping.Status, &effectiveFrom, &effectiveTo, &createdAt,
-	)
-	if err != nil {
-		return domain.Mapping{}, fmt.Errorf("get mapping %s: %w", mappingID, err)
-	}
-	// See ListMappings' comment: these have no backing column yet.
-	mapping.Direction, mapping.Cardinality = "SOURCE_TO_TARGET", "ONE_TO_ONE"
-	mapping.Authority, mapping.Confidence, mapping.Revision = "baobab", "CONFIRMED", 1
-	mapping.EffectiveFrom = effectiveFrom.UTC().Format(time.RFC3339)
-	if effectiveTo != nil {
-		mapping.EffectiveTo = effectiveTo.UTC().Format(time.RFC3339)
-	}
-	mapping.CreatedAt = createdAt.UTC().Format(time.RFC3339)
-	return mapping, nil
+// keyedScan scans a leading key column into key and the remaining columns
+// into the destinations it is given.
+type keyedScan struct {
+	row interface{ Scan(dest ...any) error }
+	key *string
 }
 
-func (r *PostgresRepository) SaveMapping(ctx context.Context, mapping domain.Mapping, expectedVersion int64) error {
-	if r == nil || r.pool == nil {
-		return errors.New("repository is not initialized")
-	}
-	if err := mapping.Validate(); err != nil {
-		return fmt.Errorf("validate mapping: %w", err)
-	}
-	if expectedVersion != 1 {
-		return fmt.Errorf("mapping %s version conflict: expected %d, got 1", mapping.ID, expectedVersion)
-	}
-	result, err := r.pool.Exec(ctx, `UPDATE mapping.canonical_mapping SET mapping_type=$2, status=LOWER($3) WHERE canonical_mapping_id=$1::uuid`, mapping.ID, mapping.MappingType, mapping.Status)
-	if err != nil {
-		return err
-	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("mapping %s not found", mapping.ID)
-	}
-	return nil
+func (k keyedScan) Scan(dest ...any) error {
+	return k.row.Scan(append([]any{k.key}, dest...)...)
 }
 
 // CreateMappingScope, GetMappingScope and ListMappingScopes are Gate 2's
