@@ -2,10 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.baobab-platform.com/control-plane/v1/tenant-registration.schema.json",
   "title": "Register tenant command",
+  "description": "Registers a tenant for an AUTHORISED TenantOnboardingRequest (ADR-BCP-017 sections 22-24). Approval activates nothing, and there is no direct registration: display_name, isolation_strategy and residency_region must equal the request's desired state, requested_products must equal its product_requirements, and a request produces at most one tenant, which it records as FULFILLED. Tenants that predate the admission workflow are registered through tenant-bootstrap-registration.schema.json instead.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["legal_entity_id", "display_name", "isolation_strategy", "residency_region"],
+  "required": ["tenant_onboarding_request_id", "legal_entity_id", "display_name", "isolation_strategy", "residency_region"],
   "properties": {
+    "tenant_onboarding_request_id": { "$ref": "../../admission/v1/onboarding.schema.json#/$defs/tenantOnboardingRequestId" },
     "legal_entity_id": { "$ref": "domain.schema.json#/$defs/legalEntityIdInput" },
     "display_name": { "type": "string", "minLength": 1, "maxLength": 255 },
     "isolation_strategy": {

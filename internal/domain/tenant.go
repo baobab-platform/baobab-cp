@@ -18,14 +18,30 @@ func (e NotFoundError) Error() string { return string(e) }
 // tenant-registration.schema.json, tenant_id is minted by the Control Plane
 // (see NewTenantID), never supplied by the caller. TenantID is populated by
 // the HTTP handler after decoding and before Validate/persistence.
+// Registration bases (ADR-BCP-017 sections 22-24): a tenant is registered
+// for an AUTHORISED TenantOnboardingRequest, or, only for a tenant that
+// predates the admission workflow, as a bootstrap tenant.
+const (
+	RegistrationOnboarding = "ONBOARDING"
+	RegistrationBootstrap  = "BOOTSTRAP"
+)
+
 type RegisterTenant struct {
-	LegalEntityID     string            `json:"legal_entity_id"`
-	TenantID          string            `json:"-"`
-	DisplayName       string            `json:"display_name"`
-	IsolationStrategy string            `json:"isolation_strategy"`
-	ResidencyRegion   string            `json:"residency_region"`
-	RequestedProducts []string          `json:"requested_products,omitempty"`
-	Metadata          map[string]string `json:"metadata,omitempty"`
+	// TenantOnboardingRequestID names the AUTHORISED request an ONBOARDING
+	// registration fulfils (Shared tenant-registration.schema.json).
+	TenantOnboardingRequestID string `json:"tenant_onboarding_request_id,omitempty"`
+	// Basis, BootstrapReason and BootstrapEvidenceReference are set by the
+	// route that accepted the command, never decoded from it.
+	Basis                      string            `json:"-"`
+	BootstrapReason            string            `json:"-"`
+	BootstrapEvidenceReference string            `json:"-"`
+	LegalEntityID              string            `json:"legal_entity_id"`
+	TenantID                   string            `json:"-"`
+	DisplayName                string            `json:"display_name"`
+	IsolationStrategy          string            `json:"isolation_strategy"`
+	ResidencyRegion            string            `json:"residency_region"`
+	RequestedProducts          []string          `json:"requested_products,omitempty"`
+	Metadata                   map[string]string `json:"metadata,omitempty"`
 }
 
 type Tenant struct {
@@ -121,6 +137,27 @@ func TransitionLifecycle(from, to LifecycleStatus) (LifecycleStatus, bool) {
 }
 
 func (c RegisterTenant) Validate() error {
+	switch c.Basis {
+	case RegistrationOnboarding:
+		if _, err := ParseResourceID(TenantOnboardingRequestIDPrefix, c.TenantOnboardingRequestID); err != nil {
+			return errors.New("tenant_onboarding_request_id must name an AUTHORISED tenant onboarding request")
+		}
+		if c.BootstrapReason != "" || c.BootstrapEvidenceReference != "" {
+			return errors.New("an onboarding registration carries no bootstrap reason or evidence")
+		}
+	case RegistrationBootstrap:
+		if c.TenantOnboardingRequestID != "" {
+			return errors.New("a bootstrap registration names no onboarding request")
+		}
+		if n := len(strings.TrimSpace(c.BootstrapReason)); n < 20 || n > 1000 {
+			return errors.New("bootstrap_reason must contain 20 to 1000 characters")
+		}
+		if n := len(strings.TrimSpace(c.BootstrapEvidenceReference)); n < 1 || n > 255 {
+			return errors.New("evidence_reference must contain 1 to 255 characters")
+		}
+	default:
+		return errors.New("a tenant is registered only for an onboarding request or as a bootstrap tenant")
+	}
 	if !ValidLegalEntityID(c.LegalEntityID) {
 		return errors.New("legal_entity_id must be a canonical legal-entity identifier (e.g. THAMANI-GLOBAL) or an accepted legacy alias")
 	}

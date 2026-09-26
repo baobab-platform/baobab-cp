@@ -72,7 +72,7 @@ func seedProvisioningAPIFixture(t *testing.T, ctx context.Context, admin *pgxpoo
 		t.Fatalf("create legal entity: %v", err)
 	}
 	for _, tenantID := range []string{f.TenantID, f.OtherTenantID} {
-		if _, err := admin.Exec(ctx, `INSERT INTO tenants(tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ($1, $2, 'ZB-03.1 API Fixture', 'row_level_security', 'af-south-1')`, tenantID, f.LegalEntityID); err != nil {
+		if _, err := admin.Exec(ctx, `INSERT INTO tenants(registration_basis, bootstrap_reason, bootstrap_evidence_reference, tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ('BOOTSTRAP', 'Test fixture registered outside admission', 'test-fixture', $1, $2, 'ZB-03.1 API Fixture', 'row_level_security', 'af-south-1')`, tenantID, f.LegalEntityID); err != nil {
 			t.Fatalf("create tenant %s: %v", tenantID, err)
 		}
 	}

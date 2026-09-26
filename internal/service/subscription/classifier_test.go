@@ -147,8 +147,8 @@ func (e *env) tenant(t *testing.T, org, platform string, relType domain.Platform
 	if _, err := e.admin.Exec(e.ctx, `INSERT INTO legal_entities(legal_entity_id) VALUES ($1)`, le); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.admin.Exec(e.ctx, `INSERT INTO tenants(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region)
-		VALUES ($1,$2,'T','row_level_security','af-south-1')`, tenantID, le); err != nil {
+	if _, err := e.admin.Exec(e.ctx, `INSERT INTO tenants(registration_basis, bootstrap_reason, bootstrap_evidence_reference, tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region)
+		VALUES ('BOOTSTRAP', 'Test fixture registered outside admission', 'test-fixture', $1,$2,'T','row_level_security','af-south-1')`, tenantID, le); err != nil {
 		t.Fatal(err)
 	}
 	var row string

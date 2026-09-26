@@ -44,6 +44,9 @@ type Config struct {
 	// group is re-derived to repair drift (ADR-BCP-018 gate ORG-05).
 	GroupDerivationInterval     time.Duration
 	GroupReconciliationInterval time.Duration
+	// TenantBootstrapRegistration enables the migration-only bootstrap
+	// registration route (ADR-BCP-017 sections 22-24). Off by default.
+	TenantBootstrapRegistration bool
 }
 
 func Load() (Config, error) {
@@ -80,6 +83,13 @@ func Load() (Config, error) {
 			return Config{}, errors.New("BILLING_SYNC_INTERVAL must be a Go duration of at least 1s")
 		}
 		c.BillingSyncInterval = interval
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("TENANT_BOOTSTRAP_REGISTRATION"))) {
+	case "", "disabled":
+	case "enabled":
+		c.TenantBootstrapRegistration = true
+	default:
+		return Config{}, errors.New("TENANT_BOOTSTRAP_REGISTRATION must be \"enabled\" or \"disabled\"")
 	}
 	if c.GroupDerivationInterval, err = time.ParseDuration(env("GROUP_DERIVATION_INTERVAL", "30s")); err != nil || c.GroupDerivationInterval < time.Second {
 		return Config{}, errors.New("GROUP_DERIVATION_INTERVAL must be a Go duration of at least 1s")

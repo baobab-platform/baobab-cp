@@ -67,7 +67,7 @@ func TestPostgresWorkforceMembershipLifecycle(t *testing.T) {
 	if _, err := admin.Exec(ctx, `INSERT INTO legal_entities(legal_entity_id) VALUES ($1)`, legalEntityID); err != nil {
 		t.Fatalf("fixture: create legal entity: %v", err)
 	}
-	if _, err := admin.Exec(ctx, `INSERT INTO tenants(tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ($1, $2, 'Gate IAM-5 Workforce Membership Test', 'row_level_security', 'af-south-1')`, tenantID, legalEntityID); err != nil {
+	if _, err := admin.Exec(ctx, `INSERT INTO tenants(registration_basis, bootstrap_reason, bootstrap_evidence_reference, tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ('BOOTSTRAP', 'Test fixture registered outside admission', 'test-fixture', $1, $2, 'Gate IAM-5 Workforce Membership Test', 'row_level_security', 'af-south-1')`, tenantID, legalEntityID); err != nil {
 		t.Fatalf("fixture: create tenant: %v", err)
 	}
 
@@ -210,7 +210,7 @@ func TestPostgresMergeTransfersAndReconcilesWorkforceMemberships(t *testing.T) {
 		t.Fatalf("fixture: create legal entity: %v", err)
 	}
 	for _, tenantID := range []string{sharedTenantID, onlySourceTenantID} {
-		if _, err := admin.Exec(ctx, `INSERT INTO tenants(tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ($1, $2, 'Gate IAM-5 Merge Test', 'row_level_security', 'af-south-1')`, tenantID, legalEntityID); err != nil {
+		if _, err := admin.Exec(ctx, `INSERT INTO tenants(registration_basis, bootstrap_reason, bootstrap_evidence_reference, tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ('BOOTSTRAP', 'Test fixture registered outside admission', 'test-fixture', $1, $2, 'Gate IAM-5 Merge Test', 'row_level_security', 'af-south-1')`, tenantID, legalEntityID); err != nil {
 			t.Fatalf("fixture: create tenant %s: %v", tenantID, err)
 		}
 	}

@@ -73,7 +73,7 @@ func seedZB02Fixture(t *testing.T, ctx context.Context, admin *pgxpool.Pool, rep
 	if _, err := admin.Exec(ctx, `INSERT INTO legal_entities(legal_entity_id) VALUES ($1)`, f.LegalEntityID); err != nil {
 		t.Fatalf("fixture %s: create legal entity: %v", tenantSuffix, err)
 	}
-	if _, err := admin.Exec(ctx, `INSERT INTO tenants(tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ($1, $2, 'ZB-02 Fixture Test', 'row_level_security', 'af-south-1')`, f.TenantID, f.LegalEntityID); err != nil {
+	if _, err := admin.Exec(ctx, `INSERT INTO tenants(registration_basis, bootstrap_reason, bootstrap_evidence_reference, tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ('BOOTSTRAP', 'Test fixture registered outside admission', 'test-fixture', $1, $2, 'ZB-02 Fixture Test', 'row_level_security', 'af-south-1')`, f.TenantID, f.LegalEntityID); err != nil {
 		t.Fatalf("fixture %s: create tenant: %v", tenantSuffix, err)
 	}
 	// ResolveManifest uppercases market codes before lookup, so the seeded

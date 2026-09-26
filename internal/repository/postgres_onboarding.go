@@ -53,6 +53,8 @@ type TenantOnboardingRepository interface {
 	// TransitionTenantOnboardingRequest locks the request, loads tenantID's
 	// facts when it is set, applies decide and records its change.
 	TransitionTenantOnboardingRequest(ctx context.Context, id, tenantID string, decide OnboardingDecision, actor AuditActor) (domain.TenantOnboardingRequest, error)
+	// TransitionTenantOnboardingRequestTx does the same inside tx.
+	TransitionTenantOnboardingRequestTx(ctx context.Context, tx pgx.Tx, id, tenantID string, decide OnboardingDecision, actor AuditActor) (domain.TenantOnboardingRequest, error)
 }
 
 var _ TenantOnboardingRepository = (*PostgresRepository)(nil)
@@ -181,12 +183,28 @@ func (r *PostgresRepository) ListTenantOnboardingRequests(ctx context.Context, s
 }
 
 func (r *PostgresRepository) TransitionTenantOnboardingRequest(ctx context.Context, id, tenantID string, decide OnboardingDecision, actor AuditActor) (domain.TenantOnboardingRequest, error) {
+	var out domain.TenantOnboardingRequest
+	err := r.inTx(ctx, actor, func(tx pgx.Tx) error {
+		var err error
+		out, err = r.TransitionTenantOnboardingRequestTx(ctx, tx, id, tenantID, decide, actor)
+		return err
+	})
+	return out, err
+}
+
+// TransitionTenantOnboardingRequestTx is TransitionTenantOnboardingRequest
+// inside the caller's transaction. Tenant registration uses it to fulfil
+// the request in the same transaction that registers the tenant.
+func (r *PostgresRepository) TransitionTenantOnboardingRequestTx(ctx context.Context, tx pgx.Tx, id, tenantID string, decide OnboardingDecision, actor AuditActor) (domain.TenantOnboardingRequest, error) {
+	if err := validateActor(actor); err != nil {
+		return domain.TenantOnboardingRequest{}, err
+	}
 	rowID, err := domain.ParseResourceID(domain.TenantOnboardingRequestIDPrefix, id)
 	if err != nil {
 		return domain.TenantOnboardingRequest{}, ErrOnboardingRequestNotFound
 	}
 	var out domain.TenantOnboardingRequest
-	err = r.inTx(ctx, actor, func(tx pgx.Tx) error {
+	err = func() error {
 		current, err := scanOnboarding(tx.QueryRow(ctx, `SELECT `+onboardingColumns+` FROM admission.tenant_onboarding_request
 			WHERE tenant_onboarding_request_id = $1::uuid FOR UPDATE`, rowID))
 		if err != nil {
@@ -231,7 +249,7 @@ func (r *PostgresRepository) TransitionTenantOnboardingRequest(ctx context.Conte
 		}
 		out = next
 		return r.recordOnboardingChange(ctx, tx, actor, next, change)
-	})
+	}()
 	return out, err
 }
 

@@ -326,7 +326,31 @@ Rules:
 - **History is evidence.** The database permits only the lifecycle transitions and never lets the request's decision, desired state or requester change. No request is deleted.
 - **Traceable (§41).** Every event of a request carries its `correlation_id`, so a tenant can be traced back to its application and decision. The events are `com.baobab-platform.control-plane.tenant-onboarding.requested|authorised|fulfilled|cancelled.v1`, carrying identifiers and state only.
 
-Not built yet: tenant registration does not yet require an AUTHORISED request. Provisioning of pre-ADR tenants (for example the migrated Nabhold group) continues unchanged, and fulfilment links the resulting tenant back to its admission authority.
+### Tenant registration requires an AUTHORISED request
+
+There is no direct tenant registration.
+
+- **`POST /v1/tenants`** (`tenant:write`, platform administrator, registered principal) names `tenant_onboarding_request_id`. The request must be AUTHORISED and must not have produced a tenant. The command must match the request's desired state:
+  - display name, residency and isolation must be equal;
+  - `requested_products` must equal the request's product requirements (neither widened nor narrowed).
+- **The same transaction** registers the tenant and records the request FULFILLED, emitting `tenant-onboarding.fulfilled`. Any refusal rolls the whole registration back:
+
+  | Problem | Status | Meaning |
+  |---|---|---|
+  | `TENANT_ONBOARDING_REQUEST_NOT_FOUND` | 422 | No request has that id. |
+  | `TENANT_ONBOARDING_REQUEST_NOT_AUTHORISED` | 409 | The request is REQUESTED, CANCELLED or already FULFILLED. |
+  | `TENANT_ALREADY_ONBOARDED` | 409 | The tenant already came from a request. |
+  | `DESIRED_STATE_MISMATCH` | 422 | The command departs from the request's desired state. |
+
+- **A request produces one tenant.** The request row is locked for the transaction, so a concurrent second registration is refused.
+- **The database backs this up.**
+  - Every tenant records `registration_basis`: ONBOARDING, BOOTSTRAP, or LEGACY for tenants registered before migration 000056. A new tenant cannot be LEGACY, and the basis never changes.
+  - An ONBOARDING tenant commits only together with its FULFILLED request, which a deferred check enforces.
+- **Bootstrap registration** (`POST /v1/tenants/bootstrap-registrations`) is the only path without a request. It is only for tenants that predate the admission workflow, such as the first-party Nabhold group.
+  - It needs the privileged scope `tenant:bootstrap`, a platform administrator and a registered principal.
+  - It requires `bootstrap_reason` (20 to 1000 characters) and `evidence_reference`, which are stored on the tenant and audited as `tenant.registration.bootstrapped`.
+  - It is **disabled** unless `TENANT_BOOTSTRAP_REGISTRATION=enabled`. Enable it only for a migration window and disable it again afterwards.
+- **`POST …/{id}/fulfilment`** now serves only to link a tenant registered before this change back to its request.
 
 ## 13. Corporate group derivation (gate ORG-05, sections 26-29)
 

@@ -40,7 +40,7 @@ func TestTenantLifecycleEndToEnd(t *testing.T) {
 	}
 
 	tenantID := domain.NewTenantID()
-	command := domain.RegisterTenant{
+	command := domain.RegisterTenant{Basis: domain.RegistrationBootstrap, BootstrapReason: "Store test tenant registered outside admission", BootstrapEvidenceReference: "test-fixture",
 		LegalEntityID:     "THAMANI-GLOBAL",
 		TenantID:          tenantID,
 		DisplayName:       "Thamani Global (integration test)",
@@ -55,7 +55,7 @@ func TestTenantLifecycleEndToEnd(t *testing.T) {
 	metadata := basestore.RequestMetadata{ActorID: "integration-test", ActorType: "workload", CorrelationID: "9f8b6e2a-0000-4000-8000-000000000001"}
 	idempotencyKey := "integration-test-" + tenantID
 
-	operation, err := store.RegisterTenant(ctx, idempotencyKey, metadata, command)
+	operation, err := store.RegisterTenant(ctx, idempotencyKey, metadata, command, nil)
 	if err != nil {
 		t.Fatalf("register tenant: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestTenantLifecycleEndToEnd(t *testing.T) {
 
 	// Replaying the same idempotency key with the same request must return the
 	// original operation, not create a second tenant or error.
-	replay, err := store.RegisterTenant(ctx, idempotencyKey, metadata, command)
+	replay, err := store.RegisterTenant(ctx, idempotencyKey, metadata, command, nil)
 	if err != nil {
 		t.Fatalf("idempotent replay: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestRegisterTenantOutboxEventMatchesSharedSchema(t *testing.T) {
 	}
 
 	tenantID := domain.NewTenantID()
-	command := domain.RegisterTenant{
+	command := domain.RegisterTenant{Basis: domain.RegistrationBootstrap, BootstrapReason: "Store test tenant registered outside admission", BootstrapEvidenceReference: "test-fixture",
 		LegalEntityID:     "THAMANI-GLOBAL",
 		TenantID:          tenantID,
 		DisplayName:       "Thamani Global (schema compatibility test)",
@@ -176,7 +176,7 @@ func TestRegisterTenantOutboxEventMatchesSharedSchema(t *testing.T) {
 		ResidencyRegion:   "af-south-1",
 	}
 	metadata := basestore.RequestMetadata{ActorID: "integration-test", ActorType: "workload", CorrelationID: "9f8b6e2a-0000-4000-8000-000000000002"}
-	if _, err := store.RegisterTenant(ctx, "schema-compat-"+tenantID, metadata, command); err != nil {
+	if _, err := store.RegisterTenant(ctx, "schema-compat-"+tenantID, metadata, command, nil); err != nil {
 		t.Fatalf("register tenant: %v", err)
 	}
 

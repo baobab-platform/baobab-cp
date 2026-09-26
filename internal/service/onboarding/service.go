@@ -20,10 +20,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/events"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/store"
 )
 
 const onboardingContract = "admission/v1/onboarding.schema.json#/$defs/"
@@ -236,4 +239,52 @@ func (s *Service) Fulfil(ctx context.Context, actor Actor, id string, raw []byte
 		return cur, repository.OnboardingChange{AuditAction: "tenant_onboarding.fulfilled", EventType: events.TenantOnboardingFulfilled,
 			EventData: map[string]any{"tenant_id": tenant.TenantID, "fulfilled_at": events.Timestamp(at)}}, nil
 	}, actor.Audit)
+}
+
+// RegistrationStep fulfils request c.TenantOnboardingRequestID inside the
+// transaction that registers c's tenant (ADR-BCP-017 sections 22-24). There
+// is no other way to register a tenant for a customer: the request must be
+// AUTHORISED, must not have produced a tenant, and its desired state must
+// equal the command's display name, residency and isolation, with
+// requested_products equal to its product requirements. Any refusal rolls
+// the whole registration back.
+func (s *Service) RegistrationStep(actor Actor, c domain.RegisterTenant) store.RegistrationStep {
+	return func(ctx context.Context, tx pgx.Tx, tenantID string) error {
+		at := s.now()
+		_, err := s.Repo.TransitionTenantOnboardingRequestTx(ctx, tx, c.TenantOnboardingRequestID, tenantID,
+			func(cur domain.TenantOnboardingRequest, tenant *repository.OnboardingTenantFacts) (domain.TenantOnboardingRequest, repository.OnboardingChange, error) {
+				if cur.Status != domain.OnboardingAuthorised {
+					return cur, repository.OnboardingChange{}, fmt.Errorf("%w: register a tenant for a %s request (only an AUTHORISED request is provisioned)", ErrTransition, cur.Status)
+				}
+				if tenant.OnboardedBy != "" {
+					return cur, repository.OnboardingChange{}, ErrTenantAlreadyOnboarded
+				}
+				want := cur.DesiredState
+				if c.DisplayName != want.DisplayName || c.IsolationStrategy != want.IsolationStrategy ||
+					c.ResidencyRegion != want.ResidencyRegion || !sameSet(c.RequestedProducts, want.ProductRequirements) {
+					return cur, repository.OnboardingChange{}, ErrDesiredStateMismatch
+				}
+				cur.Status, cur.TenantID, cur.FulfilledAt = domain.OnboardingFulfilled, tenantID, &at
+				return cur, repository.OnboardingChange{AuditAction: "tenant_onboarding.fulfilled", EventType: events.TenantOnboardingFulfilled,
+					EventData:    map[string]any{"tenant_id": tenantID, "fulfilled_at": events.Timestamp(at)},
+					AuditPayload: map[string]any{"fulfilled_by": "tenant_registration"}}, nil
+			}, actor.Audit)
+		return err
+	}
+}
+
+func sameSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]struct{}, len(a))
+	for _, v := range a {
+		seen[v] = struct{}{}
+	}
+	for _, v := range b {
+		if _, ok := seen[v]; !ok {
+			return false
+		}
+	}
+	return len(seen) == len(b)
 }
