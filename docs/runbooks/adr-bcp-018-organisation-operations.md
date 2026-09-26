@@ -152,7 +152,7 @@ Counters are per process, so aggregate with `sum by (...)` across replicas. Gaug
 | `AFFILIATE_BASIS_NOT_IN_FORCE` | CRITICAL | Treat the affiliate's INTERNAL eligibility as lost. Section 175 already fails closed on it. Run the divestiture review through the corporate-change reviewer, then end or reclassify the platform relationship. |
 | `TENANT_MAPPING_TO_INACTIVE_ORGANISATION` | DEGRADED | Context resolution for the tenant already fails closed. Either reinstate the organisation after review, or map the tenant to its successor and end the old mapping. |
 | `IAM_REFERENCE_TO_INACTIVE_ORGANISATION` | DEGRADED | End the IAM link, or relink it to the successor organisation. |
-| `GROUP_MEMBERSHIP_BASIS_NOT_IN_FORCE` | WARNING | Re-derive the group; end the membership if its basis has ended. |
+| `GROUP_MEMBERSHIP_BASIS_NOT_IN_FORCE` | WARNING | The derivation worker ends such memberships (§13). If this finding persists, check that group's derivation state. |
 | `RELATIONSHIP_PAST_EFFECTIVE_TO` | WARNING | End the relationship formally so its status matches its dates. |
 | `ACCOUNT_MEMBERSHIP_ON_INACTIVE_ACCOUNT` | WARNING | End the memberships. The account's tenants are **not** deleted (section 170). |
 | `COUNTERPARTY_ROLE_ON_INACTIVE_ORGANISATION` | INFO | End the role at the tenant's request, or leave it as history. |
@@ -327,3 +327,40 @@ Rules:
 - **Traceable (§41).** Every event of a request carries its `correlation_id`, so a tenant can be traced back to its application and decision. The events are `com.baobab-platform.control-plane.tenant-onboarding.requested|authorised|fulfilled|cancelled.v1`, carrying identifiers and state only.
 
 Not built yet: tenant registration does not yet require an AUTHORISED request. Provisioning of pre-ADR tenants (for example the migrated Nabhold group) continues unchanged, and fulfilment links the resulting tenant back to its admission authority.
+
+## 13. Corporate group derivation (gate ORG-05, sections 26-29)
+
+CorporateGroup membership is **derived state**: the deterministic consequence of verified corporate relationships under the group's grouping policy. No person edits it, and there is no API for recalculating it. Keeping it current is maintenance, not an administrative power.
+
+How membership stays current:
+
+1. **A change requests a derivation.** Database triggers write a request to `registry.corporate_group_derivation` in the same transaction as the change. The changes that count are any change to a corporate relationship, a new group, and a change to a group's root, policy or status. A committed change can never go unnoticed.
+   - Every derivable group is marked, not only those touching the changed organisations. Deciding which groups a graph change affects is the derivation's job, and there are few groups.
+   - Derivable means grouping policy `verified-control-majority/v1` and status PENDING or ACTIVE. Governed-manual and retired groups are never queued.
+2. **The worker derives asynchronously.** It runs inside the Control Plane process.
+   - It claims due groups under a lease, so replicas never derive the same group at the same time.
+   - It adds and ends memberships with lineage. History is kept, and memberships on a governed manual basis are never touched.
+   - Each change is audited to `workload:control-plane-corporate-group-derivation`, with its own correlation id.
+3. **A failure never rolls back the authoritative change.** The relationship stays committed, and the group is marked RETRYING with `last_error`. Retries back off from 30s up to 1h. A further graph change makes the retry due at once.
+4. **A request that arrives mid-derivation is not lost.** A successful derivation only clears the request it saw.
+5. **The scheduled sweep repairs drift.** Every `GROUP_RECONCILIATION_INTERVAL`, every derivable group is re-derived. This catches what the triggers cannot see, such as a relationship passing its `effective_to`. An unchanged graph re-derives with no changes.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GROUP_DERIVATION_INTERVAL` | `30s` | How often due derivations run (minimum 1s). |
+| `GROUP_RECONCILIATION_INTERVAL` | `1h` | How often every derivable group is swept (minimum 1m). |
+
+**Reading the state.** The gauge `corporate_group_derivation_total{status}` counts groups by status. `registry.corporate_group_derivation` holds each group's record.
+
+| State | Meaning | Action |
+|---|---|---|
+| CURRENT | Nothing owed. `last_succeeded_at`, `last_added` and `last_ended` describe the last run. | none |
+| PENDING | A derivation is owed and will run on the next pass. | none, unless it persists for several intervals |
+| RETRYING | The last attempt failed (`last_error`, `attempts`, `next_attempt_at`). The group has drifted from the graph until it succeeds. | Fix the cause in `last_error`. The next attempt picks it up. Alert when RETRYING persists. |
+
+To force a re-derivation for recovery, for example after a restore, run `SELECT registry.request_corporate_group_derivation(NULL, 'operator: <reason>');`. Only an operator with database access can do this, and the reason is recorded. It re-derives; it never sets membership.
+
+**It confers nothing (section 29).**
+- Group membership never implies tenant access, PlatformAccount membership, an AdministrativeGrant, a CapabilityGrant or INTERNAL classification.
+- INTERNAL eligibility reads the corporate and platform relationships directly, so a stale or failed derivation cannot affect it.
+- A test fails if any API, resolver, auth, service, capability, product or billing code outside the derivation reads corporate groups.
