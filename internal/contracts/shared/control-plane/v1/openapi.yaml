@@ -1,0 +1,1432 @@
+openapi: 3.1.0
+info:
+  title: Baobab-Platform Baobab Control Plane API
+  version: 1.2.0
+  description: >-
+    The Control Plane's runtime and administrative API (ADR-BCP-022).
+    Implementations live in baobab-platform/baobab-cp. Every adminOidc
+    operation also requires Control Plane authority beyond its scope (the
+    platform-administrator role, or tenant-administrator membership for
+    tenant-scoped operations) and, for administrative commands, a registered
+    Control Plane principal; the scope is necessary, never sufficient.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+tags:
+  - name: Applications
+    description: An applicant's own ClientApplications (ADR-BCP-017).
+  - name: Admission
+    description: Platform review and decision of ClientApplications (ADR-BCP-017, ADR-BCP-020 sections 34-35).
+  - name: Onboarding
+    description: TenantOnboardingRequests between an APPROVED decision and tenant registration (ADR-BCP-017 sections 22-24).
+servers:
+  - url: https://control.baobab-platform.com/v1
+    description: Production placeholder; activation requires an approved domain binding.
+paths:
+  /tenants:
+    post:
+      security:
+        - adminOidc: [tenant:write]
+      operationId: registerTenant
+      summary: Register the tenant of an AUTHORISED TenantOnboardingRequest and start an idempotent provisioning operation
+      description: >-
+        There is no direct registration (ADR-BCP-017 sections 22-24). The
+        command names an AUTHORISED TenantOnboardingRequest whose desired
+        state it must match; the request is recorded FULFILLED with the minted
+        tenant, and produces at most one tenant.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+        - $ref: "#/components/parameters/Traceparent"
+        - $ref: "#/components/parameters/Tracestate"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./tenant-registration.schema.json
+      responses:
+        "202":
+          description: Registration accepted or an existing idempotent result returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProvisioningOperation"
+              examples:
+                controlPlaneMintedTenant:
+                  summary: The Control Plane returns the tenant identity it minted
+                  value:
+                    operation_id: bb5e2e28-51e8-476b-b9cc-d4e94ced3d3d
+                    tenant_id: tn_01k4m7x9q2v6c8r3d5f1h0j4
+                    state: accepted
+                    revision: 1
+                    created_at: "2026-08-31T12:00:00Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+  /tenants/bootstrap-registrations:
+    post:
+      security:
+        - adminOidc: [tenant:bootstrap]
+      operationId: bootstrapRegisterTenant
+      summary: Register a tenant that predates the admission workflow (migration and platform bootstrap only)
+      description: >-
+        The only registration path without a TenantOnboardingRequest. It needs
+        the privileged tenant:bootstrap scope, is disabled unless the Control
+        Plane explicitly enables it, and audits its reason and evidence
+        reference. It is never a route for a new customer.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+        - $ref: "#/components/parameters/Traceparent"
+        - $ref: "#/components/parameters/Tracestate"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./tenant-bootstrap-registration.schema.json
+      responses:
+        "202":
+          description: Registration accepted or an existing idempotent result returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProvisioningOperation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /context/resolve:
+    post:
+      operationId: resolveTenantContext
+      summary: Resolve authoritative tenant and product-entitlement context from the authenticated principal
+      security:
+        - workloadOidc: [context:resolve]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+        - $ref: "#/components/parameters/Traceparent"
+        - $ref: "#/components/parameters/Tracestate"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./context-resolution.schema.json#/$defs/request
+      responses:
+        "200":
+          description: Active, entitled tenant context
+          headers:
+            Cache-Control:
+              schema: { type: string, const: "private, max-age=15" }
+          content:
+            application/json:
+              schema:
+                $ref: ./context-resolution.schema.json#/$defs/response
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /mappings:
+    post:
+      operationId: createMapping
+      summary: Create a new canonical mapping in DRAFT state
+      security:
+        - adminOidc: [mapping:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+        - $ref: "#/components/parameters/Traceparent"
+        - $ref: "#/components/parameters/Tracestate"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./canonical-mapping.schema.json#/$defs/mapping
+      responses:
+        "201":
+          description: Mapping created in DRAFT state
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/mapping
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /mappings/{mapping_id}:
+    get:
+      operationId: getMapping
+      summary: Retrieve a mapping by ID
+      security:
+        - workloadOidc: [mapping:read]
+      parameters:
+        - name: mapping_id
+          in: path
+          required: true
+          schema:
+            $ref: ./domain.schema.json#/$defs/mappingId
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Mapping details
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/mapping
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Mapping not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+    patch:
+      operationId: updateMapping
+      summary: Update an existing mapping (requires If-Match revision header for optimistic concurrency)
+      security:
+        - adminOidc: [mapping:write]
+      parameters:
+        - name: mapping_id
+          in: path
+          required: true
+          schema:
+            $ref: ./domain.schema.json#/$defs/mappingId
+        - name: If-Match
+          in: header
+          required: false
+          description: Optimistic concurrency control. Supply the current revision (e.g., '5') from the mapping resource.
+          schema:
+            type: integer
+            minimum: 1
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./canonical-mapping.schema.json#/$defs/mapping
+      responses:
+        "200":
+          description: Mapping updated
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/mapping
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Mapping not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: Revision conflict or state transition not permitted
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+  /mappings/{mapping_id}/activate:
+    post:
+      operationId: activateMapping
+      summary: Transition a mapping from VALIDATED state to ACTIVE state
+      security:
+        - adminOidc: [mapping:approve]
+      parameters:
+        - name: mapping_id
+          in: path
+          required: true
+          schema:
+            $ref: ./domain.schema.json#/$defs/mappingId
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [approved_by]
+              properties:
+                approved_by:
+                  type: string
+                  maxLength: 256
+                  description: Identity of the approver executing this activation.
+      responses:
+        "200":
+          description: Mapping activated
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/mapping
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Mapping not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: Mapping not in VALIDATED state or other state transition conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+  /mappings/{mapping_id}/retire:
+    post:
+      operationId: retireMapping
+      summary: Transition a mapping to RETIRED state, optionally superseding it with a new mapping
+      security:
+        - adminOidc: [mapping:write]
+      parameters:
+        - name: mapping_id
+          in: path
+          required: true
+          schema:
+            $ref: ./domain.schema.json#/$defs/mappingId
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [retired_by]
+              properties:
+                retired_by:
+                  type: string
+                  maxLength: 256
+                  description: Identity of the actor retiring this mapping.
+                successor_mapping_id:
+                  $ref: ./domain.schema.json#/$defs/mappingId
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: Explanation for retirement.
+      responses:
+        "200":
+          description: Mapping retired
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/mapping
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Mapping not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: State transition conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+  /resolution/mappings:
+    post:
+      operationId: resolveMapping
+      summary: Resolve a canonical entity to its external representation(s) in a given context and capability
+      security:
+        - workloadOidc: [mapping:resolve]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+        - $ref: "#/components/parameters/Traceparent"
+        - $ref: "#/components/parameters/Tracestate"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./canonical-mapping.schema.json#/$defs/resolutionRequest
+      responses:
+        "200":
+          description: Mapping resolved (may be cached)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: "private, max-age=60"
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/resolutionResponse
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No applicable mapping found in active state for this context
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: Ambiguous equally-specific authoritative mappings detected
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+  /markets:
+    post:
+      operationId: createMarket
+      summary: Create a new market in DRAFT state
+      security:
+        - adminOidc: [market:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./market.schema.json#/$defs/market
+      responses:
+        "201":
+          description: Market created in DRAFT state
+          content:
+            application/json:
+              schema:
+                $ref: ./market.schema.json#/$defs/market
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /markets/{market_id}:
+    get:
+      operationId: getMarket
+      summary: Retrieve market configuration by ID
+      security:
+        - workloadOidc: [market:read]
+      parameters:
+        - name: market_id
+          in: path
+          required: true
+          schema:
+            $ref: ./market.schema.json#/$defs/marketId
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Market details
+          content:
+            application/json:
+              schema:
+                $ref: ./market.schema.json#/$defs/market
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Market not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+    patch:
+      operationId: updateMarket
+      summary: Update market configuration (requires If-Match revision header)
+      security:
+        - adminOidc: [market:write]
+      parameters:
+        - name: market_id
+          in: path
+          required: true
+          schema:
+            $ref: ./market.schema.json#/$defs/marketId
+        - name: If-Match
+          in: header
+          required: false
+          description: Optimistic concurrency control (current revision number).
+          schema:
+            type: integer
+            minimum: 1
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./market.schema.json#/$defs/market
+      responses:
+        "200":
+          description: Market updated
+          content:
+            application/json:
+              schema:
+                $ref: ./market.schema.json#/$defs/market
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Market not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: Revision conflict or state transition not permitted
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+  /markets/{market_id}/activate:
+    post:
+      operationId: activateMarket
+      summary: Transition a market from VALIDATED to ACTIVE state
+      security:
+        - adminOidc: [market:approve]
+      parameters:
+        - name: market_id
+          in: path
+          required: true
+          schema:
+            $ref: ./market.schema.json#/$defs/marketId
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [approved_by]
+              properties:
+                approved_by:
+                  type: string
+                  maxLength: 256
+      responses:
+        "200":
+          description: Market activated
+          content:
+            application/json:
+              schema:
+                $ref: ./market.schema.json#/$defs/market
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Market not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: Market not in VALIDATED state
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+  # ---------------------------------------------------------------------------
+  # Applications (ADR-BCP-017): the applicant's own ClientApplications.
+  # Another applicant's application is reported as not found.
+  # ---------------------------------------------------------------------------
+  /client-applications:
+    post:
+      tags: [Applications]
+      operationId: createClientApplication
+      summary: Open a DRAFT ClientApplication as the authenticated applicant
+      description: >-
+        The applicant's first request registers their Control Plane principal
+        (ADR-BCP-017 section 5). The body is a ClientApplicationDraft without
+        a version. Status, channel, classification and verification are
+        server-authoritative and cannot be supplied. A replay with the same
+        Idempotency-Key returns the original application with 200.
+      security:
+        - adminOidc: [application:write]
+      parameters:
+        - $ref: "#/components/parameters/OptionalIdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/application.schema.json#/$defs/ClientApplicationDraft
+      responses:
+        "201":
+          $ref: "#/components/responses/ClientApplication"
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    get:
+      tags: [Applications]
+      operationId: listMyClientApplications
+      summary: List the authenticated applicant's own applications, newest first
+      security:
+        - adminOidc: [application:read]
+      parameters:
+        - $ref: "#/components/parameters/PageLimit"
+        - $ref: "#/components/parameters/ApplicationCursor"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplicationPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /client-applications/{application_id}:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Applications]
+      operationId: getMyClientApplication
+      summary: Read one of the authenticated applicant's own applications
+      security:
+        - adminOidc: [application:read]
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    patch:
+      tags: [Applications]
+      operationId: updateMyClientApplication
+      summary: Replace the editable content of a DRAFT or INFORMATION_REQUIRED application
+      description: >-
+        The body is a complete ClientApplicationDraft naming the version it
+        was based on; a stale version is refused with VERSION_CONFLICT.
+      security:
+        - adminOidc: [application:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/application.schema.json#/$defs/ClientApplicationDraft
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /client-applications/{application_id}/submit:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Applications]
+      operationId: submitMyClientApplication
+      summary: Submit a complete DRAFT application for admission
+      description: Takes no body. An incomplete application is refused with APPLICATION_INCOMPLETE (422).
+      security:
+        - adminOidc: [application:write]
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /client-applications/{application_id}/response:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Applications]
+      operationId: respondToInformationRequest
+      summary: Answer an information request, returning the application to VALIDATING
+      security:
+        - adminOidc: [application:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/application.schema.json#/$defs/ApplicantResponseCommand
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /client-applications/{application_id}/withdraw:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Applications]
+      operationId: withdrawMyClientApplication
+      summary: Withdraw an open application
+      security:
+        - adminOidc: [application:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/application.schema.json#/$defs/ClosureCommand
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  # ---------------------------------------------------------------------------
+  # Admission (ADR-BCP-017, ADR-BCP-020 sections 34-35): platform review and
+  # decision. Every operation also requires Control Plane platform-administrator
+  # authority and a registered principal.
+  # ---------------------------------------------------------------------------
+  /admission/applications:
+    get:
+      tags: [Admission]
+      operationId: listAdmissionQueue
+      summary: List applications for review, newest first
+      description: Without a status filter, lists SUBMITTED, VALIDATING, INFORMATION_REQUIRED and UNDER_REVIEW applications.
+      security:
+        - adminOidc: [admission:review]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Comma-separated application statuses.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            items:
+              $ref: ../../admission/v1/application.schema.json#/$defs/applicationStatus
+        - $ref: "#/components/parameters/PageLimit"
+        - $ref: "#/components/parameters/ApplicationCursor"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplicationPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admission/applications/{application_id}:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Admission]
+      operationId: getApplicationForReview
+      summary: Read any application for review
+      security:
+        - adminOidc: [admission:review]
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admission/applications/{application_id}/begin-validation:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Admission]
+      operationId: beginApplicationValidation
+      summary: Move a SUBMITTED application to VALIDATING
+      description: Takes no body.
+      security:
+        - adminOidc: [admission:review]
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admission/applications/{application_id}/information-request:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Admission]
+      operationId: requestApplicationInformation
+      summary: Ask the applicant for more information
+      security:
+        - adminOidc: [admission:review]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/application.schema.json#/$defs/InformationRequestCommand
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admission/applications/{application_id}/begin-review:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Admission]
+      operationId: beginApplicationReview
+      summary: Move a VALIDATING application to UNDER_REVIEW
+      description: Takes no body.
+      security:
+        - adminOidc: [admission:review]
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admission/applications/{application_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Admission]
+      operationId: cancelApplication
+      summary: Cancel an open application on the platform's side
+      security:
+        - adminOidc: [admission:review]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/application.schema.json#/$defs/ClosureCommand
+      responses:
+        "200":
+          $ref: "#/components/responses/ClientApplication"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admission/applications/{application_id}/decision:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Admission]
+      operationId: getAdmissionDecision
+      summary: Read the application's AdmissionDecision
+      description: Not found when the application does not exist or has not been decided.
+      security:
+        - adminOidc: [admission:review]
+      responses:
+        "200":
+          $ref: "#/components/responses/AdmissionDecision"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      tags: [Admission]
+      operationId: decideApplication
+      summary: Approve or reject an application UNDER_REVIEW
+      description: >-
+        The decider comes from authentication, never the body, and is never
+        the application's applicant (SELF_DECISION_FORBIDDEN, 403). An
+        approval outside the requested markets is refused with
+        MARKET_SCOPE_EXCEEDED, and INTERNAL without Control Plane-established
+        eligibility with NOT_INTERNAL_ELIGIBLE (both 422). The decision is
+        immutable.
+      security:
+        - adminOidc: [admission:decide]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/decision.schema.json#/$defs/AdmissionDecisionRequest
+      responses:
+        "201":
+          $ref: "#/components/responses/AdmissionDecision"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  # ---------------------------------------------------------------------------
+  # Onboarding (ADR-BCP-017 sections 22-24, 39): the handoff from an APPROVED
+  # decision to tenant registration. Every operation also requires Control
+  # Plane platform-administrator authority and a registered principal;
+  # onboarding:request and onboarding:authorise each also require their IAM
+  # client role, and the service enforces separation of duties per principal.
+  # ---------------------------------------------------------------------------
+  /tenant-onboarding-requests:
+    post:
+      tags: [Onboarding]
+      operationId: requestTenantOnboarding
+      summary: Hand an APPROVED AdmissionDecision to onboarding
+      description: >-
+        Desired state is copied from the decision. There is one live request
+        per decision: repeating the request returns the live one with 200.
+        The requester is never the applicant or the decider
+        (SEPARATION_OF_DUTIES, 403).
+      security:
+        - adminOidc: [onboarding:request]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/onboarding.schema.json#/$defs/TenantOnboardingRequestCommand
+      responses:
+        "201":
+          $ref: "#/components/responses/TenantOnboardingRequest"
+        "200":
+          $ref: "#/components/responses/TenantOnboardingRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    get:
+      tags: [Onboarding]
+      operationId: listTenantOnboardingRequests
+      summary: List onboarding requests, newest first
+      security:
+        - adminOidc: [onboarding:request]
+        - adminOidc: [onboarding:authorise]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: ../../admission/v1/onboarding.schema.json#/$defs/onboardingRequestStatus
+        - name: limit
+          in: query
+          required: false
+          description: 1 to 200; any other value lists 50.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Onboarding requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantOnboardingRequestList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /tenant-onboarding-requests/{request_id}:
+    parameters:
+      - $ref: "#/components/parameters/OnboardingRequestId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Onboarding]
+      operationId: getTenantOnboardingRequest
+      summary: Read one onboarding request
+      security:
+        - adminOidc: [onboarding:request]
+        - adminOidc: [onboarding:authorise]
+      responses:
+        "200":
+          $ref: "#/components/responses/TenantOnboardingRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /tenant-onboarding-requests/{request_id}/authorisation:
+    parameters:
+      - $ref: "#/components/parameters/OnboardingRequestId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Onboarding]
+      operationId: authoriseTenantOnboarding
+      summary: Authorise a REQUESTED onboarding request
+      description: The authoriser is never the requester or the applicant (SEPARATION_OF_DUTIES, 403).
+      security:
+        - adminOidc: [onboarding:authorise]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/onboarding.schema.json#/$defs/OnboardingAuthorisationCommand
+      responses:
+        "200":
+          $ref: "#/components/responses/TenantOnboardingRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /tenant-onboarding-requests/{request_id}/cancellation:
+    parameters:
+      - $ref: "#/components/parameters/OnboardingRequestId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Onboarding]
+      operationId: cancelTenantOnboarding
+      summary: Cancel a REQUESTED or AUTHORISED onboarding request
+      description: The admission decision is never rewritten.
+      security:
+        - adminOidc: [onboarding:request]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/onboarding.schema.json#/$defs/OnboardingCancellationCommand
+      responses:
+        "200":
+          $ref: "#/components/responses/TenantOnboardingRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /tenant-onboarding-requests/{request_id}/fulfilment:
+    parameters:
+      - $ref: "#/components/parameters/OnboardingRequestId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Onboarding]
+      operationId: fulfilTenantOnboarding
+      summary: Record the tenant an AUTHORISED request produced
+      description: >-
+        Registration (registerTenant) already fulfils its request; this
+        records a tenant produced elsewhere. The tenant must exist
+        (TENANT_NOT_FOUND, 422), must not belong to another request
+        (TENANT_ALREADY_ONBOARDED, 409) and must match the desired state
+        (DESIRED_STATE_MISMATCH, 422).
+      security:
+        - adminOidc: [onboarding:request]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/onboarding.schema.json#/$defs/OnboardingFulfilmentCommand
+      responses:
+        "200":
+          $ref: "#/components/responses/TenantOnboardingRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        minLength: 16
+        maxLength: 128
+    OptionalIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Makes the command replayable; a replay with a different body is refused with IDEMPOTENCY_KEY_REUSED (409).
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        minLength: 16
+        maxLength: 128
+    ApplicationId:
+      name: application_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../admission/v1/application.schema.json#/$defs/clientApplicationId
+    OnboardingRequestId:
+      name: request_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../admission/v1/onboarding.schema.json#/$defs/tenantOnboardingRequestId
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    ApplicationCursor:
+      name: before
+      in: query
+      required: false
+      description: The previous page's next cursor; lists applications older than it.
+      schema:
+        $ref: ../../admission/v1/application.schema.json#/$defs/clientApplicationId
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: A caller-supplied business correlation UUID. The service mints one when absent and returns it in problem details and emitted consequences.
+      schema: { type: string, format: uuid }
+    CausationId:
+      name: X-Causation-ID
+      in: header
+      required: false
+      description: UUID of the immediate command or event that caused this request. Omit it for a root interaction.
+      schema: { type: string, format: uuid }
+    Traceparent:
+      name: traceparent
+      in: header
+      required: false
+      description: W3C Trace Context version 00 traceparent value.
+      schema:
+        type: string
+        pattern: "^00-(?!00000000000000000000000000000000)[0-9a-f]{32}-(?!0000000000000000)[0-9a-f]{16}-[0-9a-f]{2}$"
+    Tracestate:
+      name: tracestate
+      in: header
+      required: false
+      description: Optional W3C vendor trace state; never use it for credentials or business payloads.
+      schema:
+        type: string
+        pattern: "^[ -~]+$"
+        minLength: 1
+        maxLength: 512
+  schemas:
+    ProblemDetails:
+      $ref: ../../errors/v1/problem-details.schema.json
+    ClientApplicationPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: ../../admission/v1/application.schema.json#/$defs/ClientApplication
+        next:
+          description: Cursor for the next (older) page, passed as before; absent on the last page.
+          $ref: ../../admission/v1/application.schema.json#/$defs/clientApplicationId
+    TenantOnboardingRequestList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: ../../admission/v1/onboarding.schema.json#/$defs/TenantOnboardingRequest
+    ProvisioningOperation:
+      type: object
+      additionalProperties: false
+      required: [operation_id, tenant_id, state, revision, created_at]
+      properties:
+        operation_id: { type: string, format: uuid }
+        tenant_id: { $ref: ./domain.schema.json#/$defs/tenantId }
+        state:
+          type: string
+          enum: [requested, accepted, provisioning, reconciling, active, suspended, failed, decommissioning, cancelled]
+        revision: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        failure_code: { type: [string, "null"] }
+  responses:
+    ClientApplication:
+      description: The ClientApplication
+      content:
+        application/json:
+          schema:
+            $ref: ../../admission/v1/application.schema.json#/$defs/ClientApplication
+    ClientApplicationPage:
+      description: A page of ClientApplications
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ClientApplicationPage"
+    AdmissionDecision:
+      description: The immutable AdmissionDecision
+      content:
+        application/json:
+          schema:
+            $ref: ../../admission/v1/decision.schema.json#/$defs/AdmissionDecision
+    TenantOnboardingRequest:
+      description: The TenantOnboardingRequest
+      content:
+        application/json:
+          schema:
+            $ref: ../../admission/v1/onboarding.schema.json#/$defs/TenantOnboardingRequest
+    NotFound:
+      description: No such resource, or one the caller may not see
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    PayloadTooLarge:
+      description: The request body exceeds 1 MiB
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    ServiceUnavailable:
+      description: A dependency is unavailable; the problem is retryable
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    Forbidden:
+      description: Unresolved tenant or insufficient authority or entitlement
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    Conflict:
+      description: Lifecycle conflict or incompatible idempotent replay
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    Unprocessable:
+      description: The command is well formed but contradicts governed state, e.g. it departs from the onboarding request's desired state
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+  securitySchemes:
+    adminOidc:
+      type: openIdConnect
+      openIdConnectUrl: https://identity.baobab-platform.com/.well-known/openid-configuration
+      description: Human administrator identity; issuer is environment-configured by the implementation.
+    workloadOidc:
+      type: openIdConnect
+      openIdConnectUrl: https://identity.baobab-platform.com/.well-known/openid-configuration
+      description: Short-lived workload or delegated identity token used only over the infrastructure-owned mTLS path.
