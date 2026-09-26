@@ -480,7 +480,9 @@ func (r *PostgresRepository) DetectResolutionCandidates(ctx context.Context, at 
 	if err := rows.Err(); err != nil {
 		return CandidateDetection{}, err
 	}
-	var out CandidateDetection
+	// Empty lists, never null: the report's contract (organisation/v1
+	// CounterpartyReconciliationReport) types each as an array.
+	out := CandidateDetection{Opened: []string{}, Reopened: []string{}, Updated: []string{}}
 	for _, p := range pairs {
 		// One transaction per pair keeps each quarantine decision small and
 		// lets concurrent reviewers keep working.

@@ -372,10 +372,11 @@ func TestCounterpartyRecordsConformToSharedContract(t *testing.T) {
 	roleSchema := contracttest.CompileSchema(t, dir, "organisation/v1/counterparty.schema.json#/$defs/CounterpartyRole")
 	candidateSchema := contracttest.CompileSchema(t, dir, "organisation/v1/counterparty.schema.json#/$defs/OrganisationResolutionCandidate")
 	decisionSchema := contracttest.CompileSchema(t, dir, "organisation/v1/counterparty.schema.json#/$defs/ResolutionCandidateDecision")
+	reportSchema := contracttest.CompileSchema(t, dir, "organisation/v1/counterparty.schema.json#/$defs/CounterpartyReconciliationReport")
 
 	zuri := e.tenantFor(t, "LE-"+strings.ToUpper(token()))
 	legacy, _ := e.legacyEntity(t, domain.EntityTypeBuyerOrganisation, "active", zuri)
-	e.reconcile(t, actor())
+	contracttest.ValidateJSON(t, reportSchema, e.reconcile(t, actor()))
 	roles := e.rolesOf(t, legacy)
 	if len(roles) != 1 {
 		t.Fatalf("roles %+v", roles)
@@ -395,7 +396,7 @@ func TestCounterpartyRecordsConformToSharedContract(t *testing.T) {
 	_, b, bLE := e.registeredTenant(t)
 	e.claim(t, aLE, "A", domain.OrganisationIdentifier{Type: "LEI", Value: reg})
 	e.claim(t, bLE, "B", domain.OrganisationIdentifier{Type: "LEI", Value: reg})
-	e.reconcile(t, actor())
+	contracttest.ValidateJSON(t, reportSchema, e.reconcile(t, actor()))
 	open, ok := e.candidateFor(t, a, b)
 	if !ok {
 		t.Fatal("no candidate")
