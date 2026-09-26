@@ -1,0 +1,45 @@
+name: CP Console CI
+
+# ADR-BCP-019 sections 94-96: the Console is verified independently of the
+# Go Control Plane, and only when it changes.
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/frontend.yml"
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/frontend.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: frontend/.node-version
+      - name: Enable the pinned pnpm
+        run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @baobab-platform/cp-console typecheck
+      - run: pnpm --filter @baobab-platform/cp-console lint
+      - run: pnpm --filter @baobab-platform/cp-console test
+      - run: pnpm --filter @baobab-platform/cp-console build
+      - name: Audit dependencies
+        run: pnpm audit --audit-level high
+      - name: Build the container image
+        run: docker build --file frontend/Dockerfile --tag baobab-cp-console:ci .

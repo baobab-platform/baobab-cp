@@ -1,0 +1,9 @@
+{
+  "name": "baobab-cp-workspace",
+  "private": true,
+  "description": "pnpm workspace root for the CP Console (frontend/). The Go Control Plane does not use it.",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

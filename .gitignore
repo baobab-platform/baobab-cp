@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# CP Console (frontend/). The Python "lib/" pattern above must not hide
+# frontend source.
+!frontend/src/lib/
+/node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo
