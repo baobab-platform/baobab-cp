@@ -4,7 +4,6 @@
   "private": true,
   "description": "Baobab Control Plane Console (ADR-BCP-019)",
   "type": "module",
-  "packageManager": "pnpm@11.24.0",
   "engines": {
     "node": ">=24 <25"
   },

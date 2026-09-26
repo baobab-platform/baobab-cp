@@ -54,18 +54,20 @@ dev-env-infra:
 	@set -a; . $(INFRA_ENV); set +a; \
 	echo "DATABASE_URL=postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@localhost:$${POSTGRES_PORT:-5432}/$${POSTGRES_DB}?sslmode=disable"; \
 	echo "RABBITMQ_URL=amqp://$${RABBITMQ_DEFAULT_USER}:$${RABBITMQ_DEFAULT_PASS}@localhost:$${RABBITMQ_AMQP_PORT:-5672}/$${RABBITMQ_DEFAULT_VHOST:-nabhold}"
-# CP Console (frontend/, ADR-BCP-019 section 88). Requires Node 24 with corepack.
+# CP Console (frontend/, ADR-BCP-019 section 88). Requires Node 24 with corepack;
+# the pnpm workspace root is this directory.
+CONSOLE := pnpm --filter @baobab-platform/cp-console
 frontend-install:
-	cd frontend && corepack enable && pnpm install --frozen-lockfile
+	corepack enable && pnpm install --frozen-lockfile
 frontend-dev:
-	cd frontend && pnpm dev
+	$(CONSOLE) dev
 frontend-build:
-	cd frontend && pnpm build
+	$(CONSOLE) build
 frontend-test:
-	cd frontend && pnpm test
+	$(CONSOLE) test
 frontend-lint:
-	cd frontend && pnpm lint
+	$(CONSOLE) lint
 frontend-typecheck:
-	cd frontend && pnpm typecheck
+	$(CONSOLE) typecheck
 frontend-image:
-	docker build --tag baobab-cp-console:dev frontend
+	docker build --file frontend/Dockerfile --tag baobab-cp-console:dev .

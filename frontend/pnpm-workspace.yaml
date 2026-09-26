@@ -1,6 +1,0 @@
-# pnpm settings for the CP Console. Newly published versions are held back
-# by pnpm's default minimum release age; no exclusions.
-allowBuilds:
-  # Its native resolver ships as prebuilt optional packages; the install
-  # script is not needed.
-  unrs-resolver: false

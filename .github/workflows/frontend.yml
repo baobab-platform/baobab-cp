@@ -6,11 +6,17 @@ on:
   pull_request:
     paths:
       - "frontend/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/frontend.yml"
   push:
     branches: [main]
     paths:
       - "frontend/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/frontend.yml"
 
 permissions:
@@ -19,9 +25,6 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: frontend
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
@@ -32,11 +35,11 @@ jobs:
       - name: Enable the pinned pnpm
         run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test
-      - run: pnpm build
-      - name: Audit production dependencies
-        run: pnpm audit --prod --audit-level high
+      - run: pnpm --filter @baobab-platform/cp-console typecheck
+      - run: pnpm --filter @baobab-platform/cp-console lint
+      - run: pnpm --filter @baobab-platform/cp-console test
+      - run: pnpm --filter @baobab-platform/cp-console build
+      - name: Audit dependencies
+        run: pnpm audit --audit-level high
       - name: Build the container image
-        run: docker build --tag baobab-cp-console:ci .
+        run: docker build --file frontend/Dockerfile --tag baobab-cp-console:ci .

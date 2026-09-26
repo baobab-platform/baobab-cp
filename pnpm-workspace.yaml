@@ -1,0 +1,10 @@
+# The CP Console (frontend/) is this repository's only Node package. The
+# workspace root holds its single lockfile, where the organisation's
+# foundation gates install and audit it. Newly published versions are held
+# back by pnpm's default minimum release age; no exclusions.
+packages:
+  - frontend
+allowBuilds:
+  # Its native resolver ships as prebuilt optional packages; the install
+  # script is not needed.
+  unrs-resolver: false
