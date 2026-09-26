@@ -18,9 +18,10 @@ const config = [
     },
   },
   {
-    // instrumentation.ts reads NEXT_RUNTIME, which names the runtime rather
-    // than configuring the Console.
-    files: ["src/server/env.ts", "src/instrumentation.ts", "tests/**", "*.config.*"],
+    // instrumentation.ts reads NEXT_RUNTIME, which names the runtime, and
+    // healthcheck.mjs reads the PORT the container sets; neither configures
+    // the Console.
+    files: ["src/server/env.ts", "src/instrumentation.ts", "healthcheck.mjs", "tests/**", "*.config.*"],
     rules: { "no-restricted-properties": "off" },
   },
 ];

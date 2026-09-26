@@ -6,8 +6,6 @@ capabilities:
   - node
   - container
   - engine
-package_managers:
-  node: pnpm
 environment:
   baobab_dev:
     required: true
