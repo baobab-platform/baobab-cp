@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.4.0
+  version: 1.5.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -23,6 +23,8 @@ tags:
     description: Reading tenants, their product entitlements and lifecycle commands (ADR-BCP-022 section 43).
   - name: Classification
     description: A ProductSubscription's classification and its explanation (ADR-BCP-018 ORG-11, ADR-SHARED-011).
+  - name: Canonical registry
+    description: Registering canonical entities and their lifecycle commands (ADR-BCP-001, ADR-0006, ADR-BCP-016).
   - name: Organisations
     description: IAM organisation links, organisation admission, legacy reconciliation and duplicate review (ADR-BCP-018 ORG-09, ORG-10, ORG-13).
   - name: Counterparties
@@ -1552,6 +1554,220 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
   # ---------------------------------------------------------------------------
+  # Canonical registry (ADR-BCP-001, ADR-0006, ADR-BCP-016): registering
+  # canonical entities and moving them through their lifecycle. A new entity
+  # is always DRAFT; each command needs the current version in If-Match
+  # (ADR-BCP-022 sections 123-130). Every operation also requires Control
+  # Plane platform-administrator authority.
+  # ---------------------------------------------------------------------------
+  /canonical-entities:
+    post:
+      tags: [Canonical registry]
+      operationId: createCanonicalEntity
+      summary: Register a canonical entity
+      description: >-
+        The Control Plane mints the identifier and starts the entity DRAFT at
+        version 1. A body that is not JSON or names a field the request does
+        not define, such as an identifier, status, version or timestamp, is
+        refused with INVALID_REQUEST (400); one that breaks a field's rule
+        with VALIDATION_FAILED (400); an effective_to not after
+        effective_from with VALIDATION_FAILED (422).
+      security:
+        - adminOidc: [canonical:write]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./canonical-entity.schema.json#/$defs/CanonicalEntityCreateRequest
+      responses:
+        "201":
+          description: Registered
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-entity.schema.json#/$defs/CanonicalEntity
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /canonical-entities/{entity_id}:
+    parameters:
+      - $ref: "#/components/parameters/CanonicalEntityId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Canonical registry]
+      operationId: getCanonicalEntity
+      summary: Read a canonical entity
+      security:
+        - adminOidc: [canonical:read]
+      responses:
+        "200":
+          $ref: "#/components/responses/CanonicalEntity"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /canonical-entities/{entity_id}/validate:
+    parameters:
+      - $ref: "#/components/parameters/CanonicalEntityId"
+      - $ref: "#/components/parameters/CanonicalEntityIfMatch"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Canonical registry]
+      operationId: validateCanonicalEntity
+      summary: Validate a DRAFT canonical entity
+      description: >-
+        Takes no body. Moves DRAFT to VALIDATED; any other state is refused with CANONICAL_ENTITY_LIFECYCLE_CONFLICT (409).
+      security:
+        - adminOidc: [canonical:write]
+      responses:
+        "200":
+          $ref: "#/components/responses/CanonicalEntity"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /canonical-entities/{entity_id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/CanonicalEntityId"
+      - $ref: "#/components/parameters/CanonicalEntityIfMatch"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Canonical registry]
+      operationId: activateCanonicalEntity
+      summary: Activate a VALIDATED canonical entity
+      description: >-
+        Takes no body. Moves VALIDATED to ACTIVE; any other state is refused with CANONICAL_ENTITY_LIFECYCLE_CONFLICT (409). Only an ACTIVE organisation-kind entity can be asserted as a request's organisation_id (ADR-BCP-016).
+      security:
+        - adminOidc: [canonical:write]
+      responses:
+        "200":
+          $ref: "#/components/responses/CanonicalEntity"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /canonical-entities/{entity_id}/suspend:
+    parameters:
+      - $ref: "#/components/parameters/CanonicalEntityId"
+      - $ref: "#/components/parameters/CanonicalEntityIfMatch"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Canonical registry]
+      operationId: suspendCanonicalEntity
+      summary: Suspend an ACTIVE canonical entity
+      description: >-
+        Takes no body. Moves ACTIVE to SUSPENDED; any other state is refused with CANONICAL_ENTITY_LIFECYCLE_CONFLICT (409). Suspending an organisation also suspends its profile and emits OrganisationSuspended, atomically (ADR-BCP-018); every context resolution through it then fails closed. There is no reinstatement command.
+      security:
+        - adminOidc: [canonical:write]
+      responses:
+        "200":
+          $ref: "#/components/responses/CanonicalEntity"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /canonical-entities/{entity_id}/retire:
+    parameters:
+      - $ref: "#/components/parameters/CanonicalEntityId"
+      - $ref: "#/components/parameters/CanonicalEntityIfMatch"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Canonical registry]
+      operationId: retireCanonicalEntity
+      summary: Retire a canonical entity
+      description: >-
+        Takes no body. Moves ACTIVE, SUSPENDED or DEPRECATED to RETIRED; any other state is refused with CANONICAL_ENTITY_LIFECYCLE_CONFLICT (409).
+      security:
+        - adminOidc: [canonical:write]
+      responses:
+        "200":
+          $ref: "#/components/responses/CanonicalEntity"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  # ---------------------------------------------------------------------------
   # Organisations (ADR-BCP-018): IAM organisation links (ORG-10), organisation
   # admission (ORG-09), legacy reconciliation and duplicate review (ORG-13).
   # Every operation also requires Control Plane platform-administrator
@@ -2136,6 +2352,51 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
+  /capabilities/explain:
+    post:
+      tags: [Diagnostics]
+      operationId: explainCapability
+      summary: Explain a capability resolution for a stored context
+      description: >-
+        Runs capability resolution against a context the Control Plane stored
+        earlier and reports the stage it reached and why it stopped (ADR-BCP-
+        003 section 80). Not restricted to the caller's own tenant: explaining
+        a customer's failed resolution is its purpose. It exposes internal
+        topology, so it is privileged, and it never grants access. A failed
+        resolution is still a 200 whose outcome is FAILED. An unknown or
+        expired context is refused with CONTEXT_NOT_FOUND (404). Also
+        requires Control Plane platform-administrator authority.
+      security:
+        - adminOidc: [capabilities:explain]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./capability-explanation.schema.json#/$defs/CapabilityExplanationRequest
+      responses:
+        "200":
+          description: The explanation
+          content:
+            application/json:
+              schema:
+                $ref: ./capability-explanation.schema.json#/$defs/CapabilityExplanation
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /organisations/{organisation_id}/audit:
     parameters:
       - name: organisation_id
@@ -2222,6 +2483,19 @@ components:
       required: true
       schema:
         $ref: ./domain.schema.json#/$defs/canonicalEntityId
+    CanonicalEntityIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: >-
+        The entity's current version as a strong entity tag, e.g. "3" (the
+        ETag of its last read). Missing is refused with IF_MATCH_REQUIRED
+        (428); malformed with INVALID_IF_MATCH (400); stale with
+        CANONICAL_ENTITY_VERSION_MISMATCH (412), after which the client
+        reloads the entity rather than retrying (ADR-BCP-022 sections 127-131).
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
     IamOrganisationReferenceId:
       name: reference_id
       in: path
@@ -2494,8 +2768,29 @@ components:
                 next:
                   description: Cursor for the next page; absent on the last page.
                   $ref: ../../organisation/v1/observability.schema.json#/$defs/OrganisationAuditEntry/properties/audit_id
+    CanonicalEntity:
+      description: The canonical entity
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: ./canonical-entity.schema.json#/$defs/CanonicalEntity
     NoContent:
       description: Done; no body
+    PreconditionFailed:
+      description: The If-Match version is stale; reload before changing the resource
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    PreconditionRequired:
+      description: The command requires an If-Match version
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
     InternalError:
       description: The Control Plane failed; the problem is retryable
       content:
@@ -2550,6 +2845,16 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/ProblemDetails"
+  headers:
+    ETag:
+      description: The resource's current version as a strong entity tag, e.g. "3".
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    Location:
+      description: The created resource's path.
+      schema:
+        type: string
   securitySchemes:
     adminOidc:
       type: openIdConnect

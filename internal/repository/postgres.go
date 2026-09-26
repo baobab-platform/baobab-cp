@@ -45,10 +45,20 @@ var ErrExternalReferenceAlreadyLinked = errors.New("external reference already l
 // to more than one canonical entity; lookups fail closed on it.
 var ErrExternalReferenceAmbiguous = errors.New("external reference is linked to more than one canonical entity")
 
-// ErrCanonicalEntityNotFound is returned when CreateExternalReference's
+// ErrCanonicalEntityNotFound is returned when a CanonicalEntity does not
+// exist: on read, on a lifecycle change, and when CreateExternalReference's
 // insert is rejected by registry.external_reference's canonical_entity_id
-// foreign key -- the referenced CanonicalEntity does not exist.
+// foreign key.
 var ErrCanonicalEntityNotFound = errors.New("canonical entity not found")
+
+// ErrCanonicalEntityVersionConflict is returned when a lifecycle change names
+// a version other than the entity's current one: the caller's copy is stale
+// (ADR-BCP-022 section 128).
+var ErrCanonicalEntityVersionConflict = errors.New("canonical entity version conflict")
+
+// ErrCanonicalEntityLifecycleConflict is returned when the entity's current
+// status does not allow the requested transition (ADR-BCP-022 section 129).
+var ErrCanonicalEntityLifecycleConflict = errors.New("canonical entity lifecycle conflict")
 
 // PostgresRepository is the PostgreSQL-backed repository implementation for mapping, capability, and topology data.
 type PostgresRepository struct {
@@ -118,25 +128,64 @@ func (r *PostgresRepository) CreateCanonicalEntity(ctx context.Context, entity d
 	if err := entity.Validate(); err != nil {
 		return fmt.Errorf("validate canonical entity: %w", err)
 	}
+	var schemaVersion *int
+	if entity.SchemaVersion > 0 {
+		schemaVersion = &entity.SchemaVersion
+	}
+	var effectiveFrom *time.Time
+	if !entity.EffectiveFrom.IsZero() {
+		effectiveFrom = &entity.EffectiveFrom
+	}
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO registry.canonical_entity(canonical_entity_id, tenant_id, legal_entity_id, entity_type, external_key, status)
-		VALUES ($1::uuid, NULLIF($2, ''), NULLIF($3, ''), $4, NULLIF($5, ''), LOWER($6))`, entity.ID, entity.OwnerTenantID, entity.OwnerLegalEntityID, entity.EntityType, entity.CanonicalKey, entity.Status)
+		INSERT INTO registry.canonical_entity(canonical_entity_id, tenant_id, legal_entity_id, entity_type, external_key, status,
+			display_name, subtype, authority, classification, schema_version, effective_from, effective_to)
+		VALUES ($1::uuid, NULLIF($2, ''), NULLIF($3, ''), $4, NULLIF($5, ''), LOWER($6),
+			NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''), $11, $12, $13)`,
+		entity.ID, entity.OwnerTenantID, entity.OwnerLegalEntityID, entity.EntityType, entity.CanonicalKey, entity.Status,
+		entity.DisplayName, entity.Subtype, entity.Authority, entity.Classification, schemaVersion, effectiveFrom, entity.EffectiveTo)
 	return err
 }
 
+// GetCanonicalEntity reads what registry.canonical_entity records. Fields an
+// entity was registered without (migration 000057) stay empty rather than
+// being filled with placeholders; an ADR-BCP-018 organisation's display name
+// is its profile's.
 func (r *PostgresRepository) GetCanonicalEntity(ctx context.Context, id string) (domain.CanonicalEntity, error) {
 	if r == nil || r.pool == nil {
 		return domain.CanonicalEntity{}, errors.New("repository is not initialized")
 	}
+	if !domain.IsUUID(id) {
+		return domain.CanonicalEntity{}, fmt.Errorf("%w: %s", ErrCanonicalEntityNotFound, id)
+	}
 	var entity domain.CanonicalEntity
 	var status string
-	err := r.pool.QueryRow(ctx, `SELECT canonical_entity_id::text, COALESCE(tenant_id,''), COALESCE(legal_entity_id,''), entity_type, COALESCE(external_key,''), UPPER(status), version, created_at, updated_at FROM registry.canonical_entity WHERE canonical_entity_id=$1::uuid`, id).Scan(&entity.ID, &entity.OwnerTenantID, &entity.OwnerLegalEntityID, &entity.EntityType, &entity.CanonicalKey, &status, &entity.Version, &entity.CreatedAt, &entity.UpdatedAt)
+	var schemaVersion *int
+	var effectiveFrom *time.Time
+	err := r.pool.QueryRow(ctx, `
+		SELECT ce.canonical_entity_id::text, COALESCE(ce.tenant_id, ''), COALESCE(ce.legal_entity_id, ''), ce.entity_type,
+		       COALESCE(ce.external_key, ''), UPPER(ce.status), ce.version, ce.created_at, ce.updated_at,
+		       COALESCE(ce.display_name, op.display_name, ''), COALESCE(ce.subtype, ''), COALESCE(ce.authority, ''),
+		       COALESCE(ce.classification, ''), ce.schema_version, ce.effective_from, ce.effective_to
+		FROM registry.canonical_entity ce
+		LEFT JOIN registry.organisation_profile op ON op.canonical_entity_id = ce.canonical_entity_id
+		WHERE ce.canonical_entity_id = $1::uuid`, id).Scan(
+		&entity.ID, &entity.OwnerTenantID, &entity.OwnerLegalEntityID, &entity.EntityType,
+		&entity.CanonicalKey, &status, &entity.Version, &entity.CreatedAt, &entity.UpdatedAt,
+		&entity.DisplayName, &entity.Subtype, &entity.Authority,
+		&entity.Classification, &schemaVersion, &effectiveFrom, &entity.EffectiveTo)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.CanonicalEntity{}, fmt.Errorf("%w: %s", ErrCanonicalEntityNotFound, id)
+	}
 	if err != nil {
 		return domain.CanonicalEntity{}, fmt.Errorf("get canonical entity %s: %w", id, err)
 	}
-	entity.Status, entity.SchemaVersion, entity.Authority, entity.Classification = status, 1, "baobab", "INTERNAL"
-	entity.DisplayName = entity.CanonicalKey
-	entity.EffectiveFrom = entity.CreatedAt
+	entity.Status = status
+	if schemaVersion != nil {
+		entity.SchemaVersion = *schemaVersion
+	}
+	if effectiveFrom != nil {
+		entity.EffectiveFrom = *effectiveFrom
+	}
 	return entity, nil
 }
 
@@ -149,7 +198,14 @@ func (r *PostgresRepository) SaveCanonicalEntity(ctx context.Context, entity dom
 		return err
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("canonical entity %s version conflict or not found", entity.ID)
+		var exists bool
+		if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM registry.canonical_entity WHERE canonical_entity_id=$1::uuid)`, entity.ID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("%w: %s", ErrCanonicalEntityNotFound, entity.ID)
+		}
+		return fmt.Errorf("%w: %s is not at version %d", ErrCanonicalEntityVersionConflict, entity.ID, expectedVersion)
 	}
 	return nil
 }

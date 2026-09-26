@@ -3,12 +3,15 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/contracttest"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/resolver"
 	"github.com/baobab-platform/baobab-cp/internal/service"
@@ -20,15 +23,15 @@ func explainAdminPrincipal() auth.Principal {
 
 func TestCapabilityExplainHandlerExplainsSuccessfulResolution(t *testing.T) {
 	repo := repository.NewInMemoryRepository()
-	seedCapabilityResolveFixture(t, repo, "tenant-123")
-	seedResolvedContext(t, repo, "context-1", "tenant-123")
+	seedCapabilityResolveFixture(t, repo, testTenantID)
+	seedResolvedContext(t, repo, "context-1", testTenantID)
 
 	handler := CapabilityExplainHandler{
 		Contexts: repo,
 		Service:  service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}, Repository: repo},
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"tenant-123"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"commerce.order.create","canonical_entity_id":"`+testTenantID+`"}`)))
 	req = req.WithContext(auth.WithPrincipal(context.Background(), explainAdminPrincipal()))
 	w := httptest.NewRecorder()
 
@@ -43,6 +46,7 @@ func TestCapabilityExplainHandlerExplainsSuccessfulResolution(t *testing.T) {
 	if !strings.Contains(body, `"outcome":"ROUTED"`) {
 		t.Fatalf("expected ROUTED outcome, got %s", body)
 	}
+	explanationConformsToShared(t, w.Body.Bytes())
 	if !strings.Contains(body, `"binding_id":"instance-1"`) && !strings.Contains(body, `"mapping_id":"mapping-tenant"`) {
 		t.Fatalf("expected trace detail in explanation, got %s", body)
 	}
@@ -50,7 +54,7 @@ func TestCapabilityExplainHandlerExplainsSuccessfulResolution(t *testing.T) {
 
 func TestCapabilityExplainHandlerExplainsFailedResolution(t *testing.T) {
 	repo := repository.NewInMemoryRepository()
-	seedResolvedContext(t, repo, "context-1", "tenant-123")
+	seedResolvedContext(t, repo, "context-1", testTenantID)
 
 	handler := CapabilityExplainHandler{
 		Contexts: repo,
@@ -70,6 +74,10 @@ func TestCapabilityExplainHandlerExplainsFailedResolution(t *testing.T) {
 	body := w.Body.String()
 	if !strings.Contains(body, `"outcome":"FAILED"`) {
 		t.Fatalf("expected FAILED outcome, got %s", body)
+	}
+	explanationConformsToShared(t, w.Body.Bytes())
+	if strings.Contains(body, `"policy"`) || strings.Contains(body, `"topology"`) || strings.Contains(body, `""`+`,"grant_id"`) {
+		t.Fatalf("a FAILED explanation carries no policy, topology or empty stage identifiers: %s", body)
 	}
 	if !strings.Contains(body, "no mappings for unknown-entity") {
 		t.Fatalf("expected the underlying reason to be surfaced, got %s", body)
@@ -161,5 +169,33 @@ func TestCapabilityExplainHandlerFailsClosedWhenContextStoreUnavailable(t *testi
 	handler.Explain(w, req)
 	if w.Code != http.StatusServiceUnavailable || !bytes.Contains(w.Body.Bytes(), []byte("CONTEXT_STORE_UNAVAILABLE")) {
 		t.Fatalf("expected fail-closed 503, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// explanationConformsToShared validates an explanation against Shared's
+// control-plane/v1 CapabilityExplanation when a Shared checkout is available.
+func explanationConformsToShared(t *testing.T, body []byte) {
+	t.Helper()
+	if os.Getenv("SHARED_CONTRACTS_DIR") == "" {
+		return
+	}
+	schema := contracttest.CompileSchema(t, contracttest.SharedDir(t), "control-plane/v1/capability-explanation.schema.json#/$defs/CapabilityExplanation")
+	var decoded any
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	contracttest.ValidateJSON(t, schema, decoded)
+}
+
+func TestCapabilityExplainHandlerRefusesNonCanonicalCapabilityKeys(t *testing.T) {
+	handler := CapabilityExplainHandler{Contexts: repository.NewInMemoryRepository(), Service: service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}}}
+	for _, key := range []string{"erp.receivables", "Commerce.Order.Create", "commerce.order.create.extra"} {
+		req := httptest.NewRequest(http.MethodPost, "/v1/capabilities/explain", bytes.NewReader([]byte(`{"context_id":"context-1","capability_key":"`+key+`","canonical_entity_id":"entity-1"}`)))
+		req = req.WithContext(auth.WithPrincipal(context.Background(), explainAdminPrincipal()))
+		w := httptest.NewRecorder()
+		handler.Explain(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s: expected 400, got %d body=%s", key, w.Code, w.Body.String())
+		}
 	}
 }

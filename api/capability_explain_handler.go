@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
+	"unicode/utf8"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
@@ -43,10 +45,63 @@ type CapabilityExplainHandler struct {
 	Service  service.ResolutionService
 }
 
+// capabilityExplainRequest and capabilityExplanation are Shared's
+// control-plane/v1 capability-explanation.schema.json CapabilityExplanationRequest
+// and CapabilityExplanation.
 type capabilityExplainRequest struct {
 	ContextID         string `json:"context_id"`
 	CanonicalEntityID string `json:"canonical_entity_id"`
 	CapabilityKey     string `json:"capability_key"`
+}
+
+type capabilityExplanation struct {
+	ContextID         string                     `json:"context_id"`
+	TenantID          string                     `json:"tenant_id"`
+	CanonicalEntityID string                     `json:"canonical_entity_id"`
+	CapabilityKey     string                     `json:"capability_key"`
+	Outcome           string                     `json:"outcome"`
+	Reason            string                     `json:"reason"`
+	MappingID         string                     `json:"mapping_id,omitempty"`
+	GrantID           string                     `json:"grant_id,omitempty"`
+	BindingID         string                     `json:"binding_id,omitempty"`
+	EngineInstanceID  string                     `json:"engine_instance_id,omitempty"`
+	Policy            *capabilityExplainPolicy   `json:"policy,omitempty"`
+	Topology          *capabilityExplainTopology `json:"topology,omitempty"`
+}
+
+type capabilityExplainPolicy struct {
+	Allowed bool   `json:"allowed"`
+	Reason  string `json:"reason"`
+}
+
+type capabilityExplainTopology struct {
+	ID          string `json:"id"`
+	Environment string `json:"environment"`
+}
+
+var (
+	// explainOpaqueIDPattern is the schema's opaqueId and, with a minimum
+	// length of 3, domain.schema.json's canonicalEntityId.
+	explainOpaqueIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
+	// sharedCapabilityKeyPattern is capability/v1 domain.schema.json's
+	// capabilityKey: <domain>.<resource>.<action>. The Control Plane's own
+	// registry accepts a wider grammar; a key outside Shared's cannot name a
+	// canonical capability, so it is refused rather than explained.
+	sharedCapabilityKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*\.[a-z][a-z0-9]*(?:-[a-z0-9]+)*\.[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
+)
+
+// explainReasonLimit is the schema's maxLength for reasons.
+const explainReasonLimit = 2048
+
+func explainReason(reason string) string {
+	if len(reason) <= explainReasonLimit {
+		return reason
+	}
+	cut := explainReasonLimit
+	for cut > 0 && !utf8.RuneStart(reason[cut]) {
+		cut--
+	}
+	return reason[:cut]
 }
 
 func (h CapabilityExplainHandler) Explain(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +118,15 @@ func (h CapabilityExplainHandler) Explain(w http.ResponseWriter, r *http.Request
 	}
 	if req.ContextID == "" || req.CanonicalEntityID == "" || req.CapabilityKey == "" {
 		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "context_id, canonical_entity_id and capability_key are required", false)
+		return
+	}
+	if len(req.ContextID) > 128 || !explainOpaqueIDPattern.MatchString(req.ContextID) ||
+		len(req.CanonicalEntityID) < 3 || len(req.CanonicalEntityID) > 128 || !explainOpaqueIDPattern.MatchString(req.CanonicalEntityID) {
+		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "context_id or canonical_entity_id is malformed", false)
+		return
+	}
+	if len(req.CapabilityKey) < 5 || len(req.CapabilityKey) > 128 || !sharedCapabilityKeyPattern.MatchString(req.CapabilityKey) {
+		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "capability_key must be a <domain>.<resource>.<action> capability key", false)
 		return
 	}
 	principal, ok := auth.PrincipalFromContext(r.Context())
@@ -111,27 +175,22 @@ func (h CapabilityExplainHandler) Explain(w http.ResponseWriter, r *http.Request
 		trace.Reason = resolveErr.Error()
 	}
 
-	response := map[string]any{
-		"context_id":          trustedContext.ID,
-		"tenant_id":           trustedContext.TenantID,
-		"canonical_entity_id": req.CanonicalEntityID,
-		"capability_key":      req.CapabilityKey,
+	response := capabilityExplanation{
+		ContextID:         trustedContext.ID,
+		TenantID:          trustedContext.TenantID,
+		CanonicalEntityID: req.CanonicalEntityID,
+		CapabilityKey:     req.CapabilityKey,
+		Outcome:           "FAILED",
+		Reason:            explainReason(trace.Reason),
+		MappingID:         trace.MappingID,
+		GrantID:           trace.GrantID,
+		BindingID:         trace.BindingID,
+		EngineInstanceID:  trace.EngineInstanceID,
 	}
-	response["outcome"] = trace.Outcome
-	response["reason"] = trace.Reason
-	response["mapping_id"] = trace.MappingID
-	response["grant_id"] = trace.GrantID
-	response["binding_id"] = trace.BindingID
-	response["engine_instance_id"] = trace.EngineInstanceID
 	if resolveErr == nil {
-		response["policy"] = map[string]any{
-			"allowed": result.Policy.Allowed,
-			"reason":  result.Policy.Reason,
-		}
-		response["topology"] = map[string]any{
-			"id":          result.Topology.ID,
-			"environment": result.Topology.Environment,
-		}
+		response.Outcome = "ROUTED"
+		response.Policy = &capabilityExplainPolicy{Allowed: result.Policy.Allowed, Reason: explainReason(result.Policy.Reason)}
+		response.Topology = &capabilityExplainTopology{ID: result.Topology.ID, Environment: result.Topology.Environment}
 	}
 
 	writeJSON(w, http.StatusOK, response)
