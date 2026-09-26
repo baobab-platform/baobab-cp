@@ -1,9 +1,14 @@
 package api
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -352,11 +357,32 @@ func (h mappingHandler) getExternalReference(w http.ResponseWriter, r *http.Requ
 
 // --- mappings -------------------------------------------------------------------
 
+// idempotencyKeyPattern is Shared's IdempotencyKey parameter.
+var idempotencyKeyPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
+
 func (h mappingHandler) createMapping(w http.ResponseWriter, r *http.Request) {
-	var req mappingCreateRequest
-	if !decodeStrict(w, r, &req) {
+	key := r.Header.Get("Idempotency-Key")
+	if len(key) < 16 || len(key) > 128 || !idempotencyKeyPattern.MatchString(key) {
+		problem(w, r, http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must be 16 to 128 letters, digits, '.', '_', ':' or '-'", false)
 		return
 	}
+	raw, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	var req mappingCreateRequest
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "request body is not valid JSON for this operation", false)
+		return
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, raw); err != nil {
+		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "request body is not valid JSON for this operation", false)
+		return
+	}
+	sum := sha256.Sum256(compact.Bytes())
 	if reason := req.validate(); reason != "" {
 		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", reason, false)
 		return
@@ -382,7 +408,9 @@ func (h mappingHandler) createMapping(w http.ResponseWriter, r *http.Request) {
 	if req.EffectiveTo != nil {
 		m.EffectiveTo = req.EffectiveTo.UTC().Format(time.RFC3339Nano)
 	}
-	created, err := h.repo.ProposeMapping(r.Context(), m, actor)
+	// A replay returns the mapping the key created, as created.
+	created, _, err := h.repo.ProposeMapping(r.Context(), m,
+		repository.MappingIdempotency{Key: key, RequestHash: hex.EncodeToString(sum[:])}, actor)
 	if err != nil {
 		mappingProblem(w, r, err)
 		return
@@ -473,14 +501,22 @@ func visibleToWorkload(r *http.Request, tenantID string) bool {
 
 // revisionFromIfMatch reads the required If-Match revision, or writes 428
 // or 400.
+// strongRevisionTag is Shared's MappingIfMatch: a revision as a strong entity
+// tag, e.g. "3".
+var strongRevisionTag = regexp.MustCompile(`^"[1-9][0-9]*"$`)
+
 func revisionFromIfMatch(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	value := strings.TrimSpace(r.Header.Get("If-Match"))
 	if value == "" {
 		problem(w, r, http.StatusPreconditionRequired, "IF_MATCH_REQUIRED", "If-Match with the mapping's current revision is required", false)
 		return 0, false
 	}
-	revision, err := strconv.ParseInt(strings.Trim(value, `"`), 10, 64)
-	if err != nil || revision < 1 {
+	if !strongRevisionTag.MatchString(value) {
+		problem(w, r, http.StatusBadRequest, "INVALID_IF_MATCH", "If-Match must be the mapping's revision as a strong entity tag, e.g. \"3\"", false)
+		return 0, false
+	}
+	revision, err := strconv.ParseInt(value[1:len(value)-1], 10, 64)
+	if err != nil {
 		problem(w, r, http.StatusBadRequest, "INVALID_IF_MATCH", "If-Match must be the mapping's revision, e.g. \"3\"", false)
 		return 0, false
 	}
@@ -638,6 +674,10 @@ func mappingProblem(w http.ResponseWriter, r *http.Request, err error) {
 		problem(w, r, http.StatusForbidden, "MAPPING_SELF_APPROVAL", "a mapping's creator cannot approve it", false)
 	case errors.Is(err, repository.ErrMappingOverlap):
 		problem(w, r, http.StatusConflict, "MAPPING_OVERLAP", "an identical mapping is already ACTIVE for an overlapping period", false)
+	case errors.Is(err, repository.ErrMappingIdempotencyReused):
+		problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "the idempotency key was used for a different mapping request", false)
+	case errors.Is(err, repository.ErrMappingSuccessorMismatch):
+		problem(w, r, http.StatusUnprocessableEntity, "MAPPING_SUCCESSOR_MISMATCH", err.Error(), false)
 	case errors.Is(err, repository.ErrMappingAmbiguous):
 		problem(w, r, http.StatusConflict, "MAPPING_AMBIGUOUS", "equally authoritative mappings resolve this native object to different canonical entities", false)
 	default:
