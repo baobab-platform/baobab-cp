@@ -9,7 +9,7 @@
 | Input | State audited |
 |---|---|
 | `baobab-platform/baobab-cp` | `main` at `72c9baa`. No open PRs except this one. The router is unchanged since `18ed31a` (#169). |
-| `baobab-platform/shared` | `main` at `d22c664`, which includes workload identities (#102). The CP lock pins `6efbb60`. No open PRs. |
+| `baobab-platform/shared` | `main` at `d22c664`, which includes workload identities (#102). The CP lock pins `7c9c94b`, which adds the phase 1 administrative OpenAPI (#103). |
 | `baobab-platform/baobab-iam` | `main` at `6c885a7`. Only a Dependabot PR is open. **All Keycloak work is on hold pending the Keycloak-to-Ory migration ADR.** |
 | ADRs | BCP-017 through BCP-023 in `docs/adr/`. |
 | Existing frontend assets | None. There is no `frontend/` directory, and no Node tooling, Makefile target or CI job for one. |
@@ -27,7 +27,7 @@
         ┌───────────────────────┐   ┌─────────────────────────┐
         │ IdP (Keycloak today;  │   │ baobab-cp Go API        │
         │ Ory per pending ADR)  │   │  final authorization    │
-        │  BLOCKER B1           │   │  65 human routes today  │
+        │  BLOCKER B1           │   │  68 human routes today  │
         └───────────────────────┘   └───────────┬─────────────┘
                                                 │
                   contracts.lock.yaml ◄── shared: OpenAPI + schemas
@@ -98,9 +98,9 @@ What this means for the Console:
 
 | Feature area (ADR) | Backend | Endpoint stable enough to consume | Frontend blocked |
 |---|---|---|---|
-| Applicant workspace (017) | Yes: draft, edit, submit, respond, withdraw, list own | Yes | Only on B1 and B2 |
-| Admission review and decision (017, 020 §§34-35) | Yes | Yes | Only on B1 and B2 |
-| Tenant onboarding handoff (017 §§22-24) | Yes | Yes (registration now requires an AUTHORISED request) | Only on B1 and B2 |
+| Applicant workspace (017) | Yes: draft, edit, submit, respond, withdraw, list own | Yes | Only on B1 |
+| Admission review and decision (017, 020 §§34-35) | Yes | Yes | Only on B1 |
+| Tenant onboarding handoff (017 §§22-24) | Yes | Yes (registration now requires an AUTHORISED request) | Only on B1 |
 | Organisation identity (018) | Partial: create, get, lifecycle, IAM links, external references | Get and commands yes; no list or search | Lists blocked (G4) |
 | Corporate structure (018 ORG-04/05/06) | Service and database only; no HTTP | No | Yes (G3) |
 | Platform accounts (018 ORG-07) | Partial: get, status, tenant binding | Yes; no list | Lists blocked (G4) |
@@ -117,14 +117,15 @@ What this means for the Console:
 
 ## 5. Contract readiness matrix
 
-In the Shared `control-plane/v1` OpenAPI, the only human routes are `POST /tenants` and `POST
-/tenants/bootstrap-registrations`, which is **2 of the Control Plane's 65 human routes**. The other schemas exist in
-Shared, but no OpenAPI path uses them.
+At this audit, the Shared `control-plane/v1` OpenAPI described only `POST /tenants` and `POST
+/tenants/bootstrap-registrations`: **2 of the Control Plane's 68 human routes**. Phase 1 (Shared #103) adds the 21
+applications, admission and onboarding operations, so 23 are now described. `api.TestOpenAPIDescribesTheRouter` keeps
+the count honest: it fails when a served route is neither described nor listed as undescribed.
 
 | Family | Shared schemas | Shared OpenAPI paths | CP implements | Generated client possible |
 |---|---|---|---|---|
-| Client applications, admission | `admission/v1` (application, decision, lifecycle, events) | none | yes | No (B2) |
-| Tenant onboarding | `admission/v1` onboarding schemas | none | yes | No (B2) |
+| Client applications, admission | `admission/v1` (application, decision, lifecycle, events) | Applications and Admission tags (15 operations) | yes | Yes |
+| Tenant onboarding | `admission/v1` onboarding schemas | Onboarding tag (6 operations) | yes | Yes |
 | Tenant registration | `control-plane/v1` tenant-registration and bootstrap schemas | `POST /tenants`, `POST /tenants/bootstrap-registrations` | yes | Yes |
 | Tenant read and lifecycle | partial | none | yes | No (B2) |
 | Organisation, platform account, corporate | `organisation/v1` | none | partial | No (B2) |
@@ -137,7 +138,7 @@ Shared, but no OpenAPI path uses them.
 | ID | Gap | ADR | What is needed | Owner |
 |---|---|---|---|---|
 | **B1** | The BFF must be an OIDC **confidential** client (ADR-BCP-019 §10). The only workforce client, `baobab-control-plane-admin`, is public with PKCE, and its redirect URIs are `localhost:3003`, while ADR-BCP-019 §87 puts the Console on `:3000`. | 019 §§10-11 | A confidential Console client with its redirect URIs and back-channel logout, decided by the Keycloak-to-Ory migration ADR | IAM, after the Ory ADR |
-| **B2** | There is no administrative OpenAPI. 63 of the 65 human routes have no Shared OpenAPI description. | 019 §38, 022 §§17-20 | Shared `control-plane/v1` paths for the applications, admission, onboarding, tenants, organisations, platform accounts, provisioning and classification families, tagged by family (022 §20). Then CP contract tests that fail when a route and its description drift apart. | Shared, then CP |
+| **B2** | The administrative OpenAPI is partial. Phase 1 (Shared #103) describes applications, admission and onboarding; 45 of the 68 human routes still have no description, and `api.TestOpenAPIDescribesTheRouter` lists them. | 019 §38, 022 §§17-20 | Shared `control-plane/v1` paths for the tenants, organisations, platform accounts, provisioning and classification families, tagged by family (022 §20). The CP drift test is in place. | Shared, then CP |
 | G2 | Shared declares `/markets`, `/mappings` and `/resolution/mappings`, and the CP implements none of them. | 022 §18 | Either implement them or mark them as not yet implemented, so the generated client cannot call routes that do not exist | Shared or CP |
 | G3 | Corporate relationships, corporate groups, digital estates and service selection have no HTTP surface. | 018, 019 §§20, 23, 25 | Administrative query and command endpoints | CP |
 | G4 | There are no list or search endpoints for organisations, tenants or platform accounts. | 022 §§30, 53 | Scope-filtered, paginated list read models | CP |
@@ -180,7 +181,7 @@ Shared, but no OpenAPI path uses them.
 | FE-02 Design system: tokens, primitives, status, error, loading and empty states, WCAG 2.2 AA | **Yes** | FE-01 |
 | FE-03 Authentication and BFF | No | B1 (Ory ADR and a confidential client) |
 | FE-04 Global shell and context | Shell layout yes; authority-aware navigation no | G5 |
-| FE-05 Generated client and drift CI | No | B2 (admin OpenAPI in Shared, stacked Shared → CP → frontend) |
+| FE-05 Generated client and drift CI | Yes for applications, admission and onboarding; the CP drift test exists | FE-01; the remaining B2 phases for other families |
 | FE-06 Applicant workspace; FE-07 Admission review; tenant onboarding | Backend ready | FE-03, FE-05 |
 | FE-08 Organisation administration | Partial | G3, G4 |
 | FE-09 to FE-12 People and access, changesets, approvals, operations | No | G6 |
@@ -193,9 +194,9 @@ it. FE-01 and FE-02 can start now without either.
 
 | ADR | Frontend requirement | Route or feature | API | Tests | Status |
 |---|---|---|---|---|---|
-| BCP-017 | Applicant workspace | Applications | `/v1/client-applications` | E2E | Backend ready; B1, B2 |
-| BCP-017 | Admission review | Admission | `/v1/admission/applications` | E2E, security | Backend ready; B1, B2 |
-| BCP-017 | Onboarding handoff | Onboarding | `/v1/tenant-onboarding-requests` | E2E, security (separation of duties) | Backend ready; B1, B2 |
+| BCP-017 | Applicant workspace | Applications | `/v1/client-applications` | E2E | Backend and contract ready; B1 |
+| BCP-017 | Admission review | Admission | `/v1/admission/applications` | E2E, security | Backend and contract ready; B1 |
+| BCP-017 | Onboarding handoff | Onboarding | `/v1/tenant-onboarding-requests` | E2E, security (separation of duties) | Backend and contract ready; B1 |
 | BCP-018 | Organisation | Organisations | `/v1/canonical-entities` | E2E | Partial (G4) |
 | BCP-018 | Corporate structure | Corporate structure | none | E2E | Blocked (G3) |
 | BCP-018 | Platform account | Platform accounts | `/v1/platform-accounts` | E2E | Partial (G4) |

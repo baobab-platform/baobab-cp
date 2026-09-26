@@ -6,7 +6,8 @@
 // fails on any drift; `make sync-shared-contracts` refreshes them). Only
 // the files a runtime-validated contract needs, plus the files they $ref,
 // are embedded, along with the policy documents (YAML) the Control Plane
-// applies. The JSON Schemas are registered under their own $id, so
+// applies and the control-plane/v1 OpenAPI description its routes are
+// checked against (api.TestOpenAPIDescribesTheRouter). The JSON Schemas are registered under their own $id, so
 // cross-file $refs resolve offline.
 package contracts
 
