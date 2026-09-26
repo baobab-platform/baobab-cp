@@ -288,13 +288,29 @@ Each change writes an audit entry and emits one of these events, whose payloads 
 
 Approval activates nothing. An APPROVED AdmissionDecision reaches provisioning only through a `TenantOnboardingRequest`, which is made explicitly and authorised separately. The contract is Shared `contracts/admission/v1/onboarding.schema.json` and `onboarding-lifecycle.yaml`.
 
-| Route | Scope (platform admin, registered principal) | Effect |
+| Route | Entitlement (platform admin, registered principal) | Effect |
 |---|---|---|
 | `POST /v1/tenant-onboarding-requests` | `onboarding:request` | Creates a REQUESTED request from an APPROVED decision. The body is `admission_decision_id`, `display_name`, `residency_region`, `reason`, and `isolation_strategy` only when the decision set none. Repeating it returns the live request with 200. |
 | `POST …/{id}/authorisation` | `onboarding:authorise` | REQUESTED → AUTHORISED. The body is `reason`. |
 | `POST …/{id}/fulfilment` | `onboarding:request` | AUTHORISED → FULFILLED. The body is `tenant_id`, the tenant provisioning produced. |
 | `POST …/{id}/cancellation` | `onboarding:request` | REQUESTED or AUTHORISED → CANCELLED. The body is `reason`. |
-| `GET /v1/tenant-onboarding-requests[?status=]`, `GET …/{id}` | either scope | Reads requests. |
+| `GET /v1/tenant-onboarding-requests[?status=]`, `GET …/{id}` | either entitlement | Reads requests. |
+
+### Who holds the entitlements
+
+Each entitlement is a scope **and** the matching client role of the IAM workforce client `baobab-control-plane-admin` (baobab-iam). The Control Plane ignores the scope unless the token also carries the role in `resource_access`. Keycloak lets any user of the client request an optional scope, so the scope alone proves nothing.
+
+| Responsibility | IAM client role | Scope | Also required |
+|---|---|---|---|
+| Platform Onboarding Operator | `onboarding-requester` | `onboarding:request` | `cp:platform-admin` (which brings MFA), a registered Control Plane principal |
+| Platform Onboarding Approver | `onboarding-authoriser` | `onboarding:authorise` | the same |
+| Admission Reviewer, Admission Decider | none by default | neither | |
+| Tenant Administrator | none | neither | refused by the Control Plane regardless |
+
+- **Toxic combination.** No one person should hold both client roles. baobab-iam's `scripts/check-toxic-role-combinations.sh` reports any person who does, and the IAM runbook says how to resolve it.
+- **Per-request separation of duties still applies** (below). Even a person holding both roles cannot authorise their own request.
+- **This is transitional.** IAM role bundles are the enforcement mechanism until ADR-BCP-020 AdministrativeGrants replace them. The scope names will not change.
+- **Configuration.** `ADMIN_OIDC_CLIENT_ID` (default `baobab-control-plane-admin`) names the client whose roles are read. Workforce tokens must carry `aud=baobab-control-plane` (`ADMIN_OIDC_AUDIENCE`). The standard OIDC scopes a login token carries (`openid`, `profile`, `email`, …) are ignored.
 
 Rules:
 

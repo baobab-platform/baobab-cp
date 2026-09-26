@@ -43,6 +43,7 @@ func main() {
 		slog.Error("OIDC provider unavailable", "error", err)
 		os.Exit(1)
 	}
+	adminVerifier.WithClientRoles(cfg.AdminOIDCClientID)
 	workloadDiscoveryContext, cancelWorkloadDiscovery := context.WithTimeout(ctx, 10*time.Second)
 	workloadVerifier, err := auth.NewOIDCVerifier(workloadDiscoveryContext, cfg.WorkloadOIDCIssuer, cfg.WorkloadOIDCAudience)
 	cancelWorkloadDiscovery()

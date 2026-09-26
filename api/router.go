@@ -326,11 +326,25 @@ func (a *API) authorize(verifier auth.TokenVerifier, actorType, requiredScope st
 	}
 }
 
+// scopeEntitlements binds a scope to the IAM workforce client role that
+// must accompany it (baobab-iam, client baobab-control-plane-admin). Keycloak
+// cannot restrict which users may request an optional client scope, so a
+// token can carry one of these scopes without the responsibility behind it;
+// such a scope counts for nothing here. This is the transitional enforcement
+// of the Platform Onboarding Operator / Approver split until ADR-BCP-020
+// AdministrativeGrants replace IAM role bundles; the scope names stay.
+var scopeEntitlements = map[string]string{
+	"onboarding:request":   "onboarding-requester",
+	"onboarding:authorise": "onboarding-authoriser",
+}
+
 // hasAnyScope accepts a single scope or alternatives written "a|b" (scope
-// names never contain "|"), for read routes several privileges may use.
+// names never contain "|"), for read routes several privileges may use. A
+// scope bound in scopeEntitlements counts only with its client role.
 func hasAnyScope(principal auth.Principal, required string) bool {
 	for _, scope := range strings.Split(required, "|") {
-		if principal.HasScope(scope) {
+		role, entitled := scopeEntitlements[scope]
+		if principal.HasScope(scope) && (!entitled || principal.HasClientRole(role)) {
 			return true
 		}
 	}
