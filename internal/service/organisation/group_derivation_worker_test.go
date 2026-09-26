@@ -171,14 +171,23 @@ func TestGroupDerivationWorker(t *testing.T) {
 	if _, err := e.repo.RequestCorporateGroupDerivations(e.ctx, "test"); err != nil {
 		t.Fatal(err)
 	}
-	claims, err := e.repo.ClaimCorporateGroupDerivations(e.ctx, time.Now(), time.Minute, 1000)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The claim skips rows another transaction holds (FOR UPDATE SKIP
+	// LOCKED), and a relationship change in any package sharing the test
+	// database locks every group's row while it requests their derivation,
+	// so claim until that transaction has let go.
 	var claim *repository.GroupDerivationClaim
-	for i := range claims {
-		if claims[i].GroupID == groupID {
-			claim = &claims[i]
+	for deadline := time.Now().Add(10 * time.Second); claim == nil && time.Now().Before(deadline); {
+		claims, err := e.repo.ClaimCorporateGroupDerivations(e.ctx, time.Now(), time.Minute, 1000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range claims {
+			if claims[i].GroupID == groupID {
+				claim = &claims[i]
+			}
+		}
+		if claim == nil {
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 	if claim == nil {
