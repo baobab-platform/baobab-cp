@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"net/http"
 	"regexp"
 	"unicode/utf8"
@@ -185,13 +186,22 @@ func (h CapabilityExplainHandler) Explain(w http.ResponseWriter, r *http.Request
 		MappingID:         trace.MappingID,
 		GrantID:           trace.GrantID,
 		BindingID:         trace.BindingID,
-		EngineInstanceID:  trace.EngineInstanceID,
+		EngineInstanceID:  engineInstanceKey(trace.EngineInstanceID),
 	}
 	if resolveErr == nil {
 		response.Outcome = "ROUTED"
 		response.Policy = &capabilityExplainPolicy{Allowed: result.Policy.Allowed, Reason: explainReason(result.Policy.Reason)}
-		response.Topology = &capabilityExplainTopology{ID: result.Topology.ID, Environment: result.Topology.Environment}
+		response.Topology = &capabilityExplainTopology{ID: domain.EngineInstanceKey(result.Topology.ID), Environment: result.Topology.Environment}
 	}
 
 	writeJSON(w, http.StatusOK, response)
+}
+
+// engineInstanceKey is the canonical identifier of a traced engine instance,
+// or empty when resolution never reached one.
+func engineInstanceKey(id string) string {
+	if id == "" {
+		return ""
+	}
+	return domain.EngineInstanceKey(id)
 }

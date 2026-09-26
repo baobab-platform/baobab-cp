@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"net/http"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
@@ -119,14 +120,14 @@ func (h CapabilityResolveBatchHandler) Resolve(w http.ResponseWriter, r *http.Re
 			},
 			Capability: map[string]any{
 				"binding_mode":       result.Capability.BindingMode,
-				"engine_instance_id": result.Capability.EngineInstanceID,
+				"engine_instance_id": domain.EngineInstanceKey(result.Capability.EngineInstanceID),
 			},
 			Policy: map[string]any{
 				"allowed": result.Policy.Allowed,
 				"reason":  result.Policy.Reason,
 			},
 			Topology: map[string]any{
-				"id":          result.Topology.ID,
+				"id":          domain.EngineInstanceKey(result.Topology.ID),
 				"environment": result.Topology.Environment,
 			},
 		})

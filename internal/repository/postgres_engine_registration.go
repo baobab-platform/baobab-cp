@@ -55,6 +55,11 @@ type EngineRegistrar interface {
 var _ EngineRegistrar = (*PostgresRepository)(nil)
 
 func (r *PostgresRepository) RegisterEngine(ctx context.Context, reg EngineRegistrationRecord) error {
+	// The engine's code is its engineId, the repository that owns it
+	// (ADR-SHARED-012); migration 000058 enforces the same grammar.
+	if !domain.ValidEngineID(reg.Repository) {
+		return fmt.Errorf("register engine %q: the repository must be an engine id such as baobab-trade", reg.Repository)
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err

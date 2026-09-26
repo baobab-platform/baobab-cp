@@ -68,7 +68,7 @@ func TestPostgresIdentityReferenceMapsAndResolves(t *testing.T) {
 
 	reference := domain.IdentityReference{
 		ID: domain.NewIdentityReferenceID(), PrincipalID: principal.ID,
-		Engine: "baobab-trade", EngineInstanceID: "af-south-1-production",
+		Engine: "baobab-trade", EngineInstanceID: "ei_afsouth1production",
 		ExternalType: "customer", ExternalID: "C-100", Status: "ACTIVE",
 	}
 	if err := repo.CreateIdentityReference(ctx, reference); err != nil {
@@ -97,7 +97,7 @@ func TestPostgresIdentityReferenceMapsAndResolves(t *testing.T) {
 	if resolved.PrincipalID != principal.ID {
 		t.Fatalf("expected resolved principal %s, got %s", principal.ID, resolved.PrincipalID)
 	}
-	if resolved.EngineInstanceID != "af-south-1-production" {
+	if resolved.EngineInstanceID != "ei_afsouth1production" {
 		t.Fatalf("expected engine_instance_id to round-trip, got %q", resolved.EngineInstanceID)
 	}
 	if resolved.CreatedAt.IsZero() {

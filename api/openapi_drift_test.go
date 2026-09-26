@@ -48,8 +48,8 @@ func fullRouter(t *testing.T) chi.Routes {
 		PlatformAccounts: struct {
 			repository.PlatformAccountRepository
 		}{},
-		ExternalReferences: struct {
-			repository.ExternalReferenceRepository
+		Mappings: struct {
+			repository.MappingAdminRepository
 		}{},
 		Provisioning:    struct{ ProvisioningRepository }{},
 		Onboarding:      &onboarding.Service{},
@@ -110,12 +110,10 @@ func described(t *testing.T) map[string]bool {
 // control-plane/v1 OpenAPI (CP Console FE-00 gap B2). The list may only
 // shrink: describe a route in Shared and remove it here.
 var undescribed = []string{
-	"GET /v1/external-references",
 	"GET /v1/tenants/{}/provisioning",
 	"GET /v1/tenants/{}/provisioning/{}",
 	"GET /v1/tenants/{}/provisioning/{}/drift",
 	"GET /v1/tenants/{}/provisioning/{}/readiness",
-	"POST /v1/canonical-entities/{}/external-references",
 	"POST /v1/capabilities/resolve",
 	"POST /v1/capabilities/resolve-batch",
 	"POST /v1/platform-context/resolve",
@@ -128,13 +126,8 @@ var undescribed = []string{
 
 // unimplemented are described by Shared but not served (FE-00 gap G2).
 var unimplemented = []string{
-	"GET /v1/mappings/{}",
 	"GET /v1/markets/{}",
-	"PATCH /v1/mappings/{}",
 	"PATCH /v1/markets/{}",
-	"POST /v1/mappings",
-	"POST /v1/mappings/{}/activate",
-	"POST /v1/mappings/{}/retire",
 	"POST /v1/markets",
 	"POST /v1/markets/{}/activate",
 	"POST /v1/resolution/mappings",

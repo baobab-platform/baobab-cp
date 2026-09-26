@@ -155,22 +155,3 @@ func (s MappingScope) Validate() error {
 	}
 	return nil
 }
-
-type ExternalReference struct {
-	ID                string         `json:"id,omitempty"`
-	CanonicalEntityID string         `json:"canonical_entity_id"`
-	EngineID          string         `json:"engine_id"`
-	EngineInstanceID  string         `json:"engine_instance_id,omitempty"`
-	NativeType        string         `json:"native_type"`
-	NativeID          string         `json:"native_id"`
-	ExternalURL       string         `json:"external_url,omitempty"`
-	Status            string         `json:"status"`
-	Metadata          map[string]any `json:"metadata,omitempty"`
-}
-
-func (r ExternalReference) Validate() error {
-	if r.CanonicalEntityID == "" || r.EngineID == "" || r.NativeType == "" || r.NativeID == "" {
-		return errors.New("canonical_entity_id, engine_id, native_type and native_id are required")
-	}
-	return nil
-}

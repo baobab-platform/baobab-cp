@@ -17,7 +17,7 @@ func TestEngineRelocationPreservesCanonicalIdentity(t *testing.T) {
 	}
 	from := domain.EngineInstance{ID: "ERP-AF-SOUTH-01", EngineID: "idempiere", Status: "DRAINING", HealthStatus: "HEALTHY"}
 	to := domain.EngineInstance{ID: "ERP-AF-SOUTH-02", EngineID: "idempiere", Status: "ACTIVE", HealthStatus: "HEALTHY", EffectiveFrom: cutover.Add(-time.Minute)}
-	canonical := domain.ExternalReference{CanonicalEntityID: "ce_warehouse_immutable", EngineID: "idempiere", NativeType: "M_Warehouse", NativeID: "1000000", Status: "ACTIVE"}
+	native := domain.ExternalReference{ID: "ref_warehouse01", SystemNamespace: "idempiere", EngineID: "baobab-erp", NativeEntityType: "m_warehouse", NativeID: "1000000"}
 
 	plan, err := PlanEngineRelocation(binding, from, to, cutover)
 	if err != nil {
@@ -29,7 +29,7 @@ func TestEngineRelocationPreservesCanonicalIdentity(t *testing.T) {
 	if plan.Previous.EffectiveTo == nil || !plan.Previous.EffectiveTo.Equal(plan.Successor.EffectiveFrom) {
 		t.Fatal("relocation must be temporally contiguous")
 	}
-	if canonical.CanonicalEntityID != "ce_warehouse_immutable" || canonical.NativeID != "1000000" {
+	if native.ID != "ref_warehouse01" || native.NativeID != "1000000" {
 		t.Fatal("relocation changed canonical or native identity")
 	}
 }

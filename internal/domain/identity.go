@@ -122,6 +122,9 @@ func (r IdentityReference) Validate() error {
 	if !validIdentityReferenceEngines[r.Engine] {
 		return errors.New("engine must be baobab-trade, baobab-erp, baobab-cms or baobab-pulse")
 	}
+	if r.EngineInstanceID != "" && !ValidEngineInstanceID(r.EngineInstanceID) {
+		return errors.New("engine_instance_id must be a canonical ei_ engine instance identifier")
+	}
 	if r.ExternalType == "" || r.ExternalID == "" {
 		return errors.New("external_type and external_id are required")
 	}
