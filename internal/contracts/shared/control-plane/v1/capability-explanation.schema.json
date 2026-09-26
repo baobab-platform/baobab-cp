@@ -47,7 +47,7 @@
         "mapping_id": { "$ref": "#/$defs/opaqueId" },
         "grant_id": { "$ref": "#/$defs/opaqueId" },
         "binding_id": { "$ref": "#/$defs/opaqueId" },
-        "engine_instance_id": { "$ref": "#/$defs/opaqueId" },
+        "engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
         "policy": {
           "type": "object",
           "additionalProperties": false,
@@ -62,7 +62,7 @@
           "additionalProperties": false,
           "required": ["id", "environment"],
           "properties": {
-            "id": { "$ref": "#/$defs/opaqueId" },
+            "id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
             "environment": { "type": "string", "minLength": 1, "maxLength": 64 }
           }
         }

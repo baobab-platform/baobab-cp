@@ -17,7 +17,7 @@
           "type": ["string", "null"],
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
           "maxLength": 128,
-          "description": "Opaque canonical identifier (owned by a declared authority domain). Exactly one of canonical_entity_id or target_canonical_entity_id must be set."
+          "description": "The canonical entity the mapping relates; always set."
         },
         "external_reference_id": {
           "type": ["string", "null"],
@@ -64,8 +64,7 @@
           "description": "Exclusive end of temporal validity window. Null means unbounded future validity."
         },
         "supersedes_mapping_id": {
-          "type": ["string", "null"],
-          "$ref": "./domain.schema.json#/$defs/mappingId",
+          "anyOf": [{ "$ref": "./domain.schema.json#/$defs/mappingId" }, { "type": "null" }],
           "description": "Reference to the previous mapping that this one replaces. Maintains mapping provenance."
         },
         "metadata": {
@@ -116,18 +115,20 @@
       },
       "allOf": [
         {
-          "description": "Either canonical_entity_id or target_canonical_entity_id must be set, but not both.",
+          "description": "canonical_entity_id is always set, and exactly one of external_reference_id and target_canonical_entity_id (Canonical Mapping Model section 9.2).",
+          "required": ["canonical_entity_id"],
+          "properties": { "canonical_entity_id": { "type": "string", "minLength": 1 } },
           "oneOf": [
             {
+              "required": ["external_reference_id"],
               "properties": {
-                "canonical_entity_id": { "type": "string", "minLength": 1 },
-                "external_reference_id": { "type": ["string", "null"] },
+                "external_reference_id": { "type": "string", "minLength": 1 },
                 "target_canonical_entity_id": { "type": "null" }
               }
             },
             {
+              "required": ["target_canonical_entity_id"],
               "properties": {
-                "canonical_entity_id": { "type": "null" },
                 "external_reference_id": { "type": "null" },
                 "target_canonical_entity_id": { "type": "string", "minLength": 1 }
               }
@@ -206,14 +207,10 @@
           "maxLength": 128
         },
         "engine_id": {
-          "type": ["string", "null"],
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "maxLength": 128
+          "anyOf": [{ "$ref": "./domain.schema.json#/$defs/engineId" }, { "type": "null" }]
         },
         "engine_instance_id": {
-          "type": ["string", "null"],
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "maxLength": 128
+          "anyOf": [{ "$ref": "./domain.schema.json#/$defs/engineInstanceId" }, { "type": "null" }]
         },
         "environment": { "$ref": "./domain.schema.json#/$defs/environment" },
         "deployment_region": {
@@ -252,15 +249,11 @@
           "description": "Logical namespace for native IDs (e.g., 'medusa', 'payload', 'idempiere')."
         },
         "engine_id": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "maxLength": 128,
-          "description": "Engine type identifier."
+          "$ref": "./domain.schema.json#/$defs/engineId",
+          "description": "The engine whose system holds the native object. It and system_namespace must be a pair registered in external-systems.yaml."
         },
         "engine_instance_id": {
-          "type": ["string", "null"],
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "maxLength": 128,
+          "anyOf": [{ "$ref": "./domain.schema.json#/$defs/engineInstanceId" }, { "type": "null" }],
           "description": "Specific engine instance (for multi-instance engines)."
         },
         "environment": { "$ref": "./domain.schema.json#/$defs/environment" },
@@ -381,6 +374,304 @@
         "cached": {
           "type": "boolean",
           "description": "Whether this response was served from cache."
+        }
+      }
+    },
+    "externalReferenceCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system_namespace",
+        "engine_id",
+        "native_entity_type",
+        "native_id"
+      ],
+      "description": "Records a native object's identity. The (system_namespace, engine_id) pair must be registered in external-systems.yaml. The Control Plane sets external_reference_id, status (unverified until reconciliation verifies it), source_authority (manual-import for an administrative registration) and the timestamps; a request naming any of them is refused. An ExternalReference says only that the object exists; a Mapping relates it to a canonical entity.",
+      "properties": {
+        "system_namespace": {
+          "$ref": "#/$defs/externalReference/properties/system_namespace"
+        },
+        "engine_id": {
+          "$ref": "./domain.schema.json#/$defs/engineId"
+        },
+        "engine_instance_id": {
+          "$ref": "./domain.schema.json#/$defs/engineInstanceId"
+        },
+        "environment": {
+          "$ref": "./domain.schema.json#/$defs/environment"
+        },
+        "native_entity_type": {
+          "$ref": "#/$defs/externalReference/properties/native_entity_type"
+        },
+        "native_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The identifier as known in the external system."
+        },
+        "native_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "native_uri": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "externalReferenceList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/externalReference"
+          },
+          "description": "The ExternalReference with the requested native identity, or none. A native identity has at most one."
+        }
+      }
+    },
+    "mappingCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "mapping_type",
+        "canonical_entity_id",
+        "direction",
+        "cardinality",
+        "authority",
+        "effective_from"
+      ],
+      "description": "Proposes a Mapping, which starts DRAFT at revision 1. Exactly one of external_reference_id and target_canonical_entity_id is set. The Control Plane sets mapping_id, status, revision and every created, approved and retired field from the verified actor; a request naming any of them is refused. Cross-tenant mappings are refused (Canonical Mapping Model section 47).",
+      "properties": {
+        "tenant_id": {
+          "$ref": "./domain.schema.json#/$defs/tenantId"
+        },
+        "legal_entity_id": {
+          "$ref": "./domain.schema.json#/$defs/legalEntityId"
+        },
+        "mapping_type": {
+          "$ref": "./domain.schema.json#/$defs/mappingType"
+        },
+        "canonical_entity_id": {
+          "$ref": "./domain.schema.json#/$defs/canonicalEntityId"
+        },
+        "external_reference_id": {
+          "$ref": "./domain.schema.json#/$defs/externalReferenceId"
+        },
+        "target_canonical_entity_id": {
+          "$ref": "./domain.schema.json#/$defs/canonicalEntityId"
+        },
+        "scope_id": {
+          "$ref": "./domain.schema.json#/$defs/mappingScopeId"
+        },
+        "direction": {
+          "$ref": "./domain.schema.json#/$defs/mappingDirection"
+        },
+        "cardinality": {
+          "$ref": "./domain.schema.json#/$defs/mappingCardinality"
+        },
+        "authority": {
+          "$ref": "#/$defs/mapping/properties/authority"
+        },
+        "confidence": {
+          "$ref": "./domain.schema.json#/$defs/mappingConfidence"
+        },
+        "resolution_priority": {
+          "$ref": "#/$defs/mapping/properties/resolution_priority"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "supersedes_mapping_id": {
+          "$ref": "./domain.schema.json#/$defs/mappingId"
+        },
+        "metadata": {
+          "$ref": "#/$defs/mapping/properties/metadata"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "external_reference_id"
+          ],
+          "not": {
+            "required": [
+              "target_canonical_entity_id"
+            ]
+          }
+        },
+        {
+          "required": [
+            "target_canonical_entity_id"
+          ],
+          "not": {
+            "required": [
+              "external_reference_id"
+            ]
+          }
+        }
+      ]
+    },
+    "mappingUpdateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "Changes a DRAFT Mapping (Canonical Mapping Model section 27); any other status is refused. What it relates, its tenant and its type never change: propose a new Mapping that supersedes it instead.",
+      "properties": {
+        "scope_id": {
+          "$ref": "./domain.schema.json#/$defs/mappingScopeId"
+        },
+        "direction": {
+          "$ref": "./domain.schema.json#/$defs/mappingDirection"
+        },
+        "cardinality": {
+          "$ref": "./domain.schema.json#/$defs/mappingCardinality"
+        },
+        "confidence": {
+          "$ref": "./domain.schema.json#/$defs/mappingConfidence"
+        },
+        "resolution_priority": {
+          "$ref": "#/$defs/mapping/properties/resolution_priority"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "metadata": {
+          "$ref": "#/$defs/mapping/properties/metadata"
+        }
+      }
+    },
+    "mappingRetireRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ],
+      "description": "Retires a Mapping. The retiring actor is the verified caller, never a body field.",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "successor_mapping_id": {
+          "$ref": "./domain.schema.json#/$defs/mappingId"
+        }
+      }
+    },
+    "externalReferenceResolutionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "system_namespace",
+        "engine_id",
+        "native_entity_type",
+        "native_id"
+      ],
+      "description": "Resolves a native object to the canonical entity an ACTIVE, EXTERNAL_TO_CANONICAL or BIDIRECTIONAL Mapping of the tenant relates it to (Canonical Mapping Model section 23). No match is 404; equally authoritative matches are 409, never a guess.",
+      "properties": {
+        "tenant_id": {
+          "$ref": "./domain.schema.json#/$defs/tenantId"
+        },
+        "system_namespace": {
+          "$ref": "#/$defs/externalReference/properties/system_namespace"
+        },
+        "engine_id": {
+          "$ref": "./domain.schema.json#/$defs/engineId"
+        },
+        "engine_instance_id": {
+          "$ref": "./domain.schema.json#/$defs/engineInstanceId"
+        },
+        "environment": {
+          "$ref": "./domain.schema.json#/$defs/environment"
+        },
+        "native_entity_type": {
+          "$ref": "#/$defs/externalReference/properties/native_entity_type"
+        },
+        "native_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "effective_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Point in time to resolve at. Defaults to now."
+        }
+      }
+    },
+    "externalReferenceResolutionResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "external_reference_id",
+        "mapping_id",
+        "canonical_entity_id",
+        "status",
+        "resolution_reason",
+        "effective_timestamp",
+        "mapping_version",
+        "resolved_at"
+      ],
+      "properties": {
+        "tenant_id": {
+          "$ref": "./domain.schema.json#/$defs/tenantId"
+        },
+        "external_reference_id": {
+          "$ref": "./domain.schema.json#/$defs/externalReferenceId"
+        },
+        "mapping_id": {
+          "$ref": "./domain.schema.json#/$defs/mappingId"
+        },
+        "canonical_entity_id": {
+          "$ref": "./domain.schema.json#/$defs/canonicalEntityId"
+        },
+        "scope_id": {
+          "$ref": "./domain.schema.json#/$defs/mappingScopeId"
+        },
+        "status": {
+          "$ref": "./domain.schema.json#/$defs/mappingStatus"
+        },
+        "resolution_reason": {
+          "$ref": "#/$defs/resolutionResponse/properties/resolution_reason"
+        },
+        "effective_timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "mapping_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "resolved_at": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     }
