@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/errors/v1/problem-details.schema.json",
+  "title": "Baobab API problem details",
+  "description": "RFC 9457 application/problem+json response with stable Baobab diagnostics and retry semantics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "title", "status", "code", "correlation_id", "retryable"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "format": "uri",
+      "description": "Stable problem-type URI. It identifies semantics, not a documentation version or individual occurrence."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "status": {
+      "type": "integer",
+      "minimum": 400,
+      "maximum": 599
+    },
+    "detail": {
+      "type": "string",
+      "maxLength": 2048,
+      "description": "Safe human-readable explanation. It must not contain credentials, secrets, raw financial records or unnecessary personal data."
+    },
+    "instance": {
+      "type": "string",
+      "format": "uri-reference",
+      "maxLength": 512
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$",
+      "maxLength": 100,
+      "description": "Stable machine-readable Baobab error code."
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^(?!00000000000000000000000000000000)[0-9a-f]{32}$"
+    },
+    "retryable": {
+      "type": "boolean",
+      "description": "Whether a caller may retry after applying the operation's documented retry policy."
+    },
+    "errors": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$",
+            "maxLength": 100
+          },
+          "field": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "JSON Pointer or documented request-field name when the problem is field-specific."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      }
+    }
+  }
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -144,5 +145,34 @@ func TestSourceContractReferencesAreDeclared(t *testing.T) {
 				t.Errorf("contracts.lock.yaml declares %s, which the pinned Shared commit does not have", ref)
 			}
 		}
+	}
+}
+
+// TestEmbeddedOpenAPIClosureIsComplete: every file the control-plane/v1
+// OpenAPI reaches through relative $refs, transitively, is embedded. The CP
+// Console generates its client from this closure (ADR-BCP-019 section 38),
+// so a missing file would make generation depend on something unpinned.
+func TestEmbeddedOpenAPIClosureIsComplete(t *testing.T) {
+	refPattern := regexp.MustCompile(`"?\$ref"?\s*:\s*"?(\.{1,2}/[^#"\s]+)`)
+	seen := map[string]bool{}
+	queue := []string{"control-plane/v1/openapi.yaml"}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		if seen[current] {
+			continue
+		}
+		seen[current] = true
+		data, err := ReadEmbedded(current)
+		if err != nil {
+			t.Errorf("%s is referenced but not embedded; add it and run make sync-shared-contracts", current)
+			continue
+		}
+		for _, match := range refPattern.FindAllStringSubmatch(string(data), -1) {
+			queue = append(queue, pathpkg.Join(pathpkg.Dir(current), match[1]))
+		}
+	}
+	if len(seen) < 10 {
+		t.Fatalf("closure walk found only %d files; the $ref pattern no longer matches", len(seen))
 	}
 }

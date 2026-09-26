@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/organisation/v1/observability.schema.json",
+  "title": "Baobab Organisation Drift, Audit Lineage and Metrics (ADR-BCP-018 gate ORG-15)",
+  "description": "Definition library for ADR-BCP-018 sections 127-131: relationship drift (in ADR-BCP-008's drift model, sections 14-16), the audit lineage of an Organisation, and the catalogue of organisation metrics.\nValidate resources against fragment URIs (e.g. #/$defs/RelationshipDriftFinding), not the document root.\n\nInvariants:\n  Drift is reported for review; relationship changes never trigger blind cascades (section 129), so no finding is auto-repairable.\n  Findings, audit entries and metrics carry identifiers, never organisation names or registration identifiers (sections 125, 130).\n  Metric labels are bounded vocabularies; tenant, organisation and relationship ids are never labels (ADR-BCP-008 section 44).\n\nControl Plane is the runtime authority. Shared is the contract authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "driftRule": {
+      "type": "string",
+      "description": "The relationship invariant a finding violates. Extensible by a versioned contract change.",
+      "enum": [
+        "AFFILIATE_BASIS_NOT_IN_FORCE",
+        "GROUP_MEMBERSHIP_BASIS_NOT_IN_FORCE",
+        "RELATIONSHIP_PAST_EFFECTIVE_TO",
+        "TENANT_MAPPING_TO_INACTIVE_ORGANISATION",
+        "IAM_REFERENCE_TO_INACTIVE_ORGANISATION",
+        "ACCOUNT_MEMBERSHIP_ON_INACTIVE_ACCOUNT",
+        "COUNTERPARTY_ROLE_ON_INACTIVE_ORGANISATION",
+        "INTERNAL_CLASSIFICATION_BASIS_NOT_IN_FORCE"
+      ]
+    },
+    "driftType": {
+      "type": "string",
+      "description": "ADR-BCP-008 section 15 drift types used by organisation drift.",
+      "enum": ["STATE_MISMATCH", "MISSING_RESOURCE", "UNEXPECTED_RESOURCE", "SCOPE_MISMATCH"]
+    },
+    "driftSeverity": {
+      "type": "string",
+      "description": "ADR-BCP-008 section 16. Severity reflects impact: CRITICAL can change platform classification or access, DEGRADED leaves a live link to something no longer active, WARNING and INFO need tidying.",
+      "enum": ["INFO", "WARNING", "DEGRADED", "CRITICAL"]
+    },
+    "driftResourceType": {
+      "type": "string",
+      "enum": [
+        "PLATFORM_RELATIONSHIP", "CORPORATE_RELATIONSHIP", "CORPORATE_GROUP_MEMBERSHIP",
+        "TENANT_ORGANISATION_MAPPING", "IAM_ORGANISATION_REFERENCE", "PLATFORM_ACCOUNT_MEMBERSHIP",
+        "COUNTERPARTY_ROLE", "PRODUCT_SUBSCRIPTION"
+      ]
+    },
+    "RelationshipDriftFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One actionable relationship drift (ADR-BCP-018 section 128), shaped after ADR-BCP-008 section 14. It is observed, not stored: rerunning detection on unchanged state yields the same findings.",
+      "required": ["rule", "drift_type", "severity", "resource_type", "resource_id", "observed_state", "desired_state", "remediation", "auto_repairable"],
+      "properties": {
+        "rule": {"$ref": "#/$defs/driftRule"},
+        "drift_type": {"$ref": "#/$defs/driftType"},
+        "severity": {"$ref": "#/$defs/driftSeverity"},
+        "resource_type": {"$ref": "#/$defs/driftResourceType"},
+        "resource_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Opaque id of the drifting record (e.g. a prel_ or tom_ id)."
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId",
+          "description": "Present when the drifting record is tenant-scoped."
+        },
+        "organisation_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId"}
+        },
+        "related_resource_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "description": "Opaque ids of the records the drift is measured against, e.g. the ended basis relationship.",
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "observed_state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "What is live now, in state vocabulary only (no names)."
+        },
+        "desired_state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "What the invariant requires."
+        },
+        "remediation": {
+          "type": "string",
+          "enum": ["REVIEW"],
+          "description": "Relationship drift is resolved by governed review, never by cascade (section 129)."
+        },
+        "auto_repairable": {
+          "const": false
+        }
+      }
+    },
+    "RelationshipDriftReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evaluated_at", "findings", "by_severity"],
+      "properties": {
+        "evaluated_at": {"type": "string", "format": "date-time"},
+        "findings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/RelationshipDriftFinding"}
+        },
+        "by_severity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "INFO": {"type": "integer", "minimum": 0},
+            "WARNING": {"type": "integer", "minimum": 0},
+            "DEGRADED": {"type": "integer", "minimum": 0},
+            "CRITICAL": {"type": "integer", "minimum": 0}
+          }
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when more findings exist than were returned."
+        }
+      }
+    },
+    "OrganisationAuditEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One audited change in an Organisation's lineage (ADR-BCP-018 section 131): who changed what, when, under which correlation, and on what evidence. Returned only to privileged administrators; the payload may carry evidence references but never evidence binaries.",
+      "required": ["audit_id", "occurred_at", "action", "target", "actor"],
+      "properties": {
+        "audit_id": {"type": "string", "format": "uuid"},
+        "occurred_at": {"type": "string", "format": "date-time"},
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z_]*\\.[a-z][a-z_]*$",
+          "description": "e.g. corporate_relationship.verified"
+        },
+        "target": {"type": "string", "minLength": 1, "maxLength": 256},
+        "tenant_id": {"$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"},
+        "correlation_id": {"type": "string", "format": "uuid"},
+        "actor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["actor_id", "actor_type"],
+          "properties": {
+            "actor_id": {"type": "string", "minLength": 1},
+            "actor_type": {"type": "string", "minLength": 1},
+            "client_id": {"type": "string"}
+          }
+        },
+        "payload": {
+          "type": "object",
+          "description": "The audited change as recorded; identifiers, states, reasons and evidence references."
+        }
+      }
+    },
+    "organisationMetric": {
+      "type": "string",
+      "description": "ADR-BCP-018 section 130 metric names, exposed in Prometheus form. Gauges report current counts; counters (the *_denied, *_failure, *_review and *_reclassification totals) count events since process start. corporate_group_derivation_total counts derivable CorporateGroups by derivation status (CURRENT, PENDING, RETRYING); membership is derived state kept current by the Control Plane (gate ORG-05).",
+      "enum": [
+        "organisation_total",
+        "organisation_verification_total",
+        "organisation_duplicate_candidate_total",
+        "corporate_relationship_total",
+        "corporate_relationship_conflict_total",
+        "corporate_relationship_expiry_total",
+        "platform_relationship_total",
+        "platform_relationship_reclassification_total",
+        "platform_account_total",
+        "platform_account_membership_total",
+        "tenant_organisation_mapping_total",
+        "tenant_legal_entity_mapping_total",
+        "internal_eligibility_review_total",
+        "relationship_drift_total",
+        "relationship_resolution_failure_total",
+        "cross_tenant_group_access_denied_total",
+        "corporate_group_derivation_total"
+      ]
+    },
+    "organisationMetricLabel": {
+      "type": "string",
+      "description": "The only label names organisation metrics may carry; each takes values from a bounded contract vocabulary.",
+      "enum": ["status", "verification_state", "relationship_type", "rule", "severity", "outcome"]
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/capability-explanation.schema.json",
+  "title": "Control Plane capability resolution explanation",
+  "description": "The privileged diagnostic that explains how the Control Plane resolved, or refused, a capability for a stored context (ADR-BCP-003 section 80, ADR-BCP-004 section 77, ADR-BCP-022 section 47). Unlike runtime resolution, which collapses every failure to a generic outcome, it names the stage the resolution reached and why it stopped. A definition library; validate against the fragment, e.g. capability-explanation.schema.json#/$defs/CapabilityExplanation.",
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "An internal Control Plane record identifier, reported for diagnosis only."
+    },
+    "CapabilityExplanationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_id", "canonical_entity_id", "capability_key"],
+      "properties": {
+        "context_id": {
+          "$ref": "#/$defs/opaqueId",
+          "description": "A context the Control Plane resolved and stored earlier. The explanation runs against that trusted context, never an inline one."
+        },
+        "canonical_entity_id": { "$ref": "domain.schema.json#/$defs/canonicalEntityId" },
+        "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" }
+      }
+    },
+    "CapabilityExplanation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_id", "tenant_id", "canonical_entity_id", "capability_key", "outcome", "reason"],
+      "description": "Each record identifier is present only when resolution reached that stage. policy and topology are present exactly when the outcome is ROUTED. The explanation never grants access.",
+      "properties": {
+        "context_id": { "$ref": "#/$defs/opaqueId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "canonical_entity_id": { "$ref": "domain.schema.json#/$defs/canonicalEntityId" },
+        "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
+        "outcome": {
+          "type": "string",
+          "enum": ["ROUTED", "FAILED"],
+          "description": "ROUTED when resolution selected an engine instance; FAILED otherwise."
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "Why resolution stopped, or empty when it routed. Diagnostic text for operators; clients must not parse it."
+        },
+        "mapping_id": { "$ref": "#/$defs/opaqueId" },
+        "grant_id": { "$ref": "#/$defs/opaqueId" },
+        "binding_id": { "$ref": "#/$defs/opaqueId" },
+        "engine_instance_id": { "$ref": "#/$defs/opaqueId" },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["allowed", "reason"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "reason": { "type": "string", "maxLength": 2048 }
+          }
+        },
+        "topology": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "environment"],
+          "properties": {
+            "id": { "$ref": "#/$defs/opaqueId" },
+            "environment": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
+        }
+      },
+      "if": { "properties": { "outcome": { "const": "ROUTED" } } },
+      "then": { "required": ["policy", "topology"] },
+      "else": { "not": { "anyOf": [{ "required": ["policy"] }, { "required": ["topology"] }] } }
+    }
+  }
+}

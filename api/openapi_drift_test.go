@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -177,5 +179,26 @@ func TestOpenAPIDescribesTheRouter(t *testing.T) {
 		} else if !spec[op] {
 			t.Errorf("%s is listed as unimplemented but not described", op)
 		}
+	}
+}
+
+// TestConsoleExcludesUnimplementedOperations: the CP Console's typed client
+// removes exactly the operations listed in unimplemented, so Console code
+// can neither call a route that does not exist nor lose one that does.
+func TestConsoleExcludesUnimplementedOperations(t *testing.T) {
+	source, err := os.ReadFile(filepath.Join("..", "frontend", "src", "server", "cp-client", "unimplemented.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := regexp.MustCompile(`\{[^}]+\}`)
+	var console []string
+	for _, match := range regexp.MustCompile(`"(GET|PUT|POST|PATCH|DELETE) (/[^"]*)"`).FindAllStringSubmatch(string(source), -1) {
+		console = append(console, match[1]+" /v1"+params.ReplaceAllString(match[2], "{}"))
+	}
+	sort.Strings(console)
+	want := slices.Clone(unimplemented)
+	sort.Strings(want)
+	if !slices.Equal(console, want) {
+		t.Fatalf("frontend/src/server/cp-client/unimplemented.ts lists %v; the Control Plane leaves %v unimplemented", console, want)
 	}
 }

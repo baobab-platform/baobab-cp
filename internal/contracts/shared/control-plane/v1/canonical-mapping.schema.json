@@ -1,0 +1,388 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/canonical-mapping.schema.json",
+  "title": "Canonical Mapping Registry",
+  "description": "Governed relationships between canonical identities and external representations, scoped by tenant, market, estate, and other dimensions. Implements the Baobab Canonical Mapping Model (section 9).",
+  "$defs": {
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mapping_id", "tenant_id", "mapping_type", "status", "direction", "cardinality", "authority", "effective_from", "revision", "created_at", "created_by"],
+      "properties": {
+        "mapping_id": { "$ref": "./domain.schema.json#/$defs/mappingId" },
+        "tenant_id": { "$ref": "./domain.schema.json#/$defs/tenantId" },
+        "legal_entity_id": { "$ref": "./domain.schema.json#/$defs/legalEntityId" },
+        "mapping_type": { "$ref": "./domain.schema.json#/$defs/mappingType" },
+        "canonical_entity_id": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "maxLength": 128,
+          "description": "Opaque canonical identifier (owned by a declared authority domain). Exactly one of canonical_entity_id or target_canonical_entity_id must be set."
+        },
+        "external_reference_id": {
+          "type": ["string", "null"],
+          "pattern": "^ref_[a-z0-9]+$",
+          "maxLength": 63,
+          "description": "Reference to an external system's native identifier. Mutually exclusive with target_canonical_entity_id."
+        },
+        "target_canonical_entity_id": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "maxLength": 128,
+          "description": "Target canonical entity for canon-to-canon mappings. Mutually exclusive with external_reference_id."
+        },
+        "scope_id": {
+          "$ref": "./domain.schema.json#/$defs/mappingScopeId",
+          "description": "Reference to the MappingScope that constrains this mapping's applicability."
+        },
+        "direction": { "$ref": "./domain.schema.json#/$defs/mappingDirection" },
+        "cardinality": { "$ref": "./domain.schema.json#/$defs/mappingCardinality" },
+        "authority": {
+          "type": "string",
+          "enum": ["control-plane", "organisation", "trade", "erp", "content", "identity", "external"],
+          "description": "Domain that controls the semantic definition of this mapping."
+        },
+        "confidence": {
+          "$ref": "./domain.schema.json#/$defs/mappingConfidence",
+          "description": "Confidence level for imported or reconciled mappings. Only CONFIRMED mappings should be used in production resolution."
+        },
+        "resolution_priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "Manual priority hint (scope specificity normally takes precedence). Used for tie-breaking equally specific authoritative mappings."
+        },
+        "status": { "$ref": "./domain.schema.json#/$defs/mappingStatus" },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Inclusive start of temporal validity window [effective_from, effective_to)."
+        },
+        "effective_to": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Exclusive end of temporal validity window. Null means unbounded future validity."
+        },
+        "supersedes_mapping_id": {
+          "type": ["string", "null"],
+          "$ref": "./domain.schema.json#/$defs/mappingId",
+          "description": "Reference to the previous mapping that this one replaces. Maintains mapping provenance."
+        },
+        "metadata": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "maxProperties": 20,
+          "properties": {
+            "source": { "type": "string", "maxLength": 128 },
+            "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 }, "maxItems": 20 },
+            "notes": { "type": "string", "maxLength": 1000 }
+          },
+          "description": "Schema-constrained optional metadata. Must not replace first-class fields or hold secrets."
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optimistic concurrency version for this mapping record."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "created_by": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Identity of the actor (user, service account) that created this mapping."
+        },
+        "approved_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Timestamp when a mapping was formally approved (for DRAFT→VALIDATED→ACTIVE workflows)."
+        },
+        "approved_by": {
+          "type": ["string", "null"],
+          "maxLength": 256,
+          "description": "Identity of the approver for controlled mappings."
+        },
+        "retired_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Timestamp when the mapping was retired."
+        },
+        "retired_by": {
+          "type": ["string", "null"],
+          "maxLength": 256,
+          "description": "Identity of the actor that retired this mapping."
+        }
+      },
+      "allOf": [
+        {
+          "description": "Either canonical_entity_id or target_canonical_entity_id must be set, but not both.",
+          "oneOf": [
+            {
+              "properties": {
+                "canonical_entity_id": { "type": "string", "minLength": 1 },
+                "external_reference_id": { "type": ["string", "null"] },
+                "target_canonical_entity_id": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "canonical_entity_id": { "type": "null" },
+                "external_reference_id": { "type": "null" },
+                "target_canonical_entity_id": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "mappingScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_id", "tenant_id"],
+      "properties": {
+        "scope_id": { "$ref": "./domain.schema.json#/$defs/mappingScopeId" },
+        "tenant_id": { "$ref": "./domain.schema.json#/$defs/tenantId" },
+        "legal_entity_id": { "$ref": "./domain.schema.json#/$defs/legalEntityId" },
+        "organisation_id": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "maxLength": 128
+        },
+        "business_unit_id": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "maxLength": 128
+        },
+        "operating_region_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "geographic_region_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "market_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "country": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO 3166-1 alpha-2 country code."
+        },
+        "estate_id": { "$ref": "./domain.schema.json#/$defs/estateId" },
+        "digital_property_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "channel_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "currency": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO 4217 currency code."
+        },
+        "locale": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z]{2}(?:-[A-Z]{2})?$",
+          "description": "BCP 47 language-country identifier."
+        },
+        "catalogue_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "customer_segment_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "engine_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "engine_instance_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "environment": { "$ref": "./domain.schema.json#/$defs/environment" },
+        "deployment_region": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Geographic deployment region (e.g., us-east-1, eu-west-1)."
+        },
+        "include_countries": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "pattern": "^[A-Z]{2}$" },
+          "maxItems": 250,
+          "description": "Explicit country inclusions for scope matching."
+        },
+        "exclude_countries": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "pattern": "^[A-Z]{2}$" },
+          "maxItems": 250,
+          "description": "Explicit country exclusions for scope matching."
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "description": "Scope dimensions defining the applicability constraints for a mapping. A more constrained scope outranks a broader compatible scope during resolution."
+    },
+    "externalReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["external_reference_id", "system_namespace", "engine_id", "native_entity_type", "native_id"],
+      "properties": {
+        "external_reference_id": { "$ref": "./domain.schema.json#/$defs/externalReferenceId" },
+        "system_namespace": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Logical namespace for native IDs (e.g., 'medusa', 'payload', 'idempiere')."
+        },
+        "engine_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Engine type identifier."
+        },
+        "engine_instance_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Specific engine instance (for multi-instance engines)."
+        },
+        "environment": { "$ref": "./domain.schema.json#/$defs/environment" },
+        "native_entity_type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Type/class of entity in the native system (e.g., 'product', 'order', 'customer')."
+        },
+        "native_id": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "The identifier as known in the external system."
+        },
+        "native_key": {
+          "type": ["string", "null"],
+          "maxLength": 256,
+          "description": "Optional natural key or slug from the external system."
+        },
+        "native_uri": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "maxLength": 2048,
+          "description": "URL or URI to access the native resource."
+        },
+        "source_authority": {
+          "type": "string",
+          "enum": ["engine", "external-sync", "manual-import", "reconciliation"],
+          "description": "How this reference was discovered or created."
+        },
+        "fingerprint": {
+          "type": ["string", "null"],
+          "maxLength": 128,
+          "description": "Non-sensitive hash of identity-defining attributes for drift detection."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "unverified", "suspect", "orphan", "archived"],
+          "description": "Status of this reference in the external system."
+        },
+        "first_seen_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_verified_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Timestamp of the last successful verification/reconciliation."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "resolutionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_entity_id"],
+      "properties": {
+        "canonical_entity_id": { "$ref": "./domain.schema.json#/$defs/canonicalEntityId" },
+        "target_capability": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)*$",
+          "maxLength": 128,
+          "description": "Capability namespace (e.g., 'commerce.orders', 'erp.accounting')."
+        },
+        "target_system": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Target external system (engine namespace)."
+        },
+        "context": {
+          "$ref": "./context-resolution.schema.json#/$defs/response",
+          "description": "Runtime context determining applicable scope."
+        },
+        "effective_timestamp": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Temporal reference point for validity evaluation. Defaults to current time."
+        }
+      }
+    },
+    "resolutionResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mapping_id", "canonical_entity_id", "status", "effective_timestamp", "resolution_reason"],
+      "properties": {
+        "mapping_id": { "$ref": "./domain.schema.json#/$defs/mappingId" },
+        "canonical_entity_id": { "$ref": "./domain.schema.json#/$defs/canonicalEntityId" },
+        "external_reference_id": { "$ref": "./domain.schema.json#/$defs/externalReferenceId" },
+        "scope_id": { "$ref": "./domain.schema.json#/$defs/mappingScopeId" },
+        "status": { "$ref": "./domain.schema.json#/$defs/mappingStatus" },
+        "resolution_reason": {
+          "type": "string",
+          "enum": ["active_binding", "scope_matched", "temporal_valid", "priority_applied", "default_mapping", "fallback_applied"],
+          "description": "Why this mapping was selected during resolution."
+        },
+        "effective_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp used for validity evaluation."
+        },
+        "mapping_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Revision of the mapping that was resolved."
+        },
+        "resolved_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "cached": {
+          "type": "boolean",
+          "description": "Whether this response was served from cache."
+        }
+      }
+    }
+  }
+}

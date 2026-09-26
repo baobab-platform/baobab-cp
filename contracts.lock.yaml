@@ -30,6 +30,7 @@ contracts:
   - contracts/control-plane/v1/tenant-provisioning-milestone.schema.json
   - contracts/control-plane/v1/market-participation-created.schema.json
   - contracts/control-plane/v1/market-participation-updated.schema.json
+  - contracts/control-plane/v1/market.schema.json
   - contracts/organisation/v1/iam.schema.json
   - contracts/organisation/v1/admission.schema.json
   - contracts/organisation/v1/counterparty.schema.json
