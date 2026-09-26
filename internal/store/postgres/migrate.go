@@ -92,6 +92,7 @@ var canonicalMigrationNames = []string{
 	"000055_adr_bcp_018_corporate_group_derivation.sql",
 	"000056_adr_bcp_017_registration_requires_onboarding.sql",
 	"000057_canonical_entity_descriptive_fields.sql",
+	"000058_adr_shared_012_topology_identifiers.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

@@ -85,16 +85,24 @@ func TestGroupDerivationWorker(t *testing.T) {
 	derivedAt := e.at.Add(time.Hour)
 	deriver := &CorporateGroupDeriver{Orgs: e.repo, Now: func() time.Time { return derivedAt }}
 	worker := &GroupDerivationWorker{Deriver: deriver, Queue: e.repo, Batch: 1000}
-	// drain runs passes until this group's derivation is no longer due.
+	// drain runs passes until a derivation of this group has succeeded since
+	// it was called. A pass can miss the group: the claim skips rows another
+	// transaction holds (FOR UPDATE SKIP LOCKED), and every corporate
+	// relationship change in any test package sharing this database requests
+	// every group's derivation, locking their rows until it commits. A group
+	// still RETRYING after such a pass has not been derived, so "settled"
+	// cannot mean merely "not PENDING".
 	drain := func() {
 		t.Helper()
-		for i := 0; i < 20; i++ {
+		since := time.Now()
+		for i := 0; i < 100; i++ {
 			if _, err := worker.RunOnce(e.ctx); err != nil {
 				t.Fatal(err)
 			}
-			if s := state(); s.State != repository.GroupDerivationPending {
+			if s := state(); s.State != repository.GroupDerivationRetrying && s.LastSucceededAt != nil && !s.LastSucceededAt.Before(since) {
 				return
 			}
+			time.Sleep(10 * time.Millisecond)
 		}
 		t.Fatal("derivation never ran")
 	}

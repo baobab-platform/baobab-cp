@@ -18,7 +18,40 @@ var (
 	mappingIDPattern           = regexp.MustCompile(`^map_[a-z0-9]+$`)
 	externalReferenceIDPattern = regexp.MustCompile(`^ref_[a-z0-9]+$`)
 	mappingScopeIDPattern      = regexp.MustCompile(`^scope_[a-z0-9]+$`)
+	engineIDPattern            = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
+	engineInstanceIDPattern    = regexp.MustCompile(`^ei_[a-z0-9]+$`)
 )
+
+// ValidEngineID reports whether v satisfies $defs.engineId: a registered
+// engine named as its repository, e.g. "baobab-trade" (ADR-SHARED-012).
+func ValidEngineID(v string) bool {
+	return len(v) >= 3 && len(v) <= 63 && engineIDPattern.MatchString(v)
+}
+
+// ValidEngineInstanceID reports whether v satisfies $defs.engineInstanceId,
+// the canonical "ei_" engine instance identifier (ADR-SHARED-012).
+func ValidEngineInstanceID(v string) bool {
+	return len(v) >= 6 && len(v) <= 63 && engineInstanceIDPattern.MatchString(v)
+}
+
+// EngineInstanceKey is the canonical identifier of the engine instance whose
+// internal surrogate is id: "ei_" and id's lowercase letters and digits.
+// topology.engine_instance.engine_instance_key (migration 000058) derives
+// the same value from the UUID, so the surrogate never reaches the wire. An
+// id already in canonical form is returned unchanged.
+func EngineInstanceKey(id string) string {
+	if ValidEngineInstanceID(id) {
+		return id
+	}
+	var b strings.Builder
+	b.WriteString("ei_")
+	for _, r := range strings.ToLower(id) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
 // ValidTenantID reports whether v satisfies the Control Plane-minted tenant
 // identifier grammar ($defs.tenantId): "tn_" followed by an opaque lowercase
