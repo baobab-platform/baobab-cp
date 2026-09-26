@@ -5,7 +5,7 @@ INFRASTRUCTURE_DIR ?= ../infrastructure
 INFRA_COMPOSE := $(INFRASTRUCTURE_DIR)/compose/compose.yaml
 INFRA_ENV := $(INFRASTRUCTURE_DIR)/compose/.env
 
-.PHONY: build test test-integration lint run sync-shared-contracts migrate migrate-up dev-up dev-down dev-logs dev-up-infra dev-down-infra dev-logs-infra dev-env-infra
+.PHONY: build test test-integration lint run sync-shared-contracts frontend-install frontend-dev frontend-build frontend-test frontend-lint frontend-typecheck frontend-image migrate migrate-up dev-up dev-down dev-logs dev-up-infra dev-down-infra dev-logs-infra dev-env-infra
 build:
 	go build ./cmd/controlplane
 test:
@@ -54,3 +54,18 @@ dev-env-infra:
 	@set -a; . $(INFRA_ENV); set +a; \
 	echo "DATABASE_URL=postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@localhost:$${POSTGRES_PORT:-5432}/$${POSTGRES_DB}?sslmode=disable"; \
 	echo "RABBITMQ_URL=amqp://$${RABBITMQ_DEFAULT_USER}:$${RABBITMQ_DEFAULT_PASS}@localhost:$${RABBITMQ_AMQP_PORT:-5672}/$${RABBITMQ_DEFAULT_VHOST:-nabhold}"
+# CP Console (frontend/, ADR-BCP-019 section 88). Requires Node 24 with corepack.
+frontend-install:
+	cd frontend && corepack enable && pnpm install --frozen-lockfile
+frontend-dev:
+	cd frontend && pnpm dev
+frontend-build:
+	cd frontend && pnpm build
+frontend-test:
+	cd frontend && pnpm test
+frontend-lint:
+	cd frontend && pnpm lint
+frontend-typecheck:
+	cd frontend && pnpm typecheck
+frontend-image:
+	docker build --tag baobab-cp-console:dev frontend
