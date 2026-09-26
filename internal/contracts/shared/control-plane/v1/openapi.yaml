@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.6.0
+  version: 1.7.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -554,7 +554,18 @@ paths:
     post:
       tags: [Mappings]
       operationId: resolveMapping
-      summary: Resolve a canonical entity to its external representation(s) in a given context and capability
+      summary: Resolve a canonical entity to its mapped representation in a trusted context
+      description: >-
+        Redeems a context the Control Plane resolved and stored earlier; the
+        caller never supplies scope dimensions inline (Canonical Mapping Model
+        section 17.3, ADR-SHARED-014). Follows the context tenant's ACTIVE
+        CANONICAL_TO_EXTERNAL, BIDIRECTIONAL or SOURCE_TO_TARGET Mappings in
+        effect whose scope the context matches, ranked by scope specificity,
+        then resolution priority, then confidence (section 23). An unknown or
+        expired context is CONTEXT_NOT_FOUND (404) and another tenant's
+        context is TENANT_CONTEXT_MISMATCH (403). No match is
+        MAPPING_NOT_FOUND (404); equally authoritative matches are
+        MAPPING_AMBIGUOUS (409) and resolve to nothing.
       security:
         - workloadOidc: [mapping:resolve]
       parameters:
@@ -570,12 +581,7 @@ paths:
               $ref: ./canonical-mapping.schema.json#/$defs/resolutionRequest
       responses:
         "200":
-          description: Mapping resolved (may be cached)
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                example: "private, max-age=60"
+          description: The mapping that resolved and what it resolves to
           content:
             application/json:
               schema:
@@ -587,17 +593,11 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          description: No applicable mapping found in active state for this context
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/NotFound"
         "409":
-          description: Ambiguous equally-specific authoritative mappings detected
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /markets:
     post:
       operationId: createMarket

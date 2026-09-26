@@ -17,6 +17,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/resolver"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -25,6 +26,8 @@ import (
 // definitions, kept apart from the domain types.
 type mappingHandler struct {
 	repo repository.MappingAdminRepository
+	// contexts redeems the stored contexts resolveMapping resolves in.
+	contexts repository.ContextRepository
 }
 
 // --- wire types -----------------------------------------------------------
@@ -651,6 +654,111 @@ func (h mappingHandler) resolveExternalReference(w http.ResponseWriter, r *http.
 		CanonicalEntityID: resolved.Mapping.CanonicalEntityID, ScopeID: resolved.Mapping.ScopeID,
 		Status: resolved.Mapping.Status, ResolutionReason: resolved.Reason, EffectiveTimestamp: resolved.At,
 		MappingVersion: resolved.Mapping.Revision, ResolvedAt: resolved.ResolvedAt})
+}
+
+// mappingResolutionRequest is resolutionRequest (ADR-SHARED-014). It names a
+// stored context, never the context itself.
+type mappingResolutionRequest struct {
+	ContextID             string     `json:"context_id"`
+	CanonicalEntityID     string     `json:"canonical_entity_id"`
+	TargetSystemNamespace *string    `json:"target_system_namespace"`
+	TargetEngineID        *string    `json:"target_engine_id"`
+	EffectiveTimestamp    *time.Time `json:"effective_timestamp"`
+}
+
+type mappingResolutionResponse struct {
+	ContextID               string    `json:"context_id"`
+	TenantID                string    `json:"tenant_id"`
+	MappingID               string    `json:"mapping_id"`
+	CanonicalEntityID       string    `json:"canonical_entity_id"`
+	ExternalReferenceID     string    `json:"external_reference_id,omitempty"`
+	TargetCanonicalEntityID string    `json:"target_canonical_entity_id,omitempty"`
+	ScopeID                 string    `json:"scope_id,omitempty"`
+	Status                  string    `json:"status"`
+	ResolutionReason        string    `json:"resolution_reason"`
+	EffectiveTimestamp      time.Time `json:"effective_timestamp"`
+	MappingVersion          int64     `json:"mapping_version"`
+	ResolvedAt              time.Time `json:"resolved_at"`
+}
+
+// resolveMapping resolves a canonical entity in a context the Control Plane
+// resolved and stored earlier (ADR-SHARED-014, Canonical Mapping Model section
+// 17.3): the tenant and every scope dimension come from that context, and a
+// workload can only redeem a context of its own tenant.
+func (h mappingHandler) resolveMapping(w http.ResponseWriter, r *http.Request) {
+	var req mappingResolutionRequest
+	if !decodeStrict(w, r, &req) {
+		return
+	}
+	switch {
+	case strings.TrimSpace(req.ContextID) == "":
+		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "context_id is required", false)
+		return
+	case !domain.IsUUID(req.CanonicalEntityID):
+		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "canonical_entity_id is not a canonical entity identifier", false)
+		return
+	case req.TargetSystemNamespace != nil && !domain.ValidSystemNamespace(*req.TargetSystemNamespace):
+		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "target_system_namespace must be a lower-case snake_case namespace", false)
+		return
+	case req.TargetEngineID != nil && !domain.ValidEngineID(*req.TargetEngineID):
+		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "target_engine_id must be an engine id such as baobab-trade", false)
+		return
+	}
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		problem(w, r, http.StatusUnauthorized, "AUTH_TOKEN_REQUIRED", "verified workload identity is required", false)
+		return
+	}
+	if h.contexts == nil {
+		problem(w, r, http.StatusServiceUnavailable, "CONTEXT_STORE_UNAVAILABLE", "context persistence is temporarily unavailable", true)
+		return
+	}
+	// The Control Plane mints context identifiers as UUIDs; anything else
+	// names no stored context.
+	if !domain.IsUUID(req.ContextID) {
+		problem(w, r, http.StatusNotFound, "CONTEXT_NOT_FOUND", "the referenced context_id does not exist or has expired", false)
+		return
+	}
+	trusted, err := h.contexts.GetContext(r.Context(), req.ContextID)
+	if errors.Is(err, repository.ErrContextNotFound) {
+		problem(w, r, http.StatusNotFound, "CONTEXT_NOT_FOUND", "the referenced context_id does not exist or has expired", false)
+		return
+	}
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "context lookup failed", true)
+		return
+	}
+	if _, ok := resolveWorkloadTenant(principal.TenantID, trusted.TenantID); !ok {
+		problem(w, r, http.StatusForbidden, "TENANT_CONTEXT_MISMATCH", "the referenced context does not belong to the authenticated tenant", false)
+		return
+	}
+	at := time.Now().UTC()
+	if req.EffectiveTimestamp != nil {
+		at = req.EffectiveTimestamp.UTC()
+	}
+	candidates, scopes, err := h.repo.MappingCandidates(r.Context(), trusted.TenantID, req.CanonicalEntityID,
+		repository.MappingTarget{SystemNamespace: optional(req.TargetSystemNamespace), EngineID: optional(req.TargetEngineID)}, at)
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "mapping resolution failed", true)
+		return
+	}
+	resolved, err := resolver.ResolveMappingInContext(trusted, candidates, scopes)
+	switch {
+	case errors.Is(err, resolver.ErrMappingNotFound):
+		problem(w, r, http.StatusNotFound, "MAPPING_NOT_FOUND", "no active mapping applies to this canonical entity in this context", false)
+		return
+	case errors.Is(err, resolver.ErrMappingAmbiguous):
+		problem(w, r, http.StatusConflict, "MAPPING_AMBIGUOUS", "equally authoritative mappings apply to this canonical entity in this context", false)
+		return
+	case err != nil:
+		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "mapping resolution failed", true)
+		return
+	}
+	m := resolved.Mapping
+	writeJSON(w, http.StatusOK, mappingResolutionResponse{ContextID: trusted.ID, TenantID: trusted.TenantID,
+		MappingID: m.ID, CanonicalEntityID: m.CanonicalEntityID, ExternalReferenceID: m.ExternalReferenceID,
+		TargetCanonicalEntityID: m.TargetCanonicalEntityID, ScopeID: m.ScopeID, Status: m.Status,
+		ResolutionReason: resolved.Reason, EffectiveTimestamp: at, MappingVersion: m.Revision, ResolvedAt: time.Now().UTC()})
 }
 
 // mappingProblem translates repository errors into ADR-BCP-022 problems.

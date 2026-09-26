@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/contracttest"
@@ -41,6 +42,7 @@ type mappingFixture struct {
 	foreign  string
 	instance string
 	schemas  map[string]*jsonschema.Schema
+	contexts repository.ContextStore
 }
 
 func newMappingFixture(t *testing.T) *mappingFixture {
@@ -108,9 +110,10 @@ func newMappingFixture(t *testing.T) *mappingFixture {
 		"workload":       {Subject: "trade", ActorType: "workload", TenantID: f.tenant, ClientID: "baobab-trade", TokenID: "w1", Scopes: map[string]struct{}{"mapping:read": {}, "mapping:resolve": {}}},
 		"other-workload": {Subject: "trade", ActorType: "workload", TenantID: "tn_elsewhere", ClientID: "baobab-trade", TokenID: "w2", Scopes: map[string]struct{}{"mapping:read": {}, "mapping:resolve": {}}},
 	}
-	f.handler = New(Dependencies{Store: &fakeStore{}, AdminVerifier: admins, WorkloadVerifier: workloads, Mappings: repo})
+	f.contexts = repo
+	f.handler = New(Dependencies{Store: &fakeStore{}, AdminVerifier: admins, WorkloadVerifier: workloads, Mappings: repo, Contexts: repo})
 	if dir := os.Getenv("SHARED_CONTRACTS_DIR"); dir != "" {
-		for _, def := range []string{"externalReference", "externalReferenceList", "mapping", "externalReferenceResolutionResponse"} {
+		for _, def := range []string{"externalReference", "externalReferenceList", "mapping", "externalReferenceResolutionResponse", "resolutionResponse"} {
 			f.schemas[def] = contracttest.CompileSchema(t, dir, "control-plane/v1/canonical-mapping.schema.json#/$defs/"+def)
 		}
 	}
@@ -400,4 +403,87 @@ func TestMappingAdministrationReviewFixes(t *testing.T) {
 		t.Fatalf("historical resolution of a retired mapping: %v", historical)
 	}
 	f.refused(f.do("workload", http.MethodPost, "/v1/resolution/external-references", "", resolution+`}`), http.StatusNotFound, "MAPPING_NOT_FOUND")
+}
+
+// storeContext stores a context the Control Plane resolved, as
+// PlatformContextHandler does, and returns its identifier.
+func (f *mappingFixture) storeContext(tenant, legalEntity string) string {
+	f.t.Helper()
+	id := domain.NewUUIDv7()
+	if err := f.contexts.CreateContext(f.ctx, domain.Context{ID: id, PrincipalID: "trade", TenantID: tenant, LegalEntityID: legalEntity,
+		CorrelationID: domain.NewUUIDv7(), ResolvedAt: time.Now().UTC()}); err != nil {
+		f.t.Fatal(err)
+	}
+	return id
+}
+
+// TestMappingResolutionRedeemsATrustedContext drives resolveMapping
+// (ADR-SHARED-014): the caller names a stored context and never supplies its
+// tenant or scope; a workload redeems only its own tenant's contexts; a
+// scoped mapping applies only where the context matches its scope and then
+// outranks an unscoped one; a target narrows candidates to one system; and
+// equally ranked mappings to different targets resolve to nothing.
+func TestMappingResolutionRedeemsATrustedContext(t *testing.T) {
+	f := newMappingFixture(t)
+	native := "prod_" + f.tenant[3:15]
+	reference := `{"system_namespace":"medusa","engine_id":"baobab-trade","engine_instance_id":"` + f.instance +
+		`","environment":"production","native_entity_type":"product","native_id":"` + native + `"}`
+	refID := f.ok(f.do("creator", http.MethodPost, "/v1/external-references", "", reference), http.StatusCreated, "externalReference")["external_reference_id"].(string)
+	external := f.activate(f.proposal(f.entity, refID))
+
+	var scope string
+	if err := f.admin.QueryRow(f.ctx, `INSERT INTO mapping.mapping_scope (tenant_id, legal_entity_id, scope_type) VALUES ($1, 'THAMANI-KE', 'legal_entity')
+		RETURNING mapping_scope_key`, f.tenant).Scan(&scope); err != nil {
+		t.Fatal(err)
+	}
+	successor := `{"tenant_id":"` + f.tenant + `","mapping_type":"SUCCESSOR","canonical_entity_id":"` + f.entity +
+		`","target_canonical_entity_id":"` + f.sibling + `","scope_id":"` + scope + `","direction":"SOURCE_TO_TARGET",` +
+		`"cardinality":"ONE_TO_ONE","authority":"control-plane","effective_from":"2026-01-01T00:00:00Z"}`
+	scoped := f.activate(successor)
+
+	kenya, uganda := f.storeContext(f.tenant, "THAMANI-KE"), f.storeContext(f.tenant, "THAMANI-UG")
+	request := func(contextID, extra string) string {
+		return `{"context_id":"` + contextID + `","canonical_entity_id":"` + f.entity + `"` + extra + `}`
+	}
+	const path = "/v1/resolution/mappings"
+
+	// The context is redeemed, never supplied.
+	f.refused(f.do("workload", http.MethodPost, path, "", `{"canonical_entity_id":"`+f.entity+`"}`), http.StatusBadRequest, "VALIDATION_FAILED")
+	f.refused(f.do("workload", http.MethodPost, path, "", request(kenya, `,"tenant_id":"`+f.tenant+`"`)), http.StatusBadRequest, "INVALID_REQUEST")
+	f.refused(f.do("workload", http.MethodPost, path, "", request(kenya, `,"context":{"tenant_id":"`+f.tenant+`"}`)), http.StatusBadRequest, "INVALID_REQUEST")
+	f.refused(f.do("workload", http.MethodPost, path, "", request(kenya, `,"target_engine_id":"baobab_trade"`)), http.StatusBadRequest, "VALIDATION_FAILED")
+	f.refused(f.do("workload", http.MethodPost, path, "", request("ctx_unknown", "")), http.StatusNotFound, "CONTEXT_NOT_FOUND")
+	f.refused(f.do("workload", http.MethodPost, path, "", request(domain.NewUUIDv7(), "")), http.StatusNotFound, "CONTEXT_NOT_FOUND")
+	f.refused(f.do("other-workload", http.MethodPost, path, "", request(kenya, "")), http.StatusForbidden, "TENANT_CONTEXT_MISMATCH")
+	if got := f.do("creator", http.MethodPost, path, "", request(kenya, "")); got.Code != http.StatusUnauthorized && got.Code != http.StatusForbidden {
+		t.Fatalf("mapping resolution is for workloads: %d %s", got.Code, got.Body.String())
+	}
+
+	// In Kenya the scoped successor outranks the unscoped external mapping.
+	got := f.ok(f.do("workload", http.MethodPost, path, "", request(kenya, "")), http.StatusOK, "resolutionResponse")
+	if got["mapping_id"] != scoped || got["target_canonical_entity_id"] != f.sibling || got["resolution_reason"] != "scope_matched" ||
+		got["tenant_id"] != f.tenant || got["context_id"] != kenya || got["external_reference_id"] != nil {
+		t.Fatalf("Kenya resolution: %v", got)
+	}
+	// In Uganda the scope does not match, so the unscoped mapping applies.
+	got = f.ok(f.do("workload", http.MethodPost, path, "", request(uganda, "")), http.StatusOK, "resolutionResponse")
+	if got["mapping_id"] != external || got["external_reference_id"] != refID || got["resolution_reason"] != "default_mapping" {
+		t.Fatalf("Uganda resolution: %v", got)
+	}
+	// A target narrows candidates to mappings of that system.
+	got = f.ok(f.do("workload", http.MethodPost, path, "", request(kenya, `,"target_system_namespace":"medusa","target_engine_id":"baobab-trade"`)),
+		http.StatusOK, "resolutionResponse")
+	if got["mapping_id"] != external {
+		t.Fatalf("targeted resolution: %v", got)
+	}
+	f.refused(f.do("workload", http.MethodPost, path, "", request(kenya, `,"target_engine_id":"baobab-erp"`)), http.StatusNotFound, "MAPPING_NOT_FOUND")
+	// Before the mappings took effect nothing resolves.
+	f.refused(f.do("workload", http.MethodPost, path, "", request(kenya, `,"effective_timestamp":"2025-06-01T00:00:00Z"`)), http.StatusNotFound, "MAPPING_NOT_FOUND")
+
+	// An equally ranked unscoped mapping to another target is ambiguous.
+	second := `{"system_namespace":"medusa","engine_id":"baobab-trade","engine_instance_id":"` + f.instance +
+		`","environment":"production","native_entity_type":"product","native_id":"` + native + `_2"}`
+	secondID := f.ok(f.do("creator", http.MethodPost, "/v1/external-references", "", second), http.StatusCreated, "externalReference")["external_reference_id"].(string)
+	f.activate(f.proposal(f.entity, secondID))
+	f.refused(f.do("workload", http.MethodPost, path, "", request(uganda, "")), http.StatusConflict, "MAPPING_AMBIGUOUS")
 }

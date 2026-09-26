@@ -8,7 +8,6 @@ export const UNIMPLEMENTED_OPERATIONS = [
   "PATCH /markets/{market_id}",
   "POST /markets",
   "POST /markets/{market_id}/activate",
-  "POST /resolution/mappings",
 ] as const;
 
 export type UnimplementedOperation = (typeof UNIMPLEMENTED_OPERATIONS)[number];
