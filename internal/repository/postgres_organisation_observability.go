@@ -340,10 +340,10 @@ func (r *PostgresRepository) SuspendOrganisationEntity(ctx context.Context, id s
 			return fmt.Errorf("%w: %s is %s", ErrNotAnOrganisation, id, kind)
 		}
 		if version != expectedVersion {
-			return fmt.Errorf("canonical entity %s version conflict or not found", id)
+			return fmt.Errorf("%w: %s is not at version %d", ErrCanonicalEntityVersionConflict, id, expectedVersion)
 		}
 		if status != "ACTIVE" {
-			return fmt.Errorf("canonical entity %s cannot transition from %s to SUSPENDED", id, status)
+			return fmt.Errorf("%w: canonical entity %s cannot transition from %s to SUSPENDED", ErrCanonicalEntityLifecycleConflict, id, status)
 		}
 		if _, err := tx.Exec(ctx, `UPDATE registry.canonical_entity SET status='suspended', version=version+1, updated_at=now()
 			WHERE canonical_entity_id = $1::uuid`, id); err != nil {

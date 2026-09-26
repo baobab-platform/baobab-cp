@@ -108,19 +108,12 @@ func described(t *testing.T) map[string]bool {
 // control-plane/v1 OpenAPI (CP Console FE-00 gap B2). The list may only
 // shrink: describe a route in Shared and remove it here.
 var undescribed = []string{
-	"GET /v1/canonical-entities/{}",
 	"GET /v1/external-references",
 	"GET /v1/tenants/{}/provisioning",
 	"GET /v1/tenants/{}/provisioning/{}",
 	"GET /v1/tenants/{}/provisioning/{}/drift",
 	"GET /v1/tenants/{}/provisioning/{}/readiness",
-	"POST /v1/canonical-entities",
-	"POST /v1/canonical-entities/{}/activate",
 	"POST /v1/canonical-entities/{}/external-references",
-	"POST /v1/canonical-entities/{}/retire",
-	"POST /v1/canonical-entities/{}/suspend",
-	"POST /v1/canonical-entities/{}/validate",
-	"POST /v1/capabilities/explain",
 	"POST /v1/capabilities/resolve",
 	"POST /v1/capabilities/resolve-batch",
 	"POST /v1/platform-context/resolve",

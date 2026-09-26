@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
@@ -71,6 +72,8 @@ func (r *CanonicalRepository) CreateCanonicalEntity(_ context.Context, entity do
 		return fmt.Errorf("canonical entity %s already exists", entity.ID)
 	}
 	entity.Version = 1
+	entity.CreatedAt = time.Now().UTC()
+	entity.UpdatedAt = entity.CreatedAt
 	r.Entities[entity.ID] = entity
 	return nil
 }
@@ -83,7 +86,7 @@ func (r *CanonicalRepository) GetCanonicalEntity(_ context.Context, id string) (
 	defer r.mu.RUnlock()
 	entity, exists := r.Entities[id]
 	if !exists {
-		return domain.CanonicalEntity{}, fmt.Errorf("canonical entity %s not found", id)
+		return domain.CanonicalEntity{}, fmt.Errorf("%w: %s", ErrCanonicalEntityNotFound, id)
 	}
 	return entity, nil
 }
@@ -99,12 +102,14 @@ func (r *CanonicalRepository) SaveCanonicalEntity(_ context.Context, entity doma
 	defer r.mu.Unlock()
 	current, exists := r.Entities[entity.ID]
 	if !exists {
-		return fmt.Errorf("canonical entity %s not found", entity.ID)
+		return fmt.Errorf("%w: %s", ErrCanonicalEntityNotFound, entity.ID)
 	}
 	if current.Version != expectedVersion {
-		return fmt.Errorf("canonical entity %s version conflict: expected %d, got %d", entity.ID, expectedVersion, current.Version)
+		return fmt.Errorf("%w: %s is at version %d, not %d", ErrCanonicalEntityVersionConflict, entity.ID, current.Version, expectedVersion)
 	}
 	entity.Version = current.Version + 1
+	entity.CreatedAt = current.CreatedAt
+	entity.UpdatedAt = time.Now().UTC()
 	r.Entities[entity.ID] = entity
 	return nil
 }

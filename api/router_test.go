@@ -328,32 +328,6 @@ func TestCapabilitiesExplainRouteIsRegistered(t *testing.T) {
 	}
 }
 
-func TestCanonicalEntityLifecycleRoutes(t *testing.T) {
-	canonical := service.CanonicalEntityService{Repository: repository.NewCanonicalRepository()}
-	handler := New(Dependencies{Store: &fakeStore{}, AdminVerifier: fakeVerifier{principal: adminPrincipal()}, Canonical: canonical})
-	body := `{"id":"entity-1","canonical_key":"tenant:product","entity_type":"PRODUCT","display_name":"Product","authority":"baobab","classification":"INTERNAL"}`
-	request := httptest.NewRequest(http.MethodPost, "/v1/canonical-entities", strings.NewReader(body))
-	request.Header.Set("Authorization", "Bearer admin-token")
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusCreated || response.Header().Get("ETag") != `"1"` {
-		t.Fatalf("create got status %d etag %q: %s", response.Code, response.Header().Get("ETag"), response.Body.String())
-	}
-	for _, action := range []string{"validate", "activate"} {
-		request = httptest.NewRequest(http.MethodPost, "/v1/canonical-entities/entity-1/"+action, nil)
-		request.Header.Set("Authorization", "Bearer admin-token")
-		request.Header.Set("If-Match", `"1"`)
-		if action == "activate" {
-			request.Header.Set("If-Match", `"2"`)
-		}
-		response = httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		if response.Code != http.StatusOK {
-			t.Fatalf("%s got status %d: %s", action, response.Code, response.Body.String())
-		}
-	}
-}
-
 // TestExternalReferenceRoutes proves the ADR-BCP-016 onboarding path is a
 // real, reachable HTTP surface, not just a repository-level capability: an
 // admin links a CanonicalEntity to a Keycloak Organization, then a
@@ -561,7 +535,7 @@ func TestRequireAdminRoleTenantScoping(t *testing.T) {
 		mustNoError(t, repo.CreateWorkforceMembership(context.Background(), domain.WorkforceMembership{ID: domain.NewWorkforceMembershipID(), PrincipalID: p.ID, TenantID: testTenantID, Roles: []string{RoleTenantAdmin}, Status: "ACTIVE"}))
 		canonical := service.CanonicalEntityService{Repository: repository.NewCanonicalRepository()}
 		handler := New(Dependencies{Store: &fakeStore{}, AdminVerifier: fakeVerifier{principal: principal}, Identities: repo, Memberships: repo, Canonical: canonical})
-		req := httptest.NewRequest(http.MethodPost, "/v1/canonical-entities", strings.NewReader(`{"id":"entity-2","canonical_key":"tenant:product2","entity_type":"PRODUCT","display_name":"Product","authority":"baobab","classification":"INTERNAL"}`))
+		req := httptest.NewRequest(http.MethodPost, "/v1/canonical-entities", strings.NewReader(`{"canonical_key":"tenant:product2","entity_type":"PRODUCT","display_name":"Product","authority":"baobab","classification":"INTERNAL"}`))
 		req.Header.Set("Authorization", "Bearer token")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, req)

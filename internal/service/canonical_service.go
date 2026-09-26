@@ -99,8 +99,11 @@ func (s CanonicalEntityService) Retire(ctx context.Context, id string, expectedV
 	if err != nil {
 		return domain.CanonicalEntity{}, err
 	}
+	if entity.Version != expectedVersion {
+		return domain.CanonicalEntity{}, fmt.Errorf("%w: %s is at version %d, not %d", repository.ErrCanonicalEntityVersionConflict, id, entity.Version, expectedVersion)
+	}
 	if entity.Status != "ACTIVE" && entity.Status != "SUSPENDED" && entity.Status != "DEPRECATED" {
-		return domain.CanonicalEntity{}, fmt.Errorf("canonical entity %s cannot transition from %s to RETIRED", id, entity.Status)
+		return domain.CanonicalEntity{}, fmt.Errorf("%w: canonical entity %s cannot transition from %s to RETIRED", repository.ErrCanonicalEntityLifecycleConflict, id, entity.Status)
 	}
 	return s.transition(ctx, id, expectedVersion, "RETIRED", entity.Status)
 }
@@ -110,8 +113,14 @@ func (s CanonicalEntityService) transition(ctx context.Context, id string, expec
 	if err != nil {
 		return domain.CanonicalEntity{}, err
 	}
+	// A stale version is reported before the transition check, so a caller
+	// holding an old copy is told to reload rather than that the change is
+	// prohibited (ADR-BCP-022 sections 128-129).
+	if entity.Version != expectedVersion {
+		return domain.CanonicalEntity{}, fmt.Errorf("%w: %s is at version %d, not %d", repository.ErrCanonicalEntityVersionConflict, id, entity.Version, expectedVersion)
+	}
 	if entity.Status != required {
-		return domain.CanonicalEntity{}, fmt.Errorf("canonical entity %s cannot transition from %s to %s", id, entity.Status, next)
+		return domain.CanonicalEntity{}, fmt.Errorf("%w: canonical entity %s cannot transition from %s to %s", repository.ErrCanonicalEntityLifecycleConflict, id, entity.Status, next)
 	}
 	entity.Status = next
 	if err := s.Repository.SaveCanonicalEntity(ctx, entity, expectedVersion); err != nil {

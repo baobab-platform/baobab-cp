@@ -120,8 +120,9 @@ What this means for the Console:
 At this audit, the Shared `control-plane/v1` OpenAPI described only `POST /tenants` and `POST
 /tenants/bootstrap-registrations`: **2 of the Control Plane's 68 human routes**. Phase 1 (Shared #103) adds the 21
 applications, admission and onboarding operations, and phase 2 (Shared #104) the 9 tenant and classification
-operations, and phase 3a (Shared #105) the 19 organisation, counterparty, platform account, IAM link, drift and
-audit operations, so 51 are now described. `api.TestOpenAPIDescribesTheRouter` keeps
+operations, phase 3a (Shared #105) the 19 organisation, counterparty, platform account, IAM link, drift and
+audit operations, and phase 3b (Shared #106) the 6 canonical registry operations and the capability explanation, so
+58 are now described. `api.TestOpenAPIDescribesTheRouter` keeps
 the count honest: it fails when a served route is neither described nor listed as undescribed.
 
 | Family | Shared schemas | Shared OpenAPI paths | CP implements | Generated client possible |
@@ -131,7 +132,8 @@ the count honest: it fails when a served route is neither described nor listed a
 | Tenant registration | `control-plane/v1` tenant-registration and bootstrap schemas | `POST /tenants`, `POST /tenants/bootstrap-registrations` | yes | Yes |
 | Tenant read and lifecycle | `control-plane/v1` `tenant.schema.json` | Tenants tag (5 operations) | yes | Yes |
 | Organisation links, reconciliation, counterparties, platform accounts, drift, audit | `organisation/v1` | Organisations, Counterparties, Platform accounts, Diagnostics and Audit tags (19 operations) | yes | Yes |
-| Canonical entities, external references, capabilities | `organisation/v1`, `capability/v1` | none | yes | No (B2) |
+| Canonical registry, capability explanation | `control-plane/v1` `canonical-entity.schema.json`, `capability-explanation.schema.json` | Canonical registry tag (6 operations), `explainCapability` | yes | Yes |
+| External references | `control-plane/v1` `canonical-mapping.schema.json` `externalReference` | none | legacy shape only (G9) | No (G9) |
 | Corporate structure | `organisation/v1` | none | service level only (G3) | No |
 | Subscription classification | `product/v1` (records, explanations, commands) | Classification tag (4 operations) | yes | Yes |
 | Markets, mappings | `control-plane/v1` | `/markets…`, `/mappings…`, `/resolution/mappings` | **no** | Generating would describe routes that do not exist (G2) |
@@ -142,7 +144,7 @@ the count honest: it fails when a served route is neither described nor listed a
 | ID | Gap | ADR | What is needed | Owner |
 |---|---|---|---|---|
 | **B1** | The BFF must be an OIDC **confidential** client (ADR-BCP-019 §10). The only workforce client, `baobab-control-plane-admin`, is public with PKCE, and its redirect URIs are `localhost:3003`, while ADR-BCP-019 §87 puts the Console on `:3000`. | 019 §§10-11 | A confidential Console client with its redirect URIs and back-channel logout, decided by the Keycloak-to-Ory migration ADR | IAM, after the Ory ADR |
-| **B2** | The administrative OpenAPI is partial. Phases 1, 2 and 3a (Shared #103, #104, #105) describe applications, admission, onboarding, tenants, classification, organisations, counterparties, platform accounts, IAM links, drift and audit; 17 of the 68 human routes still have no description (8 of them provisioning), and `api.TestOpenAPIDescribesTheRouter` lists them. | 019 §38, 022 §§17-20 | Shared `control-plane/v1` paths for canonical entity lifecycle, external references, capabilities, provisioning (which first needs a tenant manifest schema) and the integration families, tagged by family (022 §20). The CP drift test is in place. | Shared, then CP |
+| **B2** | The administrative OpenAPI is partial. Phases 1 to 3b (Shared #103 to #106) describe applications, admission, onboarding, tenants, classification, organisations, counterparties, platform accounts, IAM links, drift, audit, the canonical registry and the capability explanation; 10 of the 68 human routes still have no description (8 provisioning, 2 external references), and `api.TestOpenAPIDescribesTheRouter` lists them. | 019 §38, 022 §§17-20 | Shared `control-plane/v1` paths for external references (G9), provisioning (which first needs a tenant manifest schema) and the integration families, tagged by family (022 §20). The CP drift test is in place. | Shared, then CP |
 | G2 | Shared declares `/markets`, `/mappings` and `/resolution/mappings`, and the CP implements none of them. | 022 §18 | Either implement them or mark them as not yet implemented, so the generated client cannot call routes that do not exist | Shared or CP |
 | G3 | Corporate relationships, corporate groups, digital estates and service selection have no HTTP surface. | 018, 019 §§20, 23, 25 | Administrative query and command endpoints | CP |
 | G4 | There are no list or search endpoints for organisations, tenants or platform accounts. | 022 §§30, 53 | Scope-filtered, paginated list read models | CP |
@@ -150,6 +152,8 @@ the count honest: it fails when a served route is neither described nor listed a
 | G6 | There are no AdministrativeGrants, changesets, approvals, durable Operations, `/v1/admin` namespace, cross-resource audit or auditor authority. | 020, 021, 022 | The ADR-BCP-020 to 022 backend programmes | CP |
 | G7 | There is no evidence document store; evidence is carried as references only. | 023, 019 §51 | A document store and an upload flow | CP and infrastructure |
 | G8 (closed by Shared #105) | `canonical:read`, `canonical:write`, `capabilities:explain` and `metrics:read` are used by the CP but not registered in Shared. `tenant:read` is registered with audience `baobab-cp`, while the CP's audience is `baobab-control-plane`. | ADR-0007 | Register the scopes and correct the audience | Shared |
+| G9 | The CP's external references (`POST /v1/canonical-entities/{id}/external-references`, `GET /v1/external-references`) use a local shape (`id`, `native_type`, `external_url`, upper-case status, `metadata`) that conflicts with Shared's `canonical-mapping` `externalReference`, embed the canonical entity in the reference, and serve a reverse lookup under a resource name. | 022 §§17-18, 018 ORG-10 | Phase 3c: conform to Shared's `externalReference`, link through Mapping, a Shared-defined reverse resolution, an additive migration that reports legacy rows instead of guessing `system_namespace`; IAM organisation links stay on `IamOrganisationReference` | Shared, then CP |
+| G10 | The CP's capability registry accepts keys such as `erp.receivables`, wider than Shared's `capability/v1` `<domain>.<resource>.<action>` grammar. The explanation refuses non-canonical keys. | 022 §18, BCP-003 | Align the registry's key grammar with Shared and migrate or report non-conforming keys | CP |
 
 ## 7. BFF threat model
 
