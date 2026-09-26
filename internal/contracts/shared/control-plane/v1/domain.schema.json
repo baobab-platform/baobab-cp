@@ -58,6 +58,20 @@
       "type": "string",
       "enum": ["local", "development", "staging", "production"]
     },
+    "engineId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 63,
+      "description": "A registered engine: the service that owns a capability provider, named as its repository, e.g. baobab-trade. Distinct from capability/v1 engineKey, the technology family (e.g. medusa), which an ExternalReference names as its system_namespace (ADR-SHARED-012)."
+    },
+    "engineInstanceId": {
+      "type": "string",
+      "pattern": "^ei_[a-z0-9]+$",
+      "minLength": 6,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of a concrete engine deployment. The single grammar for engine_instance_id in every contract (ADR-SHARED-012)."
+    },
     "mappingId": {
       "type": "string",
       "pattern": "^map_[a-z0-9]+$",

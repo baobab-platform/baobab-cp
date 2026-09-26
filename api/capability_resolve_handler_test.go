@@ -96,8 +96,11 @@ func TestCapabilityResolveHandlerRedeemsContextAndResolves(t *testing.T) {
 	if !bytes.Contains(w.Body.Bytes(), []byte(`"capability_key":"commerce.order.create"`)) {
 		t.Fatalf("expected response to echo requested capability_key, got %s", w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte(`"engine_instance_id":"instance-1"`)) {
-		t.Fatalf("expected a resolved engine instance, got %s", w.Body.String())
+	// Only the canonical ei_ identifier reaches the wire; the surrogate
+	// never does (ADR-SHARED-012).
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"engine_instance_id":"ei_instance1"`)) ||
+		!bytes.Contains(w.Body.Bytes(), []byte(`"id":"ei_instance1"`)) || bytes.Contains(w.Body.Bytes(), []byte(`"instance-1"`)) {
+		t.Fatalf("expected the canonical engine instance identifier, got %s", w.Body.String())
 	}
 }
 
