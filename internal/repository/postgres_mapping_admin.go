@@ -23,6 +23,8 @@ var (
 	ErrMappingNotFound           = errors.New("mapping not found")
 	ErrMappingSubjectNotFound    = errors.New("mapped entity, reference, scope or predecessor not found")
 	ErrCrossTenantMapping        = errors.New("mapping crosses tenants")
+	ErrMappingIdempotencyReused  = errors.New("idempotency key was used for a different mapping request")
+	ErrMappingSuccessorMismatch  = errors.New("successor does not supersede the retired mapping")
 	ErrMappingRevisionMismatch   = errors.New("mapping revision mismatch")
 	ErrMappingNotDraft           = errors.New("mapping is not DRAFT")
 	ErrMappingLifecycleConflict  = errors.New("mapping lifecycle conflict")
@@ -60,12 +62,19 @@ type ExternalReferenceResolution struct {
 	ResolvedAt          time.Time
 }
 
+// MappingIdempotency identifies a createMapping request for Idempotency-Key
+// replay: the proposer's key and a hash of the request body.
+type MappingIdempotency struct {
+	Key         string
+	RequestHash string
+}
+
 // MappingAdminRepository administers ExternalReferences and Mappings.
 type MappingAdminRepository interface {
 	CreateExternalReference(ctx context.Context, ref domain.ExternalReference, actor AuditActor) (domain.ExternalReference, error)
 	GetExternalReference(ctx context.Context, id string) (domain.ExternalReference, error)
 	FindExternalReference(ctx context.Context, identity domain.NativeIdentity) (*domain.ExternalReference, error)
-	ProposeMapping(ctx context.Context, m domain.Mapping, actor AuditActor) (domain.Mapping, error)
+	ProposeMapping(ctx context.Context, m domain.Mapping, idempotency MappingIdempotency, actor AuditActor) (domain.Mapping, bool, error)
 	ReadMapping(ctx context.Context, id string) (domain.Mapping, error)
 	ChangeMapping(ctx context.Context, id string, expectedRevision int64, change MappingChange, actor AuditActor) (domain.Mapping, error)
 	TransitionMapping(ctx context.Context, id string, expectedRevision int64, transition MappingTransition, actor AuditActor) (domain.Mapping, error)
@@ -295,61 +304,102 @@ func mappingMetadata(metadata map[string]any) (any, error) {
 	return encoded, err
 }
 
-func (r *PostgresRepository) ProposeMapping(ctx context.Context, m domain.Mapping, actor AuditActor) (domain.Mapping, error) {
+func (r *PostgresRepository) ProposeMapping(ctx context.Context, m domain.Mapping, idempotency MappingIdempotency, actor AuditActor) (domain.Mapping, bool, error) {
 	if err := validateActor(actor); err != nil {
-		return domain.Mapping{}, err
+		return domain.Mapping{}, false, err
+	}
+	if idempotency.Key == "" || idempotency.RequestHash == "" {
+		return domain.Mapping{}, false, errors.New("a mapping proposal needs its idempotency key and request hash")
+	}
+	if existing, err := r.mappingByIdempotencyKey(ctx, actor.ActorID, idempotency); err == nil || !errors.Is(err, ErrMappingNotFound) {
+		return existing, err == nil, err
 	}
 	from, err := time.Parse(time.RFC3339Nano, m.EffectiveFrom)
 	if err != nil {
-		return domain.Mapping{}, fmt.Errorf("effective_from: %w", err)
+		return domain.Mapping{}, false, fmt.Errorf("effective_from: %w", err)
 	}
 	var to *time.Time
 	if m.EffectiveTo != "" {
 		parsed, err := time.Parse(time.RFC3339Nano, m.EffectiveTo)
 		if err != nil {
-			return domain.Mapping{}, fmt.Errorf("effective_to: %w", err)
+			return domain.Mapping{}, false, fmt.Errorf("effective_to: %w", err)
 		}
 		to = &parsed
 	}
 	metadata, err := mappingMetadata(m.Metadata)
 	if err != nil {
-		return domain.Mapping{}, err
+		return domain.Mapping{}, false, err
 	}
-	tx, err := r.pool.Begin(ctx)
+	created, err := func() (domain.Mapping, error) {
+		tx, err := r.pool.Begin(ctx)
+		if err != nil {
+			return domain.Mapping{}, err
+		}
+		defer tx.Rollback(ctx) //nolint:errcheck // a no-op after Commit
+		if err := checkMappingSubjects(ctx, tx, m); err != nil {
+			return domain.Mapping{}, err
+		}
+		var priority *int
+		if m.ResolutionPriority != 0 {
+			priority = &m.ResolutionPriority
+		}
+		created, err := scanMapping(tx.QueryRow(ctx, `
+			INSERT INTO mapping.mapping (mapping_id, tenant_id, legal_entity_id, mapping_type, canonical_entity_id,
+				external_reference_id, target_canonical_entity_id, scope_id, direction, cardinality, authority, confidence,
+				resolution_priority, status, effective_from, effective_to, supersedes_mapping_id, metadata, created_by,
+				create_idempotency_key, create_request_hash)
+			VALUES ($1, $2, NULLIF($3, ''), $4, $5::uuid, NULLIF($6, ''), NULLIF($7, '')::uuid, NULLIF($8, ''), $9, $10, $11,
+				NULLIF($12, ''), $13, 'DRAFT', $14, $15, NULLIF($16, ''), $17::jsonb, $18, $19, $20)
+			RETURNING `+mappingColumns,
+			m.ID, m.TenantID, m.LegalEntityID, m.MappingType, m.CanonicalEntityID, m.ExternalReferenceID,
+			m.TargetCanonicalEntityID, m.ScopeID, m.Direction, m.Cardinality, m.Authority, m.Confidence, priority, from, to,
+			m.SupersedesMappingID, metadata, actor.ActorID, idempotency.Key, idempotency.RequestHash))
+		if err != nil {
+			return domain.Mapping{}, err
+		}
+		if err := r.recordMappingChange(ctx, tx, actor, created, "mapping.proposed", ""); err != nil {
+			return domain.Mapping{}, err
+		}
+		return created, tx.Commit(ctx)
+	}()
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "mapping_create_idempotency_uq" {
+		// A concurrent proposal with the same key won; converge on it.
+		existing, err := r.mappingByIdempotencyKey(ctx, actor.ActorID, idempotency)
+		return existing, err == nil, err
+	}
 	if err != nil {
-		return domain.Mapping{}, err
+		return domain.Mapping{}, false, fmt.Errorf("propose mapping: %w", err)
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck // a no-op after Commit
-	if err := checkMappingSubjects(ctx, tx, m); err != nil {
-		return domain.Mapping{}, err
-	}
-	var priority *int
-	if m.ResolutionPriority != 0 {
-		priority = &m.ResolutionPriority
-	}
-	created, err := scanMapping(tx.QueryRow(ctx, `
-		INSERT INTO mapping.mapping (mapping_id, tenant_id, legal_entity_id, mapping_type, canonical_entity_id,
-			external_reference_id, target_canonical_entity_id, scope_id, direction, cardinality, authority, confidence,
-			resolution_priority, status, effective_from, effective_to, supersedes_mapping_id, metadata, created_by)
-		VALUES ($1, $2, NULLIF($3, ''), $4, $5::uuid, NULLIF($6, ''), NULLIF($7, '')::uuid, NULLIF($8, ''), $9, $10, $11,
-			NULLIF($12, ''), $13, 'DRAFT', $14, $15, NULLIF($16, ''), $17::jsonb, $18)
-		RETURNING `+mappingColumns,
-		m.ID, m.TenantID, m.LegalEntityID, m.MappingType, m.CanonicalEntityID, m.ExternalReferenceID,
-		m.TargetCanonicalEntityID, m.ScopeID, m.Direction, m.Cardinality, m.Authority, m.Confidence, priority, from, to,
-		m.SupersedesMappingID, metadata, actor.ActorID))
-	if err != nil {
-		return domain.Mapping{}, fmt.Errorf("propose mapping: %w", err)
-	}
-	if err := r.recordMappingChange(ctx, tx, actor, created, "mapping.proposed", ""); err != nil {
-		return domain.Mapping{}, err
-	}
-	return created, tx.Commit(ctx)
+	return created, false, nil
 }
 
-func (r *PostgresRepository) recordMappingChange(ctx context.Context, tx pgx.Tx, actor AuditActor, m domain.Mapping, action, reason string) error {
+// mappingByIdempotencyKey returns the mapping the proposer created with key,
+// ErrMappingNotFound when there is none, and ErrMappingIdempotencyReused when
+// the key was used for another request.
+func (r *PostgresRepository) mappingByIdempotencyKey(ctx context.Context, proposer string, idempotency MappingIdempotency) (domain.Mapping, error) {
+	var id, hash string
+	err := r.pool.QueryRow(ctx, `SELECT mapping_id, create_request_hash FROM mapping.mapping
+		WHERE created_by = $1 AND create_idempotency_key = $2`, proposer, idempotency.Key).Scan(&id, &hash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Mapping{}, ErrMappingNotFound
+	}
+	if err != nil {
+		return domain.Mapping{}, err
+	}
+	if hash != idempotency.RequestHash {
+		return domain.Mapping{}, ErrMappingIdempotencyReused
+	}
+	return r.ReadMapping(ctx, id)
+}
+
+func (r *PostgresRepository) recordMappingChange(ctx context.Context, tx pgx.Tx, actor AuditActor, m domain.Mapping, action, reason string, successor ...string) error {
 	payload := map[string]any{"mapping_id": m.ID, "status": m.Status, "revision": m.Revision, "mapping_type": m.MappingType}
 	if reason != "" {
 		payload["reason"] = reason
+	}
+	if len(successor) > 0 && successor[0] != "" {
+		payload["successor_mapping_id"] = successor[0]
 	}
 	return r.recordOrganisationChange(ctx, tx, actor, events.OrganisationChange{
 		TenantID: m.TenantID, AuditAction: action, Target: "mapping/" + m.ID, AuditPayload: payload,
@@ -468,6 +518,15 @@ func (r *PostgresRepository) TransitionMapping(ctx context.Context, id string, e
 		if err := checkMappingInTenant(ctx, tx, t.SuccessorMappingID, current.TenantID); err != nil {
 			return domain.Mapping{}, err
 		}
+		// A successor is a mapping that records this one as the mapping it
+		// supersedes (supersedes_mapping_id); naming any other is refused.
+		var supersedes *string
+		if err := tx.QueryRow(ctx, `SELECT supersedes_mapping_id FROM mapping.mapping WHERE mapping_id = $1`, t.SuccessorMappingID).Scan(&supersedes); err != nil {
+			return domain.Mapping{}, err
+		}
+		if supersedes == nil || *supersedes != id {
+			return domain.Mapping{}, fmt.Errorf("%w: %s does not supersede %s", ErrMappingSuccessorMismatch, t.SuccessorMappingID, id)
+		}
 	}
 	var statement string
 	switch t.To {
@@ -491,7 +550,7 @@ func (r *PostgresRepository) TransitionMapping(ctx context.Context, id string, e
 		return domain.Mapping{}, fmt.Errorf("move mapping to %s: %w", t.To, err)
 	}
 	action := map[string]string{"VALIDATED": "mapping.validated", "ACTIVE": "mapping.activated", "RETIRED": "mapping.retired"}[t.To]
-	if err := r.recordMappingChange(ctx, tx, actor, updated, action, t.Reason); err != nil {
+	if err := r.recordMappingChange(ctx, tx, actor, updated, action, t.Reason, t.SuccessorMappingID); err != nil {
 		return domain.Mapping{}, err
 	}
 	return updated, tx.Commit(ctx)
@@ -508,6 +567,15 @@ func mappingConfidenceRank(confidence string) int {
 	}
 }
 
+// inForceAt is the SQL predicate for a mapping (column prefix alias) that was
+// in force at the timestamp parameter at: ACTIVE, or RETIRED after at, having
+// been approved. A retired mapping is kept for historical resolution (Shared
+// retireMapping); one retired without a recorded time never resolves.
+func inForceAt(alias, at string) string {
+	return "(" + alias + "status = 'ACTIVE' OR (" + alias + "status = 'RETIRED' AND " + alias + "approved_at IS NOT NULL AND " +
+		alias + "retired_at > " + at + "::timestamptz))"
+}
+
 // ResolveExternalReference follows the tenant's ACTIVE, EXTERNAL_TO_CANONICAL
 // or BIDIRECTIONAL mappings of a native object in effect at at (Canonical
 // Mapping Model section 23). CANDIDATE and REJECTED mappings never resolve.
@@ -520,7 +588,7 @@ func (r *PostgresRepository) ResolveExternalReference(ctx context.Context, tenan
 		JOIN mapping.external_reference x ON x.external_reference_id = m.external_reference_id
 		WHERE m.tenant_id = $1 AND x.system_namespace = $2 AND x.engine_id = $3 AND x.native_entity_type = $4
 		  AND x.native_id = $5 AND ($6 = '' OR x.engine_instance_id = $6) AND ($7 = '' OR x.environment = $7)
-		  AND m.status = 'ACTIVE' AND m.direction IN ('EXTERNAL_TO_CANONICAL', 'BIDIRECTIONAL')
+		  AND `+inForceAt("m.", "$8")+` AND m.direction IN ('EXTERNAL_TO_CANONICAL', 'BIDIRECTIONAL')
 		  AND m.valid_period @> $8::timestamptz AND COALESCE(m.confidence, 'CONFIRMED') NOT IN ('CANDIDATE', 'REJECTED')`,
 		tenantID, n.SystemNamespace, n.EngineID, n.NativeEntityType, n.NativeID, n.EngineInstanceID, n.Environment, at)
 	if err != nil {

@@ -119,6 +119,16 @@ func newMappingFixture(t *testing.T) *mappingFixture {
 
 func (f *mappingFixture) do(token, method, path, ifMatch, body string) *httptest.ResponseRecorder {
 	f.t.Helper()
+	key := ""
+	if method == http.MethodPost && path == "/v1/mappings" {
+		key = "test-" + domain.NewUUIDv7()
+	}
+	return f.doKeyed(token, method, path, ifMatch, key, body)
+}
+
+// doKeyed sends a request with an explicit Idempotency-Key ("" for none).
+func (f *mappingFixture) doKeyed(token, method, path, ifMatch, key, body string) *httptest.ResponseRecorder {
+	f.t.Helper()
 	var request *http.Request
 	if body == "" {
 		request = httptest.NewRequest(method, path, nil)
@@ -128,6 +138,9 @@ func (f *mappingFixture) do(token, method, path, ifMatch, body string) *httptest
 	request.Header.Set("Authorization", "Bearer "+token)
 	if ifMatch != "" {
 		request.Header.Set("If-Match", ifMatch)
+	}
+	if key != "" {
+		request.Header.Set("Idempotency-Key", key)
 	}
 	response := httptest.NewRecorder()
 	f.handler.ServeHTTP(response, request)
@@ -329,4 +342,62 @@ func TestLegacyExternalReferencesAreFrozenAndReported(t *testing.T) {
 			t.Fatalf("legacy row %s reported %q, want %q (%v)", id, disposition, want, err)
 		}
 	}
+}
+
+// TestMappingAdministrationReviewFixes covers the review of #185: a mapping
+// proposal is idempotent by key, If-Match must be a strong entity tag, a
+// retirement's successor must supersede the retired mapping, and a retired
+// mapping still resolves at times before its retirement.
+func TestMappingAdministrationReviewFixes(t *testing.T) {
+	f := newMappingFixture(t)
+	native := "cus_" + f.tenant[3:15] + "r"
+	reference := `{"system_namespace":"medusa","engine_id":"baobab-trade","engine_instance_id":"` + f.instance +
+		`","environment":"production","native_entity_type":"customer","native_id":"` + native + `"}`
+	refID := f.ok(f.do("creator", http.MethodPost, "/v1/external-references", "", reference), http.StatusCreated, "externalReference")["external_reference_id"].(string)
+	proposal := f.proposal(f.entity, refID)
+
+	// Idempotency-Key is required; a replay returns the same mapping; the
+	// same key with another body is refused.
+	f.refused(f.doKeyed("creator", http.MethodPost, "/v1/mappings", "", "", proposal), http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY")
+	f.refused(f.doKeyed("creator", http.MethodPost, "/v1/mappings", "", "short", proposal), http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY")
+	key := "replay-" + domain.NewUUIDv7()
+	first := f.ok(f.doKeyed("creator", http.MethodPost, "/v1/mappings", "", key, proposal), http.StatusCreated, "mapping")
+	again := f.ok(f.doKeyed("creator", http.MethodPost, "/v1/mappings", "", key, proposal), http.StatusCreated, "mapping")
+	if first["mapping_id"] != again["mapping_id"] {
+		t.Fatalf("a replay created a second mapping: %v then %v", first["mapping_id"], again["mapping_id"])
+	}
+	f.refused(f.doKeyed("creator", http.MethodPost, "/v1/mappings", "", key, strings.Replace(proposal, `"COMMERCE"`, `"IDENTITY"`, 1)),
+		http.StatusConflict, "IDEMPOTENCY_KEY_REUSED")
+	id := first["mapping_id"].(string)
+	path := "/v1/mappings/" + id
+
+	// If-Match is a strong entity tag, nothing looser.
+	for _, malformed := range []string{`1`, `"1`, `1"`, `W/"1"`, `"01"`} {
+		f.refused(f.do("creator", http.MethodPost, path+"/validate", malformed, ""), http.StatusBadRequest, "INVALID_IF_MATCH")
+	}
+	f.ok(f.do("creator", http.MethodPost, path+"/validate", `"1"`, ""), http.StatusOK, "mapping")
+	activated := f.ok(f.do("approver", http.MethodPost, path+"/activate", `"2"`, ""), http.StatusOK, "mapping")
+	approvedAt := activated["approved_at"].(string)
+
+	// A successor must record the retired mapping as the one it supersedes.
+	unrelated := f.ok(f.do("creator", http.MethodPost, "/v1/mappings", "", f.proposal(f.sibling, refID)), http.StatusCreated, "mapping")["mapping_id"].(string)
+	f.refused(f.do("creator", http.MethodPost, path+"/retire", `"3"`, `{"reason":"replaced","successor_mapping_id":"`+unrelated+`"}`),
+		http.StatusUnprocessableEntity, "MAPPING_SUCCESSOR_MISMATCH")
+	successor := f.ok(f.do("creator", http.MethodPost, "/v1/mappings", "",
+		strings.Replace(f.proposal(f.sibling, refID), `"confidence"`, `"supersedes_mapping_id":"`+id+`","confidence"`, 1)), http.StatusCreated, "mapping")["mapping_id"].(string)
+	f.ok(f.do("creator", http.MethodPost, path+"/retire", `"3"`, `{"reason":"replaced","successor_mapping_id":"`+successor+`"}`), http.StatusOK, "mapping")
+	var recorded string
+	if err := f.admin.QueryRow(f.ctx, `SELECT payload->>'successor_mapping_id' FROM audit_events WHERE target = $1 AND action = 'mapping.retired'`,
+		"mapping/"+id).Scan(&recorded); err != nil || recorded != successor {
+		t.Fatalf("the retirement records its successor: %q %v", recorded, err)
+	}
+
+	// The retired mapping resolves at times before its retirement, not now.
+	resolution := `{"tenant_id":"` + f.tenant + `","system_namespace":"medusa","engine_id":"baobab-trade","native_entity_type":"customer","native_id":"` + native + `"`
+	historical := f.ok(f.do("workload", http.MethodPost, "/v1/resolution/external-references", "", resolution+`,"effective_timestamp":"`+approvedAt+`"}`),
+		http.StatusOK, "externalReferenceResolutionResponse")
+	if historical["mapping_id"] != id || historical["status"] != "RETIRED" {
+		t.Fatalf("historical resolution of a retired mapping: %v", historical)
+	}
+	f.refused(f.do("workload", http.MethodPost, "/v1/resolution/external-references", "", resolution+`}`), http.StatusNotFound, "MAPPING_NOT_FOUND")
 }

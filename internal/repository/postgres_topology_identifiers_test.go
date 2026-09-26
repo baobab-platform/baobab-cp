@@ -2,11 +2,14 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -79,5 +82,16 @@ func TestPostgresTopologyIdentifiers(t *testing.T) {
 	}
 	if err := admin.QueryRow(ctx, `SELECT count(*) FROM topology.engine_code_nonconforming WHERE engine_id = $1::uuid`, engine).Scan(&reported); err != nil || reported != 0 {
 		t.Fatalf("conforming engine code reported: %d %v", reported, err)
+	}
+
+	// An identity reference's engine instance is 6 to 63 characters, as
+	// Shared's engineInstanceId is, not merely ei_ followed by anything.
+	for _, instanceID := range []string{"ei_a", "ei_" + strings.Repeat("a", 61)} {
+		_, err := admin.Exec(ctx, `INSERT INTO identity.identity_reference (principal_id, engine, engine_instance_id, external_type, external_id)
+			VALUES ($1::uuid, 'baobab-trade', $2, 'customer', 'length-check')`, domain.NewUUIDv7(), instanceID)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.ConstraintName != "identity_reference_engine_instance_ck" {
+			t.Fatalf("engine instance %q (%d characters) should be refused by its check, got %v", instanceID, len(instanceID), err)
+		}
 	}
 }
