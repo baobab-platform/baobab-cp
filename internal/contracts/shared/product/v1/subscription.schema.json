@@ -209,6 +209,34 @@
         "properties": { "status": { "const": "MATERIALIZED" } }
       },
       "then": { "required": ["grant_id"] }
+    },
+    "classificationReason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "pattern": "\\S",
+      "description": "Why the classification is made. Recorded with the classification and in the audit trail."
+    },
+    "SubscriptionClassificationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["admission_decision_id", "reason"],
+      "description": "Classifies an unclassified ProductSubscription from the APPROVED AdmissionDecision that admitted its tenant's organisation (ADR-BCP-018 ORG-11). The type comes from the decision: the caller supplies neither a type nor eligibility evidence.",
+      "properties": {
+        "admission_decision_id": { "$ref": "../../admission/v1/decision.schema.json#/$defs/admissionDecisionId" },
+        "reason": { "$ref": "#/$defs/classificationReason" }
+      }
+    },
+    "SubscriptionReclassificationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_type", "classification_reference", "reason"],
+      "description": "Changes a classified ProductSubscription's type (ADR-BCP-017 section 48). INTERNAL is accepted only when the Control Plane itself establishes eligibility; the caller supplies no eligibility evidence.",
+      "properties": {
+        "subscription_type": { "$ref": "../../admission/v1/decision.schema.json#/$defs/subscriptionType" },
+        "classification_reference": { "$ref": "#/$defs/classificationReference" },
+        "reason": { "$ref": "#/$defs/classificationReason" }
+      }
     }
   }
 }

@@ -110,7 +110,6 @@ func described(t *testing.T) map[string]bool {
 var undescribed = []string{
 	"GET /v1/canonical-entities/{}",
 	"GET /v1/canonical-entities/{}/iam-organisations",
-	"GET /v1/entitlements",
 	"GET /v1/external-references",
 	"GET /v1/iam-organisations",
 	"GET /v1/organisation-drift",
@@ -118,11 +117,8 @@ var undescribed = []string{
 	"GET /v1/organisation-resolution-candidates/{}",
 	"GET /v1/organisations/{}/audit",
 	"GET /v1/platform-accounts/{}",
-	"GET /v1/product-subscriptions/{}/classification",
-	"GET /v1/tenants/{}",
 	"GET /v1/tenants/{}/counterparty-roles",
 	"GET /v1/tenants/{}/platform-account-bindings",
-	"GET /v1/tenants/{}/products/{}/classification",
 	"GET /v1/tenants/{}/provisioning",
 	"GET /v1/tenants/{}/provisioning/{}",
 	"GET /v1/tenants/{}/provisioning/{}/drift",
@@ -143,12 +139,8 @@ var undescribed = []string{
 	"POST /v1/organisation-resolution-candidates/{}/decision",
 	"POST /v1/platform-accounts/{}/status",
 	"POST /v1/platform-context/resolve",
-	"POST /v1/product-subscriptions/{}/classification",
-	"POST /v1/product-subscriptions/{}/reclassification",
 	"POST /v1/resolve",
-	"POST /v1/tenants/{}/activate",
 	"POST /v1/tenants/{}/counterparty-roles",
-	"POST /v1/tenants/{}/decommission",
 	"POST /v1/tenants/{}/organisation-admission",
 	"POST /v1/tenants/{}/platform-account-binding",
 	"POST /v1/tenants/{}/platform-account-binding/end",
@@ -156,7 +148,6 @@ var undescribed = []string{
 	"POST /v1/tenants/{}/provisioning/{}/apply",
 	"POST /v1/tenants/{}/provisioning/{}/cancel",
 	"POST /v1/tenants/{}/provisioning/{}/retry",
-	"POST /v1/tenants/{}/suspend",
 }
 
 // unimplemented are described by Shared but not served (FE-00 gap G2).

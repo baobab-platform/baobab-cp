@@ -63,7 +63,7 @@ func (f *fakeStore) GetTenant(_ context.Context, tenantID string) (domain.Tenant
 		// identically) -- "active" here, not the placeholder "ready" this
 		// fixture used before ContextResolutionService started checking
 		// ObservedState for the ADR-BCP-004 §52 "tenant must be active" stage.
-		f.tenant = domain.Tenant{TenantID: tenantID, LegalEntityID: tenantID, DisplayName: "Zuri Beans", IsolationStrategy: "schema_per_tenant", ResidencyRegion: "af-south-1", DesiredState: string(domain.LifecycleActive), ObservedState: string(domain.LifecycleActive), Revision: 1}
+		f.tenant = domain.Tenant{TenantID: tenantID, LegalEntityID: "ZURIBEANS", DisplayName: "Zuri Beans", IsolationStrategy: "schema_per_tenant", ResidencyRegion: "af-south-1", DesiredState: string(domain.LifecycleActive), ObservedState: string(domain.LifecycleActive), Revision: 1}
 	}
 	return f.tenant, nil
 }
@@ -73,7 +73,7 @@ func (f *fakeStore) GetEntitlement(_ context.Context, tenantID, productID string
 		return domain.Entitlement{}, f.entitlementErr
 	}
 	if f.entitlement.TenantID == "" {
-		f.entitlement = domain.Entitlement{TenantID: tenantID, ProductID: productID, Status: "active", Tier: "standard"}
+		f.entitlement = domain.Entitlement{TenantID: tenantID, ProductID: productID, Status: "ACTIVE", Tier: "standard"}
 	}
 	return f.entitlement, nil
 }

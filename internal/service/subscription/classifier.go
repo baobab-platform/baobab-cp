@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
@@ -104,6 +105,8 @@ type Classifier struct {
 var (
 	recordSchema      = contracts.MustSchema("product/v1/subscription.schema.json#/$defs/SubscriptionClassificationRecord")
 	explanationSchema = contracts.MustSchema("product/v1/subscription.schema.json#/$defs/ClassificationExplanation")
+	classifySchema    = contracts.MustSchema("product/v1/subscription.schema.json#/$defs/SubscriptionClassificationCommand")
+	reclassifySchema  = contracts.MustSchema("product/v1/subscription.schema.json#/$defs/SubscriptionReclassificationCommand")
 	referencePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$`)
 )
 
@@ -130,8 +133,20 @@ type ReclassifyRequest struct {
 	Reason                  string                  `json:"reason"`
 }
 
-// decodeStrict unmarshals raw, refusing unknown fields: a caller can never
-// smuggle eligibility evidence or a source into a classification.
+// decodeCommand validates raw against its Shared command schema, then
+// unmarshals it refusing unknown fields: a caller can never smuggle
+// eligibility evidence or a source into a classification.
+func decodeCommand(schema *contracts.Schema, raw []byte, into any) error {
+	var verr *contracts.ValidationError
+	if err := contracts.Validate(schema, raw); errors.As(err, &verr) {
+		return &InvalidError{Problems: verr.Problems}
+	} else if err != nil {
+		return err
+	}
+	return decodeStrict(raw, into)
+}
+
+// decodeStrict unmarshals raw, refusing unknown fields.
 func decodeStrict(raw []byte, into any) error {
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
@@ -145,7 +160,7 @@ func decodeStrict(raw []byte, into any) error {
 }
 
 func checkReason(reason string) []string {
-	if n := len(strings.TrimSpace(reason)); n == 0 || len(reason) > 2000 {
+	if strings.TrimSpace(reason) == "" || utf8.RuneCountInString(reason) > 2000 {
 		return []string{"/reason: a reason of 1 to 2000 characters is required"}
 	}
 	return nil
@@ -156,7 +171,7 @@ func checkReason(reason string) []string {
 // Replaying the same decision returns the existing record.
 func (c *Classifier) ClassifyFromAdmission(ctx context.Context, actor Actor, subscriptionID string, raw []byte) (domain.SubscriptionClassificationRecord, bool, error) {
 	var req ClassifyRequest
-	if err := decodeStrict(raw, &req); err != nil {
+	if err := decodeCommand(classifySchema, raw, &req); err != nil {
 		return domain.SubscriptionClassificationRecord{}, false, err
 	}
 	problems := checkReason(req.Reason)
@@ -225,7 +240,7 @@ func (c *Classifier) ClassifyFromAdmission(ctx context.Context, actor Actor, sub
 // the existing record.
 func (c *Classifier) Reclassify(ctx context.Context, actor Actor, subscriptionID string, raw []byte) (domain.SubscriptionClassificationRecord, bool, error) {
 	var req ReclassifyRequest
-	if err := decodeStrict(raw, &req); err != nil {
+	if err := decodeCommand(reclassifySchema, raw, &req); err != nil {
 		return domain.SubscriptionClassificationRecord{}, false, err
 	}
 	problems := checkReason(req.Reason)
