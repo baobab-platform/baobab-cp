@@ -98,7 +98,7 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 	if _, err := admin.Exec(ctx, `INSERT INTO legal_entities(legal_entity_id) VALUES ($1)`, legalEntityID); err != nil {
 		t.Fatalf("fixture: create legal entity: %v", err)
 	}
-	if _, err := admin.Exec(ctx, `INSERT INTO tenants(tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ($1, $2, 'ZuriBeans ZB-02 E2E Test', 'row_level_security', 'af-south-1')`, tenantID, legalEntityID); err != nil {
+	if _, err := admin.Exec(ctx, `INSERT INTO tenants(registration_basis, bootstrap_reason, bootstrap_evidence_reference, tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region) VALUES ('BOOTSTRAP', 'Test fixture registered outside admission', 'test-fixture', $1, $2, 'ZuriBeans ZB-02 E2E Test', 'row_level_security', 'af-south-1')`, tenantID, legalEntityID); err != nil {
 		t.Fatalf("fixture: create tenant: %v", err)
 	}
 	if err := repo.CreateMarket(ctx, domain.Market{ID: marketUGID, Code: "UG", Name: "Uganda", Currency: "UGX", Region: "af-east-1", IsActive: true}); err != nil {

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/tenant-bootstrap-registration.schema.json",
+  "title": "Bootstrap-register tenant command",
+  "description": "The only registration path without a TenantOnboardingRequest, for tenants that predate the admission workflow (migration and platform bootstrap, e.g. the first-party Nabhold group). It needs the privileged tenant:bootstrap scope, is disabled in the Control Plane unless explicitly enabled, and records its reason and evidence in the audit trail. It is never a shortcut around admission for a new customer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "legal_entity_id",
+    "display_name",
+    "isolation_strategy",
+    "residency_region",
+    "bootstrap_reason",
+    "evidence_reference"
+  ],
+  "properties": {
+    "legal_entity_id": {
+      "$ref": "tenant-registration.schema.json#/properties/legal_entity_id"
+    },
+    "display_name": {
+      "$ref": "tenant-registration.schema.json#/properties/display_name"
+    },
+    "isolation_strategy": {
+      "$ref": "tenant-registration.schema.json#/properties/isolation_strategy"
+    },
+    "residency_region": {
+      "$ref": "tenant-registration.schema.json#/properties/residency_region"
+    },
+    "requested_products": {
+      "$ref": "tenant-registration.schema.json#/properties/requested_products"
+    },
+    "metadata": {
+      "$ref": "tenant-registration.schema.json#/properties/metadata"
+    },
+    "bootstrap_reason": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 1000,
+      "description": "Why this tenant is registered outside the admission workflow."
+    },
+    "evidence_reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "A reference to the evidence authorising the bootstrap (for example a migration record or board resolution). Evidence content is never stored in the Control Plane."
+    }
+  }
+}

@@ -58,6 +58,10 @@ type Dependencies struct {
 	// admission decision to provisioning (ADR-BCP-017 section 22). Nil
 	// skips the routes.
 	Onboarding *onboarding.Service
+	// TenantBootstrapRegistration enables POST
+	// /v1/tenants/bootstrap-registrations, which registers a tenant that
+	// predates the admission workflow. Off unless explicitly configured.
+	TenantBootstrapRegistration bool
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -124,10 +128,16 @@ type API struct {
 	resolution       service.ResolutionService
 	identities       repository.IdentityRepository
 	memberships      repository.WorkforceMembershipRepository
+	// onboarding fulfils the AUTHORISED request a tenant is registered for;
+	// without it, registration fails closed.
+	onboarding *onboarding.Service
+	// tenantBootstrap enables the migration-only bootstrap registration.
+	tenantBootstrap bool
 }
 
 func New(dependencies Dependencies) http.Handler {
-	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships}
+	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships,
+		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration}
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
@@ -140,8 +150,12 @@ func New(dependencies Dependencies) http.Handler {
 	r.Get("/readyz", a.ready)
 	// Tenant creation has no existing tenant to scope a "cp:tenant-admin"
 	// membership against (ADR-0009 §27: WorkforceMembership always names an
-	// existing Tenant), so it is platform-admin only.
+	// existing Tenant), so it is platform-admin only. ADR-BCP-017 sections
+	// 22-24: a tenant is registered only for an AUTHORISED onboarding
+	// request, or, for a tenant that predates admission, by the
+	// migration-only bootstrap route.
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants", a.register)
+	r.With(a.authorize(a.adminVerifier, "human", "tenant:bootstrap"), a.requireAdminRole(nil, true)).Post("/v1/tenants/bootstrap-registrations", a.bootstrapRegister)
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}", a.getTenant)
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/suspend", a.tenantLifecycleAction("suspend"))
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/activate", a.tenantLifecycleAction("activate"))
@@ -501,43 +515,6 @@ func (a *API) ready(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
-}
-
-func (a *API) register(w http.ResponseWriter, r *http.Request) {
-	key := r.Header.Get("Idempotency-Key")
-	if len(key) < 16 || len(key) > 128 {
-		problem(w, r, http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 128 characters", false)
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	var command domain.RegisterTenant
-	if err := dec.Decode(&command); err != nil {
-		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "request body is not valid contract JSON", false)
-		return
-	}
-	// tenant_id is Control Plane-minted, never caller-supplied (see
-	// domain.RegisterTenant and contracts/control-plane/v1/
-	// tenant-registration.schema.json, which does not accept it as input).
-	command.TenantID = domain.NewTenantID()
-	if err := command.Validate(); err != nil {
-		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", err.Error(), false)
-		return
-	}
-	principal, _ := auth.PrincipalFromContext(r.Context())
-	metadata := requestMetadata(r, principal)
-	operation, err := a.store.RegisterTenant(r.Context(), key, metadata, command)
-	if errors.Is(err, store.ErrIdempotencyConflict) {
-		problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "the idempotency key was used for a different request", false)
-		return
-	}
-	if err != nil {
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "tenant registration could not be persisted", true)
-		return
-	}
-	w.Header().Set("Location", "/v1/operations/"+operation.OperationID)
-	writeJSON(w, http.StatusAccepted, operation)
 }
 
 func (a *API) getTenant(w http.ResponseWriter, r *http.Request) {

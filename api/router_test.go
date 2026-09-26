@@ -29,13 +29,20 @@ type fakeStore struct {
 	entitlementErr     error
 	entitlementCall    int
 	metadata           store.RequestMetadata
+	registered         domain.RegisterTenant
+	registeredStep     bool
+	registerErr        error
 }
 
 func (f *fakeStore) Ping(context.Context) error { return nil }
-func (f *fakeStore) RegisterTenant(_ context.Context, _ string, metadata store.RequestMetadata, command domain.RegisterTenant) (domain.Operation, error) {
+func (f *fakeStore) RegisterTenant(_ context.Context, _ string, metadata store.RequestMetadata, command domain.RegisterTenant, step store.RegistrationStep) (domain.Operation, error) {
 	f.calls++
 	f.metadata = metadata
 	f.registeredTenantID = command.TenantID
+	f.registered, f.registeredStep = command, step != nil
+	if f.registerErr != nil {
+		return domain.Operation{}, f.registerErr
+	}
 	return domain.Operation{OperationID: "7c8f131b-d8ba-4d89-b60b-a187d3944074", TenantID: command.TenantID, State: "accepted", Revision: 1}, nil
 }
 func (f *fakeStore) ResolveContext(_ context.Context, metadata store.RequestMetadata, tenantID, productID string) (domain.ResolvedContext, error) {
@@ -75,50 +82,6 @@ func (f *fakeStore) UpdateTenantLifecycle(_ context.Context, tenantID string, ne
 		return domain.NotFoundError("invalid tenant lifecycle status")
 	}
 	return nil
-}
-
-func TestRegisterTenant(t *testing.T) {
-	database := &fakeStore{}
-	handler := New(Dependencies{Store: database, AdminVerifier: fakeVerifier{principal: adminPrincipal()}})
-	body := `{"legal_entity_id":"THAMANI-GLOBAL","display_name":"Zuri Beans","isolation_strategy":"schema_per_tenant","residency_region":"af-south-1"}`
-	response := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/tenants", strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer admin-token")
-	req.Header.Set("Idempotency-Key", strings.Repeat("x", 16))
-	req.Header.Set("X-Correlation-ID", "7c8f131b-d8ba-4d89-b60b-a187d3944074")
-	handler.ServeHTTP(response, req)
-	if response.Code != http.StatusAccepted {
-		t.Fatalf("got status %d: %s", response.Code, response.Body.String())
-	}
-	if database.calls != 1 {
-		t.Fatalf("expected one persistence call, got %d", database.calls)
-	}
-	if database.metadata.ActorID != "admin-123" || database.metadata.CorrelationID != "7c8f131b-d8ba-4d89-b60b-a187d3944074" {
-		t.Fatalf("audit metadata not propagated: %#v", database.metadata)
-	}
-	if !domain.ValidTenantID(database.registeredTenantID) {
-		t.Fatalf("expected a Control Plane-minted tenant_id, got %q", database.registeredTenantID)
-	}
-}
-
-func TestRegisterTenantRejectsClientSuppliedTenantID(t *testing.T) {
-	// tenant_id is Control Plane-minted (tenant-registration.schema.json does
-	// not accept it as input); a client that supplies one must be rejected,
-	// not silently honoured.
-	database := &fakeStore{}
-	handler := New(Dependencies{Store: database, AdminVerifier: fakeVerifier{principal: adminPrincipal()}})
-	body := `{"legal_entity_id":"THAMANI-GLOBAL","tenant_id":"tn_client_supplied","display_name":"Zuri Beans","isolation_strategy":"schema_per_tenant","residency_region":"af-south-1"}`
-	response := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/tenants", strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer admin-token")
-	req.Header.Set("Idempotency-Key", strings.Repeat("x", 16))
-	handler.ServeHTTP(response, req)
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("expected client-supplied tenant_id to be rejected, got status %d: %s", response.Code, response.Body.String())
-	}
-	if database.calls != 0 {
-		t.Fatalf("expected no persistence call for a rejected request, got %d", database.calls)
-	}
 }
 
 func TestRegisterTenantRejectsInvalidToken(t *testing.T) {

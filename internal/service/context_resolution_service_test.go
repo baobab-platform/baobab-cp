@@ -18,7 +18,7 @@ type fakeTenantStore struct {
 	err    error
 }
 
-func (f *fakeTenantStore) RegisterTenant(context.Context, string, store.RequestMetadata, domain.RegisterTenant) (domain.Operation, error) {
+func (f *fakeTenantStore) RegisterTenant(context.Context, string, store.RequestMetadata, domain.RegisterTenant, store.RegistrationStep) (domain.Operation, error) {
 	return domain.Operation{}, errors.New("not implemented")
 }
 func (f *fakeTenantStore) ResolveContext(context.Context, store.RequestMetadata, string, string) (domain.ResolvedContext, error) {

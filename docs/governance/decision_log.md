@@ -32,7 +32,6 @@ Evidence, gate by gate (migration numbers refer to `internal/store/postgres/migr
 
 Known, recorded gaps that do not reopen the decision:
 
-- Tenant registration does not yet require an AUTHORISED TenantOnboardingRequest (runbook §12).
 - The engine-side items in the ORG-11 certification record remain open: the Kill Bill and HyperSwitch providers and the outbox relays.
 
 ---

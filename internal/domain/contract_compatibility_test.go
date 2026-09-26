@@ -20,12 +20,14 @@ func TestRegisterTenantMatchesSharedSchema(t *testing.T) {
 	schema := contracttest.CompileSchema(t, dir, "control-plane/v1/tenant-registration.schema.json")
 
 	command := domain.RegisterTenant{
-		LegalEntityID:     "THAMANI-GLOBAL",
-		TenantID:          domain.NewTenantID(), // json:"-": must not appear in the encoded payload
-		DisplayName:       "Thamani Global",
-		IsolationStrategy: "schema_per_tenant",
-		ResidencyRegion:   "af-south-1",
-		RequestedProducts: []string{"baobab-trade"},
+		Basis:                     domain.RegistrationOnboarding,
+		TenantOnboardingRequestID: "tor_0190a1b2c3d4e5f60718293a4b5c6d7e",
+		LegalEntityID:             "THAMANI-GLOBAL",
+		TenantID:                  domain.NewTenantID(), // json:"-": must not appear in the encoded payload
+		DisplayName:               "Thamani Global",
+		IsolationStrategy:         "schema_per_tenant",
+		ResidencyRegion:           "af-south-1",
+		RequestedProducts:         []string{"baobab-trade"},
 	}
 	if err := command.Validate(); err != nil {
 		t.Fatalf("command should be valid: %v", err)

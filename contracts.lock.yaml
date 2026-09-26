@@ -19,6 +19,7 @@ contracts:
   - contracts/control-plane/v1/context-resolution.schema.json
   - contracts/control-plane/v1/domain.schema.json
   - contracts/control-plane/v1/tenant-registration.schema.json
+  - contracts/control-plane/v1/tenant-bootstrap-registration.schema.json
   - contracts/control-plane/v1/canonical-mapping.schema.json
   - contracts/control-plane/v1/provisioning-state-machine.yaml
   - contracts/control-plane/v1/openapi.yaml

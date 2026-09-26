@@ -102,16 +102,36 @@ func (s *Store) UpdateTenantLifecycle(ctx context.Context, tenantID string, next
 	}
 	return nil
 }
-func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basestore.RequestMetadata, c domain.RegisterTenant) (domain.Operation, error) {
-	payload, _ := json.Marshal(c)
+func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basestore.RequestMetadata, c domain.RegisterTenant, step basestore.RegistrationStep) (domain.Operation, error) {
+	if (c.Basis != domain.RegistrationOnboarding && c.Basis != domain.RegistrationBootstrap) ||
+		(c.Basis == domain.RegistrationOnboarding && step == nil) {
+		return domain.Operation{}, basestore.ErrRegistrationBasis
+	}
+	// The hash covers the basis and its justification too, so replaying a
+	// key with a different request, reason or evidence is a conflict.
+	payload, _ := json.Marshal(struct {
+		domain.RegisterTenant
+		Basis    string `json:"basis"`
+		Reason   string `json:"bootstrap_reason,omitempty"`
+		Evidence string `json:"evidence_reference,omitempty"`
+	}{c, c.Basis, c.BootstrapReason, c.BootstrapEvidenceReference})
 	sum := sha256.Sum256(payload)
 	hash := hex.EncodeToString(sum[:])
-	auditPayload, _ := json.Marshal(map[string]any{
+	action := "tenant.registration.requested"
+	details := map[string]any{
 		"legal_entity_id":    c.LegalEntityID,
 		"requested_products": c.RequestedProducts,
 		"isolation_strategy": c.IsolationStrategy,
 		"residency_region":   c.ResidencyRegion,
-	})
+		"registration_basis": c.Basis,
+	}
+	if c.Basis == domain.RegistrationOnboarding {
+		details["tenant_onboarding_request_id"] = c.TenantOnboardingRequestID
+	} else {
+		action = "tenant.registration.bootstrapped"
+		details["bootstrap_reason"], details["evidence_reference"] = c.BootstrapReason, c.BootstrapEvidenceReference
+	}
+	auditPayload, _ := json.Marshal(details)
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return domain.Operation{}, err
@@ -122,7 +142,7 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 	err = tx.QueryRow(ctx, `SELECT operation_id::text,tenant_id,state,revision,created_at,updated_at,request_hash FROM provisioning_operations WHERE idempotency_key=$1`, key).Scan(&op.OperationID, &op.TenantID, &op.State, &op.Revision, &op.CreatedAt, &op.UpdatedAt, &prior)
 	if err == nil {
 		if prior != hash {
-			if err = insertAudit(ctx, tx, op.TenantID, metadata, key, "tenant.registration.requested", "tenant:"+op.TenantID, "denied", "idempotency_conflict", auditPayload); err != nil {
+			if err = insertAudit(ctx, tx, op.TenantID, metadata, key, action, "tenant:"+op.TenantID, "denied", "idempotency_conflict", auditPayload); err != nil {
 				return domain.Operation{}, err
 			}
 			if err = tx.Commit(ctx); err != nil {
@@ -130,7 +150,7 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 			}
 			return domain.Operation{}, basestore.ErrIdempotencyConflict
 		}
-		if err = insertAudit(ctx, tx, op.TenantID, metadata, key, "tenant.registration.requested", "tenant:"+op.TenantID, "accepted", "idempotent_replay", auditPayload); err != nil {
+		if err = insertAudit(ctx, tx, op.TenantID, metadata, key, action, "tenant:"+op.TenantID, "accepted", "idempotent_replay", auditPayload); err != nil {
 			return domain.Operation{}, err
 		}
 		return op, tx.Commit(ctx)
@@ -145,7 +165,10 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 	// no default in domain.RegisterTenant), and pgx's jsonb codec sends a nil
 	// map as SQL NULL rather than "{}" - COALESCE keeps that from tripping the
 	// NOT NULL DEFAULT '{}' constraint on tenants.metadata.
-	if _, err = tx.Exec(ctx, `INSERT INTO tenants(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region,metadata)VALUES($1,$2,$3,$4,$5,COALESCE($6,'{}'::jsonb))`, c.TenantID, c.LegalEntityID, c.DisplayName, c.IsolationStrategy, c.ResidencyRegion, c.Metadata); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO tenants(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region,metadata,
+		registration_basis,bootstrap_reason,bootstrap_evidence_reference)
+		VALUES($1,$2,$3,$4,$5,COALESCE($6,'{}'::jsonb),$7,NULLIF($8,''),NULLIF($9,''))`, c.TenantID, c.LegalEntityID, c.DisplayName,
+		c.IsolationStrategy, c.ResidencyRegion, c.Metadata, c.Basis, c.BootstrapReason, c.BootstrapEvidenceReference); err != nil {
 		return domain.Operation{}, err
 	}
 	// ADR-BCP-018: ensure organisation canonical entity, profile, and default
@@ -196,7 +219,14 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 	if _, err = tx.Exec(ctx, `INSERT INTO messaging.outbox(aggregate_type,aggregate_id,aggregate_version,event_type,tenant_id,correlation_id,payload) VALUES('tenant',$1,$2,$3,$4,$5,$6)`, c.TenantID, op.Revision, env.Type, c.TenantID, metadata.CorrelationID, eventPayload); err != nil {
 		return domain.Operation{}, err
 	}
-	if err = insertAudit(ctx, tx, c.TenantID, metadata, key, "tenant.registration.requested", "tenant:"+c.TenantID, "accepted", "scope_allowed", auditPayload); err != nil {
+	// ADR-BCP-017 sections 22-24: an ONBOARDING registration fulfils its
+	// AUTHORISED request here; if that fails, nothing is registered.
+	if step != nil {
+		if err = step(ctx, tx, c.TenantID); err != nil {
+			return domain.Operation{}, err
+		}
+	}
+	if err = insertAudit(ctx, tx, c.TenantID, metadata, key, action, "tenant:"+c.TenantID, "accepted", "scope_allowed", auditPayload); err != nil {
 		return domain.Operation{}, err
 	}
 	return op, tx.Commit(ctx)

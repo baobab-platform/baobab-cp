@@ -79,7 +79,7 @@ func (f *orgFixture) tenant(t *testing.T, legalEntityID string) string {
 	if _, err := f.admin.Exec(f.ctx, `INSERT INTO legal_entities(legal_entity_id) VALUES ($1) ON CONFLICT DO NOTHING`, legalEntityID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.admin.Exec(f.ctx, `INSERT INTO tenants(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region) VALUES ($1,$2,'T','row_level_security','af-south-1')`,
+	if _, err := f.admin.Exec(f.ctx, `INSERT INTO tenants(registration_basis, bootstrap_reason, bootstrap_evidence_reference, tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region) VALUES ('BOOTSTRAP', 'Test fixture registered outside admission', 'test-fixture', $1,$2,'T','row_level_security','af-south-1')`,
 		tenantID, legalEntityID); err != nil {
 		t.Fatal(err)
 	}

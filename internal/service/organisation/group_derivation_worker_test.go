@@ -105,7 +105,9 @@ func TestGroupDerivationWorker(t *testing.T) {
 		t.Fatalf("a new group should be PENDING with no members: %+v %v", s, members())
 	}
 	drain()
-	if s := state(); s.State == repository.GroupDerivationRetrying || s.LastAdded != 2 || s.LastSucceededAt == nil {
+	// Membership is asserted rather than LastAdded: a concurrent graph change
+	// from another test package may run a further, empty derivation.
+	if s := state(); s.State == repository.GroupDerivationRetrying || s.LastSucceededAt == nil {
 		t.Fatalf("after the first derivation: %+v", s)
 	}
 	if got := members(); !slices.Equal(got, want(root, a)) {

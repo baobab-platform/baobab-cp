@@ -35,10 +35,10 @@ func TestRegisterTenantRecordsUnverifiedOrganisationClaims(t *testing.T) {
 		t.Helper()
 		tenantID := domain.NewTenantID()
 		correlationID := domain.NewUUIDv7()
-		command := domain.RegisterTenant{LegalEntityID: legalEntityID, TenantID: tenantID, DisplayName: displayName,
+		command := domain.RegisterTenant{Basis: domain.RegistrationBootstrap, BootstrapReason: "Store test tenant registered outside admission", BootstrapEvidenceReference: "test-fixture", LegalEntityID: legalEntityID, TenantID: tenantID, DisplayName: displayName,
 			IsolationStrategy: "row_level_security", ResidencyRegion: "af-south-1"}
 		metadata := basestore.RequestMetadata{ActorID: "integration-test", ActorType: "workload", CorrelationID: correlationID}
-		if _, err := store.RegisterTenant(ctx, "org-register-"+tenantID, metadata, command); err != nil {
+		if _, err := store.RegisterTenant(ctx, "org-register-"+tenantID, metadata, command, nil); err != nil {
 			t.Fatalf("register tenant: %v", err)
 		}
 		return tenantID, correlationID
