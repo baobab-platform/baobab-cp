@@ -70,7 +70,7 @@ jobs:
     # since Dependabot has a documented issue (dependabot-core#14716)
     # resolving updates correctly the first time a previously-untagged
     # pin moves onto an actual tag.
-    uses: baobab-platform/shared/.github/workflows/greetings.yml@f7466cc89a17c0b6e02b5a1e5fce3ce76073a718 # v1.4.0
+    uses: baobab-platform/shared/.github/workflows/greetings.yml@80d7f2556ba05d4a9524acd525152892a55316fa # v2.0.0
     with:
       issue-message: |
         👋 Thanks for opening your first issue in **BAOBAB Enterprise Platform**!
