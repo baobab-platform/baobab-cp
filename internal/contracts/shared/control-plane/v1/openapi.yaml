@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.3.0
+  version: 1.4.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -23,6 +23,16 @@ tags:
     description: Reading tenants, their product entitlements and lifecycle commands (ADR-BCP-022 section 43).
   - name: Classification
     description: A ProductSubscription's classification and its explanation (ADR-BCP-018 ORG-11, ADR-SHARED-011).
+  - name: Organisations
+    description: IAM organisation links, organisation admission, legacy reconciliation and duplicate review (ADR-BCP-018 ORG-09, ORG-10, ORG-13).
+  - name: Counterparties
+    description: Tenant-scoped counterparty roles held by Organisations (ADR-BCP-018 ORG-13).
+  - name: Platform accounts
+    description: Platform accounts and tenants' bindings to them (ADR-BCP-018 ORG-07).
+  - name: Audit
+    description: Read-only audit lineage (ADR-BCP-022 section 46).
+  - name: Diagnostics
+    description: Privileged, read-only diagnostics (ADR-BCP-022 section 47).
 servers:
   - url: https://control.baobab-platform.com/v1
     description: Production placeholder; activation requires an approved domain binding.
@@ -1541,6 +1551,626 @@ paths:
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  # ---------------------------------------------------------------------------
+  # Organisations (ADR-BCP-018): IAM organisation links (ORG-10), organisation
+  # admission (ORG-09), legacy reconciliation and duplicate review (ORG-13).
+  # Every operation also requires Control Plane platform-administrator
+  # authority.
+  # ---------------------------------------------------------------------------
+  /canonical-entities/{entity_id}/iam-organisations:
+    parameters:
+      - $ref: "#/components/parameters/CanonicalEntityId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Organisations]
+      operationId: linkIamOrganisation
+      summary: Link an Organisation to its IAM-native organisation
+      description: >-
+        Records an ACTIVE link. Repeating an existing link returns it with
+        200; a link held by another Organisation is refused with
+        IAM_ORGANISATION_ALREADY_LINKED (409), and only ORGANISATION entities
+        can be linked (NOT_AN_ORGANISATION, 422). The link never grants
+        authority; context resolution fails closed on any evidence it does not
+        resolve.
+      security:
+        - adminOidc: [canonical:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../organisation/v1/iam.schema.json#/$defs/IamOrganisationLinkRequest
+      responses:
+        "201":
+          $ref: "#/components/responses/IamOrganisationReference"
+        "200":
+          $ref: "#/components/responses/IamOrganisationReference"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+    get:
+      tags: [Organisations]
+      operationId: listIamOrganisationLinks
+      summary: List an Organisation's IAM organisation links, including retired ones
+      security:
+        - adminOidc: [canonical:read]
+      responses:
+        "200":
+          $ref: "#/components/responses/IamOrganisationReferenceList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /iam-organisation-references/{reference_id}/retire:
+    parameters:
+      - $ref: "#/components/parameters/IamOrganisationReferenceId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Organisations]
+      operationId: retireIamOrganisationLink
+      summary: Retire an IAM organisation link
+      description: >-
+        A retired link never resolves. A link that is not ACTIVE, or an
+        effective_to before it took effect, is refused with
+        IAM_ORGANISATION_REFERENCE_NOT_RETIRABLE (409).
+      security:
+        - adminOidc: [canonical:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../organisation/v1/iam.schema.json#/$defs/IamOrganisationRetireRequest
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+  /iam-organisations:
+    get:
+      tags: [Organisations]
+      operationId: resolveIamOrganisation
+      summary: Resolve IAM organisation evidence to its canonical Organisation
+      description: >-
+        Answers through an ACTIVE link in effect now, failing closed exactly
+        as context resolution does (IAM_ORGANISATION_NOT_LINKED, 404).
+      security:
+        - adminOidc: [canonical:read]
+      parameters:
+        - name: provider
+          in: query
+          required: true
+          schema:
+            $ref: ../../organisation/v1/iam.schema.json#/$defs/iamProvider
+        - name: issuer
+          in: query
+          required: true
+          schema:
+            $ref: ../../organisation/v1/iam.schema.json#/$defs/iamIssuer
+        - name: provider_organisation_id
+          in: query
+          required: true
+          schema:
+            $ref: ../../organisation/v1/iam.schema.json#/$defs/providerOrganisationId
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/IamOrganisationResolution"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /tenants/{tenant_id}/organisation-admission:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Organisations]
+      operationId: onboardAdmittedOrganisation
+      summary: Onboard the Organisation behind an approved admission decision
+      description: >-
+        Issued by platform staff after an APPROVED decision, never by the
+        applicant. The body is decoded strictly: it cannot carry a platform
+        relationship or a verification flag the contract does not define (ADR-
+        BCP-018 sections 69-70). A quarantined identity answers 409 with the
+        outcome and its candidates, having written nothing; a first-party
+        organisation is refused with FIRST_PARTY_ORGANISATION and a
+        conflicting one with ORGANISATION_CONFLICT (both 409 problems).
+      security:
+        - adminOidc: [tenant:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../organisation/v1/admission.schema.json#/$defs/OrganisationAdmissionRequest
+      responses:
+        "200":
+          $ref: "#/components/responses/OrganisationAdmissionOutcome"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "409":
+          description: The identity was quarantined (the outcome, nothing written), or the organisation is first-party or conflicts (a problem)
+          content:
+            application/json:
+              schema:
+                $ref: ../../organisation/v1/admission.schema.json#/$defs/OrganisationAdmissionOutcome
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+  /organisation-reconciliation:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Organisations]
+      operationId: reconcileOrganisations
+      summary: Run the legacy buyer and supplier reconciliation and refresh duplicate candidates
+      description: >-
+        Takes no body. Migrates every pending legacy record, reports what
+        could not be migrated and why, and refreshes the resolution
+        candidates. It merges nothing and is safe to repeat.
+      security:
+        - adminOidc: [canonical:write]
+      responses:
+        "200":
+          $ref: "#/components/responses/CounterpartyReconciliationReport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /organisation-resolution-candidates:
+    get:
+      tags: [Organisations]
+      operationId: listResolutionCandidates
+      summary: List possible duplicate Organisations awaiting or after review
+      security:
+        - adminOidc: [canonical:read]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: ../../organisation/v1/counterparty.schema.json#/$defs/resolutionCandidateStatus
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: after
+          in: query
+          required: false
+          description: The previous page's next cursor.
+          schema:
+            $ref: ../../organisation/v1/counterparty.schema.json#/$defs/resolutionCandidateId
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/ResolutionCandidatePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /organisation-resolution-candidates/{candidate_id}:
+    parameters:
+      - $ref: "#/components/parameters/ResolutionCandidateId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Organisations]
+      operationId: getResolutionCandidate
+      summary: Read a resolution candidate
+      security:
+        - adminOidc: [canonical:read]
+      responses:
+        "200":
+          $ref: "#/components/responses/OrganisationResolutionCandidate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /organisation-resolution-candidates/{candidate_id}/decision:
+    parameters:
+      - $ref: "#/components/parameters/ResolutionCandidateId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Organisations]
+      operationId: decideResolutionCandidate
+      summary: Record a reviewer's decision on a resolution candidate
+      description: >-
+        The reviewer comes from authentication, never the body. A decision
+        merges nothing (ADR-BCP-023 section 52): a confirmed duplicate is
+        merged by a separate controlled change. A candidate already decided
+        differently is refused with RESOLUTION_CANDIDATE_DECIDED (409); an
+        inconsistent decision with RESOLUTION_DECISION_INVALID (422).
+      security:
+        - adminOidc: [canonical:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../organisation/v1/counterparty.schema.json#/$defs/ResolutionCandidateDecision
+      responses:
+        "200":
+          $ref: "#/components/responses/OrganisationResolutionCandidate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+  # ---------------------------------------------------------------------------
+  # Counterparties (ADR-BCP-018 gate ORG-13): tenant-scoped roles an
+  # Organisation holds towards a tenant (buyer, supplier and so on).
+  # ---------------------------------------------------------------------------
+  /tenants/{tenant_id}/counterparty-roles:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Counterparties]
+      operationId: assignCounterpartyRole
+      summary: Assign a counterparty role in a tenant to an Organisation
+      description: >-
+        Repeating a live assignment returns the stored role with 200. Only
+        ORGANISATION entities hold roles (NOT_AN_ORGANISATION, 422).
+      security:
+        - adminOidc: [tenant:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../organisation/v1/counterparty.schema.json#/$defs/CounterpartyRoleAssignRequest
+      responses:
+        "201":
+          $ref: "#/components/responses/CounterpartyRole"
+        "200":
+          $ref: "#/components/responses/CounterpartyRole"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    get:
+      tags: [Counterparties]
+      operationId: listCounterpartyRoles
+      summary: List a tenant's counterparty roles, including ended ones
+      security:
+        - adminOidc: [tenant:read]
+      parameters:
+        - name: organisation_id
+          in: query
+          required: false
+          schema:
+            $ref: ./domain.schema.json#/$defs/canonicalEntityId
+      responses:
+        "200":
+          $ref: "#/components/responses/CounterpartyRoleList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /counterparty-roles/{role_id}/end:
+    parameters:
+      - $ref: "#/components/parameters/CounterpartyRoleId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Counterparties]
+      operationId: endCounterpartyRole
+      summary: End a counterparty role
+      security:
+        - adminOidc: [tenant:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../organisation/v1/counterparty.schema.json#/$defs/CounterpartyRoleEndRequest
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+  # ---------------------------------------------------------------------------
+  # Platform accounts (ADR-BCP-018 gate ORG-07): the commercial account and
+  # the tenant's explicit binding to it.
+  # ---------------------------------------------------------------------------
+  /platform-accounts/{account_id}:
+    parameters:
+      - $ref: "#/components/parameters/PlatformAccountId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Platform accounts]
+      operationId: getPlatformAccount
+      summary: Read a platform account
+      security:
+        - adminOidc: [canonical:read]
+      responses:
+        "200":
+          $ref: "#/components/responses/PlatformAccount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /platform-accounts/{account_id}/status:
+    parameters:
+      - $ref: "#/components/parameters/PlatformAccountId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Platform accounts]
+      operationId: changePlatformAccountStatus
+      summary: Change a platform account's status
+      description: >-
+        Only the platformAccountTransitions are allowed
+        (PLATFORM_ACCOUNT_TRANSITION_NOT_ALLOWED, 409), and an account with
+        ACTIVE tenant bindings cannot close
+        (PLATFORM_ACCOUNT_HAS_ACTIVE_BINDINGS, 409). Requires a registered
+        principal.
+      security:
+        - adminOidc: [canonical:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../organisation/v1/platform.schema.json#/$defs/PlatformAccountStatusChangeRequest
+      responses:
+        "200":
+          $ref: "#/components/responses/PlatformAccount"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /tenants/{tenant_id}/platform-account-binding:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Platform accounts]
+      operationId: bindTenantPlatformAccount
+      summary: Bind a tenant to a platform account
+      description: >-
+        The account must be ACTIVE and the tenant's ACTIVE primary
+        Organisation must hold a live membership in it
+        (TENANT_ORGANISATION_REQUIRED and ORGANISATION_NOT_ACCOUNT_MEMBER,
+        422). A tenant has at most one ACTIVE binding (TENANT_ALREADY_BOUND,
+        409). Repeating the current binding returns it with 200. Requires a
+        registered principal.
+      security:
+        - adminOidc: [tenant:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../organisation/v1/platform.schema.json#/$defs/TenantPlatformAccountBindingRequest
+      responses:
+        "201":
+          $ref: "#/components/responses/TenantPlatformAccountBinding"
+        "200":
+          $ref: "#/components/responses/TenantPlatformAccountBinding"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /tenants/{tenant_id}/platform-account-binding/end:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Platform accounts]
+      operationId: endTenantPlatformAccountBinding
+      summary: End a tenant's ACTIVE platform account binding
+      description: >-
+        Requires a registered principal. A tenant with no ACTIVE binding is
+        refused with PLATFORM_ACCOUNT_BINDING_NOT_FOUND (404).
+      security:
+        - adminOidc: [tenant:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../organisation/v1/platform.schema.json#/$defs/TenantPlatformAccountBindingEndRequest
+      responses:
+        "200":
+          $ref: "#/components/responses/TenantPlatformAccountBinding"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /tenants/{tenant_id}/platform-account-bindings:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Platform accounts]
+      operationId: listTenantPlatformAccountBindings
+      summary: List a tenant's platform account bindings, including ended ones
+      security:
+        - adminOidc: [tenant:read]
+      responses:
+        "200":
+          $ref: "#/components/responses/TenantPlatformAccountBindingList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  # ---------------------------------------------------------------------------
+  # Audit and diagnostics (ADR-BCP-018 gate ORG-15, ADR-BCP-022 sections
+  # 46-47): read-only.
+  # ---------------------------------------------------------------------------
+  /organisation-drift:
+    get:
+      tags: [Diagnostics]
+      operationId: getOrganisationDrift
+      summary: Report current relationship drift
+      description: >-
+        Changes nothing: drift is resolved by review, never by cascade (ADR-
+        BCP-018 section 129).
+      security:
+        - adminOidc: [canonical:read]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          $ref: "#/components/responses/RelationshipDriftReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /organisations/{organisation_id}/audit:
+    parameters:
+      - name: organisation_id
+        in: path
+        required: true
+        schema:
+          $ref: ./domain.schema.json#/$defs/canonicalEntityId
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Audit]
+      operationId: listOrganisationAudit
+      summary: List an Organisation's audit lineage, newest first
+      security:
+        - adminOidc: [canonical:read]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: before
+          in: query
+          required: false
+          description: The previous page's next cursor.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/OrganisationAuditPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   parameters:
     IdempotencyKey:
@@ -1586,6 +2216,36 @@ components:
       required: true
       schema:
         $ref: ../../product/v1/domain.schema.json#/$defs/subscriptionId
+    CanonicalEntityId:
+      name: entity_id
+      in: path
+      required: true
+      schema:
+        $ref: ./domain.schema.json#/$defs/canonicalEntityId
+    IamOrganisationReferenceId:
+      name: reference_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../organisation/v1/domain.schema.json#/$defs/iamOrganisationReferenceId
+    ResolutionCandidateId:
+      name: candidate_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../organisation/v1/counterparty.schema.json#/$defs/resolutionCandidateId
+    CounterpartyRoleId:
+      name: role_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../organisation/v1/counterparty.schema.json#/$defs/counterpartyRoleId
+    PlatformAccountId:
+      name: account_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../organisation/v1/domain.schema.json#/$defs/platformAccountId
     PageLimit:
       name: limit
       in: query
@@ -1709,6 +2369,133 @@ components:
         application/json:
           schema:
             $ref: ../../product/v1/subscription.schema.json#/$defs/ClassificationExplanation
+    IamOrganisationReference:
+      description: The IAM organisation link
+      content:
+        application/json:
+          schema:
+            $ref: ../../organisation/v1/iam.schema.json#/$defs/IamOrganisationReference
+    IamOrganisationReferenceList:
+      description: The Organisation's IAM organisation links
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items:
+                type: array
+                items:
+                  $ref: ../../organisation/v1/iam.schema.json#/$defs/IamOrganisationReference
+    IamOrganisationResolution:
+      description: The canonical Organisation the evidence resolves to
+      content:
+        application/json:
+          schema:
+            $ref: ../../organisation/v1/iam.schema.json#/$defs/IamOrganisationResolution
+    OrganisationAdmissionOutcome:
+      description: The admission outcome
+      content:
+        application/json:
+          schema:
+            $ref: ../../organisation/v1/admission.schema.json#/$defs/OrganisationAdmissionOutcome
+    CounterpartyReconciliationReport:
+      description: The reconciliation run
+      content:
+        application/json:
+          schema:
+            $ref: ../../organisation/v1/counterparty.schema.json#/$defs/CounterpartyReconciliationReport
+    OrganisationResolutionCandidate:
+      description: The resolution candidate
+      content:
+        application/json:
+          schema:
+            $ref: ../../organisation/v1/counterparty.schema.json#/$defs/OrganisationResolutionCandidate
+    ResolutionCandidatePage:
+      description: A page of resolution candidates
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items:
+                type: array
+                items:
+                  $ref: ../../organisation/v1/counterparty.schema.json#/$defs/OrganisationResolutionCandidate
+                next:
+                  description: Cursor for the next page; absent on the last page.
+                  $ref: ../../organisation/v1/counterparty.schema.json#/$defs/resolutionCandidateId
+    CounterpartyRole:
+      description: The counterparty role as stored
+      content:
+        application/json:
+          schema:
+            $ref: ../../organisation/v1/counterparty.schema.json#/$defs/CounterpartyRole
+    CounterpartyRoleList:
+      description: The tenant's counterparty roles
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items:
+                type: array
+                items:
+                  $ref: ../../organisation/v1/counterparty.schema.json#/$defs/CounterpartyRole
+    PlatformAccount:
+      description: The platform account
+      content:
+        application/json:
+          schema:
+            $ref: ../../organisation/v1/platform.schema.json#/$defs/PlatformAccount
+    TenantPlatformAccountBinding:
+      description: The binding
+      content:
+        application/json:
+          schema:
+            $ref: ../../organisation/v1/platform.schema.json#/$defs/TenantPlatformAccountBinding
+    TenantPlatformAccountBindingList:
+      description: The tenant's bindings
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items:
+                type: array
+                items:
+                  $ref: ../../organisation/v1/platform.schema.json#/$defs/TenantPlatformAccountBinding
+    RelationshipDriftReport:
+      description: Current relationship drift
+      content:
+        application/json:
+          schema:
+            $ref: ../../organisation/v1/observability.schema.json#/$defs/RelationshipDriftReport
+    OrganisationAuditPage:
+      description: A page of audit lineage, newest first
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items:
+                type: array
+                items:
+                  $ref: ../../organisation/v1/observability.schema.json#/$defs/OrganisationAuditEntry
+                next:
+                  description: Cursor for the next page; absent on the last page.
+                  $ref: ../../organisation/v1/observability.schema.json#/$defs/OrganisationAuditEntry/properties/audit_id
+    NoContent:
+      description: Done; no body
     InternalError:
       description: The Control Plane failed; the problem is retryable
       content:
