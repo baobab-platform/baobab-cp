@@ -645,8 +645,9 @@ func (r *PostgresRepository) ResolveExternalReference(ctx context.Context, tenan
 
 // MappingCandidates returns the tenant's CANONICAL_TO_EXTERNAL,
 // BIDIRECTIONAL and SOURCE_TO_TARGET mappings of a canonical entity in force
-// and in effect at at (a mapping retired since then included, see inForceAt), narrowed to target, with the scopes they name keyed by scope_id, for
-// resolver.ResolveMappingInContext to rank (ADR-SHARED-014). A mapping to
+// and in effect at at (a mapping retired since then included, see
+// inForceAt), narrowed to target, with the scopes they name keyed by
+// scope_id, for resolver.ResolveMappingInContext to rank (ADR-SHARED-014). A mapping to
 // another canonical entity has no external reference, so a target excludes it.
 func (r *PostgresRepository) MappingCandidates(ctx context.Context, tenantID, canonicalEntityID string, target MappingTarget, at time.Time) ([]domain.Mapping, map[string]domain.MappingScope, error) {
 	if !domain.IsUUID(canonicalEntityID) {
@@ -680,34 +681,9 @@ func (r *PostgresRepository) MappingCandidates(ctx context.Context, tenantID, ca
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
 	}
-	scopes := map[string]domain.MappingScope{}
-	if len(scopeKeys) == 0 {
-		return candidates, scopes, nil
-	}
-	scopeRows, err := r.pool.Query(ctx, `SELECT mapping_scope_key, `+mappingScopeSelectColumns+`
-		FROM mapping.mapping_scope WHERE mapping_scope_key = ANY($1) AND tenant_id = $2`, scopeKeys, tenantID)
+	scopes, err := r.MappingScopesByKey(ctx, tenantID, scopeKeys)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer scopeRows.Close()
-	for scopeRows.Next() {
-		var key string
-		scope, err := scanMappingScope(prefixedScan{row: scopeRows, first: &key})
-		if err != nil {
-			return nil, nil, err
-		}
-		scopes[key] = scope
-	}
-	return candidates, scopes, scopeRows.Err()
-}
-
-// prefixedScan scans a leading column into first and the rest into the
-// destinations the wrapped scanner is given.
-type prefixedScan struct {
-	row   pgx.Row
-	first *string
-}
-
-func (p prefixedScan) Scan(dest ...any) error {
-	return p.row.Scan(append([]any{p.first}, dest...)...)
+	return candidates, scopes, nil
 }
