@@ -1,0 +1,31 @@
+# external-systems.yaml
+#
+# The external systems whose native objects the Control Plane may record as
+# ExternalReferences (canonical-mapping.schema.json#/$defs/externalReference),
+# and which engine may hold each one (ADR-SHARED-012).
+#
+# system_namespace is the logical namespace of a native identifier, usually
+# the engine's technology family (capability/v1 engineKey, e.g. medusa).
+# engine_ids are the registered engines (control-plane/v1
+# domain.schema.json#/$defs/engineId, named as their repositories) that run
+# that system. The Control Plane refuses an ExternalReference whose
+# (system_namespace, engine_id) pair is not listed here. A namespace is never
+# inferred from an engine id, or an engine id from a namespace.
+#
+# Registering a system is an architecture decision: add it here through a
+# reviewed change. scripts/validate-control-plane-contracts.py checks every
+# entry.
+
+schema: baobab-external-system-registry
+version: "1.0"
+
+systems:
+  - system_namespace: medusa
+    engine_ids: [baobab-trade]
+    description: "MedusaJS commerce objects (products, customers, orders) held by baobab-trade."
+  - system_namespace: idempiere
+    engine_ids: [baobab-erp]
+    description: "iDempiere ERP records (e.g. M_Product, C_BPartner) held by baobab-erp."
+  - system_namespace: payload
+    engine_ids: [baobab-cms]
+    description: "Payload CMS documents held by baobab-cms."

@@ -70,19 +70,21 @@ func TestContextIsExpired(t *testing.T) {
 	}
 }
 
-func TestExternalReferenceRequiresCanonicalAndNativeIdentity(t *testing.T) {
-	reference := ExternalReference{
-		CanonicalEntityID: "0199-canonical-party",
-		EngineID:          "0199-idempiere",
-		NativeType:        "C_BPartner",
-		NativeID:          "10043",
-		Status:            "ACTIVE",
+func TestNativeIdentityFollowsTheSharedGrammar(t *testing.T) {
+	identity := NativeIdentity{SystemNamespace: "idempiere", EngineID: "baobab-erp", NativeEntityType: "c_bpartner", NativeID: "10043"}
+	if err := identity.Validate(); err != nil {
+		t.Fatalf("valid native identity rejected: %v", err)
 	}
-	if err := reference.Validate(); err != nil {
-		t.Fatalf("valid external reference rejected: %v", err)
-	}
-	reference.NativeID = ""
-	if err := reference.Validate(); err == nil {
-		t.Fatal("external reference without native identity accepted")
+	for name, bad := range map[string]NativeIdentity{
+		"no native id":         {SystemNamespace: "idempiere", EngineID: "baobab-erp", NativeEntityType: "c_bpartner"},
+		"snake_case engine":    {SystemNamespace: "idempiere", EngineID: "baobab_erp", NativeEntityType: "c_bpartner", NativeID: "1"},
+		"upper-case type":      {SystemNamespace: "idempiere", EngineID: "baobab-erp", NativeEntityType: "C_BPartner", NativeID: "1"},
+		"uuid engine instance": {SystemNamespace: "idempiere", EngineID: "baobab-erp", EngineInstanceID: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b", NativeEntityType: "c_bpartner", NativeID: "1"},
+		"unknown environment":  {SystemNamespace: "idempiere", EngineID: "baobab-erp", Environment: "prod", NativeEntityType: "c_bpartner", NativeID: "1"},
+		"hyphenated namespace": {SystemNamespace: "i-dempiere", EngineID: "baobab-erp", NativeEntityType: "c_bpartner", NativeID: "1"},
+	} {
+		if err := bad.Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

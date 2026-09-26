@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.5.0
+  version: 1.6.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -23,6 +23,8 @@ tags:
     description: Reading tenants, their product entitlements and lifecycle commands (ADR-BCP-022 section 43).
   - name: Classification
     description: A ProductSubscription's classification and its explanation (ADR-BCP-018 ORG-11, ADR-SHARED-011).
+  - name: Mappings
+    description: ExternalReferences, canonical Mappings, their lifecycle and resolution (Canonical Mapping Model, ADR-SHARED-012).
   - name: Canonical registry
     description: Registering canonical entities and their lifecycle commands (ADR-BCP-001, ADR-0006, ADR-BCP-016).
   - name: Organisations
@@ -161,10 +163,175 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
+  # ---------------------------------------------------------------------------
+  # Mappings (Canonical Mapping Model sections 8-9, 23 and 46-49; ADR-SHARED-012):
+  # ExternalReferences record that a native object exists; Mappings relate a
+  # canonical entity to one, or to another canonical entity, within a tenant.
+  # Every lifecycle command needs the mapping's revision in If-Match, and the
+  # actor is always the verified caller, never a body field. Administrative
+  # operations also require Control Plane platform-administrator authority.
+  # ---------------------------------------------------------------------------
+  /external-references:
+    post:
+      tags: [Mappings]
+      operationId: createExternalReference
+      summary: Record a native object's identity
+      description: >-
+        The (system_namespace, engine_id) pair must be registered in
+        external-systems.yaml, or the request is refused with
+        EXTERNAL_SYSTEM_NOT_REGISTERED (422). A native identity is recorded
+        once: a second registration is refused with
+        EXTERNAL_REFERENCE_EXISTS (409); look it up with
+        listExternalReferences. The reference starts unverified.
+      security:
+        - adminOidc: [mapping:write]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./canonical-mapping.schema.json#/$defs/externalReferenceCreateRequest
+      responses:
+        "201":
+          description: Recorded
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/externalReference
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    get:
+      tags: [Mappings]
+      operationId: listExternalReferences
+      summary: Find the ExternalReference for a native identity
+      description: >-
+        Returns the reference with exactly this native identity, or an empty
+        list. It says nothing about which canonical entity the object
+        corresponds to: that is resolveExternalReference.
+      security:
+        - adminOidc: [canonical:read]
+      parameters:
+        - { name: system_namespace, in: query, required: true, schema: { $ref: "./canonical-mapping.schema.json#/$defs/externalReference/properties/system_namespace" } }
+        - { name: engine_id, in: query, required: true, schema: { $ref: "./domain.schema.json#/$defs/engineId" } }
+        - { name: native_entity_type, in: query, required: true, schema: { $ref: "./canonical-mapping.schema.json#/$defs/externalReference/properties/native_entity_type" } }
+        - { name: native_id, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 256 } }
+        - { name: engine_instance_id, in: query, required: false, schema: { $ref: "./domain.schema.json#/$defs/engineInstanceId" } }
+        - { name: environment, in: query, required: false, schema: { $ref: "./domain.schema.json#/$defs/environment" } }
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The matching reference, if any
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/externalReferenceList
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /external-references/{external_reference_id}:
+    parameters:
+      - $ref: "#/components/parameters/ExternalReferenceId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Mappings]
+      operationId: getExternalReference
+      summary: Read an ExternalReference
+      security:
+        - adminOidc: [canonical:read]
+      responses:
+        "200":
+          description: The reference
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/externalReference
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /resolution/external-references:
+    post:
+      tags: [Mappings]
+      operationId: resolveExternalReference
+      summary: Resolve a native object to its canonical entity
+      description: >-
+        Follows ACTIVE EXTERNAL_TO_CANONICAL or BIDIRECTIONAL Mappings of the
+        tenant in effect at effective_timestamp (Canonical Mapping Model
+        section 23). No match is MAPPING_NOT_FOUND (404); several equally
+        authoritative matches are MAPPING_AMBIGUOUS (409) and resolve to
+        nothing. An IAM organisation is resolved by resolveIamOrganisation,
+        never here (ADR-BCP-018 ORG-10).
+      security:
+        - adminOidc: [canonical:read]
+        - workloadOidc: [mapping:resolve]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/Traceparent"
+        - $ref: "#/components/parameters/Tracestate"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./canonical-mapping.schema.json#/$defs/externalReferenceResolutionRequest
+      responses:
+        "200":
+          description: The canonical entity and the mapping that relates it
+          content:
+            application/json:
+              schema:
+                $ref: ./canonical-mapping.schema.json#/$defs/externalReferenceResolutionResponse
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /mappings:
     post:
+      tags: [Mappings]
       operationId: createMapping
-      summary: Create a new canonical mapping in DRAFT state
+      summary: Propose a canonical mapping
+      description: >-
+        The mapping starts DRAFT at revision 1, created by the verified
+        caller. Its canonical entity, target and scope must belong to its
+        tenant (CROSS_TENANT_MAPPING, 422), and each must exist (404).
       security:
         - adminOidc: [mapping:write]
       parameters:
@@ -178,10 +345,15 @@ paths:
         content:
           application/json:
             schema:
-              $ref: ./canonical-mapping.schema.json#/$defs/mapping
+              $ref: ./canonical-mapping.schema.json#/$defs/mappingCreateRequest
       responses:
         "201":
-          description: Mapping created in DRAFT state
+          description: Proposed, DRAFT
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -192,28 +364,32 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /mappings/{mapping_id}:
+    parameters:
+      - $ref: "#/components/parameters/MappingId"
+      - $ref: "#/components/parameters/CorrelationId"
     get:
+      tags: [Mappings]
       operationId: getMapping
-      summary: Retrieve a mapping by ID
+      summary: Read a mapping
       security:
+        - adminOidc: [canonical:read]
         - workloadOidc: [mapping:read]
-      parameters:
-        - name: mapping_id
-          in: path
-          required: true
-          schema:
-            $ref: ./domain.schema.json#/$defs/mappingId
-        - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
-          description: Mapping details
-          content:
-            application/json:
-              schema:
-                $ref: ./canonical-mapping.schema.json#/$defs/mapping
+          $ref: "#/components/responses/Mapping"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -221,44 +397,30 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          description: Mapping not found
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
     patch:
+      tags: [Mappings]
       operationId: updateMapping
-      summary: Update an existing mapping (requires If-Match revision header for optimistic concurrency)
+      summary: Change a DRAFT mapping
+      description: >-
+        Only a DRAFT mapping changes (MAPPING_NOT_DRAFT, 409). What it relates,
+        its tenant and its type never change.
       security:
         - adminOidc: [mapping:write]
       parameters:
-        - name: mapping_id
-          in: path
-          required: true
-          schema:
-            $ref: ./domain.schema.json#/$defs/mappingId
-        - name: If-Match
-          in: header
-          required: false
-          description: Optimistic concurrency control. Supply the current revision (e.g., '5') from the mapping resource.
-          schema:
-            type: integer
-            minimum: 1
-        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/MappingIfMatch"
         - $ref: "#/components/parameters/CausationId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: ./canonical-mapping.schema.json#/$defs/mapping
+              $ref: ./canonical-mapping.schema.json#/$defs/mappingUpdateRequest
       responses:
         "200":
-          description: Mapping updated
-          content:
-            application/json:
-              schema:
-                $ref: ./canonical-mapping.schema.json#/$defs/mapping
+          $ref: "#/components/responses/Mapping"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -266,51 +428,69 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          description: Mapping not found
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/NotFound"
         "409":
-          description: Revision conflict or state transition not permitted
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
-  /mappings/{mapping_id}/activate:
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /mappings/{mapping_id}/validate:
+    parameters:
+      - $ref: "#/components/parameters/MappingId"
+      - $ref: "#/components/parameters/MappingIfMatch"
+      - $ref: "#/components/parameters/CorrelationId"
+      - $ref: "#/components/parameters/CausationId"
     post:
+      tags: [Mappings]
+      operationId: validateMapping
+      summary: Validate a DRAFT mapping
+      description: >-
+        Takes no body. Moves DRAFT to VALIDATED; any other status is MAPPING_LIFECYCLE_CONFLICT (409).
+      security:
+        - adminOidc: [mapping:write]
+      responses:
+        "200":
+          $ref: "#/components/responses/Mapping"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /mappings/{mapping_id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/MappingId"
+      - $ref: "#/components/parameters/MappingIfMatch"
+      - $ref: "#/components/parameters/CorrelationId"
+      - $ref: "#/components/parameters/CausationId"
+    post:
+      tags: [Mappings]
       operationId: activateMapping
-      summary: Transition a mapping from VALIDATED state to ACTIVE state
+      summary: Activate a VALIDATED mapping
+      description: >-
+        Takes no body. Moves VALIDATED to ACTIVE, approved by the verified caller, who must not be its creator (MAPPING_SELF_APPROVAL, 403; four-eyes, Canonical Mapping Model section 48). An overlapping ACTIVE mapping for the same subject and scope is MAPPING_OVERLAP (409).
       security:
         - adminOidc: [mapping:approve]
-      parameters:
-        - name: mapping_id
-          in: path
-          required: true
-          schema:
-            $ref: ./domain.schema.json#/$defs/mappingId
-        - $ref: "#/components/parameters/CorrelationId"
-        - $ref: "#/components/parameters/CausationId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [approved_by]
-              properties:
-                approved_by:
-                  type: string
-                  maxLength: 256
-                  description: Identity of the approver executing this activation.
       responses:
         "200":
-          description: Mapping activated
-          content:
-            application/json:
-              schema:
-                $ref: ./canonical-mapping.schema.json#/$defs/mapping
+          $ref: "#/components/responses/Mapping"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -318,57 +498,40 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          description: Mapping not found
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/NotFound"
         "409":
-          description: Mapping not in VALIDATED state or other state transition conflict
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /mappings/{mapping_id}/retire:
+    parameters:
+      - $ref: "#/components/parameters/MappingId"
+      - $ref: "#/components/parameters/MappingIfMatch"
+      - $ref: "#/components/parameters/CorrelationId"
+      - $ref: "#/components/parameters/CausationId"
     post:
+      tags: [Mappings]
       operationId: retireMapping
-      summary: Transition a mapping to RETIRED state, optionally superseding it with a new mapping
+      summary: Retire a mapping
+      description: >-
+        Moves ACTIVE, DEPRECATED or SUSPENDED to RETIRED, retired by the verified caller. A retired mapping is kept for historical resolution.
       security:
         - adminOidc: [mapping:write]
-      parameters:
-        - name: mapping_id
-          in: path
-          required: true
-          schema:
-            $ref: ./domain.schema.json#/$defs/mappingId
-        - $ref: "#/components/parameters/CorrelationId"
-        - $ref: "#/components/parameters/CausationId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: false
-              required: [retired_by]
-              properties:
-                retired_by:
-                  type: string
-                  maxLength: 256
-                  description: Identity of the actor retiring this mapping.
-                successor_mapping_id:
-                  $ref: ./domain.schema.json#/$defs/mappingId
-                reason:
-                  type: string
-                  maxLength: 500
-                  description: Explanation for retirement.
+              $ref: ./canonical-mapping.schema.json#/$defs/mappingRetireRequest
       responses:
         "200":
-          description: Mapping retired
-          content:
-            application/json:
-              schema:
-                $ref: ./canonical-mapping.schema.json#/$defs/mapping
+          $ref: "#/components/responses/Mapping"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -376,19 +539,20 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          description: Mapping not found
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/NotFound"
         "409":
-          description: State transition conflict
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /resolution/mappings:
     post:
+      tags: [Mappings]
       operationId: resolveMapping
       summary: Resolve a canonical entity to its external representation(s) in a given context and capability
       security:
@@ -2483,6 +2647,31 @@ components:
       required: true
       schema:
         $ref: ./domain.schema.json#/$defs/canonicalEntityId
+    MappingId:
+      name: mapping_id
+      in: path
+      required: true
+      schema:
+        $ref: ./domain.schema.json#/$defs/mappingId
+    ExternalReferenceId:
+      name: external_reference_id
+      in: path
+      required: true
+      schema:
+        $ref: ./domain.schema.json#/$defs/externalReferenceId
+    MappingIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: >-
+        The mapping's current revision as a strong entity tag, e.g. "3" (the
+        ETag of its last read). Missing is refused with IF_MATCH_REQUIRED
+        (428); malformed with INVALID_IF_MATCH (400); stale with
+        MAPPING_REVISION_MISMATCH (412), after which the client reloads the
+        mapping rather than retrying.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
     CanonicalEntityIfMatch:
       name: If-Match
       in: header
@@ -2768,6 +2957,15 @@ components:
                 next:
                   description: Cursor for the next page; absent on the last page.
                   $ref: ../../organisation/v1/observability.schema.json#/$defs/OrganisationAuditEntry/properties/audit_id
+    Mapping:
+      description: The mapping
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: ./canonical-mapping.schema.json#/$defs/mapping
     CanonicalEntity:
       description: The canonical entity
       headers:

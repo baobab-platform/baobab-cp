@@ -118,30 +118,6 @@ func TestIamOrganisationLinks(t *testing.T) {
 	}
 }
 
-// TestExternalReferenceLookupFailsClosedOnAmbiguity: the generic
-// registry.external_reference table is unique only per canonical entity, so
-// one provider key linked to two entities must not resolve to either.
-func TestExternalReferenceLookupFailsClosedOnAmbiguity(t *testing.T) {
-	f := newOrgFixture(t)
-	a, b := f.organisation(t, "A"), f.organisation(t, "B")
-	native := "kc-org-" + strings.ReplaceAll(domain.NewUUIDv7(), "-", "")[:16]
-	link := func(entity string) {
-		t.Helper()
-		if _, err := f.repo.CreateExternalReference(f.ctx, domain.ExternalReference{CanonicalEntityID: entity, EngineID: "baobab-iam",
-			NativeType: "keycloak_organization", NativeID: native}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	link(a)
-	if got, err := f.repo.GetCanonicalEntityByExternalReference(f.ctx, "baobab-iam", "keycloak_organization", native); err != nil || got.ID != a {
-		t.Fatalf("single link: %+v %v", got, err)
-	}
-	link(b)
-	if got, err := f.repo.GetCanonicalEntityByExternalReference(f.ctx, "baobab-iam", "keycloak_organization", native); !errors.Is(err, ErrExternalReferenceAmbiguous) {
-		t.Fatalf("ambiguous link resolved to %+v, err=%v", got, err)
-	}
-}
-
 // TestIamOrganisationReferencesConformToSharedContract validates the links
 // and evidence the Control Plane produces against baobab-platform/shared
 // contracts/organisation/v1/iam.schema.json. It skips while the pinned Shared
