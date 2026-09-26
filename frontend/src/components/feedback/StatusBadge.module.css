@@ -1,0 +1,26 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.glyph {
+  font-size: var(--font-size-xs);
+}
+
+.badge[data-tone="neutral"] { background: var(--status-neutral-bg); color: var(--status-neutral-fg); }
+.badge[data-tone="informational"] { background: var(--status-informational-bg); color: var(--status-informational-fg); }
+.badge[data-tone="in-progress"] { background: var(--status-in-progress-bg); color: var(--status-in-progress-fg); }
+.badge[data-tone="success"] { background: var(--status-success-bg); color: var(--status-success-fg); }
+.badge[data-tone="warning"] { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+.badge[data-tone="blocked"] { background: var(--status-blocked-bg); color: var(--status-blocked-fg); }
+.badge[data-tone="failure"] { background: var(--status-failure-bg); color: var(--status-failure-fg); }
+.badge[data-tone="expired"] { background: var(--status-expired-bg); color: var(--status-expired-fg); }
+.badge[data-tone="revoked"] { background: var(--status-revoked-bg); color: var(--status-revoked-fg); }
