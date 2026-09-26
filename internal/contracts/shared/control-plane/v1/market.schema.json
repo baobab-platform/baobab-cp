@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/market.schema.json",
+  "title": "Baobab Market Registry",
+  "description": "Commercial operating contexts that are not synonymous with country, region, or estate. A market is a business-defined operational boundary (§11, §22, §30).",
+  "$defs": {
+    "marketId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 63,
+      "description": "Opaque market identifier. Examples: south-africa-b2b, kenya-wholesale, east-africa-distributor."
+    },
+    "marketType": {
+      "type": "string",
+      "enum": ["B2B", "B2C", "WHOLESALE", "DISTRIBUTOR", "INSTITUTIONAL", "CORPORATE", "RETAIL", "MARKETPLACE", "OTHER"],
+      "description": "Commercial classification of the market."
+    },
+    "market": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["market_id", "canonical_key", "name", "owner_tenant_id", "market_type", "status", "created_at", "created_by"],
+      "properties": {
+        "market_id": { "$ref": "#/$defs/marketId" },
+        "canonical_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[._][a-z0-9]+)*$",
+          "minLength": 3,
+          "maxLength": 128,
+          "description": "Immutable business key identifying the market in external references and events."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Human-readable market name."
+        },
+        "owner_tenant_id": {
+          "$ref": "./domain.schema.json#/$defs/tenantId",
+          "description": "Control Plane tenant that owns this market."
+        },
+        "legal_entity_id": {
+          "$ref": "./domain.schema.json#/$defs/legalEntityId",
+          "description": "Primary legal entity responsible for this market's operations."
+        },
+        "operating_region_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Broader geographic or operational region that may contain this market."
+        },
+        "parent_market_id": {
+          "$ref": "#/$defs/marketId",
+          "description": "Optional reference to parent market in a hierarchy (§11.3). Parent can supply configuration defaults."
+        },
+        "market_type": { "$ref": "#/$defs/marketType" },
+        "default_country": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z]{2}$",
+          "description": "ISO 3166-1 alpha-2 primary country code for this market (if country-specific)."
+        },
+        "countries": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "maxItems": 250,
+          "description": "List of ISO country codes where this market operates. A market may span multiple countries; a country may have multiple markets."
+        },
+        "default_currency": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO 4217 default transaction currency for this market."
+        },
+        "allowed_currencies": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "maxItems": 10,
+          "description": "ISO 4217 currencies permitted for transactions in this market (§31)."
+        },
+        "accounting_context": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Reference to accounting configuration (e.g., account structure, consolidation rules)."
+        },
+        "default_locale": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z]{2}(?:-[A-Z]{2})?$",
+          "description": "BCP 47 default locale for content and communication (§32)."
+        },
+        "supported_locales": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z]{2}(?:-[A-Z]{2})?$"
+          },
+          "maxItems": 50,
+          "description": "BCP 47 locales supported for this market. Fallback chain should be explicit (§32)."
+        },
+        "timezone": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z_]+/[A-Za-z_]+$",
+          "description": "IANA timezone for market operations (e.g., Africa/Johannesburg, Africa/Nairobi)."
+        },
+        "tax_profile_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Reference to applicable tax configuration and rates."
+        },
+        "pricing_policy_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Reference to market-specific pricing rules and policies."
+        },
+        "catalogue_policy_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Reference to product catalogue composition and availability rules for this market."
+        },
+        "payment_policy_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Reference to accepted payment methods and providers."
+        },
+        "fulfilment_policy_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Reference to warehousing and delivery strategy."
+        },
+        "regulatory_profile_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 128,
+          "description": "Reference to regulatory requirements (licenses, compliance, data residency)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["DRAFT", "VALIDATED", "ACTIVE", "DEPRECATED", "SUSPENDED", "MIGRATING", "RETIRED"],
+          "description": "Market lifecycle state (§26)."
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Market becomes operational at this timestamp."
+        },
+        "effective_to": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Market ceases operation at this timestamp (if retiring)."
+        },
+        "metadata": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "maxProperties": 20,
+          "properties": {
+            "source": { "type": "string", "maxLength": 128 },
+            "tags": { "type": "array", "items": { "type": "string", "maxLength": 64 }, "maxItems": 20 },
+            "notes": { "type": "string", "maxLength": 1000 },
+            "established_date": { "type": "string", "format": "date" },
+            "business_model": { "type": "string", "maxLength": 256 }
+          },
+          "description": "Schema-constrained optional metadata."
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optimistic concurrency version."
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "created_by": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "updated_by": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    },
+    "marketHierarchy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "market_id": { "$ref": "#/$defs/marketId" },
+        "parent_market_id": { "$ref": "#/$defs/marketId" },
+        "child_markets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/marketId" }
+        }
+      },
+      "description": "Market hierarchy for inheritance of configuration defaults (§11.3, §20)."
+    }
+  }
+}

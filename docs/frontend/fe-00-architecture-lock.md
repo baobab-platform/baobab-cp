@@ -136,7 +136,7 @@ the count honest: it fails when a served route is neither described nor listed a
 | External references, mappings | `control-plane/v1` `canonical-mapping.schema.json` | Mappings tag (11 operations) | yes, except `resolveMapping` (G2) | Yes |
 | Corporate structure | `organisation/v1` | none | service level only (G3) | No |
 | Subscription classification | `product/v1` (records, explanations, commands) | Classification tag (4 operations) | yes | Yes |
-| Markets, mappings | `control-plane/v1` | `/markets…`, `/mappings…`, `/resolution/mappings` | **no** | Generating would describe routes that do not exist (G2) |
+| Markets, mapping resolution | `control-plane/v1` | `/markets…`, `/resolution/mappings` | **no** | Generating would describe routes that do not exist (G2) |
 | Errors | `errors/v1` problem details | referenced | yes (`application/problem+json`) | Yes |
 
 ## 6. Contract and backend gap list
@@ -175,7 +175,7 @@ the count honest: it fails when a served route is neither described nor listed a
 | ID | Risk | Mitigation |
 |---|---|---|
 | R1 | The IdP migration changes the login and session flow after FE-03 is built. | Do not build FE-03 until the Ory ADR is decided. Keep the OIDC client behind a server-only port, so the provider is one adapter. |
-| R2 | Generating a client from the current OpenAPI would produce types for routes that don't exist (G2) and none for the routes that do (B2). | FE-05 waits on B2. No hand-written API types in the meantime (prompt §93). |
+| R2 | Generating a client from the current OpenAPI would produce types for routes that don't exist (G2) and none for the routes that do (B2). | Mitigated in FE-05: 68 of 76 human routes are described, and the typed client removes the G2 operations, cross-checked against the Control Plane's list. No hand-written API types (prompt §93). |
 | R3 | The coarse `cp:platform-admin` requirement means the Console cannot give a reviewer less than full platform authority. | Show authority honestly. ADR-BCP-020 grants are the real fix (G6). |
 | R4 | Screens built before G3, G4 and G6 exist would invent local models. | Build only verticals whose backend is ready (§9). Unready areas get a shell and a documented dependency (prompt §2). |
 | R5 | Two runtimes in one repository increase CI time and blur ownership. | Path-filtered frontend CI; independent images (ADR-BCP-019 §90). |
@@ -189,7 +189,7 @@ the count honest: it fails when a served route is neither described nor listed a
 | FE-02 Design system: tokens, primitives, status, error, loading and empty states, WCAG 2.2 AA | **Yes** | FE-01 |
 | FE-03 Authentication and BFF | No | B1 (Ory ADR and a confidential client) |
 | FE-04 Global shell and context | Shell layout yes; authority-aware navigation no | G5 |
-| FE-05 Generated client and drift CI | Yes for applications, admission and onboarding; the CP drift test exists | FE-01; the remaining B2 phases for other families |
+| FE-05 Generated client and drift CI | **Done**: types generated from the pinned OpenAPI, `check:cp-client` in CI, server-only client with the G2 operations removed | FE-01 |
 | FE-06 Applicant workspace; FE-07 Admission review; tenant onboarding | Backend ready | FE-03, FE-05 |
 | FE-08 Organisation administration | Partial | G3, G4 |
 | FE-09 to FE-12 People and access, changesets, approvals, operations | No | G6 |

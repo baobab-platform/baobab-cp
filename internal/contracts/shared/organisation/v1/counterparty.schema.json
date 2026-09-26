@@ -1,0 +1,420 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/organisation/v1/counterparty.schema.json",
+  "title": "Baobab Counterparty Roles and Organisation Resolution Candidates (ADR-BCP-018 gate ORG-13)",
+  "description": "Definition library for the generalisation of ADR-BCP-016's bounded BUYER_ORGANISATION and SUPPLIER_ORGANISATION kinds into Organisation plus tenant-scoped CounterpartyRole (ADR-BCP-018 sections 11 and 112, ADR-BCP-014 sections 10-17), and for the quarantine of possible duplicate Organisations (ADR-BCP-018 sections 99-101, ADR-BCP-023 sections 50-52).\nValidate resources against fragment URIs (e.g. #/$defs/CounterpartyRole), not the document root.\n\nInvariants:\n  CounterpartyRole is tenant-scoped commercial capacity, never identity and never authorization (ADR-BCP-014 sections 11-17).\n  A migrated BUYER_ORGANISATION or SUPPLIER_ORGANISATION keeps its canonical id; the role records the legacy kind it came from.\n  Duplicate candidates are found on governed identifiers only, never on names, and are quarantined for review.\n  A reviewer decision records whether two Organisations are the same real organisation. It merges nothing: a canonical merge is a controlled change under ADR-BCP-021 (ADR-BCP-023 section 52).\n\nControl Plane is the runtime authority. Shared is the contract authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "counterpartyRoleId": {
+      "type": "string",
+      "pattern": "^crole_[a-z0-9]+$",
+      "minLength": 7,
+      "maxLength": 63,
+      "description": "Opaque Control Plane-minted CounterpartyRole identifier. Must not embed organisation names, tenants, roles or brands."
+    },
+    "resolutionCandidateId": {
+      "type": "string",
+      "pattern": "^orc_[a-z0-9]+$",
+      "minLength": 5,
+      "maxLength": 63,
+      "description": "Opaque Control Plane-minted OrganisationResolutionCandidate identifier."
+    },
+    "counterpartyRoleType": {
+      "type": "string",
+      "description": "Commercial capacity an Organisation acts in for a tenant (ADR-BCP-014 section 13; THIRD_PARTY_LOGISTICS is that section's 3PL). Roles are not organisation forms and not relationships. Extensible by a versioned contract change.",
+      "enum": [
+        "CUSTOMER",
+        "BUYER",
+        "SUPPLIER",
+        "VENDOR",
+        "DISTRIBUTOR",
+        "RESELLER",
+        "CARRIER",
+        "FREIGHT_FORWARDER",
+        "CUSTOMS_BROKER",
+        "WAREHOUSE_OPERATOR",
+        "THIRD_PARTY_LOGISTICS",
+        "INSURER",
+        "BANK",
+        "PAYMENT_PROVIDER",
+        "AGENT",
+        "SERVICE_PROVIDER",
+        "AFFILIATE",
+        "INTERCOMPANY_COUNTERPARTY"
+      ]
+    },
+    "counterpartyRoleStatus": {
+      "type": "string",
+      "description": "Role lifecycle. An ENDED role stays queryable as history.",
+      "enum": [
+        "PENDING",
+        "ACTIVE",
+        "SUSPENDED",
+        "ENDED"
+      ]
+    },
+    "legacyOrganisationKind": {
+      "type": "string",
+      "description": "The ADR-BCP-016 bounded kind a migrated role was materialised from (ADR-BCP-018 section 112).",
+      "enum": [
+        "BUYER_ORGANISATION",
+        "SUPPLIER_ORGANISATION"
+      ]
+    },
+    "CounterpartyRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "An Organisation's effective-dated commercial role for one tenant. At most one live (PENDING, ACTIVE or SUSPENDED) role per organisation, tenant and role type. A role grants no tenant access and no portal access (ADR-BCP-014 section 17).",
+      "required": [
+        "id",
+        "organisation_id",
+        "tenant_id",
+        "role",
+        "status",
+        "effective_from",
+        "source_authority"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/counterpartyRoleId"
+        },
+        "organisation_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "role": {
+          "$ref": "#/$defs/counterpartyRoleType"
+        },
+        "status": {
+          "$ref": "#/$defs/counterpartyRoleStatus"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_authority": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Who established the role, e.g. legacy-canonical-entity for an ORG-13 migration or the admitting reviewer's authority."
+        },
+        "legacy_entity_type": {
+          "$ref": "#/$defs/legacyOrganisationKind"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ENDED"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "effective_to"
+        ]
+      }
+    },
+    "resolutionCandidateStatus": {
+      "type": "string",
+      "description": "OPEN: quarantined, awaiting review. DISTINCT: a reviewer found two different real organisations. DUPLICATE_CONFIRMED: a reviewer found the same real organisation; the merge itself is a separate ADR-BCP-021 controlled change.",
+      "enum": [
+        "OPEN",
+        "DISTINCT",
+        "DUPLICATE_CONFIRMED"
+      ]
+    },
+    "matchedIdentifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A governed identifier both Organisations carry. The value is normalised (case and separators removed) exactly as identity resolution compares it.",
+      "required": [
+        "type",
+        "normalised_value"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "COMPANY_REGISTRATION",
+            "TAX_IDENTIFIER",
+            "VAT_IDENTIFIER",
+            "LEI"
+          ]
+        },
+        "normalised_value": {
+          "type": "string",
+          "pattern": "^[^a-z\\s./-]+$",
+          "minLength": 1,
+          "description": "The identifier value with whitespace, '.', '/' and '-' removed and letters upper-cased, exactly as identity resolution compares it."
+        },
+        "issuing_jurisdiction": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        }
+      }
+    },
+    "ResolutionCandidateDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A reviewer's decision on a quarantined candidate. The reviewer is the authenticated principal, never a request field.",
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "DISTINCT",
+            "DUPLICATE_CONFIRMED"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "surviving_organisation_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId",
+          "description": "Required for DUPLICATE_CONFIRMED: the Organisation a later ADR-BCP-021 merge would keep. Must be one of the candidate's organisations."
+        },
+        "evidence_references": {
+          "type": "array",
+          "items": {
+            "$ref": "domain.schema.json#/$defs/evidenceReference"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "DUPLICATE_CONFIRMED"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "surviving_organisation_id"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "surviving_organisation_id"
+          ]
+        }
+      }
+    },
+    "OrganisationResolutionCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A quarantined pair of Organisations that share at least one governed identifier. One candidate per unordered pair. A DISTINCT pair is reopened only when a governed identifier match it was not decided on appears.",
+      "required": [
+        "id",
+        "organisation_ids",
+        "matched_identifiers",
+        "status",
+        "detected_at",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/resolutionCandidateId"
+        },
+        "organisation_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId"
+          }
+        },
+        "matched_identifiers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/matchedIdentifier"
+          }
+        },
+        "status": {
+          "$ref": "#/$defs/resolutionCandidateStatus"
+        },
+        "detected_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What detected the candidate, e.g. organisation-reconciliation."
+        },
+        "decision": {
+          "$ref": "#/$defs/ResolutionCandidateDecision"
+        },
+        "decided_by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Authenticated identity of the reviewer, stamped by the Control Plane from the request's credentials."
+        },
+        "decided_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "OPEN"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "decision"
+                  ]
+                },
+                {
+                  "required": [
+                    "decided_by"
+                  ]
+                },
+                {
+                  "required": [
+                    "decided_at"
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "decision",
+              "decided_by",
+              "decided_at"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "DISTINCT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "decision": {
+                "properties": {
+                  "decision": {
+                    "const": "DISTINCT"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "DUPLICATE_CONFIRMED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "decision": {
+                "properties": {
+                  "decision": {
+                    "const": "DUPLICATE_CONFIRMED"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "CounterpartyRoleAssignRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["organisation_id", "role"],
+      "description": "Assigns a tenant-scoped counterparty role to a canonical Organisation (ADR-BCP-018 gate ORG-13). The tenant comes from the path and the source authority from the Control Plane, never the body. Repeating a live assignment returns the stored role.",
+      "properties": {
+        "organisation_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId" },
+        "role": { "$ref": "#/$defs/counterpartyRoleType" },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "ACTIVE", "SUSPENDED"],
+          "description": "The new role's status; ACTIVE when omitted. A new role is never ENDED."
+        },
+        "effective_from": { "type": "string", "format": "date-time", "description": "Defaults to now." }
+      }
+    },
+    "CounterpartyRoleEndRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "description": "Ends a counterparty role. The role stays queryable as history.",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "pattern": "\\S",
+          "description": "Why, recorded in the audit trail."
+        },
+        "effective_to": { "type": "string", "format": "date-time", "description": "Defaults to now." }
+      }
+    },
+    "CounterpartyReconciliationReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profiles_attached", "roles_materialised", "backlog", "candidates"],
+      "description": "The outcome of one ORG-13 reconciliation run: legacy buyer and supplier records migrated, what could not be migrated and why, and the duplicate-organisation candidates refreshed. A run merges nothing and is safe to repeat.",
+      "properties": {
+        "profiles_attached": { "type": "integer", "minimum": 0 },
+        "roles_materialised": { "type": "integer", "minimum": 0 },
+        "backlog": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 },
+          "description": "Legacy records still awaiting migration, counted by the reason they could not be migrated."
+        },
+        "candidates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["opened", "reopened", "updated", "unchanged"],
+          "properties": {
+            "opened": { "type": "array", "items": { "$ref": "#/$defs/resolutionCandidateId" } },
+            "reopened": { "type": "array", "items": { "$ref": "#/$defs/resolutionCandidateId" } },
+            "updated": { "type": "array", "items": { "$ref": "#/$defs/resolutionCandidateId" } },
+            "unchanged": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}
