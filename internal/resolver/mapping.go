@@ -195,3 +195,80 @@ func confidenceRank(confidence string) int {
 		return 0
 	}
 }
+
+// ErrMappingNotFound is returned by ResolveMappingInContext when no candidate
+// applies in the context.
+var ErrMappingNotFound = errors.New("no mapping applies in this context")
+
+// ContextualMapping is the mapping ResolveMappingInContext selected, with why.
+type ContextualMapping struct {
+	Mapping     domain.Mapping
+	Specificity int
+	// Reason is default_mapping for an unscoped mapping and scope_matched for a
+	// scoped one, or priority_applied when resolution priority or confidence
+	// decided between equally specific candidates (ADR-SHARED-014).
+	Reason string
+}
+
+// ResolveMappingInContext selects among a tenant's ACTIVE mappings in effect
+// the one that applies in a trusted context (Canonical Mapping Model sections
+// 9.7 and 23): a scoped mapping applies only when the context matches its
+// scope, which scopes holds by scope_id; candidates rank by scope specificity,
+// then resolution priority, then confidence. Equally ranked candidates with
+// different targets are ErrMappingAmbiguous, never a guess.
+func ResolveMappingInContext(ctx Context, candidates []domain.Mapping, scopes map[string]domain.MappingScope) (ContextualMapping, error) {
+	eligible := make([]rankedMapping, 0, len(candidates))
+	for _, mapping := range candidates {
+		if mapping.Status != "ACTIVE" || mapping.Confidence == "CANDIDATE" || mapping.Confidence == "REJECTED" {
+			continue
+		}
+		specificity := 0
+		if mapping.ScopeID != "" {
+			scope, ok := scopes[mapping.ScopeID]
+			if !ok {
+				continue
+			}
+			match := DefaultScopeMatcher{}.Match(ctx, scope)
+			if !match.Compatible {
+				continue
+			}
+			specificity = match.Specificity
+		}
+		eligible = append(eligible, rankedMapping{mapping: mapping, specificity: specificity})
+	}
+	if len(eligible) == 0 {
+		return ContextualMapping{}, ErrMappingNotFound
+	}
+	sort.SliceStable(eligible, func(i, j int) bool {
+		a, b := eligible[i], eligible[j]
+		if a.specificity != b.specificity {
+			return a.specificity > b.specificity
+		}
+		if a.mapping.ResolutionPriority != b.mapping.ResolutionPriority {
+			return a.mapping.ResolutionPriority > b.mapping.ResolutionPriority
+		}
+		if confidenceRank(a.mapping.Confidence) != confidenceRank(b.mapping.Confidence) {
+			return confidenceRank(a.mapping.Confidence) > confidenceRank(b.mapping.Confidence)
+		}
+		return a.mapping.ID < b.mapping.ID
+	})
+	best := eligible[0]
+	reason := "default_mapping"
+	if best.mapping.ScopeID != "" {
+		reason = "scope_matched"
+	}
+	for _, other := range eligible[1:] {
+		if other.specificity != best.specificity {
+			break
+		}
+		if !sameMappingRank(best, other) {
+			reason = "priority_applied"
+			break
+		}
+		if other.mapping.ExternalReferenceID != best.mapping.ExternalReferenceID ||
+			other.mapping.TargetCanonicalEntityID != best.mapping.TargetCanonicalEntityID {
+			return ContextualMapping{}, ErrMappingAmbiguous
+		}
+	}
+	return ContextualMapping{Mapping: best.mapping, Specificity: best.specificity, Reason: reason}, nil
+}

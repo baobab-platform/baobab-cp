@@ -316,40 +316,45 @@
     "resolutionRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["canonical_entity_id"],
+      "required": ["context_id", "canonical_entity_id"],
+      "description": "Resolves a canonical entity through the tenant's ACTIVE CANONICAL_TO_EXTERNAL, BIDIRECTIONAL or SOURCE_TO_TARGET Mappings in effect whose scope the context matches (Canonical Mapping Model section 23, ADR-SHARED-014). The context is one the Control Plane resolved and stored earlier: a caller never supplies its tenant, legal entity, market or other scope dimensions inline (section 17.3).",
       "properties": {
+        "context_id": {
+          "$ref": "./capability-explanation.schema.json#/$defs/opaqueId",
+          "description": "A context the Control Plane resolved and stored earlier. Resolution runs in that context's tenant, which must be the caller's."
+        },
         "canonical_entity_id": { "$ref": "./domain.schema.json#/$defs/canonicalEntityId" },
-        "target_capability": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)*$",
-          "maxLength": 128,
-          "description": "Capability namespace (e.g., 'commerce.orders', 'erp.accounting')."
+        "target_system_namespace": {
+          "$ref": "#/$defs/externalReference/properties/system_namespace",
+          "description": "Only mappings to an external reference in this system namespace are candidates."
         },
-        "target_system": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
-          "maxLength": 128,
-          "description": "Target external system (engine namespace)."
-        },
-        "context": {
-          "$ref": "./context-resolution.schema.json#/$defs/response",
-          "description": "Runtime context determining applicable scope."
+        "target_engine_id": {
+          "$ref": "./domain.schema.json#/$defs/engineId",
+          "description": "Only mappings to an external reference of this engine are candidates. Capability resolution selects the engine serving a capability; resolve the capability first and pass its engine here."
         },
         "effective_timestamp": {
-          "type": ["string", "null"],
+          "type": "string",
           "format": "date-time",
-          "description": "Temporal reference point for validity evaluation. Defaults to current time."
+          "description": "Point in time to resolve at. Defaults to now."
         }
       }
     },
     "resolutionResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mapping_id", "canonical_entity_id", "status", "effective_timestamp", "resolution_reason"],
+      "required": ["context_id", "tenant_id", "mapping_id", "canonical_entity_id", "status", "effective_timestamp", "resolution_reason", "mapping_version", "resolved_at"],
+      "description": "The mapping that resolved and what it resolves to: exactly one of external_reference_id and target_canonical_entity_id. resolution_reason is default_mapping for an unscoped mapping and scope_matched for a scoped one, or priority_applied when resolution priority or confidence decided between equally specific candidates.",
+      "oneOf": [
+        { "required": ["external_reference_id"], "not": { "required": ["target_canonical_entity_id"] } },
+        { "required": ["target_canonical_entity_id"], "not": { "required": ["external_reference_id"] } }
+      ],
       "properties": {
+        "context_id": { "$ref": "./capability-explanation.schema.json#/$defs/opaqueId" },
+        "tenant_id": { "$ref": "./domain.schema.json#/$defs/tenantId" },
         "mapping_id": { "$ref": "./domain.schema.json#/$defs/mappingId" },
         "canonical_entity_id": { "$ref": "./domain.schema.json#/$defs/canonicalEntityId" },
         "external_reference_id": { "$ref": "./domain.schema.json#/$defs/externalReferenceId" },
+        "target_canonical_entity_id": { "$ref": "./domain.schema.json#/$defs/canonicalEntityId" },
         "scope_id": { "$ref": "./domain.schema.json#/$defs/mappingScopeId" },
         "status": { "$ref": "./domain.schema.json#/$defs/mappingStatus" },
         "resolution_reason": {

@@ -57,9 +57,15 @@ var environments = map[string]bool{"local": true, "development": true, "staging"
 
 // Validate checks the native identity's grammar (the schema's structural
 // rules). Whether the system is registered is ExternalSystems' concern.
+// ValidSystemNamespace reports whether namespace is an ExternalReference
+// system_namespace in Shared's grammar.
+func ValidSystemNamespace(namespace string) bool {
+	return len(namespace) <= 128 && systemNamespacePattern.MatchString(namespace)
+}
+
 func (n NativeIdentity) Validate() error {
 	switch {
-	case len(n.SystemNamespace) > 128 || !systemNamespacePattern.MatchString(n.SystemNamespace):
+	case !ValidSystemNamespace(n.SystemNamespace):
 		return errors.New("system_namespace must be a lower-case snake_case namespace")
 	case !ValidEngineID(n.EngineID):
 		return errors.New("engine_id must be an engine id such as baobab-trade")

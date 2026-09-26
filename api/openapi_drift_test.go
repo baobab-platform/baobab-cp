@@ -130,7 +130,6 @@ var unimplemented = []string{
 	"PATCH /v1/markets/{}",
 	"POST /v1/markets",
 	"POST /v1/markets/{}/activate",
-	"POST /v1/resolution/mappings",
 }
 
 // TestOpenAPIDescribesTheRouter: every /v1 route is described by the

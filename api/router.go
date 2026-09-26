@@ -184,7 +184,7 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/"+action, canonical.lifecycle(action))
 	}
 	if dependencies.Mappings != nil {
-		mappings := mappingHandler{repo: dependencies.Mappings}
+		mappings := mappingHandler{repo: dependencies.Mappings, contexts: dependencies.Contexts}
 		write := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "mapping:write"), a.requireAdminRole(nil, true)}
 		approve := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "mapping:approve"), a.requireAdminRole(nil, true)}
 		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)}
@@ -192,6 +192,7 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(read...).Get("/v1/external-references", mappings.listExternalReferences)
 		r.With(read...).Get("/v1/external-references/{externalReferenceID}", mappings.getExternalReference)
 		r.With(a.adminOrWorkload("canonical:read", "mapping:resolve")).Post("/v1/resolution/external-references", mappings.resolveExternalReference)
+		r.With(a.authorize(a.workloadVerifier, "workload", "mapping:resolve")).Post("/v1/resolution/mappings", mappings.resolveMapping)
 		r.With(write...).Post("/v1/mappings", mappings.createMapping)
 		r.With(a.adminOrWorkload("canonical:read", "mapping:read")).Get("/v1/mappings/{mappingID}", mappings.getMapping)
 		r.With(write...).Patch("/v1/mappings/{mappingID}", mappings.updateMapping)

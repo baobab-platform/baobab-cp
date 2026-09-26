@@ -79,6 +79,15 @@ type MappingAdminRepository interface {
 	ChangeMapping(ctx context.Context, id string, expectedRevision int64, change MappingChange, actor AuditActor) (domain.Mapping, error)
 	TransitionMapping(ctx context.Context, id string, expectedRevision int64, transition MappingTransition, actor AuditActor) (domain.Mapping, error)
 	ResolveExternalReference(ctx context.Context, tenantID string, identity domain.NativeIdentity, at time.Time) (ExternalReferenceResolution, error)
+	MappingCandidates(ctx context.Context, tenantID, canonicalEntityID string, target MappingTarget, at time.Time) ([]domain.Mapping, map[string]domain.MappingScope, error)
+}
+
+// MappingTarget narrows forward mapping resolution to mappings whose external
+// reference is in a system namespace or of an engine (ADR-SHARED-014). Either
+// field left empty does not narrow.
+type MappingTarget struct {
+	SystemNamespace string
+	EngineID        string
 }
 
 var _ MappingAdminRepository = (*PostgresRepository)(nil)
@@ -632,4 +641,73 @@ func (r *PostgresRepository) ResolveExternalReference(ctx context.Context, tenan
 	}
 	return ExternalReferenceResolution{TenantID: tenantID, ExternalReferenceID: best.ExternalReferenceID, Mapping: best,
 		Reason: reason, At: at, ResolvedAt: time.Now().UTC()}, nil
+}
+
+// MappingCandidates returns the tenant's ACTIVE CANONICAL_TO_EXTERNAL,
+// BIDIRECTIONAL and SOURCE_TO_TARGET mappings of a canonical entity in effect
+// at at, narrowed to target, with the scopes they name keyed by scope_id, for
+// resolver.ResolveMappingInContext to rank (ADR-SHARED-014). A mapping to
+// another canonical entity has no external reference, so a target excludes it.
+func (r *PostgresRepository) MappingCandidates(ctx context.Context, tenantID, canonicalEntityID string, target MappingTarget, at time.Time) ([]domain.Mapping, map[string]domain.MappingScope, error) {
+	if !domain.IsUUID(canonicalEntityID) {
+		return nil, nil, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+mappingColumnsOf("m.")+`
+		FROM mapping.mapping m
+		LEFT JOIN mapping.external_reference x ON x.external_reference_id = m.external_reference_id
+		WHERE m.tenant_id = $1 AND m.canonical_entity_id = $2::uuid
+		  AND m.status = 'ACTIVE' AND m.direction IN ('CANONICAL_TO_EXTERNAL', 'BIDIRECTIONAL', 'SOURCE_TO_TARGET')
+		  AND m.valid_period @> $3::timestamptz
+		  AND ($4 = '' OR x.system_namespace = $4) AND ($5 = '' OR x.engine_id = $5)`,
+		tenantID, canonicalEntityID, at, target.SystemNamespace, target.EngineID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	var candidates []domain.Mapping
+	var scopeKeys []string
+	for rows.Next() {
+		m, err := scanMapping(rows)
+		if err != nil {
+			return nil, nil, err
+		}
+		candidates = append(candidates, m)
+		if m.ScopeID != "" {
+			scopeKeys = append(scopeKeys, m.ScopeID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	scopes := map[string]domain.MappingScope{}
+	if len(scopeKeys) == 0 {
+		return candidates, scopes, nil
+	}
+	scopeRows, err := r.pool.Query(ctx, `SELECT mapping_scope_key, `+mappingScopeSelectColumns+`
+		FROM mapping.mapping_scope WHERE mapping_scope_key = ANY($1) AND tenant_id = $2`, scopeKeys, tenantID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer scopeRows.Close()
+	for scopeRows.Next() {
+		var key string
+		scope, err := scanMappingScope(prefixedScan{row: scopeRows, first: &key})
+		if err != nil {
+			return nil, nil, err
+		}
+		scopes[key] = scope
+	}
+	return candidates, scopes, scopeRows.Err()
+}
+
+// prefixedScan scans a leading column into first and the rest into the
+// destinations the wrapped scanner is given.
+type prefixedScan struct {
+	row   pgx.Row
+	first *string
+}
+
+func (p prefixedScan) Scan(dest ...any) error {
+	return p.row.Scan(append([]any{p.first}, dest...)...)
 }
