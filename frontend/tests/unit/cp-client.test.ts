@@ -14,12 +14,12 @@ const tenant = {
   revision: 3,
 };
 
-function recorder(respond: (request: Request) => Response | Promise<Response>) {
+function recorder(respond: (request: Request, signal: AbortSignal) => Response | Promise<Response>) {
   const requests: Request[] = [];
-  const fetch = async (input: RequestInfo | URL) => {
+  const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input as Request;
     requests.push(request);
-    return respond(request);
+    return respond(request, init?.signal ?? request.signal);
   };
   return { requests, fetch: fetch as typeof globalThis.fetch };
 }
@@ -111,9 +111,9 @@ describe("Control Plane client", () => {
 
   it("abandons a request that exceeds its time budget", async () => {
     const { fetch } = recorder(
-      (request) =>
-        new Promise<Response>((_, reject) => {
-          request.signal.addEventListener("abort", () => reject(request.signal.reason));
+      (_, signal) =>
+        new Promise<Response>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason));
         }),
     );
     const error = await client(fetch, 20)

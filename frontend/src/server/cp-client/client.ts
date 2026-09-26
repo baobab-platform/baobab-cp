@@ -69,8 +69,12 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions) {
     cache: "no-store",
     redirect: "error",
     fetch: async (request: Request) => {
+      // The signal goes to fetch directly and stays referenced for the whole
+      // call. A Request derived from it would follow it only weakly, so a
+      // collected composite signal could silently drop the timeout.
+      const signal = AbortSignal.any([request.signal, AbortSignal.timeout(timeoutMs)]);
       try {
-        return await baseFetch(new Request(request, { signal: AbortSignal.any([request.signal, AbortSignal.timeout(timeoutMs)]) }));
+        return await baseFetch(request, { signal });
       } catch (error) {
         const correlationId = request.headers.get("x-correlation-id") ?? undefined;
         if (error instanceof DOMException && error.name === "TimeoutError") {
