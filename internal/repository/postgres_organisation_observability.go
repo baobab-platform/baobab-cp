@@ -383,6 +383,7 @@ var organisationGaugeHelp = map[string]string{
 	"tenant_organisation_mapping_total":      "Tenant organisation mappings by status.",
 	"tenant_legal_entity_mapping_total":      "Tenant legal-entity mappings by status.",
 	"relationship_drift_total":               "Current relationship drift findings by rule and severity.",
+	"corporate_group_derivation_total":       "Derivable corporate groups by derivation status (CURRENT, PENDING, RETRYING).",
 }
 
 const organisationGaugesSQL = `
@@ -405,7 +406,10 @@ const organisationGaugesSQL = `
 	UNION ALL SELECT 'tenant_organisation_mapping_total', jsonb_build_object('status', status), count(*)
 		FROM registry.tenant_organisation_mapping GROUP BY status
 	UNION ALL SELECT 'tenant_legal_entity_mapping_total', jsonb_build_object('status', status), count(*)
-		FROM registry.tenant_legal_entity_mapping GROUP BY status`
+		FROM registry.tenant_legal_entity_mapping GROUP BY status
+	UNION ALL SELECT 'corporate_group_derivation_total', jsonb_build_object('status', state), count(*)
+		FROM (SELECT CASE WHEN requested_at IS NULL THEN 'CURRENT' WHEN attempts = 0 THEN 'PENDING' ELSE 'RETRYING' END AS state
+			FROM registry.corporate_group_derivation) d GROUP BY state`
 
 func (c OrganisationMetricsCollector) Collect(ctx context.Context) ([]metrics.Family, error) {
 	now := time.Now().UTC()

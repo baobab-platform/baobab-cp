@@ -95,6 +95,10 @@ func main() {
 			Tokens: billing.FileTokenSource{Path: cfg.BillingWorkloadTokenFile}}}
 		go projector.Run(ctx, cfg.BillingSyncInterval)
 	}
+	// ADR-BCP-018 gate ORG-05: CorporateGroup membership is derived state,
+	// kept current by triggers plus a scheduled sweep. It confers no access.
+	groupDerivation := &svcorg.GroupDerivationWorker{Deriver: &svcorg.CorporateGroupDeriver{Orgs: resolverRepository}, Queue: resolverRepository}
+	go groupDerivation.Run(ctx, cfg.GroupDerivationInterval, cfg.GroupReconciliationInterval)
 	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, ExternalReferences: resolverRepository, OrganisationMappings: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, OrganisationObservability: resolverRepository, PlatformAccounts: resolverRepository, Metrics: metrics.Default, Applications: applications, Classifications: classifications, Onboarding: &onboarding.Service{Repo: resolverRepository, Admissions: resolverRepository}}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		slog.Info("control plane listening", "address", cfg.HTTPAddress)

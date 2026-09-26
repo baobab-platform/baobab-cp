@@ -39,6 +39,11 @@ type Config struct {
 	BillingEngineURL         string
 	BillingWorkloadTokenFile string
 	BillingSyncInterval      time.Duration
+	// GroupDerivationInterval is how often due CorporateGroup derivations
+	// are processed; GroupReconciliationInterval how often every derivable
+	// group is re-derived to repair drift (ADR-BCP-018 gate ORG-05).
+	GroupDerivationInterval     time.Duration
+	GroupReconciliationInterval time.Duration
 }
 
 func Load() (Config, error) {
@@ -75,6 +80,12 @@ func Load() (Config, error) {
 			return Config{}, errors.New("BILLING_SYNC_INTERVAL must be a Go duration of at least 1s")
 		}
 		c.BillingSyncInterval = interval
+	}
+	if c.GroupDerivationInterval, err = time.ParseDuration(env("GROUP_DERIVATION_INTERVAL", "30s")); err != nil || c.GroupDerivationInterval < time.Second {
+		return Config{}, errors.New("GROUP_DERIVATION_INTERVAL must be a Go duration of at least 1s")
+	}
+	if c.GroupReconciliationInterval, err = time.ParseDuration(env("GROUP_RECONCILIATION_INTERVAL", "1h")); err != nil || c.GroupReconciliationInterval < time.Minute {
+		return Config{}, errors.New("GROUP_RECONCILIATION_INTERVAL must be a Go duration of at least 1m")
 	}
 	for name, rawIssuer := range map[string]string{"ADMIN_OIDC_ISSUER": c.AdminOIDCIssuer, "WORKLOAD_OIDC_ISSUER": c.WorkloadOIDCIssuer} {
 		issuer, err := url.Parse(rawIssuer)

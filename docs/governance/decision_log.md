@@ -18,7 +18,7 @@ Evidence, gate by gate (migration numbers refer to `internal/store/postgres/migr
 | ORG-02 Organisation | 000045; `internal/repository/postgres_organisation*.go` |
 | ORG-03 / ORG-12 LegalEntity and first-party reconciliation | 000045; `cmd/reconcile-first-party`; `legal-entity/registry.yaml` |
 | ORG-04 CorporateRelationship | 000045; directed, evidence-backed, effective-dated lifecycle and divestiture review |
-| ORG-05 CorporateGroup | 000045; `CorporateGroupDeriver` derives membership from verified relationships (not yet wired to a route or worker; see gaps) |
+| ORG-05 CorporateGroup | 000045; `CorporateGroupDeriver` derives membership from verified relationships; triggers (000055) request it on every graph change and a worker plus scheduled sweep keep it current (runbook §13) |
 | ORG-06 PlatformRelationship | 000045; verification, conflict and end transitions |
 | ORG-07 PlatformAccount | 000045 and 000053: explicit tenant binding and the §83 lifecycle (#164) |
 | ORG-08 Tenant mappings | 000045; explicit mappings and fail-closed context attestation |
@@ -33,7 +33,6 @@ Evidence, gate by gate (migration numbers refer to `internal/store/postgres/migr
 Known, recorded gaps that do not reopen the decision:
 
 - Tenant registration does not yet require an AUTHORISED TenantOnboardingRequest (runbook §12).
-- `CorporateGroupDeriver` is implemented and tested, but no route or worker invokes it in production, so derived groups are refreshed only when it is called programmatically.
 - The engine-side items in the ORG-11 certification record remain open: the Kill Bill and HyperSwitch providers and the outbox relays.
 
 ---
