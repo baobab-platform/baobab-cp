@@ -8,8 +8,8 @@
 
 | Input | State audited |
 |---|---|
-| `baobab-platform/baobab-cp` | `main` at `18ed31a` (tenant registration requires onboarding, #169). The only open PR is #170 (a runbook change). |
-| `baobab-platform/shared` | `main` at `2b9304e`. The CP lock pins `6efbb60`. The only open PR is #102 (workload identities). |
+| `baobab-platform/baobab-cp` | `main` at `72c9baa`. No open PRs except this one. The router is unchanged since `18ed31a` (#169). |
+| `baobab-platform/shared` | `main` at `d22c664`, which includes workload identities (#102). The CP lock pins `6efbb60`. No open PRs. |
 | `baobab-platform/baobab-iam` | `main` at `6c885a7`. Only a Dependabot PR is open. **All Keycloak work is on hold pending the Keycloak-to-Ory migration ADR.** |
 | ADRs | BCP-017 through BCP-023 in `docs/adr/`. |
 | Existing frontend assets | None. There is no `frontend/` directory, and no Node tooling, Makefile target or CI job for one. |
