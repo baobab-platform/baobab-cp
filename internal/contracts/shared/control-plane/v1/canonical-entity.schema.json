@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/canonical-entity.schema.json",
+  "title": "Control Plane canonical entity registry",
+  "description": "The registry-level canonical identity the Control Plane administers (ADR-BCP-001, ADR-0006, ADR-BCP-016): the create request and the entity the canonical-entity routes return. A definition library; validate against the fragment, e.g. canonical-entity.schema.json#/$defs/CanonicalEntity. The Control Plane mints the identifier and the version, and a new entity always starts DRAFT: lifecycle state moves only through the validate, activate, suspend and retire commands.",
+  "$defs": {
+    "canonicalKey": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+:[a-z0-9][a-z0-9._:-]*$",
+      "minLength": 3,
+      "maxLength": 255,
+      "description": "Namespaced natural key in namespace:type form, e.g. supplier:thamani_global:sup_01k4p8q2r3s4."
+    },
+    "entityType": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "maxLength": 64,
+      "description": "Registered canonical entity kind. The set is data-driven rather than enumerated (ADR-0006): PRODUCT, SUPPLIER_ORGANISATION (ADR-0006), BUYER_ORGANISATION (ADR-BCP-016) and ORGANISATION (ADR-BCP-018) are registered today."
+    },
+    "canonicalEntityStatus": {
+      "type": "string",
+      "enum": ["DRAFT", "VALIDATED", "ACTIVE", "DEPRECATED", "SUSPENDED", "MIGRATING", "QUARANTINED", "RETIRED"],
+      "description": "Lifecycle state. The commands move DRAFT to VALIDATED, VALIDATED to ACTIVE, ACTIVE to SUSPENDED, and ACTIVE, SUSPENDED or DEPRECATED to RETIRED."
+    },
+    "canonicalEntityClassification": {
+      "type": "string",
+      "enum": ["PUBLIC", "INTERNAL", "TENANT_CONFIDENTIAL", "RESTRICTED"],
+      "description": "Data classification of the entity's record."
+    },
+    "canonicalEntityAuthority": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "maxLength": 64,
+      "description": "The domain authoritative for the entity's definition, e.g. baobab or thamani."
+    },
+    "CanonicalEntityCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_key", "entity_type", "display_name", "authority", "classification"],
+      "description": "Registers a canonical entity. Carries no identifier, status, version or timestamps: the Control Plane owns them, and a request naming any of them is refused.",
+      "properties": {
+        "canonical_key": { "$ref": "#/$defs/canonicalKey" },
+        "entity_type": { "$ref": "#/$defs/entityType" },
+        "subtype": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "owner_tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "owner_legal_entity_id": { "$ref": "domain.schema.json#/$defs/legalEntityIdInput" },
+        "authority": { "$ref": "#/$defs/canonicalEntityAuthority" },
+        "classification": { "$ref": "#/$defs/canonicalEntityClassification" },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Inclusive start of validity. Defaults to the time of registration."
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Exclusive end of validity; must be after effective_from."
+        }
+      }
+    },
+    "CanonicalEntity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "entity_type", "status", "version", "created_at", "updated_at"],
+      "description": "A canonical entity as the Control Plane records it. An ADR-BCP-018 ORGANISATION registered through admission or first-party reconciliation has no canonical_key: its identity is its legal entity. display_name, subtype, authority, classification, schema_version and the validity window are absent for an entity registered before the Control Plane persisted them: they are reported as unknown, never inferred.",
+      "properties": {
+        "id": { "$ref": "domain.schema.json#/$defs/canonicalEntityId" },
+        "canonical_key": { "$ref": "#/$defs/canonicalKey" },
+        "entity_type": { "$ref": "#/$defs/entityType" },
+        "subtype": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "owner_tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "owner_legal_entity_id": { "$ref": "domain.schema.json#/$defs/legalEntityIdInput" },
+        "authority": { "$ref": "#/$defs/canonicalEntityAuthority" },
+        "classification": { "$ref": "#/$defs/canonicalEntityClassification" },
+        "status": { "$ref": "#/$defs/canonicalEntityStatus" },
+        "schema_version": { "type": "integer", "minimum": 1 },
+        "effective_from": { "type": "string", "format": "date-time" },
+        "effective_to": { "type": "string", "format": "date-time" },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optimistic concurrency version, also sent as the strong ETag \"<version>\". Lifecycle commands require it in If-Match."
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
