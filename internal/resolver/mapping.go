@@ -139,6 +139,9 @@ func sameMappingRank(left, right rankedMapping) bool {
 }
 
 func legacyScopeSpecificity(ctx Context, scopeID string) int {
+	if scopeID == "" {
+		return 0
+	}
 	switch scopeID {
 	case ctx.TenantID:
 		return 20
@@ -155,7 +158,9 @@ func legacyScopeSpecificity(ctx Context, scopeID string) int {
 
 func confidenceRank(confidence string) int {
 	switch confidence {
-	case "CONFIRMED":
+	case "", "CONFIRMED":
+		// A mapping recorded without a confidence ranks as confirmed, as
+		// external reference resolution ranks it.
 		return 4
 	case "PROBABLE":
 		return 3
