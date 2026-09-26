@@ -210,8 +210,8 @@ type ContextualMapping struct {
 	Reason string
 }
 
-// ResolveMappingInContext selects among a tenant's ACTIVE mappings in effect
-// the one that applies in a trusted context (Canonical Mapping Model sections
+// ResolveMappingInContext selects among a tenant's mappings in force and in
+// effect at the resolution time the one that applies in a trusted context (Canonical Mapping Model sections
 // 9.7 and 23): a scoped mapping applies only when the context matches its
 // scope, which scopes holds by scope_id; candidates rank by scope specificity,
 // then resolution priority, then confidence. Equally ranked candidates with
@@ -219,7 +219,10 @@ type ContextualMapping struct {
 func ResolveMappingInContext(ctx Context, candidates []domain.Mapping, scopes map[string]domain.MappingScope) (ContextualMapping, error) {
 	eligible := make([]rankedMapping, 0, len(candidates))
 	for _, mapping := range candidates {
-		if mapping.Status != "ACTIVE" || mapping.Confidence == "CANDIDATE" || mapping.Confidence == "REJECTED" {
+		// The caller supplies mappings in force at the resolution time: ACTIVE,
+		// or retired since then (a retired mapping is kept for historical
+		// resolution). No other status resolves.
+		if (mapping.Status != "ACTIVE" && mapping.Status != "RETIRED") || mapping.Confidence == "CANDIDATE" || mapping.Confidence == "REJECTED" {
 			continue
 		}
 		specificity := 0

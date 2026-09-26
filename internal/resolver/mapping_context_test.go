@@ -49,7 +49,10 @@ func TestResolveMappingInContext(t *testing.T) {
 		{name: "candidate and rejected mappings never resolve",
 			candidates: []domain.Mapping{mapping("map_a", "ref_a", "", 0, "CANDIDATE"), mapping("map_b", "ref_b", "", 0, "REJECTED")},
 			wantErr:    ErrMappingNotFound},
-		{name: "only ACTIVE mappings resolve",
+		{name: "a mapping retired since the resolution time still resolves",
+			candidates: []domain.Mapping{{ID: "map_a", TenantID: tenant, ExternalReferenceID: "ref_a", Status: "RETIRED"}},
+			wantID:     "map_a", wantReason: "default_mapping"},
+		{name: "only ACTIVE or retired mappings resolve",
 			candidates: []domain.Mapping{{ID: "map_a", TenantID: tenant, ExternalReferenceID: "ref_a", Status: "VALIDATED"}},
 			wantErr:    ErrMappingNotFound},
 	}

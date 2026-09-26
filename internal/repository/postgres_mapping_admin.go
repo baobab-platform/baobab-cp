@@ -643,9 +643,9 @@ func (r *PostgresRepository) ResolveExternalReference(ctx context.Context, tenan
 		Reason: reason, At: at, ResolvedAt: time.Now().UTC()}, nil
 }
 
-// MappingCandidates returns the tenant's ACTIVE CANONICAL_TO_EXTERNAL,
-// BIDIRECTIONAL and SOURCE_TO_TARGET mappings of a canonical entity in effect
-// at at, narrowed to target, with the scopes they name keyed by scope_id, for
+// MappingCandidates returns the tenant's CANONICAL_TO_EXTERNAL,
+// BIDIRECTIONAL and SOURCE_TO_TARGET mappings of a canonical entity in force
+// and in effect at at (a mapping retired since then included, see inForceAt), narrowed to target, with the scopes they name keyed by scope_id, for
 // resolver.ResolveMappingInContext to rank (ADR-SHARED-014). A mapping to
 // another canonical entity has no external reference, so a target excludes it.
 func (r *PostgresRepository) MappingCandidates(ctx context.Context, tenantID, canonicalEntityID string, target MappingTarget, at time.Time) ([]domain.Mapping, map[string]domain.MappingScope, error) {
@@ -657,7 +657,7 @@ func (r *PostgresRepository) MappingCandidates(ctx context.Context, tenantID, ca
 		FROM mapping.mapping m
 		LEFT JOIN mapping.external_reference x ON x.external_reference_id = m.external_reference_id
 		WHERE m.tenant_id = $1 AND m.canonical_entity_id = $2::uuid
-		  AND m.status = 'ACTIVE' AND m.direction IN ('CANONICAL_TO_EXTERNAL', 'BIDIRECTIONAL', 'SOURCE_TO_TARGET')
+		  AND `+inForceAt("m.", "$3")+` AND m.direction IN ('CANONICAL_TO_EXTERNAL', 'BIDIRECTIONAL', 'SOURCE_TO_TARGET')
 		  AND m.valid_period @> $3::timestamptz
 		  AND ($4 = '' OR x.system_namespace = $4) AND ($5 = '' OR x.engine_id = $5)`,
 		tenantID, canonicalEntityID, at, target.SystemNamespace, target.EngineID)
