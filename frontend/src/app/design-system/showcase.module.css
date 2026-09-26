@@ -1,0 +1,21 @@
+/* Sidebar beside content on wide screens, stacked on narrow ones (WCAG 1.4.10 reflow). */
+.layout {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.layout > main {
+  min-width: 0;
+}
+
+@media (min-width: 48rem) {
+  .layout {
+    grid-template-columns: 14rem minmax(0, 1fr);
+  }
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

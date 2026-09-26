@@ -1,14 +1,8 @@
-// Runs once when the server starts. Invalid configuration stops the
-// process: Next.js would otherwise log the error and keep serving.
+// Runs once when the server starts. The configuration check is Node-only,
+// so it lives in its own module that the Edge runtime never loads.
 export async function register(): Promise<void> {
-  if (process.env.NEXT_RUNTIME !== "nodejs") {
-    return;
-  }
-  const { serverEnv } = await import("@/server/env");
-  try {
-    serverEnv();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
-    process.exit(1);
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { validateConfigurationOrExit } = await import("./instrumentation-node");
+    validateConfigurationOrExit();
   }
 }

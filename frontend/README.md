@@ -4,8 +4,9 @@ The Baobab Control Plane Console is the administrative frontend defined by ADR-B
 application that runs as its own container and reaches the Go Control Plane API only from the server. The browser
 never calls the Control Plane directly, and never holds a token.
 
-This is Gate FE-01, the foundation: tooling, configuration, build, image and CI. Authentication, the shell and every
-workspace arrive in later gates (`docs/frontend/fe-00-architecture-lock.md` §9). No page shows Control Plane data yet.
+Gates FE-01 (foundation: tooling, configuration, build, image and CI) and FE-02 (design system) are in place.
+Authentication, the shell and every workspace arrive in later gates (`docs/frontend/fe-00-architecture-lock.md` §9).
+No page shows Control Plane data yet.
 
 ## Stack
 
@@ -16,11 +17,37 @@ workspace arrive in later gates (`docs/frontend/fe-00-architecture-lock.md` §9)
 | Language | TypeScript 5.9, strict, with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` |
 | Package manager | pnpm, pinned by the root `package.json` `packageManager` and enabled through corepack |
 | Lint | ESLint 9 with `eslint-config-next` (TypeScript 7 and ESLint 10 wait on `typescript-eslint` and `eslint-plugin-react` support) |
-| Unit tests | Vitest |
+| Unit tests | Vitest, Testing Library, jsdom and axe-core |
 
 The repository root is the pnpm workspace (`package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`), with this
 directory as its only package. The organisation's foundation gates install and audit Node dependencies at the root.
 pnpm holds back newly published versions by its default minimum release age, and the workspace makes no exceptions.
+
+## Design system
+
+`src/components` is the Console's own design system (FE-02, prompt §§52-54). Features import from `@/components`.
+
+| Area | Components |
+|---|---|
+| Tokens | `src/styles/tokens.css`: colour, the nine semantic status tones, typography, spacing, radius, elevation, focus, motion |
+| Actions | `Button` (primary, secondary, danger, ghost; `busy`), `ConfirmDialog` (typed confirmation and audited reason) |
+| Forms | `Field` (label, hint and error wired to the control), `TextInput`, `Select`, `Textarea` |
+| Feedback | `Alert`, `StatusBadge`, `LoadingState`, `EmptyState`, `ErrorState`, `Dialog` |
+| Structure | `PageHeader`, `Table` (captioned, server-sorted), `SideNav`, `Tabs`, `SkipLink` |
+
+Rules the components enforce:
+
+- Status is never colour alone. Every tone has a glyph and text, and features keep their precise domain wording.
+- Every token pair meets WCAG 2.2 AA contrast. `tests/unit/tokens.test.ts` computes the ratios.
+- Dialogs are native `<dialog>` modals, so the rest of the page is inert, and focus returns to the opener.
+- Loading states name what is loading, empty states explain what would fill them, and error states give a next step and
+  the Control Plane reference.
+- Tables sort, filter and page on the server. A sortable header is a link, and its state is exposed with `aria-sort`.
+- Reduced motion is honoured, and layouts reflow at 320 CSS pixels.
+- Strings live in `src/lib/i18n/messages.ts`, and nothing concatenates sentences.
+
+Every component test runs axe in jsdom. `/design-system` shows every component and state with illustrative data, and
+returns 404 when `CONSOLE_ENVIRONMENT` is `production`.
 
 ## Configuration
 

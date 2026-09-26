@@ -1,0 +1,14 @@
+.skip {
+  position: absolute;
+  left: var(--space-4);
+  top: -100px;
+  z-index: 100;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-2);
+}
+
+.skip:focus {
+  top: var(--space-4);
+}
