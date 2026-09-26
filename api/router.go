@@ -104,11 +104,10 @@ type Dependencies struct {
 	// them) rather than registering handlers that would panic -- every
 	// other route in this file is unaffected either way.
 	Provisioning ProvisioningRepository
-	// ExternalReferences backs the /v1/canonical-entities/{entityID}/
-	// external-references routes and the external-reference lookup route
-	// (Gate ZB-03.3, ADR-BCP-016). Nil disables those routes, the same
+	// Mappings backs the ExternalReference and Mapping administration and
+	// resolution routes (ADR-SHARED-013). Nil disables them, the same
 	// nil-skip shape Provisioning above already established.
-	ExternalReferences repository.ExternalReferenceRepository
+	Mappings repository.MappingAdminRepository
 	// WorkloadRegistry backs request-time enforcement of ADR-0007 §45's
 	// workload lifecycle status (Gate ZB-03.10, closing the gap
 	// docs/reconciliation/gate-zb03-authority-contract-freeze.md §7 named):
@@ -184,10 +183,21 @@ func New(dependencies Dependencies) http.Handler {
 	for _, action := range []string{"validate", "activate", "suspend", "retire"} {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/"+action, canonical.lifecycle(action))
 	}
-	if dependencies.ExternalReferences != nil {
-		externalReferences := externalReferenceHandler{repo: dependencies.ExternalReferences}
-		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/external-references", externalReferences.create)
-		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/external-references", externalReferences.lookup)
+	if dependencies.Mappings != nil {
+		mappings := mappingHandler{repo: dependencies.Mappings}
+		write := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "mapping:write"), a.requireAdminRole(nil, true)}
+		approve := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "mapping:approve"), a.requireAdminRole(nil, true)}
+		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)}
+		r.With(write...).Post("/v1/external-references", mappings.createExternalReference)
+		r.With(read...).Get("/v1/external-references", mappings.listExternalReferences)
+		r.With(read...).Get("/v1/external-references/{externalReferenceID}", mappings.getExternalReference)
+		r.With(a.adminOrWorkload("canonical:read", "mapping:resolve")).Post("/v1/resolution/external-references", mappings.resolveExternalReference)
+		r.With(write...).Post("/v1/mappings", mappings.createMapping)
+		r.With(a.adminOrWorkload("canonical:read", "mapping:read")).Get("/v1/mappings/{mappingID}", mappings.getMapping)
+		r.With(write...).Patch("/v1/mappings/{mappingID}", mappings.updateMapping)
+		r.With(write...).Post("/v1/mappings/{mappingID}/validate", mappings.transition("VALIDATED"))
+		r.With(approve...).Post("/v1/mappings/{mappingID}/activate", mappings.transition("ACTIVE"))
+		r.With(write...).Post("/v1/mappings/{mappingID}/retire", mappings.transition("RETIRED"))
 	}
 	if dependencies.IamOrganisations != nil {
 		iam := iamOrganisationHandler{repo: dependencies.IamOrganisations}
@@ -296,6 +306,27 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/drift", prov.drift)
 	}
 	return r
+}
+
+// adminOrWorkload admits either a platform administrator holding adminScope
+// or a registered workload holding workloadScope, for operations the
+// contract offers to both (for example getMapping). A token the admin
+// verifier accepts as human takes the administrator path; anything else is
+// judged as a workload. Handlers confine workloads to their tenant.
+func (a *API) adminOrWorkload(adminScope, workloadScope string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		admin := a.authorize(a.adminVerifier, "human", adminScope)(a.requireAdminRole(nil, true)(next))
+		workload := a.authorize(a.workloadVerifier, "workload", workloadScope)(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if raw, ok := bearerToken(r.Header.Get("Authorization")); ok && a.adminVerifier != nil {
+				if principal, err := a.adminVerifier.Verify(r.Context(), raw); err == nil && principal.ActorType == "human" {
+					admin.ServeHTTP(w, r)
+					return
+				}
+			}
+			workload.ServeHTTP(w, r)
+		})
+	}
 }
 
 func (a *API) authorize(verifier auth.TokenVerifier, actorType, requiredScope string) func(http.Handler) http.Handler {
