@@ -142,8 +142,15 @@ func TestGroupDerivationWorker(t *testing.T) {
 	if err := e.repo.EndCorporateRelationship(e.ctx, rootOwnsA, derivedAt.Add(-time.Minute), "divested", actor()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := worker.RunOnce(e.ctx); err != nil {
-		t.Fatal(err)
+	// Run until the failing derivation has been attempted: like drain(), a
+	// pass can miss the group while another transaction holds its row.
+	for deadline := time.Now().Add(10 * time.Second); state().Attempts == 0 && time.Now().Before(deadline); {
+		if _, err := worker.RunOnce(e.ctx); err != nil {
+			t.Fatal(err)
+		}
+		if state().Attempts == 0 {
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 	if failed := state(); failed.State != repository.GroupDerivationRetrying || failed.Attempts < 1 || failed.LastError != "graph unavailable" || failed.NextAttemptAt == nil {
 		t.Fatalf("a failed derivation should be RETRYING with its error: %+v", failed)
