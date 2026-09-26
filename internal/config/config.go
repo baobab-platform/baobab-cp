@@ -10,10 +10,13 @@ import (
 )
 
 type Config struct {
-	HTTPAddress          string
-	DatabaseURL          string
-	AdminOIDCIssuer      string
-	AdminOIDCAudience    string
+	HTTPAddress       string
+	DatabaseURL       string
+	AdminOIDCIssuer   string
+	AdminOIDCAudience string
+	// AdminOIDCClientID is the IAM workforce client whose resource_access
+	// roles back scope entitlements such as onboarding-requester.
+	AdminOIDCClientID    string
 	WorkloadOIDCIssuer   string
 	WorkloadOIDCAudience string
 	// PlatformContextTTL bounds how long a Context persisted by
@@ -44,6 +47,7 @@ func Load() (Config, error) {
 		DatabaseURL:          os.Getenv("DATABASE_URL"),
 		AdminOIDCIssuer:      os.Getenv("ADMIN_OIDC_ISSUER"),
 		AdminOIDCAudience:    env("ADMIN_OIDC_AUDIENCE", "baobab-control-plane"),
+		AdminOIDCClientID:    env("ADMIN_OIDC_CLIENT_ID", "baobab-control-plane-admin"),
 		WorkloadOIDCIssuer:   os.Getenv("WORKLOAD_OIDC_ISSUER"),
 		WorkloadOIDCAudience: env("WORKLOAD_OIDC_AUDIENCE", "baobab-control-plane"),
 	}

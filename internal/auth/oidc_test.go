@@ -173,3 +173,57 @@ func TestOIDCVerifierRejectsMalformedScope(t *testing.T) {
 		t.Fatal("malformed scope was accepted")
 	}
 }
+
+// TestOIDCVerifierIgnoresProtocolScopes: a Keycloak workforce login token
+// carries "openid profile email" beside its authority. Those grant nothing,
+// so they are ignored; a non-canonical scope outside that set is still
+// refused, and a token with no canonical scope at all still fails.
+func TestOIDCVerifierIgnoresProtocolScopes(t *testing.T) {
+	issuer := newTestIssuer(t)
+	verifier, err := NewOIDCVerifier(context.Background(), issuer.server.URL, "baobab-control-plane")
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal, err := verifier.Verify(context.Background(), issuer.token(t, map[string]any{"scope": "openid profile email onboarding:request"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !principal.HasScope("onboarding:request") || principal.HasScope("openid") || len(principal.Scopes) != 1 {
+		t.Fatalf("scopes = %#v, want only onboarding:request", principal.Scopes)
+	}
+	if _, err := verifier.Verify(context.Background(), issuer.token(t, map[string]any{"scope": "openid profile email"})); err == nil {
+		t.Fatal("a token carrying only protocol scopes was accepted")
+	}
+	if _, err := verifier.Verify(context.Background(), issuer.token(t, map[string]any{"scope": "openid tenant-write"})); err == nil {
+		t.Fatal("a non-canonical scope beside a protocol scope was accepted")
+	}
+}
+
+// TestOIDCVerifierExtractsConfiguredClientRoles: only the configured IAM
+// client's resource_access roles become ClientRoles -- a role another client
+// carries never counts, and without WithClientRoles none are read.
+func TestOIDCVerifierExtractsConfiguredClientRoles(t *testing.T) {
+	issuer := newTestIssuer(t)
+	claims := map[string]any{"resource_access": map[string]any{
+		"baobab-control-plane-admin": map[string]any{"roles": []string{"onboarding-requester"}},
+		"baobab-cms-admin":           map[string]any{"roles": []string{"onboarding-authoriser"}},
+	}}
+	plain, err := NewOIDCVerifier(context.Background(), issuer.server.URL, "baobab-control-plane")
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal, err := plain.Verify(context.Background(), issuer.token(t, claims))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(principal.ClientRoles) != 0 {
+		t.Fatalf("a verifier without WithClientRoles read client roles: %#v", principal.ClientRoles)
+	}
+	principal, err = plain.WithClientRoles("baobab-control-plane-admin").Verify(context.Background(), issuer.token(t, claims))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !principal.HasClientRole("onboarding-requester") || principal.HasClientRole("onboarding-authoriser") {
+		t.Fatalf("client roles = %#v, want only the configured client's onboarding-requester", principal.ClientRoles)
+	}
+}
