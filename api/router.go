@@ -520,17 +520,17 @@ func (a *API) ready(w http.ResponseWriter, r *http.Request) {
 func (a *API) getTenant(w http.ResponseWriter, r *http.Request) {
 	tenantID := chi.URLParam(r, "tenantID")
 	if !domain.ValidTenantID(tenantID) {
-		problem(w, r, 400, "invalid_tenant_id", "tenant_id is invalid", false)
+		problem(w, r, 400, "INVALID_TENANT_ID", "tenant_id is invalid", false)
 		return
 	}
 	tenant, err := a.store.GetTenant(r.Context(), tenantID)
 	if err != nil {
 		var notFound domain.NotFoundError
 		if errors.As(err, &notFound) {
-			problem(w, r, 404, "tenant_not_found", err.Error(), false)
+			problem(w, r, 404, "TENANT_NOT_FOUND", err.Error(), false)
 			return
 		}
-		problem(w, r, 500, "internal_error", "tenant lookup failed", true)
+		problem(w, r, 500, "INTERNAL_ERROR", "tenant lookup failed", true)
 		return
 	}
 	writeJSON(w, 200, tenant)
@@ -541,17 +541,17 @@ func (a *API) getEntitlement(w http.ResponseWriter, r *http.Request) {
 	productID := r.URL.Query().Get("productId")
 	q := domain.EntitlementQuery{TenantID: tenantID, ProductID: productID}
 	if err := q.Validate(); err != nil {
-		problem(w, r, 422, "validation_failed", err.Error(), false)
+		problem(w, r, 422, "VALIDATION_FAILED", err.Error(), false)
 		return
 	}
 	ent, err := a.store.GetEntitlement(r.Context(), tenantID, productID)
 	if err != nil {
 		var notFound domain.NotFoundError
 		if errors.As(err, &notFound) {
-			problem(w, r, 404, "entitlement_not_found", err.Error(), false)
+			problem(w, r, 404, "ENTITLEMENT_NOT_FOUND", err.Error(), false)
 			return
 		}
-		problem(w, r, 500, "internal_error", "entitlement lookup failed", true)
+		problem(w, r, 500, "INTERNAL_ERROR", "entitlement lookup failed", true)
 		return
 	}
 	writeJSON(w, 200, ent)
@@ -562,7 +562,7 @@ func (a *API) tenantLifecycleAction(action string) http.HandlerFunc {
 		tenantID := chi.URLParam(r, "tenantID")
 		cmd := domain.LifecycleAction{TenantID: tenantID, Action: action}
 		if err := cmd.Validate(); err != nil {
-			problem(w, r, 422, "validation_failed", err.Error(), false)
+			problem(w, r, 422, "VALIDATION_FAILED", err.Error(), false)
 			return
 		}
 		var next domain.LifecycleStatus
@@ -577,10 +577,10 @@ func (a *API) tenantLifecycleAction(action string) http.HandlerFunc {
 		if err := a.store.UpdateTenantLifecycle(r.Context(), tenantID, next); err != nil {
 			var notFound domain.NotFoundError
 			if errors.As(err, &notFound) {
-				problem(w, r, 404, "tenant_not_found", err.Error(), false)
+				problem(w, r, 404, "TENANT_NOT_FOUND", err.Error(), false)
 				return
 			}
-			problem(w, r, 500, "internal_error", "tenant lifecycle update failed", true)
+			problem(w, r, 500, "INTERNAL_ERROR", "tenant lifecycle update failed", true)
 			return
 		}
 		writeJSON(w, 200, map[string]string{"tenant_id": tenantID, "status": string(next)})

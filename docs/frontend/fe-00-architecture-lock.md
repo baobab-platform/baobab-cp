@@ -9,7 +9,7 @@
 | Input | State audited |
 |---|---|
 | `baobab-platform/baobab-cp` | `main` at `72c9baa`. No open PRs except this one. The router is unchanged since `18ed31a` (#169). |
-| `baobab-platform/shared` | `main` at `d22c664`, which includes workload identities (#102). The CP lock pins `7c9c94b`, which adds the phase 1 administrative OpenAPI (#103). |
+| `baobab-platform/shared` | `main` at `d22c664`, which includes workload identities (#102). The CP lock pins `3c30305`, which adds the phase 1 and 2 administrative OpenAPI (#103, #104). |
 | `baobab-platform/baobab-iam` | `main` at `6c885a7`. Only a Dependabot PR is open. **All Keycloak work is on hold pending the Keycloak-to-Ory migration ADR.** |
 | ADRs | BCP-017 through BCP-023 in `docs/adr/`. |
 | Existing frontend assets | None. There is no `frontend/` directory, and no Node tooling, Makefile target or CI job for one. |
@@ -105,7 +105,7 @@ What this means for the Console:
 | Corporate structure (018 ORG-04/05/06) | Service and database only; no HTTP | No | Yes (G3) |
 | Platform accounts (018 ORG-07) | Partial: get, status, tenant binding | Yes; no list | Lists blocked (G4) |
 | Tenants and lifecycle (018, 019 §§109-110) | Yes: register, get, suspend, activate, decommission | Yes; no list | Lists blocked (G4) |
-| Subscription classification (018 ORG-11) | Yes: classify, reclassify, explain | Yes | Only on B1 and B2 |
+| Subscription classification (018 ORG-11) | Yes: classify, reclassify, explain | Yes | Only on B1 |
 | Provisioning, readiness, drift (019 §§31-33) | Yes, per tenant | Yes | Only on B1 and B2 |
 | Markets (019 §24) | No HTTP | No | Yes (G2) |
 | Digital estates, services selection (019 §§23, 25) | No HTTP | No | Yes (G3) |
@@ -119,7 +119,8 @@ What this means for the Console:
 
 At this audit, the Shared `control-plane/v1` OpenAPI described only `POST /tenants` and `POST
 /tenants/bootstrap-registrations`: **2 of the Control Plane's 68 human routes**. Phase 1 (Shared #103) adds the 21
-applications, admission and onboarding operations, so 23 are now described. `api.TestOpenAPIDescribesTheRouter` keeps
+applications, admission and onboarding operations, and phase 2 (Shared #104) the 9 tenant and classification
+operations, so 32 are now described. `api.TestOpenAPIDescribesTheRouter` keeps
 the count honest: it fails when a served route is neither described nor listed as undescribed.
 
 | Family | Shared schemas | Shared OpenAPI paths | CP implements | Generated client possible |
@@ -127,9 +128,9 @@ the count honest: it fails when a served route is neither described nor listed a
 | Client applications, admission | `admission/v1` (application, decision, lifecycle, events) | Applications and Admission tags (15 operations) | yes | Yes |
 | Tenant onboarding | `admission/v1` onboarding schemas | Onboarding tag (6 operations) | yes | Yes |
 | Tenant registration | `control-plane/v1` tenant-registration and bootstrap schemas | `POST /tenants`, `POST /tenants/bootstrap-registrations` | yes | Yes |
-| Tenant read and lifecycle | partial | none | yes | No (B2) |
+| Tenant read and lifecycle | `control-plane/v1` `tenant.schema.json` | Tenants tag (5 operations) | yes | Yes |
 | Organisation, platform account, corporate | `organisation/v1` | none | partial | No (B2) |
-| Subscription classification | `product/v1`, `subscriptions/v1` | none | yes | No (B2) |
+| Subscription classification | `product/v1` (records, explanations, commands) | Classification tag (4 operations) | yes | Yes |
 | Markets, mappings | `control-plane/v1` | `/markets…`, `/mappings…`, `/resolution/mappings` | **no** | Generating would describe routes that do not exist (G2) |
 | Errors | `errors/v1` problem details | referenced | yes (`application/problem+json`) | Yes |
 
@@ -138,7 +139,7 @@ the count honest: it fails when a served route is neither described nor listed a
 | ID | Gap | ADR | What is needed | Owner |
 |---|---|---|---|---|
 | **B1** | The BFF must be an OIDC **confidential** client (ADR-BCP-019 §10). The only workforce client, `baobab-control-plane-admin`, is public with PKCE, and its redirect URIs are `localhost:3003`, while ADR-BCP-019 §87 puts the Console on `:3000`. | 019 §§10-11 | A confidential Console client with its redirect URIs and back-channel logout, decided by the Keycloak-to-Ory migration ADR | IAM, after the Ory ADR |
-| **B2** | The administrative OpenAPI is partial. Phase 1 (Shared #103) describes applications, admission and onboarding; 45 of the 68 human routes still have no description, and `api.TestOpenAPIDescribesTheRouter` lists them. | 019 §38, 022 §§17-20 | Shared `control-plane/v1` paths for the tenants, organisations, platform accounts, provisioning and classification families, tagged by family (022 §20). The CP drift test is in place. | Shared, then CP |
+| **B2** | The administrative OpenAPI is partial. Phases 1 and 2 (Shared #103, #104) describe applications, admission, onboarding, tenants and classification; 36 of the 68 human routes still have no description, and `api.TestOpenAPIDescribesTheRouter` lists them. | 019 §38, 022 §§17-20 | Shared `control-plane/v1` paths for the organisations, platform accounts, provisioning (which first needs a tenant manifest schema), counterparty and integration families, tagged by family (022 §20). The CP drift test is in place. | Shared, then CP |
 | G2 | Shared declares `/markets`, `/mappings` and `/resolution/mappings`, and the CP implements none of them. | 022 §18 | Either implement them or mark them as not yet implemented, so the generated client cannot call routes that do not exist | Shared or CP |
 | G3 | Corporate relationships, corporate groups, digital estates and service selection have no HTTP surface. | 018, 019 §§20, 23, 25 | Administrative query and command endpoints | CP |
 | G4 | There are no list or search endpoints for organisations, tenants or platform accounts. | 022 §§30, 53 | Scope-filtered, paginated list read models | CP |

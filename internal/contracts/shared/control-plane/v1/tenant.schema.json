@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/tenant.schema.json",
+  "title": "Control Plane tenant read models",
+  "description": "What the Control Plane's tenant administration routes return (ADR-BCP-022): the tenant, a product entitlement, and the result of a lifecycle command. A definition library; validate against the fragment, e.g. tenant.schema.json#/$defs/Tenant.",
+  "$defs": {
+    "lifecycleStatus": {
+      "type": "string",
+      "enum": ["provisioning", "active", "suspended", "decommissioning", "decommissioned"],
+      "description": "A tenant's lifecycle status."
+    },
+    "Tenant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_id", "legal_entity_id", "display_name", "isolation_strategy", "residency_region", "desired_state", "observed_state", "revision"],
+      "properties": {
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "legal_entity_id": {
+          "$ref": "domain.schema.json#/$defs/legalEntityIdInput",
+          "description": "The legal entity the tenant was registered for. A tenant registered with a legacy alias still reports it; new registrations should name the canonical identifier."
+        },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "isolation_strategy": { "type": "string", "enum": ["schema_per_tenant", "row_level_security"] },
+        "residency_region": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Operator-supplied labels. Omitted when empty."
+        },
+        "desired_state": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "The lifecycle status the Control Plane is driving the tenant towards (a lifecycleStatus once a lifecycle command has run; active at registration)."
+        },
+        "observed_state": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "The lifecycle status last observed (pending until provisioning reports)."
+        },
+        "revision": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "Entitlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_id", "product_id", "status"],
+      "properties": {
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "product_id": { "$ref": "domain.schema.json#/$defs/productId" },
+        "status": { "$ref": "../../product/v1/domain.schema.json#/$defs/subscriptionStatus" },
+        "tier": {
+          "type": "string",
+          "description": "Legacy field; always \"standard\". Tiers are not part of the product/v1 model."
+        }
+      }
+    },
+    "TenantLifecycleResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_id", "status"],
+      "properties": {
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "status": {
+          "type": "string",
+          "enum": ["active", "suspended", "decommissioned"],
+          "description": "The status the command set as both desired and observed state."
+        }
+      }
+    }
+  }
+}
