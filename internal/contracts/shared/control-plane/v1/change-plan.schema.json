@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/change-plan.schema.json",
+  "title": "Change plan",
+  "description": "The immutable, reviewed plan of a controlled mutation (ADR-BCP-021 SS21-29). Planning is side-effect free; the plan is the unit of understanding, approval binds to its digest, and apply executes exactly this plan. Generic: tenant provisioning specialises it (provisioning-plan.schema.json), and Changesets reuse it. A definition library.",
+  "$defs": {
+    "riskClass": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+      "description": "Derived from change type, scope, environment and affected resources (ADR-BCP-021 SS43-46). Never user-selected."
+    },
+    "planFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 64 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "step_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 64 }
+      }
+    },
+    "planCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "description"],
+      "properties": {
+        "check": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 64 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "planStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id", "operation", "irreversible"],
+      "properties": {
+        "step_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 64 },
+        "operation": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "maxLength": 64,
+          "description": "A canonical, Baobab-native operation type. A specialisation (e.g. ProvisioningPlan) restricts it to its vocabulary."
+        },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 64 },
+          "default": []
+        },
+        "resources": {
+          "type": "object",
+          "description": "The resolved resources the step acts on. A specialisation defines their shape."
+        },
+        "irreversible": { "type": "boolean" }
+      }
+    },
+    "impactAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "resources_created", "resources_changed", "resources_removed"],
+      "description": "What the plan would change and who it affects (ADR-BCP-021 SS34-42).",
+      "properties": {
+        "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "resources_created": { "type": "integer", "minimum": 0 },
+        "resources_changed": { "type": "integer", "minimum": 0 },
+        "resources_removed": { "type": "integer", "minimum": 0 },
+        "security_impact": { "type": "string", "maxLength": 1000 },
+        "isolation_impact": { "type": "string", "maxLength": 1000 },
+        "residency_impact": { "type": "string", "maxLength": 1000 },
+        "availability_impact": { "type": "string", "maxLength": 1000 }
+      }
+    },
+    "ChangePlan": {
+      "type": "object",
+      "required": ["plan_id", "plan_version", "plan_digest", "base_revision", "generated_at", "risk_class", "steps", "blockers", "warnings", "impact_analysis", "verification_strategy", "compensation_strategy"],
+      "properties": {
+        "plan_id": { "$ref": "domain.schema.json#/$defs/provisioningPlanId" },
+        "plan_version": { "type": "integer", "minimum": 1 },
+        "plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+        "base_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The revision of the subject the plan was generated against. A plan whose base revision is no longer current is stale and cannot be applied (ADR-BCP-021 SS29-31)."
+        },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "risk_class": { "$ref": "#/$defs/riskClass" },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/planStep" } },
+        "security_checks": { "type": "array", "items": { "$ref": "#/$defs/planCheck" }, "default": [] },
+        "readiness_requirements": { "type": "array", "items": { "$ref": "#/$defs/planCheck" }, "default": [] },
+        "blockers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/planFinding" },
+          "description": "Conditions preventing approval or apply. A plan with blockers cannot be approved."
+        },
+        "warnings": { "type": "array", "items": { "$ref": "#/$defs/planFinding" } },
+        "impact_analysis": { "$ref": "#/$defs/impactAnalysis" },
+        "verification_strategy": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "compensation_strategy": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    }
+  }
+}

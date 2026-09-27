@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/provisioning-plan.schema.json",
+  "title": "Provisioning plan",
+  "description": "The immutable plan that makes a tenant's observed state converge on its desired state (Technical Specification SS25-27, ADR-SHARED-015): a ChangePlan (change-plan.schema.json) whose steps are canonical provisioning operations. Unlike the desired state, a plan names the resolved topology, always in ADR-SHARED-012 identifiers. Generating it is side-effect free; only an approved plan whose digest matches the approval is applied. A definition library; validate against provisioning-plan.schema.json#/$defs/ProvisioningPlan. (Before ADR-SHARED-015 this file defined the provisioning aggregate, now tenant-provisioning.schema.json.)",
+  "$defs": {
+    "provisioningOperation": {
+      "type": "string",
+      "enum": [
+        "REGISTER_TENANT",
+        "REGISTER_LEGAL_ENTITY",
+        "CREATE_MARKET_PARTICIPATION",
+        "CREATE_DIGITAL_ESTATE",
+        "CREATE_PRODUCT_SUBSCRIPTION",
+        "CREATE_CAPABILITY_GRANT",
+        "CREATE_CAPABILITY_BINDING",
+        "CONFIGURE_PROVIDER",
+        "CREATE_MAPPING",
+        "CONFIGURE_IAM_PROJECTION",
+        "VERIFY_SECURITY",
+        "VERIFY_READINESS"
+      ],
+      "description": "Canonical, Baobab-native provisioning operation types (ADR-SHARED-015). Provider-specific work is a resolved resource of a step, never its type."
+    },
+    "provisioningStepResources": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The resolved resources a step acts on. Topology is named only in ADR-SHARED-012 identifiers.",
+      "properties": {
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "legal_entity_id": { "$ref": "domain.schema.json#/$defs/canonicalLegalEntityId" },
+        "market": { "$ref": "../../admission/v1/application.schema.json#/$defs/countryCode" },
+        "estate_key": { "$ref": "domain.schema.json#/$defs/resourceId" },
+        "product_id": { "$ref": "domain.schema.json#/$defs/productId" },
+        "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
+        "provider_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey" },
+        "binding_mode": { "$ref": "../../capability/v1/domain.schema.json#/$defs/bindingMode" },
+        "engine_id": { "$ref": "domain.schema.json#/$defs/engineId" },
+        "system_namespace": { "$ref": "canonical-mapping.schema.json#/$defs/externalReference/properties/system_namespace" },
+        "engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" }
+      }
+    },
+    "provisioningStep": {
+      "allOf": [{ "$ref": "change-plan.schema.json#/$defs/planStep" }],
+      "properties": {
+        "operation": { "$ref": "#/$defs/provisioningOperation" },
+        "resources": { "$ref": "#/$defs/provisioningStepResources" }
+      },
+      "required": ["resources"]
+    },
+    "ProvisioningPlan": {
+      "allOf": [{ "$ref": "change-plan.schema.json#/$defs/ChangePlan" }],
+      "required": ["tenant_provisioning_id", "tenant_id", "desired_state_version", "desired_state_digest"],
+      "properties": {
+        "tenant_provisioning_id": { "$ref": "domain.schema.json#/$defs/tenantProvisioningId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "desired_state_version": { "type": "integer", "minimum": 1 },
+        "desired_state_digest": {
+          "$ref": "domain.schema.json#/$defs/planDigest",
+          "description": "The digest of the desired state the plan was generated from."
+        },
+        "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/provisioningStep" } }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

@@ -135,7 +135,38 @@
     "tenantProvisioningPhase": {
       "type": "string",
       "enum": ["DRAFT", "VALIDATING", "PLANNED", "REGISTERING", "CONFIGURING_CONTEXT", "PROVISIONING_ENTITLEMENTS", "PROVISIONING_PROVIDERS", "VALIDATING_SECURITY", "VERIFYING_READINESS", "BLOCKED", "REMEDIATING", "READY"],
-      "description": "Fine-grained orchestration phase within a TenantProvisioning run (Technical Specification SS22). Deliberately distinct from, and a sub-classification of, the coarser provisioning-state-machine.yaml lifecycle state (e.g. several of these phases all occur while the coarse state is \"provisioning\" or \"reconciling\") -- this enum does not replace or renumber that already-implemented state machine."
+      "description": "Deprecated (ADR-SHARED-015): the orchestration phases of Technical Specification SS22 without the terminal states. Use tenantProvisioningState, the canonical TenantProvisioning lifecycle."
+    },
+    "tenantProvisioningState": {
+      "type": "string",
+      "enum": ["DRAFT", "VALIDATING", "PLANNED", "REGISTERING", "CONFIGURING_CONTEXT", "PROVISIONING_ENTITLEMENTS", "PROVISIONING_PROVIDERS", "VALIDATING_SECURITY", "VERIFYING_READINESS", "BLOCKED", "REMEDIATING", "READY", "ACTIVE", "FAILED", "CANCELLED", "DEPROVISIONED"],
+      "description": "The canonical TenantProvisioning lifecycle (Technical Specification SS22, ADR-SHARED-015; transitions in tenant-provisioning-lifecycle.yaml). BLOCKED is a known, remediable condition; FAILED an operational failure; REMEDIATING the deliberate resolution of known blockers. Distinct from ExecutionOperation status and readiness status."
+    },
+    "provisioningPlanId": {
+      "type": "string",
+      "pattern": "^plan_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of an immutable plan (a ChangePlan, ADR-BCP-021 SS21)."
+    },
+    "approvalDecisionId": {
+      "type": "string",
+      "pattern": "^apd_[a-z0-9]+$",
+      "minLength": 7,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of an ApprovalDecision (ADR-BCP-021 SS50)."
+    },
+    "operationId": {
+      "type": "string",
+      "pattern": "^op_[a-z0-9]+$",
+      "minLength": 6,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of a durable ExecutionOperation (ADR-BCP-022 SS58)."
+    },
+    "planDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Digest of a plan's material execution semantics (ADR-BCP-021 SS23). An approval binds to it; any material change produces another digest."
     },
     "readinessSnapshotId": {
       "type": "string",
@@ -146,8 +177,8 @@
     },
     "readinessStatus": {
       "type": "string",
-      "enum": ["READY", "DEGRADED", "BLOCKED", "NOT_READY"],
-      "description": "Readiness verdict for one object in the readiness hierarchy (Provider/Capability/Product/Estate/Tenant, Technical Specification SS44)."
+      "enum": ["UNKNOWN", "NOT_READY", "BLOCKED", "DEGRADED", "READY"],
+      "description": "Readiness verdict for one object in the readiness hierarchy (Provider/Capability/Product/Estate/Tenant, Technical Specification SS44). UNKNOWN until readiness has been evaluated."
     },
     "driftRecordId": {
       "type": "string",

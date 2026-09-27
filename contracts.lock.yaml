@@ -2,12 +2,12 @@ contract_bundle:
   name: "baobab-platform-resolution"
   version: "1.0.0"
   source_repository: "baobab-platform/shared"
-  source_commit: 97ed1f0f962f88f6c3c1fb5d1951421552c9afb5
+  source_commit: 0de2c1e24c95b4005f7541d646e45e6b9af3dcd0
 schema: nabhold-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: 97ed1f0f962f88f6c3c1fb5d1951421552c9afb5
+  commit: 0de2c1e24c95b4005f7541d646e45e6b9af3dcd0
 # This file previously listed 4 of the ~14 contracts this repository actually
 # implements against - see docs/reconciliation/shared-control-plane-audit.md
 # §6. It must declare every schema/policy file whose shape this repository's
@@ -32,6 +32,14 @@ contracts:
   - contracts/control-plane/v1/market-participation-created.schema.json
   - contracts/control-plane/v1/market-participation-updated.schema.json
   - contracts/control-plane/v1/market.schema.json
+  - contracts/control-plane/v1/provisioning-desired-state.schema.json
+  - contracts/control-plane/v1/change-plan.schema.json
+  - contracts/control-plane/v1/provisioning-plan.schema.json
+  - contracts/control-plane/v1/approval-decision.schema.json
+  - contracts/control-plane/v1/execution-operation.schema.json
+  - contracts/control-plane/v1/tenant-provisioning.schema.json
+  - contracts/control-plane/v1/readiness.schema.json
+  - contracts/control-plane/v1/drift.schema.json
   - contracts/organisation/v1/iam.schema.json
   - contracts/organisation/v1/admission.schema.json
   - contracts/organisation/v1/counterparty.schema.json

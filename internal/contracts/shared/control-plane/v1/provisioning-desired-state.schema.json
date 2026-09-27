@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/provisioning-desired-state.schema.json",
+  "title": "Provisioning desired state",
+  "description": "The business intent a tenant is provisioned to (Technical Specification SS24, ADR-SHARED-015). It is frozen from an AUTHORISED TenantOnboardingRequest and persisted independently of any plan, so a plan can be regenerated without changing intent. It never names engines, engine instances, providers, capability grants or bindings: those are planning results (provisioning-plan.schema.json). A definition library; validate against the fragment, e.g. provisioning-desired-state.schema.json#/$defs/ProvisioningDesiredState.",
+  "$defs": {
+    "marketActivity": {
+      "type": "string",
+      "enum": ["LEGAL_PRESENCE", "SOURCING", "EXPORTING", "IMPORTING", "SELLING", "BUYING", "FULFILMENT"],
+      "description": "What the tenant does in a market (Technical Specification SS24 market_participation)."
+    },
+    "desiredStateProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_onboarding_request_id", "admission_decision_id", "desired_state_version"],
+      "description": "The unbroken lineage ClientApplication -> AdmissionDecision -> TenantOnboardingRequest -> desired state.",
+      "properties": {
+        "tenant_onboarding_request_id": { "$ref": "../../admission/v1/onboarding.schema.json#/$defs/tenantOnboardingRequestId" },
+        "admission_decision_id": { "$ref": "../../admission/v1/decision.schema.json#/$defs/admissionDecisionId" },
+        "desired_state_version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ProvisioningDesiredState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant", "products", "market_participation", "isolation_requirement", "residency_requirement", "provenance", "desired_state_digest", "frozen_at"],
+      "properties": {
+        "tenant": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tenant_id", "display_name"],
+          "properties": {
+            "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+            "display_name": { "type": "string", "minLength": 1, "maxLength": 255 }
+          }
+        },
+        "legal_entities": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": { "$ref": "domain.schema.json#/$defs/canonicalLegalEntityId" },
+          "default": []
+        },
+        "products": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["product_id"],
+            "properties": {
+              "product_id": { "$ref": "domain.schema.json#/$defs/productId" },
+              "profiles": {
+                "type": "array",
+                "maxItems": 50,
+                "uniqueItems": true,
+                "items": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityCompositionKey" },
+                "default": []
+              }
+            }
+          }
+        },
+        "market_participation": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["market"],
+            "properties": {
+              "market": { "$ref": "../../admission/v1/application.schema.json#/$defs/countryCode" },
+              "activities": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "$ref": "#/$defs/marketActivity" },
+                "default": []
+              }
+            }
+          }
+        },
+        "digital_estates": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["estate_key", "channel"],
+            "properties": {
+              "estate_key": { "$ref": "domain.schema.json#/$defs/resourceId" },
+              "channel": { "type": "string", "enum": ["B2B", "B2C", "SUPPLIER", "INTERNAL"] }
+            }
+          },
+          "default": []
+        },
+        "isolation_requirement": { "$ref": "../../admission/v1/decision.schema.json#/$defs/isolationStrategy" },
+        "residency_requirement": { "$ref": "tenant-registration.schema.json#/properties/residency_region" },
+        "provenance": { "$ref": "#/$defs/desiredStateProvenance" },
+        "desired_state_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+        "frozen_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "TenantProvisioningCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_onboarding_request_id"],
+      "description": "Creates a provisioning from the tenant's AUTHORISED onboarding request. It names the source of desired state and never carries a manifest, grants, bindings or engines: the Control Plane plans from authoritative state (ADR-SHARED-015). Creating a provisioning only plans; nothing is applied.",
+      "properties": {
+        "tenant_onboarding_request_id": { "$ref": "../../admission/v1/onboarding.schema.json#/$defs/tenantOnboardingRequestId" },
+        "desired_state_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The desired-state version the caller reviewed. When given, a different current version is refused rather than planned."
+        }
+      }
+    }
+  }
+}

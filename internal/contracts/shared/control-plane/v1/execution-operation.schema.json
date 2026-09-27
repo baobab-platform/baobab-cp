@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/execution-operation.schema.json",
+  "title": "Execution operation",
+  "description": "A durable long-running operation (ADR-BCP-021 SS59-61, ADR-BCP-022 SS54-67; ADR-SHARED-015). Accepting work returns it with 202 and a Location; 202 does not mean success, so the caller polls it. Its status is the operation's, never the subject's: an operation SUCCEEDED does not mean a tenant is ACTIVE, which the result's resource states. Retry and cancel are operation commands. Generic: tenant provisioning apply uses it now. A definition library.",
+  "$defs": {
+    "operationStatus": {
+      "type": "string",
+      "enum": ["QUEUED", "PREPARING", "RUNNING", "WAITING", "VERIFYING", "BLOCKED", "SUCCEEDED", "FAILED", "PARTIALLY_APPLIED", "COMPENSATING", "COMPENSATED", "COMPENSATION_FAILED", "CANCEL_REQUESTED", "CANCELLED"],
+      "description": "ADR-BCP-022 SS59. Not every operation type uses every status."
+    },
+    "operationType": {
+      "type": "string",
+      "enum": ["TENANT_PROVISIONING_APPLY", "TENANT_PROVISIONING_REMEDIATE"],
+      "description": "The class of work. Extended additively as other long-running commands adopt operations."
+    },
+    "ExecutionOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation_id", "operation_type", "status", "subject", "requested_by", "retryable", "revision", "created_at", "updated_at"],
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "FAILED" } } },
+          "then": { "required": ["problem"] }
+        },
+        {
+          "if": { "properties": { "status": { "const": "SUCCEEDED" } } },
+          "then": { "required": ["result", "completed_at"] }
+        }
+      ],
+      "properties": {
+        "operation_id": { "$ref": "domain.schema.json#/$defs/operationId" },
+        "operation_type": { "$ref": "#/$defs/operationType" },
+        "status": { "$ref": "#/$defs/operationStatus" },
+        "subject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id"],
+          "properties": {
+            "type": { "type": "string", "enum": ["TENANT_PROVISIONING", "CHANGESET"] },
+            "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*_[a-z0-9]+$", "maxLength": 63 },
+            "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" }
+          }
+        },
+        "plan_id": { "$ref": "domain.schema.json#/$defs/provisioningPlanId" },
+        "plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+        "approval_id": { "$ref": "domain.schema.json#/$defs/approvalDecisionId" },
+        "requested_by": { "$ref": "../../admission/v1/application.schema.json#/$defs/principalId" },
+        "current_phase": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "The subject's current phase, e.g. a tenantProvisioningState, where meaningful."
+        },
+        "progress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["completed_steps", "total_steps"],
+          "description": "Step counts where meaningful. No fabricated percentage (ADR-BCP-022 SS62).",
+          "properties": {
+            "completed_steps": { "type": "integer", "minimum": 0 },
+            "total_steps": { "type": "integer", "minimum": 0 },
+            "current_step": { "type": "string", "maxLength": 64 }
+          }
+        },
+        "execution_attempt": { "type": "integer", "minimum": 1 },
+        "retryable": {
+          "type": "boolean",
+          "description": "Whether retry is valid now for this operation's type and status."
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resource_type", "resource_id", "resource_state"],
+          "description": "The resulting resource and its state, rather than a copy of it (ADR-BCP-022 SS63). Required once the operation SUCCEEDED: the operation's success is not the subject's, so resource_state says where the subject is (for example READY rather than ACTIVE).",
+          "properties": {
+            "resource_type": { "type": "string", "enum": ["TENANT_PROVISIONING", "CHANGESET"] },
+            "resource_id": { "type": "string", "maxLength": 63 },
+            "resource_state": { "type": "string", "maxLength": 64 },
+            "summary": { "type": "string", "maxLength": 1000 }
+          }
+        },
+        "problem": { "$ref": "../../errors/v1/problem-details.schema.json" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "correlation_id": { "$ref": "domain.schema.json#/$defs/uuid" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "OperationCommandRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "description": "Retrying or cancelling an operation records why. The actor is the verified caller.",
+      "properties": {
+        "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    }
+  }
+}
