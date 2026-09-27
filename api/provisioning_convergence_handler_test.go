@@ -283,10 +283,19 @@ func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
 	if page := decode(call("requester", http.MethodGet, base, "", "", ""), http.StatusOK, "tenant-provisioning.schema.json#/$defs/TenantProvisioningPage"); len(page["items"].([]any)) != 1 {
 		t.Fatalf("list: %v", page)
 	}
-	// Readiness evidence of the applied provisioning, by its public id.
-	if readiness := call("requester", http.MethodGet, base+"/"+id+"/readiness", "", "", ""); readiness.Code != http.StatusOK {
-		t.Fatalf("readiness: %d %s", readiness.Code, readiness.Body.String())
+	// Readiness and drift evidence of the applied provisioning, by its
+	// public id: the verdict with the evaluation it derives from.
+	readiness := decode(call("requester", http.MethodGet, base+"/"+id+"/readiness", "", "", ""), http.StatusOK,
+		"tenant-provisioning.schema.json#/$defs/ProvisioningReadiness")
+	if snapshots := readiness["snapshots"].([]any); readiness["status"] != "READY" || readiness["tenant_provisioning_id"] != id ||
+		len(snapshots) != 1 || snapshots[0].(map[string]any)["level"] != "TENANT" || active["readiness_status"] != "READY" {
+		t.Fatalf("readiness: %v (provisioning readiness_status %v)", readiness, active["readiness_status"])
 	}
+	if drift := decode(call("requester", http.MethodGet, base+"/"+id+"/drift", "", "", ""), http.StatusOK,
+		"tenant-provisioning.schema.json#/$defs/ProvisioningDrift"); drift["tenant_provisioning_id"] != id || drift["observed_at"] == nil {
+		t.Fatalf("drift: %v", drift)
+	}
+	refused(call("requester", http.MethodGet, "/v1/tenants/"+f.OtherTenantID+"/provisioning/"+id+"/readiness", "", "", ""), http.StatusNotFound, "PROVISIONING_NOT_FOUND")
 	refused(call("requester", http.MethodGet, "/v1/tenants/"+f.OtherTenantID+"/provisioning/"+id, "", "", ""), http.StatusNotFound, "PROVISIONING_NOT_FOUND")
 
 	// No provider instance runs where the other tenant must reside: planned
@@ -303,6 +312,16 @@ func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
 	refused(call("approver", http.MethodPost, otherBase+"/"+blocked["tenant_provisioning_id"].(string)+"/approve", "", `"1"`,
 		`{"plan_id":"`+otherPlan["plan_id"].(string)+`","plan_version":1,"plan_digest":"`+otherPlan["plan_digest"].(string)+`","decision":"APPROVED"}`),
 		http.StatusConflict, "PLAN_BLOCKED")
+	// Never evaluated: readiness is UNKNOWN and no drift is observed.
+	otherPath := otherBase + "/" + blocked["tenant_provisioning_id"].(string)
+	if unknown := decode(call("requester", http.MethodGet, otherPath+"/readiness", "", "", ""), http.StatusOK,
+		"tenant-provisioning.schema.json#/$defs/ProvisioningReadiness"); unknown["status"] != "UNKNOWN" || len(unknown["snapshots"].([]any)) != 0 {
+		t.Fatalf("unevaluated readiness: %v", unknown)
+	}
+	if none := decode(call("requester", http.MethodGet, otherPath+"/drift", "", "", ""), http.StatusOK,
+		"tenant-provisioning.schema.json#/$defs/ProvisioningDrift"); none["observed_at"] != nil || len(none["items"].([]any)) != 0 {
+		t.Fatalf("unobserved drift: %v", none)
+	}
 }
 
 func jsonNumber(v any) string {

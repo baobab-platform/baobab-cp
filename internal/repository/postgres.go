@@ -1695,6 +1695,19 @@ func (r *PostgresRepository) SaveReadinessSnapshot(ctx context.Context, snapshot
 	); err != nil {
 		return "", fmt.Errorf("insert readiness snapshot: %w", err)
 	}
+	// The provisioning's readiness is its latest evaluation's verdict
+	// (ADR-SHARED-015 section 5); an older evaluation saved late does not
+	// replace it.
+	if _, err := tx.Exec(ctx, `
+		UPDATE provisioning.tenant_provisioning
+		SET readiness_status = CASE WHEN $2 THEN 'READY' ELSE 'NOT_READY' END
+		WHERE tenant_provisioning_id = $1::uuid
+			AND NOT EXISTS (SELECT 1 FROM provisioning.readiness_snapshot
+				WHERE tenant_provisioning_id = $1::uuid AND evaluated_at > $3)`,
+		snapshot.TenantProvisioningID, snapshot.OverallReady, snapshot.EvaluatedAt,
+	); err != nil {
+		return "", fmt.Errorf("record readiness status: %w", err)
+	}
 	for _, check := range snapshot.Checks {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO provisioning.readiness_check(

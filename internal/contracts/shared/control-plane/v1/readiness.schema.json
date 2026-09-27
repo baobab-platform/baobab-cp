@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.baobab-platform.com/control-plane/v1/readiness.schema.json",
   "title": "ReadinessSnapshot",
-  "description": "Hierarchical readiness projection (Technical Specification SS44, SS51): Provider -> Capability -> Product -> Estate -> Tenant. Readiness SHALL be explainable -- never merely `ready: false` where structured reasons are available (SS44) -- so every non-READY snapshot carries blocking_reasons drawn from the same capability_resolution_denial reason-code vocabulary CapabilityResolution and TenantProvisioning.blocking_reasons already use, rather than a separate readiness-specific vocabulary.",
+  "description": "Hierarchical readiness projection (Technical Specification SS44, SS51): Provider -> Capability -> Product -> Estate -> Tenant. Readiness SHALL be explainable -- never merely `ready: false` where structured reasons are available (SS44) -- so every non-READY snapshot carries blocking_reasons drawn from the reason-code registry: the capability_resolution_denial code CapabilityResolution uses where one names the condition, and otherwise a provisioning_blocker code, the vocabulary TenantProvisioning.blocking_reasons also uses.",
   "$defs": {
     "readinessSnapshot": {
       "type": "object",
@@ -31,7 +31,7 @@
             "properties": {
               "code": {
                 "type": "string",
-                "description": "A capability_resolution_denial code from contracts/authorization/v1/reason-code-registry.yaml, e.g. BINDING_NOT_FOUND (matches the Technical Specification SS51 example verbatim)."
+                "description": "A capability_resolution_denial or provisioning_blocker code from contracts/authorization/v1/reason-code-registry.yaml, e.g. BINDING_NOT_FOUND (matches the Technical Specification SS51 example verbatim)."
               },
               "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
               "detail": { "type": "string", "maxLength": 500 }

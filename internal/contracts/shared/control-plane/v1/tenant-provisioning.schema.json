@@ -19,7 +19,7 @@
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$",
           "maxLength": 64,
-          "description": "A known, remediable condition, e.g. NO_RESIDENCY_COMPLIANT_PROVIDER or BINDING_NOT_FOUND (authorization/v1 reason-code-registry.yaml)."
+          "description": "A known, remediable condition: a capability_resolution_denial or provisioning_blocker code from authorization/v1 reason-code-registry.yaml, e.g. NO_RESIDENCY_COMPLIANT_PROVIDER or BINDING_NOT_FOUND."
         },
         "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
         "detail": { "type": "string", "maxLength": 500 }

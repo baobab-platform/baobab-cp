@@ -194,7 +194,7 @@
     },
     "driftObjectType": {
       "type": "string",
-      "enum": ["TENANT", "LEGAL_ENTITY", "DIGITAL_ESTATE", "MARKET_PARTICIPATION", "PRODUCT_SUBSCRIPTION", "CAPABILITY_GRANT", "CAPABILITY_BINDING", "PROVIDER_CONFIGURATION"],
+      "enum": ["TENANT", "LEGAL_ENTITY", "DIGITAL_ESTATE", "MARKET_PARTICIPATION", "PRODUCT_SUBSCRIPTION", "CAPABILITY_GRANT", "CAPABILITY_BINDING", "PROVIDER_CONFIGURATION", "TRADE_LANE"],
       "description": "The class of object a Drift record compares desired vs. observed state for. Intentionally the set of objects Programme Gate P0's classification (phase-0-architecture-inventory-and-lock.md) identified as carrying desired/observed state, not an open-ended free-text field."
     },
     "driftResolution": {
