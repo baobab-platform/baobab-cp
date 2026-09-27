@@ -9,11 +9,9 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
-	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -155,41 +153,6 @@ func doJSON(t *testing.T, handler http.Handler, method, path, idempotencyKey str
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	return rec
-}
-
-func TestProvisioningCancelTransitionsDirectly(t *testing.T) {
-	handler, repo, admin, _ := newProvisioningTestHandler(t)
-	ctx := context.Background()
-	f := seedProvisioningAPIFixture(t, ctx, admin, repo, "cancel")
-
-	now := time.Now().UTC()
-	seed := provisioningdomain.TenantProvisioning{
-		ID: domain.NewUUIDv7(), TenantID: f.TenantID, IdempotencyKey: "idem-cancel-http", RequestHash: "hash-cancel-http",
-		Status: provisioningdomain.ProvisioningStatusReconcile, DesiredStateVersion: 1, ObservedStateVersion: 0,
-		StartedAt: now, Version: 1,
-	}
-	if err := repo.CreateTenantProvisioning(ctx, seed); err != nil {
-		t.Fatalf("seed tenant provisioning: %v", err)
-	}
-
-	rec := doJSON(t, handler, http.MethodPost, "/v1/tenants/"+f.TenantID+"/provisioning/"+seed.ID+"/cancel", "", map[string]string{"reason": "operator requested"})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on cancel, got %d: %s", rec.Code, rec.Body.String())
-	}
-	var cancelled provisioningdomain.TenantProvisioning
-	if err := json.Unmarshal(rec.Body.Bytes(), &cancelled); err != nil {
-		t.Fatalf("decode cancel response: %v", err)
-	}
-	if cancelled.Status != provisioningdomain.ProvisioningStatusCancelled {
-		t.Fatalf("expected CANCELLED, got %s", cancelled.Status)
-	}
-
-	// Cancelling an already-CANCELLED run is rejected (no outbound edges
-	// from a terminal state), not silently accepted a second time.
-	rec = doJSON(t, handler, http.MethodPost, "/v1/tenants/"+f.TenantID+"/provisioning/"+seed.ID+"/cancel", "", nil)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409 cancelling an already-CANCELLED run, got %d: %s", rec.Code, rec.Body.String())
-	}
 }
 
 func TestProvisioningUnknownIDReturnsNotFound(t *testing.T) {

@@ -22,6 +22,10 @@ var (
 	ErrPlanAlreadyDecided   = errors.New("the plan already has a decision")
 	ErrOperationInProgress  = errors.New("an operation on the provisioning is already in progress")
 	ErrOperationKeyReused   = errors.New("the idempotency key was used for a different request")
+	// ErrOperationNotRetryable: only a retryable FAILED or BLOCKED operation is retried.
+	ErrOperationNotRetryable = errors.New("the operation cannot be retried")
+	// ErrOperationNotCancellable: a finished operation cannot be cancelled.
+	ErrOperationNotCancellable = errors.New("the operation has finished and cannot be cancelled")
 )
 
 // ConvergenceRepository persists provisioning planned from desired state.
@@ -35,6 +39,12 @@ type ConvergenceRepository interface {
 	GetDesiredState(ctx context.Context, id string, version int64) (convergence.DesiredState, error)
 	RecordPlanDecision(ctx context.Context, id string, expectedRevision int64, decision PlanDecision, actor AuditActor) error
 	AcceptApply(ctx context.Context, id string, expectedRevision int64, op operations.Operation, key, requestHash string, actor AuditActor) (operations.Operation, bool, error)
+	AcceptRemediation(ctx context.Context, id string, expectedRevision int64, op operations.Operation, key, requestHash string, actor AuditActor) (operations.Operation, bool, error)
+	Replan(ctx context.Context, id string, expectedRevision int64, plan convergence.Plan, key, requestHash, reason string, actor AuditActor) error
+	PlanByIdempotencyKey(ctx context.Context, id, key string) (planID, requestHash string, err error)
+	Withdraw(ctx context.Context, id string, expectedRevision int64, reason string, actor AuditActor) error
+	RetryOperation(ctx context.Context, operationID, key, reason string, actor AuditActor) (operations.Operation, error)
+	CancelOperation(ctx context.Context, operationID, reason string, actor AuditActor) (operations.Operation, error)
 	GetOperation(ctx context.Context, id string) (operations.Operation, error)
 	ReplayOperation(ctx context.Context, requestedBy, opType, key string) (operations.Operation, error)
 	OperationRequestHash(ctx context.Context, id string) string
@@ -70,6 +80,11 @@ type ConvergedProvisioning struct {
 	Plan                                                 *convergence.Plan
 	Decision                                             *PlanDecision
 	OperationID                                          string
+	// LegacyStatus is the orchestrator's status; BlockedReason why the
+	// provisioning is BLOCKED when no finding says; OperationActive whether
+	// an operation on it is still in progress.
+	LegacyStatus, BlockedReason string
+	OperationActive             bool
 }
 
 var _ ConvergenceRepository = (*PostgresRepository)(nil)
@@ -233,7 +248,14 @@ const convergedColumns = `tp.tenant_provisioning_id::text, tp.tenant_provisionin
 	ap.decided_at, ap.correlation_id::text,
 	(SELECT o.operation_id FROM operations.execution_operation o
 		WHERE o.subject_type = 'TENANT_PROVISIONING' AND o.subject_id = tp.tenant_provisioning_key
-		ORDER BY o.created_at DESC LIMIT 1)`
+		ORDER BY o.created_at DESC LIMIT 1),
+	tp.status, COALESCE(tp.blocked_reason, ''),
+	EXISTS (SELECT 1 FROM operations.execution_operation o
+		WHERE o.subject_type = 'TENANT_PROVISIONING' AND o.subject_id = tp.tenant_provisioning_key AND o.status IN (` + activeOperationStatuses + `))`
+
+// activeOperationStatuses are the statuses of an operation still in
+// progress; any other is finished, or waiting to be retried.
+const activeOperationStatuses = `'QUEUED', 'PREPARING', 'RUNNING', 'WAITING', 'VERIFYING', 'COMPENSATING', 'CANCEL_REQUESTED'`
 
 const convergedFrom = `
 	FROM provisioning.tenant_provisioning tp
@@ -250,7 +272,8 @@ func scanConverged(row pgx.Row) (ConvergedProvisioning, error) {
 	var decidedAt *time.Time
 	err := row.Scan(&c.ID, &c.Key, &c.TenantID, &c.State, &c.CreatedBy, &c.ReadinessStatus, &c.TenantOnboardingRequestID,
 		&c.AdmissionDecisionID, &c.DesiredStateVersion, &c.DesiredStateDigest, &legacy, &c.Revision, &c.CreatedAt, &c.UpdatedAt,
-		&plan, &approvalID, &planID, &planVersion, &planDigest, &decision, &reason, &decidedBy, &decidedAt, &correlation, &operationID)
+		&plan, &approvalID, &planID, &planVersion, &planDigest, &decision, &reason, &decidedBy, &decidedAt, &correlation, &operationID,
+		&c.LegacyStatus, &c.BlockedReason, &c.OperationActive)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ConvergedProvisioning{}, ErrProvisioningNotFound
 	}
@@ -399,17 +422,27 @@ func (r *PostgresRepository) RecordPlanDecision(ctx context.Context, id string, 
 // the same idempotency key returns the operation it created (created is
 // false); another operation still in progress on the provisioning refuses it.
 func (r *PostgresRepository) AcceptApply(ctx context.Context, id string, expectedRevision int64, op operations.Operation, key, requestHash string, actor AuditActor) (operations.Operation, bool, error) {
-	out, created, err := r.acceptApply(ctx, id, expectedRevision, op, key, requestHash, actor)
+	return r.acceptOperation(ctx, id, expectedRevision, op, key, requestHash, "", "tenant_provisioning.apply_accepted", actor)
+}
+
+// AcceptRemediation queues the remediation of a BLOCKED provisioning, which
+// is REMEDIATING until it runs.
+func (r *PostgresRepository) AcceptRemediation(ctx context.Context, id string, expectedRevision int64, op operations.Operation, key, requestHash string, actor AuditActor) (operations.Operation, bool, error) {
+	return r.acceptOperation(ctx, id, expectedRevision, op, key, requestHash, "REMEDIATING", "tenant_provisioning.remediation_accepted", actor)
+}
+
+func (r *PostgresRepository) acceptOperation(ctx context.Context, id string, expectedRevision int64, op operations.Operation, key, requestHash, state, action string, actor AuditActor) (operations.Operation, bool, error) {
+	out, created, err := r.acceptApply(ctx, id, expectedRevision, op, key, requestHash, state, action, actor)
 	if errors.Is(err, errOperationKeyRace) {
 		// A concurrent request with the same key won; this one is its replay.
-		return r.acceptApply(ctx, id, expectedRevision, op, key, requestHash, actor)
+		return r.acceptApply(ctx, id, expectedRevision, op, key, requestHash, state, action, actor)
 	}
 	return out, created, err
 }
 
 var errOperationKeyRace = errors.New("concurrent operation with the same idempotency key")
 
-func (r *PostgresRepository) acceptApply(ctx context.Context, id string, expectedRevision int64, op operations.Operation, key, requestHash string, actor AuditActor) (operations.Operation, bool, error) {
+func (r *PostgresRepository) acceptApply(ctx context.Context, id string, expectedRevision int64, op operations.Operation, key, requestHash, state, action string, actor AuditActor) (operations.Operation, bool, error) {
 	if err := validateActor(actor); err != nil {
 		return operations.Operation{}, false, err
 	}
@@ -440,7 +473,7 @@ func (r *PostgresRepository) acceptApply(ctx context.Context, id string, expecte
 	var active bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM operations.execution_operation
 		WHERE subject_type = 'TENANT_PROVISIONING' AND subject_id = $1
-			AND status NOT IN ('SUCCEEDED', 'FAILED', 'COMPENSATED', 'COMPENSATION_FAILED', 'CANCELLED'))`, op.SubjectID).Scan(&active); err != nil {
+			AND status IN (`+activeOperationStatuses+`))`, op.SubjectID).Scan(&active); err != nil {
 		return operations.Operation{}, false, err
 	}
 	if active {
@@ -460,10 +493,15 @@ func (r *PostgresRepository) acceptApply(ctx context.Context, id string, expecte
 		}
 		return operations.Operation{}, false, fmt.Errorf("insert operation: %w", err)
 	}
+	// A new execution supersedes any earlier one's outcome.
+	if _, err := tx.Exec(ctx, `UPDATE provisioning.tenant_provisioning SET blocked_reason = NULL,
+		state = COALESCE(NULLIF($2, ''), state) WHERE tenant_provisioning_id = $1::uuid`, id, state); err != nil {
+		return operations.Operation{}, false, err
+	}
 	if err := bumpRevision(ctx, tx, id); err != nil {
 		return operations.Operation{}, false, err
 	}
-	if err := insertProvisioningAudit(ctx, tx, actor, tenantID, "tenant_provisioning.apply_accepted", op.SubjectID, map[string]any{
+	if err := insertProvisioningAudit(ctx, tx, actor, tenantID, action, op.SubjectID, map[string]any{
 		"operation_id": op.ID, "plan_id": op.PlanID, "plan_digest": op.PlanDigest, "approval_id": op.ApprovalID}); err != nil {
 		return operations.Operation{}, false, err
 	}
@@ -492,30 +530,36 @@ func ProvisioningUUID(key string) (string, error) {
 	return domain.ParseResourceID("tp", key)
 }
 
-// SaveExecutionManifest persists the manifest an approved plan executes as,
-// once: a resumed execution reuses the first one rather than re-deriving it.
+// SaveExecutionManifest persists the manifest the approved plan executes
+// as. A resumed execution of the same plan keeps the first one rather than
+// re-deriving it; a replanned plan's execution replaces it.
 func (r *PostgresRepository) SaveExecutionManifest(ctx context.Context, m provisioningdomain.TenantManifestRecord) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO provisioning.tenant_manifest (tenant_provisioning_id, tenant_id, schema_version, manifest_hash,
 			desired_state_version, source, raw_manifest, resolved_manifest)
 		VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (tenant_provisioning_id) DO NOTHING`,
+		ON CONFLICT (tenant_provisioning_id) DO UPDATE SET schema_version = EXCLUDED.schema_version,
+			manifest_hash = EXCLUDED.manifest_hash, desired_state_version = EXCLUDED.desired_state_version,
+			source = EXCLUDED.source, raw_manifest = EXCLUDED.raw_manifest, resolved_manifest = EXCLUDED.resolved_manifest
+		WHERE provisioning.tenant_manifest.source <> EXCLUDED.source`,
 		m.TenantProvisioningID, m.TenantID, m.SchemaVersion, m.ManifestHash, m.DesiredStateVersion, m.Source,
 		m.RawManifest, m.ResolvedManifest)
 	return err
 }
 
 // MarkProvisioningBlocked records that execution stopped at a known,
-// remediable condition. The legacy status is left as the orchestrator set it.
-func (r *PostgresRepository) MarkProvisioningBlocked(ctx context.Context, id string) error {
-	_, err := r.pool.Exec(ctx, `UPDATE provisioning.tenant_provisioning SET state = 'BLOCKED', updated_at = now()
-		WHERE tenant_provisioning_id = $1::uuid`, id)
+// remediable condition, and why when no finding says (reason may be empty).
+// The legacy status is left as the orchestrator set it.
+func (r *PostgresRepository) MarkProvisioningBlocked(ctx context.Context, id, reason string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE provisioning.tenant_provisioning SET state = 'BLOCKED', blocked_reason = NULLIF($2, ''),
+		version = version + 1, updated_at = now() WHERE tenant_provisioning_id = $1::uuid`, id, reason)
 	return err
 }
 
-// ClaimApply claims the next runnable provisioning apply operation.
-func (r *PostgresRepository) ClaimApply(ctx context.Context, lease time.Duration) (operations.Operation, bool, error) {
-	return r.ClaimOperation(ctx, operations.TypeTenantProvisioningApply, lease)
+// ClaimExecution claims the next runnable provisioning apply or
+// remediation.
+func (r *PostgresRepository) ClaimExecution(ctx context.Context, lease time.Duration) (operations.Operation, bool, error) {
+	return r.ClaimOperation(ctx, lease, operations.TypeTenantProvisioningApply, operations.TypeTenantProvisioningRemediate)
 }
 
 // LoadExecuted reads the provisioning an operation applies, by its tp_ id.
@@ -532,7 +576,8 @@ func (r *PostgresRepository) LoadExecuted(ctx context.Context, key string) (conv
 	if err != nil {
 		return convergence.ExecutedProvisioning{}, err
 	}
-	out := convergence.ExecutedProvisioning{ID: c.ID, Key: c.Key, TenantID: c.TenantID, Plan: c.Plan, Desired: &desired}
+	out := convergence.ExecutedProvisioning{ID: c.ID, Key: c.Key, TenantID: c.TenantID, Plan: c.Plan, Desired: &desired,
+		LegacyStatus: c.LegacyStatus}
 	if c.Decision != nil {
 		out.ApprovalID, out.ApprovedDigest = c.Decision.ApprovalID, c.Decision.PlanDigest
 		out.Approved = c.Decision.Decision == "APPROVED"

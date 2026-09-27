@@ -57,7 +57,13 @@ func (r *PostgresRepository) GetOperation(ctx context.Context, id string) (opera
 // a lease: a QUEUED one, or one whose executor's lease expired, which is
 // resumed as a new execution attempt. It returns false when none is
 // runnable.
-func (r *PostgresRepository) ClaimOperation(ctx context.Context, opType string, lease time.Duration) (operations.Operation, bool, error) {
+func (r *PostgresRepository) ClaimOperation(ctx context.Context, lease time.Duration, opTypes ...string) (operations.Operation, bool, error) {
+	return r.claimOperation(ctx, lease, "", opTypes...)
+}
+
+// claimOperation claims as ClaimOperation does, only operationID when it is
+// not empty.
+func (r *PostgresRepository) claimOperation(ctx context.Context, lease time.Duration, operationID string, opTypes ...string) (operations.Operation, bool, error) {
 	op, err := scanOperation(r.pool.QueryRow(ctx, `
 		UPDATE operations.execution_operation o
 		SET status = 'RUNNING', lease_expires_at = now() + $2::interval, started_at = COALESCE(o.started_at, now()),
@@ -65,12 +71,12 @@ func (r *PostgresRepository) ClaimOperation(ctx context.Context, opType string, 
 			revision = o.revision + 1, updated_at = now()
 		WHERE o.operation_id = (
 			SELECT operation_id FROM operations.execution_operation
-			WHERE operation_type = $1 AND (status = 'QUEUED'
+			WHERE operation_type = ANY($1) AND ($3 = '' OR operation_id = $3) AND (status = 'QUEUED'
 				OR (status IN ('PREPARING', 'RUNNING') AND lease_expires_at < now()))
 			ORDER BY created_at
 			FOR UPDATE SKIP LOCKED
 			LIMIT 1)
-		RETURNING `+operationColumns, opType, lease.String()))
+		RETURNING `+operationColumns, opTypes, lease.String(), operationID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return operations.Operation{}, false, nil
 	}
@@ -82,24 +88,27 @@ func (r *PostgresRepository) ClaimOperation(ctx context.Context, opType string, 
 var ErrOperationLeaseLost = errors.New("the operation was resumed by another executor")
 
 // CompleteOperation records the outcome of the execution attempt that
-// claimed the operation and releases its lease. It changes nothing when the
+// claimed the operation and releases its lease, returning the status
+// recorded. An operation asked to stop meanwhile ends CANCELLED unless the
+// attempt succeeded, whose work is then done. It changes nothing when the
 // operation has since been resumed as another attempt.
-func (r *PostgresRepository) CompleteOperation(ctx context.Context, id string, attempt int, outcome operations.Outcome) error {
-	terminal := outcome.Status == operations.StatusSucceeded || outcome.Status == operations.StatusFailed
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE operations.execution_operation
-		SET status = $2, current_phase = NULLIF($3, ''), retryable = $4, result = $5, problem = $6,
-			completed_at = CASE WHEN $7 THEN now() END, lease_expires_at = NULL,
+func (r *PostgresRepository) CompleteOperation(ctx context.Context, id string, attempt int, outcome operations.Outcome) (operations.Status, error) {
+	var recorded string
+	err := r.pool.QueryRow(ctx, `
+		UPDATE operations.execution_operation SET
+			status = CASE WHEN status = 'CANCEL_REQUESTED' AND $2 <> 'SUCCEEDED' THEN 'CANCELLED' ELSE $2 END,
+			current_phase = CASE WHEN status = 'CANCEL_REQUESTED' AND $2 <> 'SUCCEEDED' THEN 'CANCELLED' ELSE NULLIF($3, '') END, retryable = $4 AND status <> 'CANCEL_REQUESTED', result = $5::jsonb,
+			problem = CASE WHEN status = 'CANCEL_REQUESTED' AND $2 <> 'SUCCEEDED' THEN NULL ELSE $6::jsonb END,
+			completed_at = CASE WHEN $7 OR status = 'CANCEL_REQUESTED' THEN now() END, lease_expires_at = NULL,
 			revision = revision + 1, updated_at = now()
-		WHERE operation_id = $1 AND execution_attempt = $8 AND status IN ('PREPARING', 'RUNNING')`,
-		id, string(outcome.Status), outcome.CurrentPhase, outcome.Retryable, nullJSON(outcome.Result), nullJSON(outcome.Problem), terminal, attempt)
-	if err != nil {
-		return err
+		WHERE operation_id = $1 AND execution_attempt = $8 AND status IN ('PREPARING', 'RUNNING', 'CANCEL_REQUESTED')
+		RETURNING status`,
+		id, string(outcome.Status), outcome.CurrentPhase, outcome.Retryable, nullJSON(outcome.Result), nullJSON(outcome.Problem),
+		outcome.Status == operations.StatusSucceeded || outcome.Status == operations.StatusFailed, attempt).Scan(&recorded)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrOperationLeaseLost
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrOperationLeaseLost
-	}
-	return nil
+	return operations.Status(recorded), err
 }
 
 func nullJSON(raw json.RawMessage) any {

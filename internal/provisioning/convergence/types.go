@@ -153,9 +153,12 @@ type ExecutionRegistry interface {
 // provisioning it applies.
 type ExecutedProvisioning struct {
 	ID, Key, TenantID string
-	Plan              *Plan
-	Desired           *DesiredState
-	ApprovalID        string
-	ApprovedDigest    string
-	Approved          bool
+	// LegacyStatus is the orchestrator's status: a FAILED execution is
+	// resumed with Retry.
+	LegacyStatus   string
+	Plan           *Plan
+	Desired        *DesiredState
+	ApprovalID     string
+	ApprovedDigest string
+	Approved       bool
 }

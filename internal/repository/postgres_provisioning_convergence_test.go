@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -141,15 +142,18 @@ func TestAnInterruptedOperationIsResumed(t *testing.T) {
 	}
 	defer admin.Close()
 
-	// A remediation: no other test queues one, so claims are deterministic
-	// while other packages run against the same database.
-	claim := func() (operations.Operation, bool, error) {
-		return repo.ClaimOperation(ctx, operations.TypeTenantProvisioningRemediate, time.Minute)
-	}
+	// Claims are of this operation only: other packages' tests queue and
+	// execute operations in the same database concurrently.
 	id := "op_" + strings.ReplaceAll(domain.NewUUIDv7(), "-", "")
+	claim := func() (operations.Operation, bool, error) {
+		return repo.claimOperation(ctx, time.Minute, id, operations.TypeTenantProvisioningRemediate)
+	}
 	t.Cleanup(func() { admin.Exec(ctx, `DELETE FROM operations.execution_operation WHERE operation_id = $1`, id) })
-	if _, err := admin.Exec(ctx, `INSERT INTO operations.execution_operation (operation_id, operation_type, status, subject_type, subject_id, requested_by)
-		VALUES ($1, 'TENANT_PROVISIONING_REMEDIATE', 'QUEUED', 'TENANT_PROVISIONING', 'tp_x', 'prn_requester')`, id); err != nil {
+	// Created a day ahead, so executors under test elsewhere claim their own
+	// operations first.
+	if _, err := admin.Exec(ctx, `INSERT INTO operations.execution_operation (operation_id, operation_type, status, subject_type, subject_id,
+		requested_by, created_at) VALUES ($1, 'TENANT_PROVISIONING_REMEDIATE', 'QUEUED', 'TENANT_PROVISIONING', 'tp_x', 'prn_requester',
+		now() + interval '1 day')`, id); err != nil {
 		t.Fatal(err)
 	}
 	first, ok, err := claim()
@@ -169,13 +173,82 @@ func TestAnInterruptedOperationIsResumed(t *testing.T) {
 	// The interrupted attempt cannot record over the resumed one; the
 	// resumed attempt records its outcome.
 	outcome := operations.Outcome{Status: operations.StatusBlocked, CurrentPhase: "BLOCKED", Retryable: true}
-	if err := repo.CompleteOperation(ctx, id, 1, outcome); !errors.Is(err, ErrOperationLeaseLost) {
+	if _, err := repo.CompleteOperation(ctx, id, 1, outcome); !errors.Is(err, ErrOperationLeaseLost) {
 		t.Fatalf("the interrupted attempt recorded its outcome: %v", err)
 	}
-	if err := repo.CompleteOperation(ctx, id, 2, outcome); err != nil {
+	if _, err := repo.CompleteOperation(ctx, id, 2, outcome); err != nil {
 		t.Fatalf("the resumed attempt could not record its outcome: %v", err)
 	}
-	if err := repo.CompleteOperation(ctx, id, 2, outcome); !errors.Is(err, ErrOperationLeaseLost) {
+	if _, err := repo.CompleteOperation(ctx, id, 2, outcome); !errors.Is(err, ErrOperationLeaseLost) {
 		t.Fatalf("a completed operation was completed again: %v", err)
+	}
+}
+
+// TestARunningOperationStopsAtItsSafePoint: cancelling a running operation
+// asks it to stop; the attempt's completion then records CANCELLED, unless
+// it succeeded, whose work is done. An operation asked to stop whose
+// executor died is finished as CANCELLED by the next executor.
+func TestARunningOperationStopsAtItsSafePoint(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping PostgreSQL integration test")
+	}
+	ctx := context.Background()
+	store, err := postgres.Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.ApplyMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	admin, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+
+	actor := AuditActor{ActorID: "prn_operator", ActorType: "human", CorrelationID: domain.NewUUIDv7()}
+	running := func(label string) string {
+		id := "op_" + strings.ReplaceAll(domain.NewUUIDv7(), "-", "")
+		t.Cleanup(func() { admin.Exec(ctx, `DELETE FROM operations.execution_operation WHERE operation_id = $1`, id) })
+		if _, err := admin.Exec(ctx, `INSERT INTO operations.execution_operation (operation_id, operation_type, status, subject_type,
+			subject_id, requested_by, lease_expires_at) VALUES ($1, 'TENANT_PROVISIONING_REMEDIATE', 'RUNNING', 'TENANT_PROVISIONING',
+			'tp_x', 'prn_requester', now() + interval '1 minute')`, id); err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+		requested, err := repo.CancelOperation(ctx, id, "operator stop", actor)
+		if err != nil || requested.Status != operations.StatusCancelRequested {
+			t.Fatalf("%s: cancelling a running operation: %v %+v", label, err, requested)
+		}
+		return id
+	}
+	blocked := operations.Outcome{Status: operations.StatusBlocked, CurrentPhase: "BLOCKED", Retryable: true}
+	if recorded, err := repo.CompleteOperation(ctx, running("blocked"), 1, blocked); err != nil || recorded != operations.StatusCancelled {
+		t.Fatalf("a stopped attempt recorded %s: %v", recorded, err)
+	}
+	result := json.RawMessage(`{"resource_type":"TENANT_PROVISIONING","resource_id":"tp_x","resource_state":"ACTIVE"}`)
+	succeeded := operations.Outcome{Status: operations.StatusSucceeded, CurrentPhase: "ACTIVE", Result: result}
+	if recorded, err := repo.CompleteOperation(ctx, running("succeeded"), 1, succeeded); err != nil || recorded != operations.StatusSucceeded {
+		t.Fatalf("an attempt that succeeded before its safe point recorded %s: %v", recorded, err)
+	}
+
+	abandoned := running("abandoned")
+	if _, err := admin.Exec(ctx, `UPDATE operations.execution_operation SET lease_expires_at = now() - interval '1 second'
+		WHERE operation_id = $1`, abandoned); err != nil {
+		t.Fatal(err)
+	}
+	// An executor under test elsewhere may sweep it first; either way it ends CANCELLED.
+	if _, err := repo.FinishAbandonedCancellations(ctx); err != nil {
+		t.Fatalf("abandoned cancellations: %v", err)
+	}
+	op, err := repo.GetOperation(ctx, abandoned)
+	if err != nil || op.Status != operations.StatusCancelled {
+		t.Fatalf("an abandoned cancellation: %v %s", err, op.Status)
 	}
 }

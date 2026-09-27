@@ -34,19 +34,20 @@ type store struct {
 	completed *operations.Outcome
 }
 
-func (s *store) ClaimApply(context.Context, time.Duration) (operations.Operation, bool, error) {
+func (s *store) ClaimExecution(context.Context, time.Duration) (operations.Operation, bool, error) {
 	return s.op, s.completed == nil, nil
 }
+func (s *store) FinishAbandonedCancellations(context.Context) (int, error) { return 0, nil }
 func (s *store) LoadExecuted(context.Context, string) (convergence.ExecutedProvisioning, error) {
 	return s.executed, nil
 }
 func (s *store) SaveExecutionManifest(context.Context, provisioningdomain.TenantManifestRecord) error {
 	return nil
 }
-func (s *store) MarkProvisioningBlocked(context.Context, string) error { return nil }
-func (s *store) CompleteOperation(_ context.Context, _ string, _ int, o operations.Outcome) error {
+func (s *store) MarkProvisioningBlocked(context.Context, string, string) error { return nil }
+func (s *store) CompleteOperation(_ context.Context, _ string, _ int, o operations.Outcome) (operations.Status, error) {
 	s.completed = &o
-	return nil
+	return o.Status, nil
 }
 func (s *store) LegalEntityOf(context.Context, string) (string, error) { return "LE-1", nil }
 
