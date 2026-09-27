@@ -42,6 +42,10 @@ After the legacy decision, `requireAdminRole` evaluates the caller's grants for 
 
 All label values come from closed sets. The response is never changed, and evaluation has a 250 ms budget. `grants_broader` also logs a warning.
 
+- **`unresolved` and `error`:** only a principal who is not found or not ACTIVE is `unresolved`. An identity-store or grant-store failure, including the budget running out, is `error`.
+- **Targets named in the body or a stored record:** the resource is the route's path and query identifiers. The two platform-account binding routes also resolve their account: from the request body when binding (the body is restored for the handler), and from the active binding when ending.
+- **`not_evaluated`:** when grants do not allow and the caller holds a live grant of the permission at a level the route left unresolved, the comparison is `not_evaluated`, never `grants_narrower`. An example is an organisation grant checked on a tenant route. Resolving each route's organisation, account and group ancestry would turn these into real comparisons.
+
 **Criteria for moving enforcement to grants:**
 - `grants_broader` stays at zero over a representative period;
 - every `grants_narrower` is explained, as a principal who still needs a grant or a role that was broader than intended;

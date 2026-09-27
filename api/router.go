@@ -148,12 +148,15 @@ type API struct {
 	// no grants reader, shadow evaluation is off.
 	grants      repository.AdministrativeGrantReader
 	environment string
+	// platformAccounts resolves the account a binding route acts on for
+	// shadow evaluation.
+	platformAccounts repository.PlatformAccountRepository
 }
 
 func New(dependencies Dependencies) http.Handler {
 	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships,
 		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration,
-		grants: dependencies.AdministrativeGrants, environment: dependencies.Environment}
+		grants: dependencies.AdministrativeGrants, environment: dependencies.Environment, platformAccounts: dependencies.PlatformAccounts}
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.

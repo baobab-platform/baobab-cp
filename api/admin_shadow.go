@@ -1,7 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -11,6 +15,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/administration"
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 // adminRoutePermissions names the AdministrativePermission each role-guarded
@@ -115,51 +120,79 @@ func (a *API) shadowAdministrativeDecision(r *http.Request, principal auth.Princ
 	pattern := r.Method + " " + chi.RouteContext(r.Context()).RoutePattern()
 	permission, mapped := adminRoutePermissions[pattern]
 	if !mapped || permission == "" {
-		a.recordShadow(metrics.ShadowUnregisteredPermission, legacy, metrics.ShadowUnmapped, pattern)
+		a.recordShadow(metrics.ShadowUnregisteredPermission, legacy, metrics.ShadowUnmapped, "", pattern)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), shadowBudget)
 	defer cancel()
-	grants := a.shadowGrants(ctx, r, principal, permission)
-	a.recordShadow(permission, legacy, grants, pattern)
+	grants, comparable := a.shadowGrants(ctx, r, principal, permission)
+	if !comparable {
+		a.recordShadow(permission, legacy, grants, metrics.ShadowNotEvaluated, pattern)
+		return
+	}
+	a.recordShadow(permission, legacy, grants, "", pattern)
 }
 
-func (a *API) shadowGrants(ctx context.Context, r *http.Request, principal auth.Principal, permission string) string {
+// shadowGrants returns the grants outcome and whether it can be compared
+// with the legacy decision. It cannot when grants do not allow and the
+// caller holds a live grant of the permission at a level the resource was
+// not anchored at: the route names its target only indirectly, so the grant
+// may well cover it, and counting grants_narrower would be false evidence.
+func (a *API) shadowGrants(ctx context.Context, r *http.Request, principal auth.Principal, permission string) (string, bool) {
 	if a.identities == nil {
-		return metrics.ShadowError
+		return metrics.ShadowError, true
 	}
 	caller, err := a.identities.ResolveIdentity(ctx, principal.Issuer, principal.Subject)
-	if err != nil || caller.Status != "ACTIVE" {
-		return metrics.ShadowUnresolved
+	switch {
+	case errors.Is(err, repository.ErrIdentityNotFound):
+		return metrics.ShadowUnresolved, true
+	case err != nil:
+		// A store failure or the budget running out is not an absent
+		// principal: count it as an error, never as a comparison.
+		return metrics.ShadowError, true
+	case caller.Status != "ACTIVE":
+		return metrics.ShadowUnresolved, true
 	}
 	grants, sources, err := a.grants.AdministrativeGrantsOf(ctx, caller.ID)
 	if err != nil {
-		return metrics.ShadowError
+		return metrics.ShadowError, true
 	}
+	resource, err := a.shadowResource(ctx, r)
+	if err != nil {
+		return metrics.ShadowError, true
+	}
+	now := time.Now().UTC()
 	decision := administration.Evaluate(administration.Request{
-		PrincipalID: caller.ID, PrincipalActive: true, Action: permission, Resource: shadowResource(r, a.environment),
+		PrincipalID: caller.ID, PrincipalActive: true, Action: permission, Resource: resource,
 		// The verified token carries no assurance claim the Control Plane
 		// reads yet, so a grant requiring step-up counts as step_up.
-		Now: time.Now().UTC(), Grants: grants, Sources: sources,
+		Now: now, Grants: grants, Sources: sources,
 	})
+	outcome := metrics.ShadowDeny
 	switch decision.Outcome {
 	case administration.OutcomeAllow:
-		return metrics.ShadowAllow
+		return metrics.ShadowAllow, true
 	case administration.OutcomeStepUpRequired:
-		return metrics.ShadowStepUp
+		outcome = metrics.ShadowStepUp
 	case administration.OutcomeApprovalRequired:
-		return metrics.ShadowApproval
+		outcome = metrics.ShadowApproval
 	case administration.OutcomeNotReady:
-		return metrics.ShadowNotReady
+		outcome = metrics.ShadowNotReady
 	}
-	return metrics.ShadowDeny
+	for _, g := range grants {
+		if g.Permission == permission && g.Status == administration.StatusActive && g.ValidAt(now) && !resource.Anchors(g.Scope.Level) {
+			return outcome, false
+		}
+	}
+	return outcome, true
 }
 
-// shadowResource is the resource a route acts on, from its own path and
-// query. Only identifiers the route itself names are set; a route naming
-// none is platform-level, which only a PLATFORM grant covers.
-func shadowResource(r *http.Request, environment string) administration.Resource {
-	res := administration.Resource{Environment: environment}
+// shadowResource is the resource a route acts on: identifiers from its own
+// path and query, and for the tenant platform-account binding routes the
+// account from the request body or the active binding. A route naming none
+// is platform-level, which only a PLATFORM grant covers.
+func (a *API) shadowResource(ctx context.Context, r *http.Request) (administration.Resource, error) {
+	res := administration.Resource{Environment: a.environment}
 	res.TenantID = chi.URLParam(r, "tenantID")
 	if res.TenantID == "" {
 		res.TenantID = r.URL.Query().Get("tenantId")
@@ -169,22 +202,65 @@ func shadowResource(r *http.Request, environment string) administration.Resource
 		res.OrganisationID = chi.URLParam(r, "entityID")
 	}
 	res.PlatformAccountID = chi.URLParam(r, "accountID")
-	return res
+	switch r.Method + " " + chi.RouteContext(r.Context()).RoutePattern() {
+	case "POST /v1/tenants/{tenantID}/platform-account-binding":
+		res.PlatformAccountID = peekPlatformAccountID(r)
+	case "POST /v1/tenants/{tenantID}/platform-account-binding/end":
+		if a.platformAccounts == nil {
+			break
+		}
+		bindings, err := a.platformAccounts.ListTenantPlatformAccountBindings(ctx, res.TenantID)
+		if err != nil {
+			return res, err
+		}
+		for _, b := range bindings {
+			if b.Status == "ACTIVE" {
+				res.PlatformAccountID = b.PlatformAccountID
+				break
+			}
+		}
+	}
+	return res, nil
 }
 
-func (a *API) recordShadow(permission, legacy, grants, pattern string) {
-	agreement := metrics.ShadowNotEvaluated
+// peekPlatformAccountID reads platform_account_id from a binding request
+// body and restores the body unchanged for the handler, which validates it.
+// An unreadable or malformed body leaves the account unanchored.
+func peekPlatformAccountID(r *http.Request) string {
+	if r.Body == nil {
+		return ""
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	r.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(raw), r.Body), r.Body}
+	if err != nil {
+		return ""
+	}
+	var body struct {
+		PlatformAccountID string `json:"platform_account_id"`
+	}
+	if json.Unmarshal(raw, &body) != nil {
+		return ""
+	}
+	return body.PlatformAccountID
+}
+
+// recordShadow counts one comparison. agreement is computed from legacy
+// and grants unless the caller already knows it (not_evaluated).
+func (a *API) recordShadow(permission, legacy, grants, agreement, pattern string) {
 	grantsAllow := grants == metrics.ShadowAllow
-	switch grants {
-	case metrics.ShadowAllow, metrics.ShadowDeny, metrics.ShadowStepUp, metrics.ShadowApproval, metrics.ShadowNotReady, metrics.ShadowUnresolved:
-		switch {
-		case grantsAllow == (legacy == metrics.ShadowAllow):
-			agreement = metrics.ShadowAgree
-		case grantsAllow:
-			agreement = metrics.ShadowGrantsBroader
-		default:
-			agreement = metrics.ShadowGrantsNarrower
-		}
+	switch {
+	case agreement != "":
+	case grants == metrics.ShadowUnmapped, grants == metrics.ShadowError:
+		agreement = metrics.ShadowNotEvaluated
+	case grantsAllow == (legacy == metrics.ShadowAllow):
+		agreement = metrics.ShadowAgree
+	case grantsAllow:
+		agreement = metrics.ShadowGrantsBroader
+	default:
+		agreement = metrics.ShadowGrantsNarrower
 	}
 	metrics.AdministrativeAuthorityShadow.Add(1, permission, legacy, grants, agreement)
 	if agreement == metrics.ShadowGrantsBroader {
