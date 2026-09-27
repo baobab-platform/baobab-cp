@@ -321,8 +321,15 @@ func New(dependencies Dependencies) http.Handler {
 		// platform administrators only, never the requester.
 		r.With(a.authorize(a.adminVerifier, "human", "provisioning:approve"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/approve", plans.approve)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/apply", plans.apply)
-		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/retry", prov.retry)
-		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/cancel", prov.cancel)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/plan", plans.replan)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/withdraw", plans.withdraw)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/remediate", plans.remediate)
+		// Retrying or cancelling execution is an operation command; the
+		// handler admits the operation's readers (tenant administrators of
+		// its tenant, platform administrators).
+		commands := operationCommands{read: operationHandler{tenantAdminOf: a.tenantAdminOf}, plans: plans}
+		r.With(a.authorize(a.adminVerifier, "human", "operation:control")).Post("/v1/admin/operations/{operationID}/retry", commands.retry)
+		r.With(a.authorize(a.adminVerifier, "human", "operation:control")).Post("/v1/admin/operations/{operationID}/cancel", commands.cancel)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/readiness", prov.readiness)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/drift", prov.drift)
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/operations"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
@@ -18,11 +19,13 @@ import (
 
 // ExecutorStore is the persistence the executor needs.
 type ExecutorStore interface {
-	ClaimApply(ctx context.Context, lease time.Duration) (operations.Operation, bool, error)
+	ClaimExecution(ctx context.Context, lease time.Duration) (operations.Operation, bool, error)
+	FinishAbandonedCancellations(ctx context.Context) (int, error)
 	LoadExecuted(ctx context.Context, key string) (convergence.ExecutedProvisioning, error)
 	SaveExecutionManifest(ctx context.Context, m provisioningdomain.TenantManifestRecord) error
-	MarkProvisioningBlocked(ctx context.Context, id string) error
-	CompleteOperation(ctx context.Context, id string, attempt int, outcome operations.Outcome) error
+	MarkProvisioningBlocked(ctx context.Context, id, reason string) error
+	MarkExecutionFailed(ctx context.Context, id, code string, retryable bool) error
+	CompleteOperation(ctx context.Context, id string, attempt int, outcome operations.Outcome) (operations.Status, error)
 	LegalEntityOf(ctx context.Context, tenantID string) (string, error)
 }
 
@@ -56,14 +59,34 @@ func (e Executor) RunOnce(ctx context.Context) (bool, error) {
 	if lease <= 0 {
 		lease = 5 * time.Minute
 	}
-	op, found, err := e.Store.ClaimApply(ctx, lease)
+	if _, err := e.Store.FinishAbandonedCancellations(ctx); err != nil {
+		return false, err
+	}
+	op, found, err := e.Store.ClaimExecution(ctx, lease)
 	if err != nil || !found {
 		return false, err
 	}
 	outcome := e.execute(ctx, op)
+	recorded, err := e.Store.CompleteOperation(ctx, op.ID, op.ExecutionAttempt, outcome)
 	slog.InfoContext(ctx, "provisioning operation executed", "operation_id", op.ID, "tenant_provisioning_id", op.SubjectID,
-		"tenant_id", op.TenantID, "attempt", op.ExecutionAttempt, "status", string(outcome.Status))
-	return true, e.Store.CompleteOperation(ctx, op.ID, op.ExecutionAttempt, outcome)
+		"tenant_id", op.TenantID, "operation_type", op.Type, "attempt", op.ExecutionAttempt, "status", string(recorded))
+	if err != nil {
+		return true, err
+	}
+	id, err := provisioningRowID(op.SubjectID)
+	if err != nil {
+		return true, nil
+	}
+	switch recorded {
+	case operations.StatusCancelled:
+		// Asked to stop, execution halted at this safe point.
+		return true, e.Store.MarkProvisioningBlocked(ctx, id, "EXECUTION_CANCELLED")
+	case operations.StatusFailed:
+		// A failure before the pipeline recorded one must not leave the
+		// provisioning APPLYING or REMEDIATING, where no command reaches it.
+		return true, e.Store.MarkExecutionFailed(ctx, id, outcomeCode(outcome), outcome.Retryable)
+	}
+	return true, nil
 }
 
 // Run executes operations until ctx ends, polling every interval while none
@@ -139,7 +162,12 @@ func (e Executor) execute(ctx context.Context, op operations.Operation) operatio
 	if err != nil {
 		return failed("PROVISIONING_UNAVAILABLE", "the provisioning pipeline could not be built", true)
 	}
-	final, runErr := pipeline.Run(ctx, p.ID)
+	// A failed execution resumes the approved plan from where it failed.
+	run := pipeline.Run
+	if p.LegacyStatus == string(provisioningdomain.ProvisioningStatusFailed) {
+		run = pipeline.Retry
+	}
+	final, runErr := run(ctx, p.ID)
 	switch final.Status {
 	case provisioningdomain.ProvisioningStatusActive:
 		return succeeded(p.Key, "ACTIVE", "The approved plan was applied and the tenant is ACTIVE.")
@@ -147,7 +175,7 @@ func (e Executor) execute(ctx context.Context, op operations.Operation) operatio
 		return failed("PROVISIONING_FAILED", final.LastError, true)
 	case provisioningdomain.ProvisioningStatusReconcile, provisioningdomain.ProvisioningStatusReady:
 		if runErr == nil {
-			if err := e.Store.MarkProvisioningBlocked(ctx, p.ID); err != nil {
+			if err := e.Store.MarkProvisioningBlocked(ctx, p.ID, ""); err != nil {
 				return failed("PROVISIONING_UNAVAILABLE", "the blocked provisioning could not be recorded", true)
 			}
 			return operations.Outcome{Status: operations.StatusBlocked, CurrentPhase: "BLOCKED", Retryable: true}
@@ -204,6 +232,15 @@ func failure(op operations.Operation, code, detail string, retryable bool) opera
 	return operations.Outcome{Status: operations.StatusFailed, CurrentPhase: "FAILED", Retryable: retryable, Problem: problem}
 }
 
+// outcomeCode is the code of a failed outcome's problem.
+func outcomeCode(o operations.Outcome) string {
+	var p struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(o.Problem, &p)
+	return p.Code
+}
+
 // StandardPipeline is the provisioning pipeline an approved plan executes
 // through: the existing ordered, idempotent phase workers over the tenant's
 // default capability scope.
@@ -215,4 +252,9 @@ func StandardPipeline(deps provisioning.ZB02Dependencies) Pipeline {
 		}
 		return provisioning.BuildZB02Pipeline(deps, manifest, scopeID)
 	}
+}
+
+// provisioningRowID returns the row id behind a tp_ identifier.
+func provisioningRowID(key string) (string, error) {
+	return domain.ParseResourceID("tp", key)
 }

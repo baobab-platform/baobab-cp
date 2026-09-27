@@ -128,10 +128,14 @@ func (h convergenceHandler) response(c repository.ConvergedProvisioning, stale b
 	return out
 }
 
-// blockingReasons are the plan's blockers or, when execution stopped short
-// of readiness, what the pipeline reported.
+// blockingReasons are why the provisioning is BLOCKED: a cancelled
+// execution, the plan's blockers or, when execution stopped short of
+// readiness, what the pipeline reported.
 func blockingReasons(c repository.ConvergedProvisioning) []blockingReason {
 	var out []blockingReason
+	if c.BlockedReason != "" {
+		out = append(out, blockingReason{Code: c.BlockedReason})
+	}
 	if c.Plan != nil {
 		for _, b := range c.Plan.Blockers {
 			reason := blockingReason{Code: b.Code, Detail: b.Message}

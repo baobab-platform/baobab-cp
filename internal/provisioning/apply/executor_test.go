@@ -32,21 +32,31 @@ type store struct {
 	op        operations.Operation
 	executed  convergence.ExecutedProvisioning
 	completed *operations.Outcome
+	// failed is the recovery state recorded for a failed execution.
+	failed string
 }
 
-func (s *store) ClaimApply(context.Context, time.Duration) (operations.Operation, bool, error) {
+func (s *store) ClaimExecution(context.Context, time.Duration) (operations.Operation, bool, error) {
 	return s.op, s.completed == nil, nil
 }
+func (s *store) FinishAbandonedCancellations(context.Context) (int, error) { return 0, nil }
 func (s *store) LoadExecuted(context.Context, string) (convergence.ExecutedProvisioning, error) {
 	return s.executed, nil
 }
 func (s *store) SaveExecutionManifest(context.Context, provisioningdomain.TenantManifestRecord) error {
 	return nil
 }
-func (s *store) MarkProvisioningBlocked(context.Context, string) error { return nil }
-func (s *store) CompleteOperation(_ context.Context, _ string, _ int, o operations.Outcome) error {
-	s.completed = &o
+func (s *store) MarkProvisioningBlocked(context.Context, string, string) error { return nil }
+func (s *store) MarkExecutionFailed(_ context.Context, _ string, code string, retryable bool) error {
+	s.failed = "BLOCKED " + code
+	if retryable {
+		s.failed = "FAILED"
+	}
 	return nil
+}
+func (s *store) CompleteOperation(_ context.Context, _ string, _ int, o operations.Outcome) (operations.Status, error) {
+	s.completed = &o
+	return o.Status, nil
 }
 func (s *store) LegalEntityOf(context.Context, string) (string, error) { return "LE-1", nil }
 
@@ -72,15 +82,16 @@ func fixture(t *testing.T, r *registry, generated time.Time) *store {
 	if err != nil {
 		t.Fatal(err)
 	}
+	key := domain.NewResourceID("tp")
 	plan, err := convergence.Planner{Registry: r}.Plan(context.Background(), convergence.Input{Desired: desired,
-		TenantProvisioningID: "tp_1", PlanID: "plan_1", PlanVersion: 1, BaseRevision: 1, Now: generated})
+		TenantProvisioningID: key, PlanID: "plan_1", PlanVersion: 1, BaseRevision: 1, Now: generated})
 	if err != nil || len(plan.Blockers) != 0 {
 		t.Fatalf("plan: %v %v", err, plan.Blockers)
 	}
 	return &store{
-		op: operations.Operation{ID: "op_1", SubjectID: "tp_1", PlanID: plan.PlanID, PlanDigest: plan.PlanDigest,
+		op: operations.Operation{ID: "op_1", SubjectID: key, PlanID: plan.PlanID, PlanDigest: plan.PlanDigest,
 			ApprovalID: "apd_1", ExecutionAttempt: 1},
-		executed: convergence.ExecutedProvisioning{ID: domain.NewUUIDv7(), Key: "tp_1", TenantID: "tn_acme", Plan: &plan,
+		executed: convergence.ExecutedProvisioning{ID: domain.NewUUIDv7(), Key: key, TenantID: "tn_acme", Plan: &plan,
 			Desired: &desired, ApprovalID: "apd_1", ApprovedDigest: plan.PlanDigest, Approved: true},
 	}
 }
@@ -123,6 +134,9 @@ func TestAnApprovedPlanIsRevalidatedBeforeExecution(t *testing.T) {
 	if code := problemCode(t, s.completed); code != "PROVISIONING_UNAVAILABLE" {
 		t.Fatalf("unchanged state did not proceed to execution: %s", code)
 	}
+	if s.failed != "FAILED" {
+		t.Fatalf("a retryable failure left the provisioning %q, not FAILED", s.failed)
+	}
 
 	for label, change := range map[string]func(r *registry){
 		"the provider lost production permission": func(r *registry) { r.candidates[0].ProductionPermitted = false },
@@ -138,6 +152,10 @@ func TestAnApprovedPlanIsRevalidatedBeforeExecution(t *testing.T) {
 		}
 		if code := problemCode(t, s.completed); code != "PLAN_STALE" || s.completed.Retryable {
 			t.Errorf("%s: %s (retryable %v)", label, code, s.completed.Retryable)
+		}
+		// Not left APPLYING: blocked, for a replan.
+		if s.failed != "BLOCKED PLAN_STALE" {
+			t.Errorf("%s: the provisioning was left %q", label, s.failed)
 		}
 	}
 

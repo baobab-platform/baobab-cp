@@ -20,6 +20,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // onboardingRequests serves fixed onboarding requests over the real
@@ -37,17 +38,32 @@ func (o onboardingRequests) GetTenantOnboardingRequest(_ context.Context, id str
 	return request, nil
 }
 
-// TestProvisioningIsPlannedApprovedAndApplied drives ADR-SHARED-015 end to
-// end: plan from an authorised onboarding request, approve the plan's
-// digest as another principal, apply it as an operation, execute it.
-func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
+// convergenceFixture is authoritative state a provisioning is planned
+// against: an active market XQ, a product packaging one mandatory
+// capability, and a provider permitted in production on the fixture's
+// af-south-1 production instance. Tenant a's onboarding request resides in
+// af-south-1, tenant b's in eu-west-1, where no instance runs.
+type convergenceFixture struct {
+	repo                                           *repository.PostgresRepository
+	admin                                          *pgxpool.Pool
+	tenantStore                                    *postgres.Store
+	f                                              provisioningAPIFixture
+	suffix, capabilityKey, engineCode, providerKey string
+	productID, instanceKey                         string
+	call                                           func(token, method, path, key, ifMatch, body string) *httptest.ResponseRecorder
+	decode                                         func(response *httptest.ResponseRecorder, want int, definition string) map[string]any
+	refused                                        func(response *httptest.ResponseRecorder, status int, code string)
+}
+
+func newConvergenceFixture(t *testing.T, name string) convergenceFixture {
+	t.Helper()
 	_, repo, admin, url := newProvisioningTestHandler(t)
 	ctx := context.Background()
-	f := seedProvisioningAPIFixture(t, ctx, admin, repo, "converge")
+	f := seedProvisioningAPIFixture(t, ctx, admin, repo, name)
 	suffix := strings.ToLower(f.suffix())
 	capabilityKey := "trade.settlement" + suffix + ".execute"
-	engineCode, providerKey := "zbconv-"+suffix, "zbconv-"+suffix+".medusa"
-	productID, compositionKey := "zbconv-"+suffix, "solution.zbconv-"+suffix
+	engineCode, providerKey := "zb"+name+"-"+suffix, "zb"+name+"-"+suffix+".medusa"
+	productID, compositionKey := "zb"+name+"-"+suffix, "solution.zb"+name+"-"+suffix
 	instanceKey, _ := domain.FormatResourceID("ei", f.InstanceID)
 
 	cleanup := func() {
@@ -114,8 +130,8 @@ func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
 			PrincipalID: registered.ID, Issuer: p.Issuer, Subject: p.Subject, Status: "ACTIVE"}))
 		return p
 	}
-	requester := principal("requester-"+suffix, "tenant:write", "tenant:read", "provisioning:approve")
-	approver := principal("approver-"+suffix, "tenant:read", "tenant:write", "provisioning:approve")
+	requester := principal("requester-"+suffix, "tenant:write", "tenant:read", "provisioning:approve", "operation:read", "operation:control")
+	approver := principal("approver-"+suffix, "tenant:read", "tenant:write", "provisioning:approve", "operation:read", "operation:control")
 	authorised := time.Now().UTC()
 	fulfilled := func(id, tenantID, residency string) domain.TenantOnboardingRequest {
 		return domain.TenantOnboardingRequest{ID: id, AdmissionDecisionID: "adm_0199a1b2c3d47e8f", Status: domain.OnboardingFulfilled,
@@ -132,7 +148,7 @@ func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
 	mustNoError(t, err)
 	t.Cleanup(func() { tenantStore.Close() })
 	handler := New(Dependencies{Store: tenantStore, AdminVerifier: tokenVerifier{"requester": requester, "approver": approver},
-		Identities: identities, Provisioning: store})
+		Identities: identities, Provisioning: store, Operations: repo})
 
 	call := func(token, method, path, key, ifMatch, body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -165,6 +181,26 @@ func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
 			t.Fatalf("want %d %s, got %d: %s", status, code, response.Code, response.Body.String())
 		}
 	}
+	return convergenceFixture{repo: repo, admin: admin, tenantStore: tenantStore, f: f, suffix: suffix,
+		capabilityKey: capabilityKey, engineCode: engineCode, providerKey: providerKey, productID: productID,
+		instanceKey: instanceKey, call: call, decode: decode, refused: refused}
+}
+
+// executor runs the fixture's operations.
+func (x convergenceFixture) executor() apply.Executor {
+	return apply.Executor{Store: x.repo, Registry: x.repo, Planner: convergence.Planner{Registry: x.repo},
+		Pipeline: apply.StandardPipeline(provisioning.ZB02Dependencies{Tenants: x.tenantStore, Repo: x.repo, Provisioning: x.repo})}
+}
+
+// TestProvisioningIsPlannedApprovedAndApplied drives ADR-SHARED-015 end to
+// end: plan from an authorised onboarding request, approve the plan's
+// digest as another principal, apply it as an operation, execute it.
+func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
+	x := newConvergenceFixture(t, "converge")
+	ctx := context.Background()
+	repo, f, suffix := x.repo, x.f, x.suffix
+	capabilityKey, engineCode, providerKey, instanceKey := x.capabilityKey, x.engineCode, x.providerKey, x.instanceKey
+	call, decode, refused := x.call, x.decode, x.refused
 
 	base := "/v1/tenants/" + f.TenantID + "/provisioning"
 	create := `{"tenant_onboarding_request_id":"tor_` + suffix + `a"}`
@@ -229,7 +265,7 @@ func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
 	}
 	refused(call("requester", http.MethodPost, base+"/"+id+"/apply", "apply-key2-"+suffix, `"3"`, ""), http.StatusConflict, "OPERATION_IN_PROGRESS")
 
-	executor := apply.Executor{Store: repo, Registry: repo, Planner: convergence.Planner{Registry: repo}, Pipeline: apply.StandardPipeline(provisioning.ZB02Dependencies{Tenants: tenantStore, Repo: repo, Provisioning: repo})}
+	executor := x.executor()
 	if ran, err := executor.RunOnce(ctx); !ran || err != nil {
 		t.Fatalf("executor: ran %v, %v", ran, err)
 	}
@@ -272,4 +308,144 @@ func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
 func jsonNumber(v any) string {
 	raw, _ := json.Marshal(v)
 	return string(raw)
+}
+
+// TestProvisioningLifecycleCommands drives the lifecycle commands: an apply
+// cancelled before it ran leaves the provisioning BLOCKED; remediation within
+// the approved plan runs as an operation; a retryable operation is retried
+// once per key; a plan with blockers is replanned when authoritative state
+// changes, idempotently; and a provisioning not executing is withdrawn.
+func TestProvisioningLifecycleCommands(t *testing.T) {
+	x := newConvergenceFixture(t, "lifecycle")
+	ctx := context.Background()
+	call, decode, refused, suffix := x.call, x.decode, x.refused, x.suffix
+	const provisioningSchema = "tenant-provisioning.schema.json#/$defs/TenantProvisioning"
+	const operationSchema = "execution-operation.schema.json#/$defs/ExecutionOperation"
+	revision := func(tp map[string]any) string { return `"` + jsonNumber(tp["revision"]) + `"` }
+	reason := func(r string) string { return `{"reason":"` + r + `"}` }
+	get := func(base, id string) map[string]any {
+		return decode(call("requester", http.MethodGet, base+"/"+id, "", "", ""), http.StatusOK, provisioningSchema)
+	}
+
+	// Tenant a: planned, approved and applied, then cancelled before it ran.
+	base := "/v1/tenants/" + x.f.TenantID + "/provisioning"
+	tp := decode(call("requester", http.MethodPost, base, "create-a-"+suffix, "", `{"tenant_onboarding_request_id":"tor_`+suffix+`a"}`),
+		http.StatusCreated, provisioningSchema)
+	id := tp["tenant_provisioning_id"].(string)
+	plan := decode(call("requester", http.MethodGet, base+"/"+id+"/plan", "", "", ""), http.StatusOK, "")
+	decode(call("approver", http.MethodPost, base+"/"+id+"/approve", "", `"1"`, `{"plan_id":"`+plan["plan_id"].(string)+
+		`","plan_version":1,"plan_digest":"`+plan["plan_digest"].(string)+`","decision":"APPROVED"}`), http.StatusOK, "")
+	applied := decode(call("requester", http.MethodPost, base+"/"+id+"/apply", "apply-a-"+suffix, `"2"`, ""), http.StatusAccepted, operationSchema)
+	ops := "/v1/admin/operations/" + applied["operation_id"].(string)
+
+	// Abandoning or replanning an executing provisioning waits for its operation.
+	refused(call("requester", http.MethodPost, base+"/"+id+"/withdraw", "", `"3"`, reason("not now")), http.StatusConflict, "OPERATION_IN_PROGRESS")
+	cancelled := decode(call("requester", http.MethodPost, ops+"/cancel", "", "", reason("wrong window")), http.StatusAccepted, operationSchema)
+	if cancelled["status"] != "CANCELLED" {
+		t.Fatalf("a queued operation is cancelled at once: %v", cancelled)
+	}
+	refused(call("requester", http.MethodPost, ops+"/cancel", "", "", reason("again")), http.StatusConflict, "OPERATION_NOT_CANCELLABLE")
+	refused(call("requester", http.MethodPost, ops+"/cancel", "", "", `{}`), http.StatusBadRequest, "INVALID_REQUEST")
+	blocked := get(base, id)
+	if blocked["state"] != "BLOCKED" || blocked["blocking_reasons"].([]any)[0].(map[string]any)["code"] != "EXECUTION_CANCELLED" {
+		t.Fatalf("a cancelled apply leaves the provisioning BLOCKED: %v", blocked)
+	}
+
+	// Remediation runs the approved plan as an operation; the provisioning is
+	// REMEDIATING, and nothing else runs until it ends.
+	remediation := decode(call("requester", http.MethodPost, base+"/"+id+"/remediate", "remediate-a-"+suffix, revision(blocked), reason("window open")),
+		http.StatusAccepted, operationSchema)
+	if remediation["operation_type"] != "TENANT_PROVISIONING_REMEDIATE" || remediation["status"] != "QUEUED" {
+		t.Fatalf("remediation: %v", remediation)
+	}
+	if again := decode(call("requester", http.MethodPost, base+"/"+id+"/remediate", "remediate-a-"+suffix, revision(blocked), reason("window open")),
+		http.StatusAccepted, ""); again["operation_id"] != remediation["operation_id"] {
+		t.Fatalf("a remediation replay created another operation: %v", again)
+	}
+	remediating := get(base, id)
+	if remediating["state"] != "REMEDIATING" {
+		t.Fatalf("remediation accepted: %v", remediating)
+	}
+	refused(call("requester", http.MethodPost, base+"/"+id+"/plan", "replan-a-"+suffix, revision(remediating), reason("change")), http.StatusConflict, "PROVISIONING_STATE_CONFLICT")
+
+	// Retry: only a retryable FAILED or BLOCKED operation, once per key. The
+	// executor's failure is set here directly.
+	remediationOps := "/v1/admin/operations/" + remediation["operation_id"].(string)
+	refused(call("requester", http.MethodPost, remediationOps+"/retry", "retry-a-"+suffix, "", reason("again")), http.StatusConflict, "OPERATION_NOT_RETRYABLE")
+	if _, err := x.admin.Exec(ctx, `UPDATE operations.execution_operation SET status = 'FAILED', retryable = true, completed_at = now(),
+		problem = '{"type":"https://docs.nabhold.com/problems/provisioning_unavailable","title":"Provisioning operation failed","status":503,"code":"PROVISIONING_UNAVAILABLE","correlation_id":"c","retryable":true}'
+		WHERE operation_id = $1`, remediation["operation_id"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := x.admin.Exec(ctx, `UPDATE provisioning.tenant_provisioning SET state = 'BLOCKED' WHERE tenant_provisioning_key = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	retried := decode(call("requester", http.MethodPost, remediationOps+"/retry", "retry-a-"+suffix, "", reason("provider back")),
+		http.StatusAccepted, operationSchema)
+	if retried["status"] != "QUEUED" || retried["execution_attempt"] != float64(2) {
+		t.Fatalf("retry: %v", retried)
+	}
+	if replay := decode(call("requester", http.MethodPost, remediationOps+"/retry", "retry-a-"+suffix, "", reason("provider back")),
+		http.StatusAccepted, ""); replay["execution_attempt"] != float64(2) {
+		t.Fatalf("a retry replay retried again: %v", replay)
+	}
+	refused(call("requester", http.MethodPost, remediationOps+"/retry", "retry-a2-"+suffix, "", reason("again")), http.StatusConflict, "OPERATION_NOT_RETRYABLE")
+	// The retried attempt fails retryably; a late replay of its key does not
+	// queue another attempt, a new key does.
+	if _, err := x.admin.Exec(ctx, `UPDATE operations.execution_operation SET status = 'FAILED', retryable = true, completed_at = now(),
+		problem = '{"type":"https://docs.nabhold.com/problems/provisioning_unavailable","title":"Provisioning operation failed","status":503,"code":"PROVISIONING_UNAVAILABLE","correlation_id":"c","retryable":true}'
+		WHERE operation_id = $1`, remediation["operation_id"]); err != nil {
+		t.Fatal(err)
+	}
+	if replay := decode(call("requester", http.MethodPost, remediationOps+"/retry", "retry-a-"+suffix, "", reason("provider back")),
+		http.StatusAccepted, ""); replay["execution_attempt"] != float64(2) || replay["status"] != "FAILED" {
+		t.Fatalf("a late retry replay retried again: %v", replay)
+	}
+	if again := decode(call("requester", http.MethodPost, remediationOps+"/retry", "retry-a3-"+suffix, "", reason("provider back again")),
+		http.StatusAccepted, operationSchema); again["execution_attempt"] != float64(3) {
+		t.Fatalf("second retry: %v", again)
+	}
+
+	if ran, err := x.executor().RunOnce(ctx); !ran || err != nil {
+		t.Fatalf("executor: %v %v", ran, err)
+	}
+	done := decode(call("requester", http.MethodGet, remediationOps, "", "", ""), http.StatusOK, operationSchema)
+	if done["status"] != "SUCCEEDED" || get(base, id)["state"] != "ACTIVE" {
+		t.Fatalf("remediation did not complete the provisioning: %v", done)
+	}
+
+	// Tenant b: no instance runs where it must reside, so its plan is blocked;
+	// remediation cannot help, another plan can.
+	otherBase := "/v1/tenants/" + x.f.OtherTenantID + "/provisioning"
+	other := decode(call("requester", http.MethodPost, otherBase, "create-b-"+suffix, "", `{"tenant_onboarding_request_id":"tor_`+suffix+`b"}`),
+		http.StatusCreated, provisioningSchema)
+	otherID := other["tenant_provisioning_id"].(string)
+	refused(call("requester", http.MethodPost, otherBase+"/"+otherID+"/remediate", "remediate-b-"+suffix, `"1"`, reason("try")), http.StatusConflict, "PLAN_CHANGE_REQUIRED")
+	refused(call("requester", http.MethodPost, otherBase+"/"+otherID+"/plan", "replan-b-"+suffix, "", reason("try")), http.StatusPreconditionRequired, "IF_MATCH_REQUIRED")
+
+	instance := domain.NewUUIDv7()
+	t.Cleanup(func() {
+		x.admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_instance_id = $1::uuid`, instance)
+	})
+	if _, err := x.admin.Exec(ctx, `INSERT INTO topology.engine_instance (engine_instance_id, engine_id, region, environment, status)
+		VALUES ($1::uuid, $2::uuid, 'eu-west-1', 'production', 'ACTIVE')`, instance, x.f.EngineID); err != nil {
+		t.Fatal(err)
+	}
+	replanned := decode(call("requester", http.MethodPost, otherBase+"/"+otherID+"/plan", "replan-b-"+suffix, `"1"`, reason("eu instance live")),
+		http.StatusOK, provisioningSchema)
+	if replanned["state"] != "PLANNED" || replanned["current_plan"].(map[string]any)["plan_version"] != float64(2) || replanned["approval"] != nil {
+		t.Fatalf("replan: %v", replanned)
+	}
+	if replay := decode(call("requester", http.MethodPost, otherBase+"/"+otherID+"/plan", "replan-b-"+suffix, `"1"`, reason("eu instance live")),
+		http.StatusOK, ""); replay["current_plan"].(map[string]any)["plan_version"] != float64(2) {
+		t.Fatalf("a replan replay replanned again: %v", replay)
+	}
+	refused(call("requester", http.MethodPost, otherBase+"/"+otherID+"/plan", "replan-b-"+suffix, `"2"`, reason("different")), http.StatusConflict, "IDEMPOTENCY_KEY_REUSED")
+	refused(call("requester", http.MethodPost, otherBase+"/"+otherID+"/withdraw", "", `"1"`, reason("stale")), http.StatusPreconditionFailed, "PROVISIONING_REVISION_MISMATCH")
+	withdrawn := decode(call("requester", http.MethodPost, otherBase+"/"+otherID+"/withdraw", "", revision(replanned), reason("not proceeding")),
+		http.StatusOK, provisioningSchema)
+	if withdrawn["state"] != "CANCELLED" || withdrawn["legacy_state"] != "cancelled" {
+		t.Fatalf("withdraw: %v", withdrawn)
+	}
+	refused(call("requester", http.MethodPost, otherBase+"/"+otherID+"/withdraw", "", revision(withdrawn), reason("again")), http.StatusConflict, "PROVISIONING_STATE_CONFLICT")
 }

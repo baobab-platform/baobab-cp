@@ -117,23 +117,14 @@ var undescribed = []string{
 	"POST /v1/capabilities/resolve-batch",
 	"POST /v1/platform-context/resolve",
 	"POST /v1/resolve",
-	// Retry and cancel move to /v1/admin/operations (ADR-SHARED-015).
-	"POST /v1/tenants/{}/provisioning/{}/cancel",
-	"POST /v1/tenants/{}/provisioning/{}/retry",
 }
 
-// unimplemented are described by Shared but not served (FE-00 gaps G2, and
-// ADR-SHARED-015 until the provisioning migration lands).
+// unimplemented are described by Shared but not served (FE-00 gap G2).
 var unimplemented = []string{
 	"GET /v1/markets/{}",
 	"PATCH /v1/markets/{}",
 	"POST /v1/markets",
 	"POST /v1/markets/{}/activate",
-	"POST /v1/tenants/{}/provisioning/{}/plan",
-	"POST /v1/tenants/{}/provisioning/{}/remediate",
-	"POST /v1/tenants/{}/provisioning/{}/withdraw",
-	"POST /v1/admin/operations/{}/cancel",
-	"POST /v1/admin/operations/{}/retry",
 }
 
 // nonconforming are served at a described path but not yet to its

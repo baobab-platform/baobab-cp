@@ -10,12 +10,6 @@ export const UNIMPLEMENTED_OPERATIONS = [
   "PATCH /markets/{market_id}",
   "POST /markets",
   "POST /markets/{market_id}/activate",
-  // Described by ADR-SHARED-015, not yet served.
-  "POST /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/plan",
-  "POST /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/remediate",
-  "POST /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/withdraw",
-  "POST /admin/operations/{operation_id}/cancel",
-  "POST /admin/operations/{operation_id}/retry",
   // Served, but not yet to their ADR-SHARED-015 description.
   "GET /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/drift",
   "GET /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/readiness",
