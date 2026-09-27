@@ -556,6 +556,20 @@ func (r *PostgresRepository) MarkProvisioningBlocked(ctx context.Context, id, re
 	return err
 }
 
+// MarkExecutionFailed leaves a provisioning whose execution failed
+// recoverable: FAILED, to be retried, when the failure is retryable, and
+// otherwise BLOCKED with the failure's code, to be replanned or withdrawn. It
+// changes only a provisioning still APPLYING or REMEDIATING: one the pipeline
+// already recorded as FAILED keeps that.
+func (r *PostgresRepository) MarkExecutionFailed(ctx context.Context, id, code string, retryable bool) error {
+	_, err := r.pool.Exec(ctx, `UPDATE provisioning.tenant_provisioning
+		SET state = CASE WHEN $3 THEN 'FAILED' ELSE 'BLOCKED' END,
+			blocked_reason = CASE WHEN $3 THEN NULL ELSE NULLIF($2, '') END,
+			version = version + 1, updated_at = now()
+		WHERE tenant_provisioning_id = $1::uuid AND state IN ('APPLYING', 'REMEDIATING')`, id, code, retryable)
+	return err
+}
+
 // ClaimExecution claims the next runnable provisioning apply or
 // remediation.
 func (r *PostgresRepository) ClaimExecution(ctx context.Context, lease time.Duration) (operations.Operation, bool, error) {

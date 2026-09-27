@@ -24,6 +24,7 @@ type ExecutorStore interface {
 	LoadExecuted(ctx context.Context, key string) (convergence.ExecutedProvisioning, error)
 	SaveExecutionManifest(ctx context.Context, m provisioningdomain.TenantManifestRecord) error
 	MarkProvisioningBlocked(ctx context.Context, id, reason string) error
+	MarkExecutionFailed(ctx context.Context, id, code string, retryable bool) error
 	CompleteOperation(ctx context.Context, id string, attempt int, outcome operations.Outcome) (operations.Status, error)
 	LegalEntityOf(ctx context.Context, tenantID string) (string, error)
 }
@@ -72,11 +73,18 @@ func (e Executor) RunOnce(ctx context.Context) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	// Asked to stop, execution halted at this safe point.
-	if recorded == operations.StatusCancelled {
-		if id, err := provisioningRowID(op.SubjectID); err == nil {
-			return true, e.Store.MarkProvisioningBlocked(ctx, id, "EXECUTION_CANCELLED")
-		}
+	id, err := provisioningRowID(op.SubjectID)
+	if err != nil {
+		return true, nil
+	}
+	switch recorded {
+	case operations.StatusCancelled:
+		// Asked to stop, execution halted at this safe point.
+		return true, e.Store.MarkProvisioningBlocked(ctx, id, "EXECUTION_CANCELLED")
+	case operations.StatusFailed:
+		// A failure before the pipeline recorded one must not leave the
+		// provisioning APPLYING or REMEDIATING, where no command reaches it.
+		return true, e.Store.MarkExecutionFailed(ctx, id, outcomeCode(outcome), outcome.Retryable)
 	}
 	return true, nil
 }
@@ -222,6 +230,15 @@ func failure(op operations.Operation, code, detail string, retryable bool) opera
 		"title": "Provisioning operation failed", "status": status, "code": code, "detail": detail,
 		"correlation_id": correlation, "retryable": retryable})
 	return operations.Outcome{Status: operations.StatusFailed, CurrentPhase: "FAILED", Retryable: retryable, Problem: problem}
+}
+
+// outcomeCode is the code of a failed outcome's problem.
+func outcomeCode(o operations.Outcome) string {
+	var p struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(o.Problem, &p)
+	return p.Code
 }
 
 // StandardPipeline is the provisioning pipeline an approved plan executes

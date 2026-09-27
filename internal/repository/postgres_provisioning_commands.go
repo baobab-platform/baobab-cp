@@ -119,10 +119,12 @@ func (r *PostgresRepository) RetryOperation(ctx context.Context, operationID, ke
 			op.ID).Scan(&last); err != nil {
 			return operations.Operation{}, err
 		}
+		// A key queues one attempt: its replay returns the operation as it
+		// is now, even once that attempt has failed and is retryable.
+		if last != nil && *last == key {
+			return op, nil
+		}
 		if !op.Retryable || (op.Status != operations.StatusFailed && op.Status != operations.StatusBlocked) {
-			if last != nil && *last == key {
-				return op, nil
-			}
 			return operations.Operation{}, ErrOperationNotRetryable
 		}
 		next, err := scanOperation(tx.QueryRow(ctx, `

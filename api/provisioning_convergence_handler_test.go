@@ -390,6 +390,21 @@ func TestProvisioningLifecycleCommands(t *testing.T) {
 		t.Fatalf("a retry replay retried again: %v", replay)
 	}
 	refused(call("requester", http.MethodPost, remediationOps+"/retry", "retry-a2-"+suffix, "", reason("again")), http.StatusConflict, "OPERATION_NOT_RETRYABLE")
+	// The retried attempt fails retryably; a late replay of its key does not
+	// queue another attempt, a new key does.
+	if _, err := x.admin.Exec(ctx, `UPDATE operations.execution_operation SET status = 'FAILED', retryable = true, completed_at = now(),
+		problem = '{"type":"https://docs.nabhold.com/problems/provisioning_unavailable","title":"Provisioning operation failed","status":503,"code":"PROVISIONING_UNAVAILABLE","correlation_id":"c","retryable":true}'
+		WHERE operation_id = $1`, remediation["operation_id"]); err != nil {
+		t.Fatal(err)
+	}
+	if replay := decode(call("requester", http.MethodPost, remediationOps+"/retry", "retry-a-"+suffix, "", reason("provider back")),
+		http.StatusAccepted, ""); replay["execution_attempt"] != float64(2) || replay["status"] != "FAILED" {
+		t.Fatalf("a late retry replay retried again: %v", replay)
+	}
+	if again := decode(call("requester", http.MethodPost, remediationOps+"/retry", "retry-a3-"+suffix, "", reason("provider back again")),
+		http.StatusAccepted, operationSchema); again["execution_attempt"] != float64(3) {
+		t.Fatalf("second retry: %v", again)
+	}
 
 	if ran, err := x.executor().RunOnce(ctx); !ran || err != nil {
 		t.Fatalf("executor: %v %v", ran, err)

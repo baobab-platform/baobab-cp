@@ -67,12 +67,7 @@ func (h convergenceHandler) replan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	requestHash := sha256Hex([]byte(reason + "|" + versionString(version)))
-	if _, hash, err := h.repo.PlanByIdempotencyKey(r.Context(), c.ID, key); err == nil {
-		if hash != requestHash {
-			problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "the idempotency key was used for a different request", false)
-			return
-		}
-		h.writeProvisioning(w, r, http.StatusOK, c)
+	if h.replanReplayed(w, r, c, key, requestHash) {
 		return
 	}
 	switch {
@@ -101,10 +96,32 @@ func (h convergenceHandler) replan(w http.ResponseWriter, r *http.Request) {
 		problem(w, r, http.StatusServiceUnavailable, "PLANNING_UNAVAILABLE", "authoritative state could not be read for planning", true)
 		return
 	}
-	if !h.commandRecorded(w, r, h.repo.Replan(r.Context(), c.ID, revision, plan, key, requestHash, reason, actor)) {
+	if err := h.repo.Replan(r.Context(), c.ID, revision, plan, key, requestHash, reason, actor); err != nil {
+		// A concurrent request with the same key may have won the revision:
+		// answer as its replay.
+		if h.replanReplayed(w, r, c, key, requestHash) {
+			return
+		}
+		h.commandRecorded(w, r, err)
 		return
 	}
 	h.reload(w, r, c.ID, http.StatusOK)
+}
+
+// replanReplayed answers a replan whose key already created a plan: with
+// the provisioning as it is now for the same request, and a conflict for a
+// different one.
+func (h convergenceHandler) replanReplayed(w http.ResponseWriter, r *http.Request, c repository.ConvergedProvisioning, key, requestHash string) bool {
+	_, hash, err := h.repo.PlanByIdempotencyKey(r.Context(), c.ID, key)
+	if err != nil {
+		return false
+	}
+	if hash != requestHash {
+		problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "the idempotency key was used for a different request", false)
+		return true
+	}
+	h.reload(w, r, c.ID, http.StatusOK)
+	return true
 }
 
 // withdraw abandons a provisioning that is not executing.
