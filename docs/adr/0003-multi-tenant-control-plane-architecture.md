@@ -1,12 +1,19 @@
 # ADR-0003: Multi-Tenant, Production-Ready Control Plane Architecture
 
-**Status:** Proposed
+**Status:** Superseded by ADR-BCP-001 to ADR-BCP-010 and ADR-BCP-018  
 **Date:** 2026-08-31
 **Repository:** `baobab-platform/baobab-cp`
 **Series:** Local ADR register (follows `0001-go-control-plane-runtime.md`, `0002-adopting-zensical.md`)
 **Related:** Platform ADR-020 (Control Plane / Product Plane / Digital Estate architecture), `baobab-platform/shared` (canonical contracts), `baobab-platform/infrastructure` (environment provisioning)
 
 ---
+
+> **Superseded.** This local-register ADR predates the normative ADR-BCP series and is kept for history. Do not implement from it:
+> - its tenancy hierarchy and tiered product entitlements are replaced by capabilities, grants and subscriptions (ADR-BCP-002, -003, -005) and by the organisation, corporate group, platform account and tenant model (ADR-BCP-018);
+> - its context-resolution endpoint and client caching are replaced by ADR-BCP-004 and ADR-BCP-007;
+> - its contract location is replaced by `baobab-platform/shared` `contracts/control-plane/v1`.
+>
+> Its lasting principles are carried forward: declarative desired state with idempotent reconciliation (ADR-BCP-008, `shared` ADR-SHARED-015), fail-closed resolution (ADR-BCP-007, ADR-BCP-009), and the transactional outbox (ADR-BCP-001).
 
 ## 1. Context
 

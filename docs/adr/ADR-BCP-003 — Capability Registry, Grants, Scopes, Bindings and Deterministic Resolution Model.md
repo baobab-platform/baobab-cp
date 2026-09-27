@@ -1,6 +1,7 @@
 # ADR-BCP-003 — Capability Registry, Grants, Scopes, Bindings and Deterministic Resolution Model
 
-**Status:** Proposed — Normative Implementation Architecture  
+**Status:** Accepted — Normative Implementation Architecture, amended in part  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`)  
 **Date:** 2026-09-10  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  

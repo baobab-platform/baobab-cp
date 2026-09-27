@@ -1,7 +1,9 @@
 # Baobab Control Plane Tenant Onboarding & Provisioning Technical Specification
 
 **Document ID:** BCP-TS-ONBOARDING-001  
-**Status:** Proposed Normative Implementation Specification  
+**Status:** Accepted — Normative Implementation Specification, amended in part  
+**Amended By:** `shared` ADR-SHARED-008 (CR-003 and §§47–48: canonical event types are `com.baobab-platform.<context>.<...>.v<N>`)  
+**Refined By:** `shared` ADR-SHARED-015 (§§21–27 and 42–44: the canonical provisioning lifecycle, plan approval, durable operations, readiness and drift, and registered blocking-reason codes)  
 **Date:** 2026-09-11  
 **Primary Repository:** `baobab-platform/baobab-cp`  
 **Contract Authority:** `baobab-platform/shared`  
@@ -489,7 +491,7 @@ reason-code vocabulary
 
 No runtime repository SHALL invent independent canonical event names.
 
-**ERRATUM (`shared` ADR-SHARED-008, Gate ZB-01):** CR-003 above specified the canonical event-type format as `baobab.<bounded-context>.<aggregate>.<event>.v<major>`. This repository is not the event-vocabulary authority — §13 says so in the same breath — and `baobab-platform/shared` had already shipped and enforced a different format, `com.nabhold.<context>.<...>.v<N>` (`contracts/events/v1/envelope.schema.json`), across every real identity/ERP/supplier-onboarding event before this specification was written. CR-003's format is superseded; `com.nabhold.*` is canonical. See ADR-SHARED-008 for the full resolution and `baobab-cp` ADR-BCP-015 for the downstream correction to ADR-BCP-011/012/013/014 and `baobab-trade` ADR-0019/0020/0021/0022.
+**ERRATUM (`shared` ADR-SHARED-008, Gate ZB-01):** CR-003 above specified the canonical event-type format as `baobab.<bounded-context>.<aggregate>.<event>.v<major>`. This repository is not the event-vocabulary authority — §13 says so in the same breath — and `baobab-platform/shared` had already shipped and enforced a different format, now `com.baobab-platform.<context>.<...>.v<N>` (`contracts/events/v1/envelope.schema.json`, originally `com.nabhold.*`), across every real identity/ERP/supplier-onboarding event before this specification was written. CR-003's format is superseded; `com.baobab-platform.*` is canonical. See ADR-SHARED-008 for the full resolution and `baobab-cp` ADR-BCP-015 for the downstream correction to ADR-BCP-011/012/013/014 and `baobab-trade` ADR-0019/0020/0021/0022.
 
 ---
 
@@ -1512,6 +1514,9 @@ Business Operation
 
 # 47. Phase 12 — Audit, Events and Observability
 
+> **Superseded by `shared` ADR-SHARED-008** (see the erratum in §13): canonical event types are `com.baobab-platform.<context>.<...>.v<N>`; the `baobab.*` names below are not valid.
+
+
 Implement:
 
 ```text
@@ -1534,6 +1539,9 @@ baobab.<bounded-context>.<aggregate>.<event>.v<major>
 ---
 
 # 48. Mandatory Event Examples
+
+> **Superseded by `shared` ADR-SHARED-008** (see the erratum in §13): canonical event types are `com.baobab-platform.<context>.<...>.v<N>`; the `baobab.*` names below are not valid.
+
 
 ```text
 baobab.tenant.tenant.created.v1

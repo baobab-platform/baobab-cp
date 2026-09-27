@@ -1,6 +1,7 @@
 # ADR-BCP-009 — Capability-Centric Security, Isolation, Residency, Revocation and Failure Semantics
 
-**Status:** Proposed — Normative Platform Security Architecture  
+**Status:** Accepted — Normative Platform Security Architecture, amended in part  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`)  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  

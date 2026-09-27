@@ -6,6 +6,25 @@ source file, or ADR) it is drawn from; nothing here is asserted from prose alone
 
 ---
 
+## 2026-09-27 — ADR status reconciliation (proposed)
+
+ADR-BCP-001 to ADR-BCP-010 and the Tenant Onboarding & Provisioning Technical Specification were still marked Proposed, although ADR-BCP-011 to ADR-BCP-024, Shared ADR-SHARED-008 to ADR-SHARED-015 and the implementation all treat them as normative. Each is classified from what later documents actually decide about it, not marked Accepted wholesale. ADR-0003 is superseded. Merging this entry is the acceptance.
+
+| Document | Status | Evidence |
+|---|---|---|
+| ADR-0003 | Superseded | Its tenancy hierarchy and tiered entitlements are replaced by ADR-BCP-002, -003, -005 and -018; its context endpoint by ADR-BCP-004 and -007; its contract location by Shared `control-plane/v1` |
+| ADR-BCP-001 | Accepted, amended in part | Technical Specification CR-002 (`binding_mode`), CR-004 (migration-count erratum), CR-005 (bindings through providers) |
+| ADR-BCP-002 | Accepted, amended in part | CR-001 replaces its Gate 0; CR-002 rules out `READ_ONLY` as a binding mode |
+| ADR-BCP-003 to ADR-BCP-009 | Accepted, amended in part | CR-001 replaces each one's Gate 0 with the single Phase-0 classification (`docs/reconciliation/phase-0-architecture-inventory-and-lock.md`) |
+| ADR-BCP-010 | Accepted | No later document amends it |
+| Technical Specification | Accepted, amended in part and refined | ADR-SHARED-008 supersedes CR-003 and §§47–48 (event types are `com.baobab-platform.*`); ADR-SHARED-015 refines §§21–27 and 42–44 |
+
+The Specification's own erratum named `com.nabhold.*`, which ADR-SHARED-008 has since replaced with `com.baobab-platform.*`, and its §§47–48 showed the superseded `baobab.*` names without a marker; both are corrected. `docs/adr/index.md` becomes the complete register: it listed 7 of 29 documents.
+
+Not changed by this entry: the implementation gaps the ADRs describe, for example ADR-BCP-006 health observation, ADR-BCP-020 AdministrativeGrant and ADR-BCP-023 evidence. An accepted ADR records the target; the gaps are tracked as work, not as reasons to leave the decision Proposed.
+
+---
+
 ## 2026-09-25 — ADR-BCP-018 accepted
 
 ADR-BCP-018 moves from Proposed to **Accepted — Normative Platform Architecture**. Its migrations, APIs, contracts, security policy, runbooks and readiness gates were already on `main`, and a normative ADR still marked Proposed was governance drift.
