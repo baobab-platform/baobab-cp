@@ -79,6 +79,30 @@
       "enum": ["ALLOW", "DENY", "STEP_UP_REQUIRED", "APPROVAL_REQUIRED", "NOT_READY"],
       "description": "Section 97. Anything but ALLOW does not permit the action."
     },
+    "administrativeMetric": {
+      "type": "string",
+      "enum": ["administrative_authority_shadow_total"],
+      "description": "Administrative authority metrics, exposed in Prometheus form. administrative_authority_shadow_total counts role-guarded administrative requests by how the legacy role decision compared with the AdministrativeGrant decision (ADR-BCP-020 section 144); it never changes a decision."
+    },
+    "administrativeMetricLabel": {
+      "type": "string",
+      "enum": ["permission", "legacy", "grants", "agreement"],
+      "description": "The only label names administrative metrics may carry. permission takes a key of permission-registry.yaml or unregistered; legacy, grants and agreement take shadowLegacyOutcome, shadowGrantsOutcome and shadowAgreement values."
+    },
+    "shadowLegacyOutcome": {
+      "type": "string",
+      "enum": ["allow", "deny"]
+    },
+    "shadowGrantsOutcome": {
+      "type": "string",
+      "enum": ["allow", "deny", "step_up", "unresolved", "unmapped", "error"],
+      "description": "unresolved: the caller has no ACTIVE principal. unmapped: the route names no registered permission yet. error: grants could not be read in time."
+    },
+    "shadowAgreement": {
+      "type": "string",
+      "enum": ["agree", "grants_broader", "grants_narrower", "not_evaluated"],
+      "description": "grants_broader: grants would allow what the role check denied, which must never occur before enforcement moves to grants. grants_narrower: grants would deny what the role check allowed."
+    },
     "administrativeReasonCode": {
       "type": "string",
       "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$",

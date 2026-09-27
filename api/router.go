@@ -143,11 +143,17 @@ type API struct {
 	onboarding *onboarding.Service
 	// tenantBootstrap enables the migration-only bootstrap registration.
 	tenantBootstrap bool
+	// grants and environment feed shadow evaluation of role-guarded
+	// routes against AdministrativeGrants (ADR-BCP-020 section 144). With
+	// no grants reader, shadow evaluation is off.
+	grants      repository.AdministrativeGrantReader
+	environment string
 }
 
 func New(dependencies Dependencies) http.Handler {
 	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships,
-		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration}
+		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration,
+		grants: dependencies.AdministrativeGrants, environment: dependencies.Environment}
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
@@ -474,34 +480,47 @@ func tenantIDFromQuery(r *http.Request) string { return r.URL.Query().Get("tenan
 // consulted in that case).
 func (a *API) requireAdminRole(tenantID func(*http.Request) string, platformAdminOnly bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			principal, ok := auth.PrincipalFromContext(r.Context())
-			if !ok {
-				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
-				return
-			}
-			if principal.HasRole(RolePlatformAdmin) {
-				next.ServeHTTP(w, r)
-				return
-			}
-			if platformAdminOnly || !principal.HasRole(RoleTenantAdmin) {
-				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
-				return
-			}
-			target := ""
-			if tenantID != nil {
-				target = tenantID(r)
-			}
-			switch a.tenantAdminOf(r, principal, target) {
-			case adminUnavailable:
-				problem(w, r, http.StatusServiceUnavailable, "AUTH_VERIFIER_UNAVAILABLE", "authorization is temporarily unavailable", true)
-			case adminDenied:
-				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
-			default:
-				next.ServeHTTP(w, r)
-			}
-		})
+		return adminGate{a: a, tenantID: tenantID, platformAdminOnly: platformAdminOnly, next: next}
 	}
+}
+
+// adminGate is requireAdminRole's handler. A named type, so tests can find
+// every role-guarded route and check it is mapped to a permission.
+type adminGate struct {
+	a                 *API
+	tenantID          func(*http.Request) string
+	platformAdminOnly bool
+	next              http.Handler
+}
+
+func (g adminGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	a := g.a
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
+		return
+	}
+	allowed := principal.HasRole(RolePlatformAdmin)
+	if !allowed && !g.platformAdminOnly && principal.HasRole(RoleTenantAdmin) {
+		target := ""
+		if g.tenantID != nil {
+			target = g.tenantID(r)
+		}
+		switch a.tenantAdminOf(r, principal, target) {
+		case adminUnavailable:
+			problem(w, r, http.StatusServiceUnavailable, "AUTH_VERIFIER_UNAVAILABLE", "authorization is temporarily unavailable", true)
+			return
+		case adminAllowed:
+			allowed = true
+		}
+	}
+	// The legacy decision stands; grants are only compared with it.
+	a.shadowAdministrativeDecision(r, principal, allowed)
+	if !allowed {
+		problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
+		return
+	}
+	g.next.ServeHTTP(w, r)
 }
 
 type adminAuthority int

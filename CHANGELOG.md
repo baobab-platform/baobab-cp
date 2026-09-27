@@ -723,6 +723,10 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Shadow evaluation of administrative authority (ADR-BCP-020 section 144).
+  Every role-guarded route maps to the permission it performs. Grants are
+  evaluated beside the legacy role decision and counted in
+  `administrative_authority_shadow_total`, without changing any response.
 - Administrative grants and the effective-authority read model (ADR-BCP-020
   gates ADA-01 to ADA-03, FE-00 G5; Shared `administration/v1`).
   - `internal/administration`: the permission and profile catalogue, scope

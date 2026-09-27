@@ -27,13 +27,36 @@ Route coverage: 53 routes run `requireAdminRole`.
 - **`GET /v1/admin/effective-authority`:** the caller's own usable grants, derived from grants only (G5).
 - **`cmd/admin-bootstrap`:** the controlled initial authority procedure (§128–129). Grants are platform-scoped and TIME_BOUND for at most 30 days, the operator is audited, and CRITICAL or EMERGENCY permissions are never granted.
 
+## Shadow evaluation (§144)
+
+Every role-guarded route is mapped to the permission it performs in `api/admin_shadow.go`'s `adminRoutePermissions`. `TestEveryGuardedRouteIsMapped` walks the router so no guarded route goes unmapped and no mapping goes stale.
+
+After the legacy decision, `requireAdminRole` evaluates the caller's grants for the same permission and for the resource the route names: tenant, organisation or platform account, else platform-level. It counts the comparison in `administrative_authority_shadow_total`:
+
+| Label | Values |
+|---|---|
+| `permission` | a registered permission, or `unregistered` |
+| `legacy` | `allow`, `deny` |
+| `grants` | `allow`, `deny`, `step_up`, `unresolved`, `unmapped`, `error` |
+| `agreement` | `agree`, `grants_broader`, `grants_narrower`, `not_evaluated` |
+
+All label values come from closed sets. The response is never changed, and evaluation has a 250 ms budget. `grants_broader` also logs a warning.
+
+**Criteria for moving enforcement to grants:**
+- `grants_broader` stays at zero over a representative period;
+- every `grants_narrower` is explained, as a principal who still needs a grant or a role that was broader than intended;
+- the eleven canonical-mapping routes have Shared permissions (`mapping.view`, `mapping.manage`, `mapping.approve`) instead of `unregistered`.
+
+**The decision to flip enforcement, and to retire the realm roles, is the user's.** It is not made on a green build.
+
+Two mappings are approximations to revisit once the vocabulary grows:
+- tenant onboarding and provisioning approval map to `changeset.approve`, ahead of ADR-BCP-021 changesets;
+- canonical entities map to `organisation.*`.
+
 ## Not yet (next gates)
 
-- **Shadow evaluation (§144):**
-  - Map every administrative route to a permission and the resource it acts on.
-  - Evaluate grants beside `requireAdminRole`.
-  - Record differences as bounded metrics without changing any decision.
-  - Enforcement moves to grants, and the realm roles retire, only after the comparison shows no broadening.
+- **Enforcement on grants.** See the criteria above.
+- **Operations routes.** They authorise inside `operationHandler` with the platform-admin role, not through `requireAdminRole`, so they are not yet shadowed.
 - **Grant administration routes** (`administrator.grant`, `.revoke`, `.delegate`), SoD and approval (ADA-05, ADA-06), JIT (ADA-07), support and break-glass (ADA-08, ADA-09).
 - **An expiry sweeper.** Evaluation already treats an elapsed window as expired, so it is housekeeping, not a security gap.
 - **IAM issuance of `authority:self`.** Keycloak configuration stays untouched pending its ADRs; until the scope is issued, the route answers 403.

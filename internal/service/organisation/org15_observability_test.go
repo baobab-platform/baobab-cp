@@ -264,6 +264,7 @@ func TestOrganisationMetricsFollowTheSharedCatalogue(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := map[string]bool{}
+	labels := map[string][]string{}
 	for _, f := range append(families, defaults...) {
 		names[f.Name] = true
 		if f.Name == "organisation_total" {
@@ -279,9 +280,7 @@ func TestOrganisationMetricsFollowTheSharedCatalogue(t *testing.T) {
 		}
 		for _, s := range f.Samples {
 			for label := range s.Labels {
-				if !slices.Contains([]string{"status", "verification_state", "relationship_type", "rule", "severity", "outcome"}, label) {
-					t.Fatalf("%s carries label %q outside the bounded catalogue", f.Name, label)
-				}
+				labels[f.Name] = append(labels[f.Name], label)
 			}
 		}
 	}
@@ -300,14 +299,43 @@ func TestOrganisationMetricsFollowTheSharedCatalogue(t *testing.T) {
 		t.Fatal(err)
 	}
 	catalogue := schema.Defs["organisationMetric"].Enum
+	organisationLabels := schema.Defs["organisationMetricLabel"].Enum
 	for _, name := range catalogue {
 		if !names[name] {
 			t.Errorf("section 130 metric %s is not exposed", name)
 		}
 	}
+	// The process-wide registry also carries administrative authority
+	// metrics, catalogued in Shared administration/v1 with their own
+	// bounded labels (ADR-BCP-020 section 144).
+	var administration struct {
+		Defs map[string]struct {
+			Enum []string `json:"enum"`
+		} `json:"$defs"`
+	}
+	adminRaw, err := os.ReadFile(filepath.Join(dir, "contracts", "administration", "v1", "domain.schema.json"))
+	if err == nil {
+		err = json.Unmarshal(adminRaw, &administration)
+	}
+	if err != nil {
+		t.Fatalf("administration/v1 metric catalogue: %v", err)
+	}
+	adminCatalogue := administration.Defs["administrativeMetric"].Enum
+	adminLabels := administration.Defs["administrativeMetricLabel"].Enum
 	for name := range names {
-		if !slices.Contains(catalogue, name) {
-			t.Errorf("exposed metric %s is not in the Shared catalogue", name)
+		allowed := organisationLabels
+		switch {
+		case slices.Contains(catalogue, name):
+		case slices.Contains(adminCatalogue, name):
+			allowed = adminLabels
+		default:
+			t.Errorf("exposed metric %s is not in a Shared catalogue", name)
+			continue
+		}
+		for _, label := range labels[name] {
+			if !slices.Contains(allowed, label) {
+				t.Errorf("%s carries label %q outside its bounded catalogue", name, label)
+			}
 		}
 	}
 }
