@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -173,6 +174,8 @@ func TestHealthObservationStore(t *testing.T) {
 	refused("expiring before observed", "health_observation_window_ck", insert, nil, provider, "HEALTHY", now, now, []string{})
 	refused("DEGRADED without a reason", "health_observation_reasons_ck", insert, nil, provider, "DEGRADED", now, now.Add(time.Minute), []string{})
 	refused("a malformed reason", "health_observation_reason_codes_ck", insert, nil, provider, "DEGRADED", now, now.Add(time.Minute), []string{"slow"})
+	refused("a reason over 64 characters", "health_observation_reason_codes_ck", insert, nil, provider, "DEGRADED", now, now.Add(time.Minute),
+		[]string{"HEALTH_" + strings.Repeat("X", 58)})
 	refused("the capability's criticality outside the contract", "capability_health_criticality_ck",
 		`UPDATE capability.capability SET health_criticality = 'RELAXED' WHERE capability_id = $1::uuid`, capability)
 

@@ -181,10 +181,16 @@ func (p *CapabilityBindingProvisioner) Resolve(
 		return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err
 	}
 
-	resolved, err := (resolver.CapabilityResolverImpl{}).Resolve(ctx, resolver.CapabilityResolutionQuery{
+	levels := make(map[string]health.Levels, len(bindings))
+	for _, b := range bindings {
+		if levels[b.ID], err = p.health(ctx, b.EngineInstanceID, b.ProviderID, capabilityKey); err != nil {
+			return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err
+		}
+	}
+	resolved, err := resolver.ResolveHealthyCapability(ctx, resolver.CapabilityResolutionQuery{
 		CapabilityKey: capabilityKey, Context: trusted, Bindings: bindings,
 		Scopes: scopes, At: p.now(), Capability: &capability,
-	})
+	}, capability.HealthCriticality, levels, p.now())
 	if err != nil {
 		return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err
 	}
@@ -193,14 +199,10 @@ func (p *CapabilityBindingProvisioner) Resolve(
 	if err != nil {
 		return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err
 	}
-	levels, err := p.health(ctx, resolved.EngineInstanceID, resolved.ProviderID, capabilityKey)
-	if err != nil {
-		return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err
-	}
 	instance, err := (resolver.TopologyResolverImpl{}).Resolve(ctx, resolver.TopologyResolutionQuery{
 		Context: trusted, SelectedEngineInstanceID: resolved.EngineInstanceID,
 		EngineInstances: instances, At: p.now(),
-		HealthCriticality: capability.HealthCriticality, Health: levels,
+		HealthCriticality: capability.HealthCriticality, Health: levels[resolved.BindingID],
 	})
 	if err != nil {
 		return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err

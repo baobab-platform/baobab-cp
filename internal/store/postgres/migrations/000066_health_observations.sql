@@ -31,7 +31,9 @@ CREATE TABLE topology.health_observation (
     CONSTRAINT health_observation_reasons_ck CHECK (status = 'HEALTHY' OR cardinality(reasons) > 0),
     CONSTRAINT health_observation_reason_codes_ck CHECK (
         cardinality(reasons) <= 16
-        AND array_to_string(reasons, ',') ~ '^([A-Z][A-Z0-9]*(_[A-Z0-9]+)+(,|$))*$')
+        AND array_to_string(reasons, ',') ~ '^([A-Z][A-Z0-9]*(_[A-Z0-9]+)+(,|$))*$'
+        -- and each is at most 64 characters (capability/v1 healthReasonCode)
+        AND array_to_string(reasons, ',') ~ '^([A-Z0-9_]{1,64}(,|$))*$')
 );
 CREATE UNIQUE INDEX health_observation_instance_uq ON topology.health_observation (engine_instance_id)
     WHERE engine_instance_id IS NOT NULL;

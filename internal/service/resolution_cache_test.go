@@ -183,3 +183,28 @@ func TestInMemoryResolutionCachePurge(t *testing.T) {
 		t.Fatal("expected purge to remove all entries")
 	}
 }
+
+// TestCachedDecisionNeverOutlivesItsHealth: an entry expires no later than
+// the earliest health observation the decision relied on.
+func TestCachedDecisionNeverOutlivesItsHealth(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		until  time.Time
+		cached bool
+	}{
+		{"health already expired", time.Now().Add(-time.Second), false},
+		{"health current beyond the TTL", time.Now().Add(time.Hour), true},
+		{"no observation held", time.Time{}, true},
+	} {
+		inner := &fakeResolver{result: ResolutionResult{HealthValidUntil: c.until}}
+		svc := CachingResolutionService{Inner: inner, Cache: &InMemoryResolutionCache{}, TTL: time.Minute}
+		for range 2 {
+			if _, err := svc.Resolve(context.Background(), baseCachingRequest()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := inner.calls == 1; got != c.cached {
+			t.Errorf("%s: served from cache = %v, want %v", c.name, got, c.cached)
+		}
+	}
+}

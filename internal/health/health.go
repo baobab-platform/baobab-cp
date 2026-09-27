@@ -143,7 +143,7 @@ func (o Observation) Validate() error {
 		return errors.New("an observation carries at most 16 reasons")
 	}
 	for i, r := range o.Reasons {
-		if !reasonCode.MatchString(r) {
+		if len(r) > 64 || !reasonCode.MatchString(r) {
 			return fmt.Errorf("reason %q is not a reason code", r)
 		}
 		if slices.Contains(o.Reasons[:i], r) {

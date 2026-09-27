@@ -116,14 +116,15 @@ func TestObservationValidation(t *testing.T) {
 		t.Fatalf("a valid observation was refused: %v", err)
 	}
 	bad := map[string]func(o *Observation){
-		"two levels":       func(o *Observation) { o.Subject.ProviderID = "prov-1" },
-		"capability alone": func(o *Observation) { o.Subject = Subject{CapabilityKey: "commerce.order.create"} },
-		"no reason":        func(o *Observation) { o.Reasons = nil },
-		"expires first":    func(o *Observation) { o.ExpiresAt = o.ObservedAt },
-		"unknown source":   func(o *Observation) { o.Source = "SANDBOX" },
-		"unknown status":   func(o *Observation) { o.Status = "UNHEALTHY" },
-		"malformed reason": func(o *Observation) { o.Reasons = []string{"slow"} },
-		"repeated reason":  func(o *Observation) { o.Reasons = []string{"HEALTH_PROBE_FAILED", "HEALTH_PROBE_FAILED"} },
+		"two levels":                func(o *Observation) { o.Subject.ProviderID = "prov-1" },
+		"capability alone":          func(o *Observation) { o.Subject = Subject{CapabilityKey: "commerce.order.create"} },
+		"no reason":                 func(o *Observation) { o.Reasons = nil },
+		"expires first":             func(o *Observation) { o.ExpiresAt = o.ObservedAt },
+		"unknown source":            func(o *Observation) { o.Source = "SANDBOX" },
+		"unknown status":            func(o *Observation) { o.Status = "UNHEALTHY" },
+		"malformed reason":          func(o *Observation) { o.Reasons = []string{"slow"} },
+		"reason over 64 characters": func(o *Observation) { o.Reasons = []string{"HEALTH_" + strings.Repeat("X", 58)} },
+		"repeated reason":           func(o *Observation) { o.Reasons = []string{"HEALTH_PROBE_FAILED", "HEALTH_PROBE_FAILED"} },
 	}
 	for name, mutate := range bad {
 		o := good

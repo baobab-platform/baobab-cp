@@ -202,6 +202,14 @@ func (s CachingResolutionService) Resolve(ctx context.Context, req ResolutionReq
 	if err != nil {
 		return result, err
 	}
-	s.Cache.Set(dims, result, s.TTL)
+	// A decision never outlives the health it relied on (ADR-BCP-006
+	// section 21): the entry expires no later than the earliest observation.
+	ttl := s.TTL
+	if !result.HealthValidUntil.IsZero() {
+		if remaining := time.Until(result.HealthValidUntil); remaining < ttl {
+			ttl = remaining
+		}
+	}
+	s.Cache.Set(dims, result, ttl)
 	return result, nil
 }

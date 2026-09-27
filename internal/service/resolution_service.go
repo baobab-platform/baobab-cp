@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
@@ -36,6 +37,8 @@ type ResolutionResult struct {
 	Policy     resolver.PolicyDecision
 	Topology   resolver.EngineInstance
 	Trace      resolver.ResolutionTrace
+	// HealthValidUntil: see resolver.ResolutionResult.
+	HealthValidUntil time.Time
 }
 
 // ResolutionService exposes the composed resolver pipeline as a service interface.
@@ -145,6 +148,7 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 		return ResolutionResult{}, err
 	}
 	pipelineReq.HealthCriticality = criticality
+	pipelineReq.Now = time.Now().UTC()
 
 	if s.EnforceEntitlement {
 		if s.Grants != nil {
@@ -201,6 +205,8 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 		Policy:     pipelineResult.Policy,
 		Topology:   pipelineResult.Topology,
 		Trace:      pipelineResult.Trace,
+
+		HealthValidUntil: pipelineResult.HealthValidUntil,
 	}, nil
 }
 
