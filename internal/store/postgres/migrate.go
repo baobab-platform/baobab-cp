@@ -97,6 +97,8 @@ var canonicalMigrationNames = []string{
 	"000060_adr_shared_013_legacy_canonical_mappings.sql",
 	"000061_mapping_review_fixes.sql",
 	"000062_adr_shared_015_provisioning_convergence.sql",
+	"000063_adr_shared_015_plan_approve_apply.sql",
+	"000064_onboarding_market_participation.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

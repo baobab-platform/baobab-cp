@@ -4,11 +4,6 @@
   "title": "Provisioning desired state",
   "description": "The business intent a tenant is provisioned to (Technical Specification SS24, ADR-SHARED-015). It is frozen from an AUTHORISED TenantOnboardingRequest and persisted independently of any plan, so a plan can be regenerated without changing intent. It never names engines, engine instances, providers, capability grants or bindings: those are planning results (provisioning-plan.schema.json). A definition library; validate against the fragment, e.g. provisioning-desired-state.schema.json#/$defs/ProvisioningDesiredState.",
   "$defs": {
-    "marketActivity": {
-      "type": "string",
-      "enum": ["LEGAL_PRESENCE", "SOURCING", "EXPORTING", "IMPORTING", "SELLING", "BUYING", "FULFILMENT"],
-      "description": "What the tenant does in a market (Technical Specification SS24 market_participation)."
-    },
     "desiredStateProvenance": {
       "type": "object",
       "additionalProperties": false,
@@ -67,14 +62,15 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["market"],
+            "required": ["market", "activities"],
             "properties": {
               "market": { "$ref": "../../admission/v1/application.schema.json#/$defs/countryCode" },
               "activities": {
                 "type": "array",
+                "minItems": 1,
                 "uniqueItems": true,
-                "items": { "$ref": "#/$defs/marketActivity" },
-                "default": []
+                "items": { "$ref": "domain.schema.json#/$defs/marketParticipationCapability" },
+                "description": "The participation capabilities declared on the onboarding request and authorised with it."
               }
             }
           }

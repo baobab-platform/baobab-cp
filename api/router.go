@@ -62,6 +62,11 @@ type Dependencies struct {
 	// /v1/tenants/bootstrap-registrations, which registers a tenant that
 	// predates the admission workflow. Off unless explicitly configured.
 	TenantBootstrapRegistration bool
+	// Environment names the deployment (config.Config.Environment). Planning
+	// treats anything but development, test, integration or sandbox,
+	// including unset, as production: providers must then be permitted in
+	// production (ADR-SHARED-011).
+	Environment string
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -307,10 +312,15 @@ func New(dependencies Dependencies) http.Handler {
 	}
 	if dependencies.Provisioning != nil {
 		prov := provisioningHandler{tenants: dependencies.Store, repo: dependencies.Provisioning}
-		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning", prov.create)
-		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning", prov.list)
-		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}", prov.get)
-		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/apply", prov.apply)
+		plans := convergenceHandler{repo: dependencies.Provisioning, identities: dependencies.Identities, environment: dependencies.Environment}
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning", plans.create)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning", plans.list)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}", plans.get)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/plan", plans.plan)
+		// Deciding a plan is privileged and separate from requesting it:
+		// platform administrators only, never the requester.
+		r.With(a.authorize(a.adminVerifier, "human", "provisioning:approve"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/approve", plans.approve)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/apply", plans.apply)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/retry", prov.retry)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning/{provisioningID}/cancel", prov.cancel)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/readiness", prov.readiness)

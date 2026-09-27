@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -50,4 +51,69 @@ func (r *PostgresRepository) GetOperation(ctx context.Context, id string) (opera
 		return operations.Operation{}, ErrOperationNotFound
 	}
 	return op, err
+}
+
+// ClaimOperation takes the oldest runnable operation of type opType under
+// a lease: a QUEUED one, or one whose executor's lease expired, which is
+// resumed as a new execution attempt. It returns false when none is
+// runnable.
+func (r *PostgresRepository) ClaimOperation(ctx context.Context, opType string, lease time.Duration) (operations.Operation, bool, error) {
+	op, err := scanOperation(r.pool.QueryRow(ctx, `
+		UPDATE operations.execution_operation o
+		SET status = 'RUNNING', lease_expires_at = now() + $2::interval, started_at = COALESCE(o.started_at, now()),
+			execution_attempt = o.execution_attempt + CASE WHEN o.status = 'QUEUED' THEN 0 ELSE 1 END,
+			revision = o.revision + 1, updated_at = now()
+		WHERE o.operation_id = (
+			SELECT operation_id FROM operations.execution_operation
+			WHERE operation_type = $1 AND (status = 'QUEUED'
+				OR (status IN ('PREPARING', 'RUNNING') AND lease_expires_at < now()))
+			ORDER BY created_at
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1)
+		RETURNING `+operationColumns, opType, lease.String()))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return operations.Operation{}, false, nil
+	}
+	return op, err == nil, err
+}
+
+// CompleteOperation records the outcome and releases the lease.
+func (r *PostgresRepository) CompleteOperation(ctx context.Context, id string, outcome operations.Outcome) error {
+	terminal := outcome.Status == operations.StatusSucceeded || outcome.Status == operations.StatusFailed
+	_, err := r.pool.Exec(ctx, `
+		UPDATE operations.execution_operation
+		SET status = $2, current_phase = NULLIF($3, ''), retryable = $4, result = $5, problem = $6,
+			completed_at = CASE WHEN $7 THEN now() END, lease_expires_at = NULL,
+			revision = revision + 1, updated_at = now()
+		WHERE operation_id = $1`,
+		id, string(outcome.Status), outcome.CurrentPhase, outcome.Retryable, nullJSON(outcome.Result), nullJSON(outcome.Problem), terminal)
+	return err
+}
+
+func nullJSON(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return []byte(raw)
+}
+
+// ReplayOperation returns the operation a principal created with an
+// idempotency key, or ErrOperationNotFound.
+func (r *PostgresRepository) ReplayOperation(ctx context.Context, requestedBy, opType, key string) (operations.Operation, error) {
+	op, err := scanOperation(r.pool.QueryRow(ctx, `SELECT `+operationColumns+` FROM operations.execution_operation
+		WHERE requested_by = $1 AND operation_type = $2 AND idempotency_key = $3`, requestedBy, opType, key))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return operations.Operation{}, ErrOperationNotFound
+	}
+	return op, err
+}
+
+// OperationRequestHash is the hash of the request that created an
+// operation; empty when it has none or cannot be read, which never matches.
+func (r *PostgresRepository) OperationRequestHash(ctx context.Context, id string) string {
+	var hash *string
+	if err := r.pool.QueryRow(ctx, `SELECT request_hash FROM operations.execution_operation WHERE operation_id = $1`, id).Scan(&hash); err != nil || hash == nil {
+		return ""
+	}
+	return *hash
 }

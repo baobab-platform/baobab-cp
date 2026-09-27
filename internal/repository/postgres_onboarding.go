@@ -60,7 +60,7 @@ type TenantOnboardingRepository interface {
 var _ TenantOnboardingRepository = (*PostgresRepository)(nil)
 
 const onboardingColumns = `tenant_onboarding_request_id::text, client_application_id::text, admission_decision_id::text, status,
-	display_name, residency_region, isolation_strategy, subscription_type, market_scope, product_requirements, reason,
+	display_name, residency_region, isolation_strategy, subscription_type, market_scope, market_participation, product_requirements, reason,
 	correlation_id::text, requested_by::text, requested_at, COALESCE(authorised_by::text, ''), authorised_at,
 	COALESCE(tenant_id, ''), fulfilled_at, COALESCE(cancelled_by::text, ''), cancelled_at, COALESCE(cancellation_reason, '')`
 
@@ -69,9 +69,10 @@ func scanOnboarding(row pgx.Row) (domain.TenantOnboardingRequest, error) {
 		r                           domain.TenantOnboardingRequest
 		rowID, application, decided string
 		subscription                string
+		participation               []byte
 	)
 	err := row.Scan(&rowID, &application, &decided, &r.Status, &r.DesiredState.DisplayName, &r.DesiredState.ResidencyRegion,
-		&r.DesiredState.IsolationStrategy, &subscription, &r.DesiredState.MarketScope, &r.DesiredState.ProductRequirements,
+		&r.DesiredState.IsolationStrategy, &subscription, &r.DesiredState.MarketScope, &participation, &r.DesiredState.ProductRequirements,
 		&r.Reason, &r.CorrelationID, &r.RequestedBy, &r.RequestedAt, &r.AuthorisedBy, &r.AuthorisedAt, &r.TenantID,
 		&r.FulfilledAt, &r.CancelledBy, &r.CancelledAt, &r.CancellationReason)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -81,6 +82,9 @@ func scanOnboarding(row pgx.Row) (domain.TenantOnboardingRequest, error) {
 		return r, err
 	}
 	r.DesiredState.SubscriptionType = domain.SubscriptionType(subscription)
+	if err := json.Unmarshal(participation, &r.DesiredState.MarketParticipation); err != nil {
+		return r, fmt.Errorf("unmarshal market participation: %w", err)
+	}
 	if r.DesiredState.ProductRequirements == nil {
 		r.DesiredState.ProductRequirements = []string{}
 	}
@@ -127,12 +131,13 @@ func (r *PostgresRepository) CreateTenantOnboardingRequest(ctx context.Context, 
 		tag, err := tx.Exec(ctx, `
 			INSERT INTO admission.tenant_onboarding_request (tenant_onboarding_request_id, client_application_id,
 				admission_decision_id, status, display_name, residency_region, isolation_strategy, subscription_type,
-				market_scope, product_requirements, reason, correlation_id, requested_by, requested_at)
-			VALUES ($1::uuid, $2::uuid, $3::uuid, 'REQUESTED', $4, $5, $6, $7, $8, $9, $10, $11::uuid, $12::uuid, $13)
+				market_scope, product_requirements, reason, correlation_id, requested_by, requested_at, market_participation)
+			VALUES ($1::uuid, $2::uuid, $3::uuid, 'REQUESTED', $4, $5, $6, $7, $8, $9, $10, $11::uuid, $12::uuid, $13, $14)
 			ON CONFLICT (admission_decision_id) WHERE status IN ('REQUESTED','AUTHORISED','FULFILLED') DO NOTHING`,
 			id, application, decision, req.DesiredState.DisplayName, req.DesiredState.ResidencyRegion,
 			req.DesiredState.IsolationStrategy, string(req.DesiredState.SubscriptionType), req.DesiredState.MarketScope,
-			emptyIfNil(req.DesiredState.ProductRequirements), req.Reason, req.CorrelationID, req.RequestedBy, req.RequestedAt)
+			emptyIfNil(req.DesiredState.ProductRequirements), req.Reason, req.CorrelationID, req.RequestedBy, req.RequestedAt,
+			participationJSON(req.DesiredState.MarketParticipation))
 		if err != nil {
 			return fmt.Errorf("record tenant onboarding request: %w", err)
 		}
@@ -280,4 +285,13 @@ func (r *PostgresRepository) recordOnboardingChange(ctx context.Context, tx pgx.
 	}
 	rowID, _ := domain.ParseResourceID(domain.TenantOnboardingRequestIDPrefix, req.ID)
 	return r.insertOutboxEvent(ctx, tx, "tenant_onboarding_request", rowID, time.Now().UnixMicro(), env)
+}
+
+// participationJSON encodes market participation, never as null.
+func participationJSON(p []domain.OnboardingMarketParticipation) []byte {
+	if p == nil {
+		p = []domain.OnboardingMarketParticipation{}
+	}
+	raw, _ := json.Marshal(p)
+	return raw
 }

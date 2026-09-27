@@ -48,6 +48,9 @@ var (
 	ErrIsolationDecided = errors.New("the admission decision already set the isolation strategy")
 	// ErrIsolationRequired: neither the decision nor the request set an isolation strategy.
 	ErrIsolationRequired = errors.New("an isolation strategy is required")
+	// ErrMarketParticipation: the declared participation does not cover the
+	// decision's market scope exactly once with governed capabilities.
+	ErrMarketParticipation = errors.New("market participation must declare each admitted market exactly once with governed participation capabilities")
 	// ErrTransition: the lifecycle does not permit the step from the current status.
 	ErrTransition = errors.New("tenant onboarding request transition not allowed")
 	// ErrTenantAlreadyOnboarded: another request already produced the tenant.
@@ -102,11 +105,12 @@ func decode(schema *contracts.Schema, raw []byte, into any) error {
 // decision with a live request returns that request, created=false.
 func (s *Service) Request(ctx context.Context, actor Actor, raw []byte) (domain.TenantOnboardingRequest, bool, error) {
 	var cmd struct {
-		AdmissionDecisionID string `json:"admission_decision_id"`
-		DisplayName         string `json:"display_name"`
-		ResidencyRegion     string `json:"residency_region"`
-		IsolationStrategy   string `json:"isolation_strategy"`
-		Reason              string `json:"reason"`
+		AdmissionDecisionID string                                 `json:"admission_decision_id"`
+		DisplayName         string                                 `json:"display_name"`
+		ResidencyRegion     string                                 `json:"residency_region"`
+		MarketParticipation []domain.OnboardingMarketParticipation `json:"market_participation"`
+		IsolationStrategy   string                                 `json:"isolation_strategy"`
+		Reason              string                                 `json:"reason"`
 	}
 	if err := decode(requestSchema, raw, &cmd); err != nil {
 		return domain.TenantOnboardingRequest{}, false, err
@@ -137,12 +141,16 @@ func (s *Service) Request(ctx context.Context, actor Actor, raw []byte) (domain.
 	case isolation == "":
 		isolation = cmd.IsolationStrategy
 	}
+	if err := checkParticipation(cmd.MarketParticipation, decision.ApprovedMarketScope); err != nil {
+		return domain.TenantOnboardingRequest{}, false, err
+	}
 	req := domain.TenantOnboardingRequest{
 		ID: domain.NewResourceID(domain.TenantOnboardingRequestIDPrefix), ClientApplicationID: decision.ClientApplicationID,
 		AdmissionDecisionID: decision.ID, Status: domain.OnboardingRequested, Reason: cmd.Reason,
 		DesiredState: domain.OnboardingDesiredState{DisplayName: cmd.DisplayName, ResidencyRegion: cmd.ResidencyRegion,
 			IsolationStrategy: isolation, SubscriptionType: decision.ApprovedSubscriptionType,
-			MarketScope: slices.Clone(decision.ApprovedMarketScope), ProductRequirements: slices.Clone(decision.ApprovedProductRequirements)},
+			MarketScope: slices.Clone(decision.ApprovedMarketScope), MarketParticipation: cmd.MarketParticipation,
+			ProductRequirements: slices.Clone(decision.ApprovedProductRequirements)},
 		CorrelationID: domain.NewUUIDv7(), RequestedBy: actor.PrincipalID, RequestedAt: s.now(),
 	}
 	if req.DesiredState.ProductRequirements == nil {
@@ -287,4 +295,26 @@ func sameSet(a, b []string) bool {
 		}
 	}
 	return len(seen) == len(b)
+}
+
+// checkParticipation requires one declaration per admitted market, with
+// governed participation capabilities (ADR-BCP-011 section 6). The requester
+// declares what the decision did not decide; the authoriser authorises it.
+func checkParticipation(declared []domain.OnboardingMarketParticipation, scope []string) error {
+	seen := map[string]bool{}
+	for _, p := range declared {
+		if seen[p.Market] || !slices.Contains(scope, p.Market) || len(p.Activities) == 0 {
+			return ErrMarketParticipation
+		}
+		seen[p.Market] = true
+		for _, a := range p.Activities {
+			if !domain.MarketParticipationCapability(a).Valid() {
+				return ErrMarketParticipation
+			}
+		}
+	}
+	if len(seen) != len(scope) {
+		return ErrMarketParticipation
+	}
+	return nil
 }

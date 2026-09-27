@@ -6,8 +6,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/operations"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -108,5 +110,60 @@ func TestProvisioningConvergenceStore(t *testing.T) {
 	if _, err := admin.Exec(ctx, `INSERT INTO provisioning.plan_approval (approval_id, tenant_provisioning_id, plan_id, plan_version, plan_digest,
 		decision, decided_by) VALUES ($1, $2::uuid, $3, 1, $4, 'APPROVED', 'prn_approver')`, "apd_"+suffix, row, plan, digest("b")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestAnInterruptedOperationIsResumed: an executor holds an operation under a
+// lease; while it holds it nobody else claims it, and once the lease expires
+// the operation is resumed as a new execution attempt, not lost.
+func TestAnInterruptedOperationIsResumed(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping PostgreSQL integration test")
+	}
+	ctx := context.Background()
+	store, err := postgres.Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.ApplyMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	admin, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+
+	// A remediation: no other test queues one, so claims are deterministic
+	// while other packages run against the same database.
+	claim := func() (operations.Operation, bool, error) {
+		return repo.ClaimOperation(ctx, operations.TypeTenantProvisioningRemediate, time.Minute)
+	}
+	id := "op_" + strings.ReplaceAll(domain.NewUUIDv7(), "-", "")
+	t.Cleanup(func() { admin.Exec(ctx, `DELETE FROM operations.execution_operation WHERE operation_id = $1`, id) })
+	if _, err := admin.Exec(ctx, `INSERT INTO operations.execution_operation (operation_id, operation_type, status, subject_type, subject_id, requested_by)
+		VALUES ($1, 'TENANT_PROVISIONING_REMEDIATE', 'QUEUED', 'TENANT_PROVISIONING', 'tp_x', 'prn_requester')`, id); err != nil {
+		t.Fatal(err)
+	}
+	first, ok, err := claim()
+	if err != nil || !ok || first.ID != id || first.Status != "RUNNING" || first.ExecutionAttempt != 1 {
+		t.Fatalf("first claim: %v %v %+v", ok, err, first)
+	}
+	if _, ok, err := claim(); ok || err != nil {
+		t.Fatalf("a leased operation was claimed again: %v %v", ok, err)
+	}
+	if _, err := admin.Exec(ctx, `UPDATE operations.execution_operation SET lease_expires_at = now() - interval '1 second' WHERE operation_id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	resumed, ok, err := claim()
+	if err != nil || !ok || resumed.ID != id || resumed.ExecutionAttempt != 2 {
+		t.Fatalf("an expired lease was not resumed: %v %v %+v", ok, err, resumed)
 	}
 }

@@ -72,3 +72,12 @@ type Operation struct {
 	UpdatedAt        time.Time
 	CompletedAt      *time.Time
 }
+
+// Outcome is how one execution of an operation ended.
+type Outcome struct {
+	Status       Status
+	CurrentPhase string
+	Retryable    bool
+	Result       json.RawMessage
+	Problem      json.RawMessage
+}

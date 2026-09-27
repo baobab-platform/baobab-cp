@@ -163,6 +163,11 @@
       "maxLength": 63,
       "description": "Control Plane-minted identifier of a durable ExecutionOperation (ADR-BCP-022 SS58)."
     },
+    "marketParticipationCapability": {
+      "type": "string",
+      "enum": ["LEGAL_PRESENCE", "SOURCING", "PROCUREMENT", "SELLING", "IMPORTING", "EXPORTING", "WAREHOUSING", "DISTRIBUTION", "FULFILMENT", "PROCESSING", "TRANSIT"],
+      "description": "What a tenant may do in a market (ADR-BCP-011 section 6). A governed vocabulary: extended only through controlled registry evolution, never with arbitrary strings."
+    },
     "planDigest": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$",

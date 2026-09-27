@@ -11,20 +11,14 @@ export const UNIMPLEMENTED_OPERATIONS = [
   "POST /markets",
   "POST /markets/{market_id}/activate",
   // Described by ADR-SHARED-015, not yet served.
-  "GET /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/plan",
   "POST /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/plan",
-  "POST /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/approve",
   "POST /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/remediate",
   "POST /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/withdraw",
   "POST /admin/operations/{operation_id}/cancel",
   "POST /admin/operations/{operation_id}/retry",
   // Served, but not yet to their ADR-SHARED-015 description.
-  "GET /tenants/{tenant_id}/provisioning",
-  "GET /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}",
   "GET /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/drift",
   "GET /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/readiness",
-  "POST /tenants/{tenant_id}/provisioning",
-  "POST /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/apply",
 ] as const;
 
 export type UnimplementedOperation = (typeof UNIMPLEMENTED_OPERATIONS)[number];

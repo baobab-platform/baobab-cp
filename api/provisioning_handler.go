@@ -18,25 +18,20 @@
 // api/context.go's ADR-BCP-004 §72 handling already established for
 // resolved contexts).
 //
-// "Prefer an automatic orchestration command over forcing operators to
-// manually call each lifecycle transition" (spec §12): POST .../provisioning
-// and POST .../apply both drive Orchestrator.Run to completion or as far as
-// deterministic results allow in one call, never exposing
-// TenantProvisioningService's individual phase-transition methods over
-// HTTP -- there is no route that lets a caller jump PLAN straight to READY,
-// or otherwise select an arbitrary next state.
+// Since ADR-SHARED-015 these handlers serve only the legacy manifest runs'
+// retry and cancel and every run's readiness and drift evidence. Creating,
+// reading, deciding and applying a provisioning is desired-state convergence
+// (provisioning_convergence_handler.go): plan from an authorised onboarding
+// request, approve the plan's digest, apply it as an operation.
 package api
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
-	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning"
@@ -54,6 +49,7 @@ type ProvisioningRepository interface {
 	repository.TenantProvisioningRepository
 	repository.ReadinessSnapshotRepository
 	repository.DriftSnapshotRepository
+	repository.ConvergenceRepository
 }
 
 // ErrProvisioningNotFound signals "no such run for this tenant" -- returned
@@ -68,105 +64,6 @@ type provisioningHandler struct {
 
 func (h provisioningHandler) pipelineDeps() provisioning.ZB02Dependencies {
 	return provisioning.ZB02Dependencies{Tenants: h.tenants, Repo: h.repo, Provisioning: h.repo}
-}
-
-// create is the "automatic orchestration command": POST body is a
-// provisioning.TenantManifest. It validates and resolves the manifest,
-// persists it atomically with a new TenantProvisioning row (or, on an
-// idempotency-key replay of the identical request, reuses the existing
-// row instead of creating a duplicate), then drives the orchestrator as
-// far as it will go in this one call before responding.
-func (h provisioningHandler) create(w http.ResponseWriter, r *http.Request) {
-	tenantID := chi.URLParam(r, "tenantID")
-	if !domain.ValidTenantID(tenantID) {
-		problem(w, r, http.StatusBadRequest, "INVALID_TENANT_ID", "tenant_id is invalid", false)
-		return
-	}
-	key := r.Header.Get("Idempotency-Key")
-	if len(key) < 16 || len(key) > 128 {
-		problem(w, r, http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 128 characters", false)
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	raw, err := io.ReadAll(r.Body)
-	if err != nil {
-		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "request body could not be read", false)
-		return
-	}
-	var manifest provisioning.TenantManifest
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&manifest); err != nil {
-		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "request body is not a valid tenant manifest", false)
-		return
-	}
-	if manifest.Metadata.TenantID != tenantID {
-		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "metadata.tenant_id must match the tenant in the URL", false)
-		return
-	}
-	requestHash := sha256Hex(raw)
-
-	ctx := r.Context()
-	if existing, err := h.repo.GetTenantProvisioningByIdempotencyKey(ctx, tenantID, key); err == nil {
-		if existing.RequestHash != requestHash {
-			problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "the idempotency key was used for a different request", false)
-			return
-		}
-		h.runAndRespond(w, r, existing.ID, http.StatusOK)
-		return
-	}
-
-	resolved, err := provisioning.ResolveManifest(ctx, h.repo, manifest)
-	if err != nil {
-		problem(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error(), false)
-		return
-	}
-	provisioningID := domain.NewUUIDv7()
-	record, err := provisioning.NewTenantManifestRecord(provisioningID, manifest, resolved, "http-api")
-	if err != nil {
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "could not persist manifest", true)
-		return
-	}
-	now := time.Now().UTC()
-	op := provisioningdomain.TenantProvisioning{
-		ID: provisioningID, TenantID: tenantID,
-		IdempotencyKey: key, RequestHash: requestHash,
-		Status:              provisioningdomain.ProvisioningStatusPlan,
-		DesiredStateVersion: resolved.DesiredStateVersion,
-		StartedAt:           now, Version: 1,
-	}
-	if err := h.repo.CreateTenantProvisioningWithManifest(ctx, op, record); err != nil {
-		if errors.Is(err, repository.ErrTenantProvisioningAlreadyExists) {
-			// Lost a race against a concurrent identical request; the
-			// winner's row is what we must converge on.
-			existing, getErr := h.repo.GetTenantProvisioningByIdempotencyKey(ctx, tenantID, key)
-			if getErr != nil {
-				problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "provisioning could not be created", true)
-				return
-			}
-			if existing.RequestHash != requestHash {
-				problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "the idempotency key was used for a different request", false)
-				return
-			}
-			h.runAndRespond(w, r, existing.ID, http.StatusOK)
-			return
-		}
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "provisioning could not be created", true)
-		return
-	}
-	h.runAndRespond(w, r, op.ID, http.StatusAccepted)
-}
-
-// apply drives an existing run forward: Orchestrator.Run, never a single
-// hand-picked phase transition. Safe to call repeatedly (e.g. after an
-// operator resolves whatever a RECONCILE/READY block named).
-func (h provisioningHandler) apply(w http.ResponseWriter, r *http.Request) {
-	op, ok := h.loadOwned(w, r)
-	if !ok {
-		return
-	}
-	h.runAndRespond(w, r, op.ID, http.StatusOK)
 }
 
 // retry re-runs a FAILED operation (FAILED -> APPLY, then drives forward),
@@ -234,28 +131,6 @@ func (h provisioningHandler) cancel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, next)
 }
 
-func (h provisioningHandler) get(w http.ResponseWriter, r *http.Request) {
-	op, ok := h.loadOwned(w, r)
-	if !ok {
-		return
-	}
-	writeJSON(w, http.StatusOK, op)
-}
-
-func (h provisioningHandler) list(w http.ResponseWriter, r *http.Request) {
-	tenantID := chi.URLParam(r, "tenantID")
-	if !domain.ValidTenantID(tenantID) {
-		problem(w, r, http.StatusBadRequest, "INVALID_TENANT_ID", "tenant_id is invalid", false)
-		return
-	}
-	ops, err := h.repo.ListTenantProvisioningsForTenant(r.Context(), tenantID)
-	if err != nil {
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "provisioning runs could not be listed", true)
-		return
-	}
-	writeJSON(w, http.StatusOK, ops)
-}
-
 func (h provisioningHandler) readiness(w http.ResponseWriter, r *http.Request) {
 	op, ok := h.loadOwned(w, r)
 	if !ok {
@@ -287,6 +162,9 @@ func (h provisioningHandler) drift(w http.ResponseWriter, r *http.Request) {
 func (h provisioningHandler) loadOwned(w http.ResponseWriter, r *http.Request) (provisioningdomain.TenantProvisioning, bool) {
 	tenantID := chi.URLParam(r, "tenantID")
 	id := chi.URLParam(r, "provisioningID")
+	if row, err := repository.ProvisioningUUID(id); err == nil {
+		id = row
+	}
 	if !domain.ValidTenantID(tenantID) {
 		problem(w, r, http.StatusBadRequest, "INVALID_TENANT_ID", "tenant_id is invalid", false)
 		return provisioningdomain.TenantProvisioning{}, false
@@ -297,31 +175,6 @@ func (h provisioningHandler) loadOwned(w http.ResponseWriter, r *http.Request) (
 		return provisioningdomain.TenantProvisioning{}, false
 	}
 	return op, true
-}
-
-// runAndRespond rebuilds the pipeline for id and drives it forward one
-// step (Orchestrator.Run), returning the resulting state regardless of
-// whether it fully reached ACTIVE -- a blocked RECONCILE/READY result is
-// not itself an HTTP error, it is a legitimate, inspectable outcome (see
-// the readiness/drift endpoints for why it blocked).
-func (h provisioningHandler) runAndRespond(w http.ResponseWriter, r *http.Request, id string, successStatus int) {
-	op, err := h.repo.GetTenantProvisioning(r.Context(), id)
-	if err != nil {
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "provisioning run could not be read back", true)
-		return
-	}
-	pipeline, err := h.rebuildPipeline(r.Context(), op)
-	if err != nil {
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "could not rebuild provisioning pipeline", true)
-		return
-	}
-	final, err := pipeline.Run(r.Context(), id)
-	if err != nil && final.ID == "" {
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "provisioning run failed", true)
-		return
-	}
-	w.Header().Set("Location", "/v1/tenants/"+final.TenantID+"/provisioning/"+final.ID)
-	writeJSON(w, successStatus, final)
 }
 
 // rebuildPipeline rehydrates op's ResolvedManifest (persisted at create

@@ -261,12 +261,22 @@ const (
 // section 24). SubscriptionType, MarketScope, ProductRequirements and
 // IsolationStrategy come from the AdmissionDecision.
 type OnboardingDesiredState struct {
-	DisplayName         string           `json:"display_name"`
-	ResidencyRegion     string           `json:"residency_region"`
-	IsolationStrategy   string           `json:"isolation_strategy"`
-	SubscriptionType    SubscriptionType `json:"subscription_type"`
-	MarketScope         []string         `json:"market_scope"`
-	ProductRequirements []string         `json:"product_requirements"`
+	DisplayName       string           `json:"display_name"`
+	ResidencyRegion   string           `json:"residency_region"`
+	IsolationStrategy string           `json:"isolation_strategy"`
+	SubscriptionType  SubscriptionType `json:"subscription_type"`
+	MarketScope       []string         `json:"market_scope"`
+	// MarketParticipation declares, for each market of the scope exactly
+	// once, what the tenant will do there (ADR-BCP-011 section 6).
+	MarketParticipation []OnboardingMarketParticipation `json:"market_participation"`
+	ProductRequirements []string                        `json:"product_requirements"`
+}
+
+// OnboardingMarketParticipation is what a tenant will do in one admitted
+// market: one or more participation capabilities.
+type OnboardingMarketParticipation struct {
+	Market     string   `json:"market"`
+	Activities []string `json:"activities"`
 }
 
 // TenantOnboardingRequest is the governed handoff from an APPROVED
