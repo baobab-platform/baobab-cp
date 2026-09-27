@@ -1,7 +1,7 @@
 # ADR-BCP-009 — Capability-Centric Security, Isolation, Residency, Revocation and Failure Semantics
 
-**Status:** Accepted — Normative Platform Security Architecture, amended in part  
-**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`)  
+**Status:** Accepted — Normative Platform Security Architecture  
+**Gate 0:** Its threat model (assets, actors, trust boundaries, attack surfaces, abuse cases) stays required. BCP-TS-ONBOARDING-001 CR-001 centralises the discovery of existing objects, which a threat model is not; the Phase-0 inventory does not satisfy it.  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  
