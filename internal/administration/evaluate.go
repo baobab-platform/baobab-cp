@@ -27,6 +27,33 @@ type Resource struct {
 	ResourceID       string
 }
 
+// Anchors reports whether the resource names its anchor at level, so a
+// grant at that level can be judged to cover it or not. A caller that could
+// not resolve an anchor must not read a denial at that level as evidence.
+func (r Resource) Anchors(level ScopeLevel) bool {
+	switch level {
+	case LevelPlatform:
+		return true
+	case LevelPlatformAccount:
+		return r.PlatformAccountID != ""
+	case LevelCorporateGroup:
+		return r.CorporateGroupID != "" || len(r.CorporateGroupIDs) > 0
+	case LevelOrganisation:
+		return r.OrganisationID != ""
+	case LevelTenant:
+		return r.TenantID != ""
+	case LevelLegalEntity:
+		return r.LegalEntityID != ""
+	case LevelMarket:
+		return r.MarketID != ""
+	case LevelDigitalEstate:
+		return r.DigitalEstateID != ""
+	case LevelResource:
+		return r.ResourceType != "" && r.ResourceID != ""
+	}
+	return false
+}
+
 // Covers reports whether the scope reaches the resource. Each level matches
 // its own anchor only; a corporate group reaches its organisations only as
 // its mode states (sections 17-20).
