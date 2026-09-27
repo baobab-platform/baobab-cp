@@ -2,12 +2,12 @@
 
 The register of this repository's architecture decisions and normative specifications, with the status each one declares. `baobab-platform/shared` keeps its own register in `docs/adr/README.md`.
 
-An ADR marked *amended in part* or *refined* stays authoritative except where the document named in its `Amended By` or `Refined By` header decides otherwise. A *superseded* ADR is kept for history only.
+An ADR marked *amended in part* or *refined* stays authoritative except where the document named in its `Amended By` or `Refined By` header decides otherwise. A *superseded in part* ADR stands only where no later ADR decides otherwise; its note says which parts survive.
 
 | Document | Status |
 |---|---|
 | [ADR-0001: Use Go for the Baobab control-plane runtime](0001-go-control-plane-runtime.md) | Accepted |
-| [ADR-0003: Multi-Tenant, Production-Ready Control Plane Architecture](0003-multi-tenant-control-plane-architecture.md) | Superseded by ADR-BCP-001 to ADR-BCP-010 and ADR-BCP-018 |
+| [ADR-0003: Multi-Tenant, Production-Ready Control Plane Architecture](0003-multi-tenant-control-plane-architecture.md) | Superseded in part by ADR-BCP-001 to ADR-BCP-010 and ADR-BCP-018 |
 | [ADR-0004: Executable Tenant Context Resolution Policy](0004-context-resolution-policy.md) | Accepted |
 | [ADR-0006: Supplier Organisation Canonical Entity Registration](0006-supplier-organisation-canonical-entity.md) | Accepted |
 | [Baobab Control Plane — Parent Implementation Contract and Derived Artefacts](ADR-BCP-001-Baobab%20Control%20Plane%20%E2%80%94%20Parent%20Implementation%20Contract%20and%20Derived%20Artefacts.md) | Accepted — Normative Implementation Baseline, amended in part |

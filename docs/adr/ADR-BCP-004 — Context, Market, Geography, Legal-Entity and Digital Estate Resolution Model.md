@@ -3309,9 +3309,9 @@ If the answer belongs to different categories, the fields SHALL remain different
 
 # 126. Decision
 
-**ACCEPTED TARGET CONTEXT ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET CONTEXT ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. the existing CP context model SHALL be audited against this ADR;
 2. tenant/legal-entity conflation SHALL be removed;

@@ -3469,9 +3469,9 @@ cross-cutting the entire system.
 
 # 214. Decision
 
-**ACCEPTED TARGET SECURITY ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET SECURITY ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. Baobab SHALL operate deny-by-default.
 2. IAM, CP and domain authorization SHALL remain separate.

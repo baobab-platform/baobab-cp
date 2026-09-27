@@ -2677,9 +2677,9 @@ The Control Plane SHALL thereby become capable of supporting many Digital Estate
 
 # 106. Decision
 
-**ACCEPTED TARGET IMPLEMENTATION ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET IMPLEMENTATION ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. current capability/binding implementation SHALL be reconciled against this ADR;
 2. pre-production persistence SHALL be remodelled where necessary;

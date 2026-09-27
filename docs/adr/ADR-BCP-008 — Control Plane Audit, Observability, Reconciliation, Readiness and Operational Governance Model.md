@@ -3614,9 +3614,9 @@ Rejected.
 
 # 196. Operational Decision
 
-**ACCEPTED TARGET AUDIT, OBSERVABILITY, RECONCILIATION AND READINESS ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET AUDIT, OBSERVABILITY, RECONCILIATION AND READINESS ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. audit SHALL become first-class;
 2. readiness SHALL become a hierarchical platform model;

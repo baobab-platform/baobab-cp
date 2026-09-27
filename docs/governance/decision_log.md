@@ -8,19 +8,21 @@ source file, or ADR) it is drawn from; nothing here is asserted from prose alone
 
 ## 2026-09-27 — ADR status reconciliation (proposed)
 
-ADR-BCP-001 to ADR-BCP-010 and the Tenant Onboarding & Provisioning Technical Specification were still marked Proposed, although ADR-BCP-011 to ADR-BCP-024, Shared ADR-SHARED-008 to ADR-SHARED-015 and the implementation all treat them as normative. Each is classified from what later documents actually decide about it, not marked Accepted wholesale. ADR-0003 is superseded. Merging this entry is the acceptance.
+ADR-BCP-001 to ADR-BCP-010 and the Tenant Onboarding & Provisioning Technical Specification were still marked Proposed, although ADR-BCP-011 to ADR-BCP-024, Shared ADR-SHARED-008 to ADR-SHARED-015 and the implementation all treat them as normative. Each is classified from what later documents actually decide about it, not marked Accepted wholesale. ADR-0003 is superseded in part. Merging this entry is the acceptance.
 
 | Document | Status | Evidence |
 |---|---|---|
-| ADR-0003 | Superseded | Its tenancy hierarchy and tiered entitlements are replaced by ADR-BCP-002, -003, -005 and -018; its context endpoint by ADR-BCP-004 and -007; its contract location by Shared `control-plane/v1` |
+| ADR-0003 | Superseded in part | Its tenancy hierarchy and tiered entitlements are replaced by ADR-BCP-002, -003, -005 and -018; its context endpoint by ADR-BCP-004 and -007; its contract location by Shared `control-plane/v1` |
 | ADR-BCP-001 | Accepted, amended in part | Technical Specification CR-002 (`binding_mode`), CR-004 (migration-count erratum), CR-005 (bindings through providers); ADR-SHARED-008 supersedes its §96 `baobab.*` event naming |
 | ADR-BCP-002 | Accepted, amended in part | CR-001 replaces its Gate 0; CR-002 rules out `READ_ONLY` as a binding mode |
 | ADR-BCP-003 to ADR-BCP-008 | Accepted, amended in part | CR-001 replaces each one's Gate 0, a discovery audit, with the single Phase-0 classification (`docs/reconciliation/phase-0-architecture-inventory-and-lock.md`) |
-| ADR-BCP-009 | Accepted | Its Gate 0 is a threat model, not discovery, so CR-001 does not replace it; it stays required |
+| ADR-BCP-009 | Accepted | Its Gate 0 is a threat model, not discovery, so CR-001 does not replace it; it stays required unless a later ADR supersedes it (confirmed by the architecture owner) |
 | ADR-BCP-010 | Accepted | No later document amends it |
 | Technical Specification | Accepted, amended in part and refined | ADR-SHARED-008 supersedes CR-003 and §§47–48 (event types are `com.baobab-platform.*`); ADR-SHARED-015 refines §§21–27 and 42–44 |
 
 ADR-BCP-001 §96 and the Specification's §§47–48 carry a superseded marker. The Specification's own erratum named `com.nabhold.*`, which ADR-SHARED-008 has since replaced with `com.baobab-platform.*`, and its §§47–48 showed the superseded `baobab.*` names without one; both are corrected. `docs/adr/index.md` becomes the complete register: it listed 7 of 29 documents.
+
+ADR-BCP-002 to ADR-BCP-009 closed with "ACCEPTED TARGET … ARCHITECTURE, subject to formal approval. Upon approval: …"; with acceptance recorded, the qualifier is removed.
 
 Not changed by this entry: the implementation gaps the ADRs describe, for example ADR-BCP-006 health observation, ADR-BCP-020 AdministrativeGrant and ADR-BCP-023 evidence. An accepted ADR records the target; the gaps are tracked as work, not as reasons to leave the decision Proposed.
 

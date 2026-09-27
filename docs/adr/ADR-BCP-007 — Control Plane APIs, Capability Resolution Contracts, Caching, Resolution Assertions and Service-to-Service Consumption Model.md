@@ -3252,9 +3252,9 @@ be performed on this resource now?"
 
 # 165. Decision
 
-**ACCEPTED TARGET CONTROL-PLANE API AND CONSUMPTION ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET CONTROL-PLANE API AND CONSUMPTION ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. `baobab-cp` SHALL expose canonical context and capability-resolution APIs;
 2. Digital Estates SHALL consume capabilities rather than engine identities;

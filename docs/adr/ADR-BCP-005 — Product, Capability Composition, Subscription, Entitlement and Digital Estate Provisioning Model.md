@@ -3087,9 +3087,9 @@ Rejected.
 
 # 136. Decision
 
-**ACCEPTED TARGET PRODUCT AND PROVISIONING ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET PRODUCT AND PROVISIONING ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. product packaging SHALL be separated from engine topology;
 2. capability compositions SHALL define products and profiles;

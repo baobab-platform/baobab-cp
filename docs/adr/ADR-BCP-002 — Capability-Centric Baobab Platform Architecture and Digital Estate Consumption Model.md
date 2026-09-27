@@ -3140,9 +3140,9 @@ All future Control Plane development SHALL be judged against whether it moves Ba
 
 # 73. Decision
 
-**ACCEPTED TARGET ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. `ADR-BCP-002` SHALL become the architectural authority for capability-centric platform consumption.
 2. `ADR-BCP-001` SHALL remain authoritative where it does not conflict with this decision.
