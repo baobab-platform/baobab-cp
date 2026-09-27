@@ -3,9 +3,11 @@ package resolver
 import (
 	"context"
 	"errors"
+	"time"
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/health"
 )
 
 // ResolutionRequest is the combined request used by the full resolver pipeline.
@@ -43,6 +45,16 @@ type ResolutionRequest struct {
 	// scope_id. A candidate naming a governed scope that is absent here never
 	// applies.
 	MappingScopes map[string]domain.MappingScope
+	// HealthCriticality is the requested capability's declared health
+	// criticality; empty is STANDARD.
+	HealthCriticality health.Criticality
+	// Health holds each candidate binding's health, by binding ID. A binding
+	// absent here has no observation at any level, so its instance is
+	// UNKNOWN.
+	Health map[string]health.Levels
+	// Now is when health is judged: the time of this request, never the
+	// (reusable) context's ResolvedAt. Zero means time.Now.
+	Now time.Time
 }
 
 // ResolutionResult is the final output from the composed resolver pipeline.
@@ -53,6 +65,10 @@ type ResolutionResult struct {
 	Policy     PolicyDecision
 	Topology   EngineInstance
 	Trace      ResolutionTrace
+	// HealthValidUntil is when the health this decision relied on stops
+	// being current; a cached decision must not outlive it. Zero when no
+	// observation was held.
+	HealthValidUntil time.Time
 }
 
 // ResolutionPipeline composes the resolution stack into a single deterministic decision process.
@@ -124,13 +140,17 @@ func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (R
 		trace.GrantID = entitlementResult.GrantID
 	}
 
-	capabilityResult, err := CapabilityResolverImpl{}.Resolve(ctx, CapabilityResolutionQuery{
+	now := req.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	capabilityResult, err := ResolveHealthyCapability(ctx, CapabilityResolutionQuery{
 		CapabilityKey: req.CapabilityKey,
 		Context:       req.Context,
 		Bindings:      req.Bindings,
 		Scopes:        req.Scopes,
 		Capability:    req.Capability,
-	})
+	}, req.HealthCriticality, req.Health, now)
 	if err != nil {
 		return ResolutionResult{}, resolutionFailure(trace, err)
 	}
@@ -142,6 +162,9 @@ func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (R
 		SelectedEngineInstanceID: capabilityResult.EngineInstanceID,
 		EngineInstances:          req.EngineInstances,
 		At:                       req.Context.ResolvedAt,
+		HealthCriticality:        req.HealthCriticality,
+		Health:                   req.Health[capabilityResult.BindingID],
+		HealthAt:                 now,
 	})
 	if err != nil {
 		return ResolutionResult{}, resolutionFailure(trace, err)
@@ -168,5 +191,7 @@ func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (R
 		Policy:     policyResult,
 		Topology:   topologyResult,
 		Trace:      trace,
+
+		HealthValidUntil: HealthValidUntil(req.Health[capabilityResult.BindingID]),
 	}, nil
 }

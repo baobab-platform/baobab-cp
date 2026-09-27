@@ -13,6 +13,8 @@ import (
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/health"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/resolver"
 )
 
@@ -22,6 +24,17 @@ type CapabilityBindingStore interface {
 	ListBindings(ctx context.Context, capabilityKey string) ([]resolver.CapabilityBinding, error)
 	CreateBinding(ctx context.Context, binding resolver.CapabilityBinding) error
 	ListActiveInstances(ctx context.Context, engineID string) ([]resolver.EngineInstance, error)
+}
+
+// health is what the store holds for an engine instance and, when set, its
+// provider and the provider's capability. A store that holds no health
+// leaves every instance UNKNOWN, which a CRITICAL capability never accepts.
+func (p *CapabilityBindingProvisioner) health(ctx context.Context, instanceID, providerID, capabilityKey string) (health.Levels, error) {
+	reader, ok := p.store.(repository.HealthReader)
+	if !ok {
+		return health.Levels{}, nil
+	}
+	return reader.HealthLevels(ctx, instanceID, providerID, capabilityKey)
 }
 
 type DesiredCapabilityBinding struct {
@@ -100,11 +113,18 @@ func (p *CapabilityBindingProvisioner) Apply(ctx context.Context, desired Desire
 	if err != nil {
 		return resolver.CapabilityBinding{}, false, err
 	}
+	levels, err := p.health(ctx, desired.EngineInstanceID, "", desired.CapabilityKey)
+	if err != nil {
+		return resolver.CapabilityBinding{}, false, err
+	}
 	selected, err := (resolver.TopologyResolverImpl{}).Resolve(ctx, resolver.TopologyResolutionQuery{
 		Context:                  trusted,
 		SelectedEngineInstanceID: desired.EngineInstanceID,
 		EngineInstances:          instances,
 		At:                       effectiveAt(desired.EffectiveFrom, p.now()),
+		HealthCriticality:        capability.HealthCriticality,
+		Health:                   levels,
+		HealthAt:                 p.now(),
 	})
 	if err != nil {
 		return resolver.CapabilityBinding{}, false, fmt.Errorf("engine instance is not eligible: %w", err)
@@ -161,10 +181,16 @@ func (p *CapabilityBindingProvisioner) Resolve(
 		return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err
 	}
 
-	resolved, err := (resolver.CapabilityResolverImpl{}).Resolve(ctx, resolver.CapabilityResolutionQuery{
+	levels := make(map[string]health.Levels, len(bindings))
+	for _, b := range bindings {
+		if levels[b.ID], err = p.health(ctx, b.EngineInstanceID, b.ProviderID, capabilityKey); err != nil {
+			return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err
+		}
+	}
+	resolved, err := resolver.ResolveHealthyCapability(ctx, resolver.CapabilityResolutionQuery{
 		CapabilityKey: capabilityKey, Context: trusted, Bindings: bindings,
 		Scopes: scopes, At: p.now(), Capability: &capability,
-	})
+	}, capability.HealthCriticality, levels, p.now())
 	if err != nil {
 		return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err
 	}
@@ -176,6 +202,7 @@ func (p *CapabilityBindingProvisioner) Resolve(
 	instance, err := (resolver.TopologyResolverImpl{}).Resolve(ctx, resolver.TopologyResolutionQuery{
 		Context: trusted, SelectedEngineInstanceID: resolved.EngineInstanceID,
 		EngineInstances: instances, At: p.now(),
+		HealthCriticality: capability.HealthCriticality, Health: levels[resolved.BindingID],
 	})
 	if err != nil {
 		return resolver.ResolvedCapability{}, resolver.EngineInstance{}, err

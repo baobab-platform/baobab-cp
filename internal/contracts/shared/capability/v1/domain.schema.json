@@ -107,6 +107,22 @@
       "enum": ["UNKNOWN", "HEALTHY", "DEGRADED", "UNAVAILABLE"],
       "description": "Ephemeral operational health of a provider or engine instance, distinct from lifecycle. Health is never persisted as a substitute for lifecycle state."
     },
+    "capabilityHealthCriticality": {
+      "type": "string",
+      "enum": ["CRITICAL", "STANDARD"],
+      "description": "Which provider health a capability tolerates (ADR-BCP-006 SS22). A per-capability policy, independent of any composition's membership criticality. CRITICAL, e.g. payment authorisation: only HEALTHY is eligible. STANDARD: HEALTHY or UNKNOWN. See health-policy.yaml."
+    },
+    "healthObservationSource": {
+      "type": "string",
+      "enum": ["ACTIVE_PROBE", "PASSIVE_TELEMETRY", "ENGINE_REPORT", "OPERATOR"],
+      "description": "How a HealthObservation (health.schema.json) was obtained. ACTIVE_PROBE: the Control Plane called the subject's health endpoint. PASSIVE_TELEMETRY: derived from the subject's observed request outcomes. ENGINE_REPORT: the engine instance reported its own health under its workload identity. OPERATOR: an authenticated operator recorded it. A closed set, so it is safe as a bounded metric label."
+    },
+    "healthReasonCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$",
+      "maxLength": 64,
+      "description": "A code registered in the health_observation category of contracts/authorization/v1/reason-code-registry.yaml."
+    },
     "capabilityBindingId": {
       "type": "string",
       "pattern": "^bind_[a-z0-9]+$",

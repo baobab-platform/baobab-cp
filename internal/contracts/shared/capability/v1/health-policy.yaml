@@ -1,0 +1,67 @@
+# health-policy.yaml
+# How HealthObservations (health.schema.json) decide whether a binding's
+# provider and engine instance are eligible to serve a capability
+# (ADR-SHARED-007 §37.1, ADR-BCP-006 SS18-22, SS72-73). This is part of
+# step 1 of scope-specificity.yaml: a candidate that fails it is never
+# scored. Capability resolution, provider relocation and the provisioning
+# planner apply the same rule, because the planner's candidates come from
+# the same eligibility gate.
+
+policy_version: 1
+
+# A subject's effective health is the status of its newest current
+# observation: one with observed_at <= now < expires_at. When it has none,
+# because nothing was observed, the newest has expired, or it is dated in
+# the future (clock skew or a bad report), its health is UNKNOWN
+# (ADR-BCP-006 SS21). An expired or future-dated HEALTHY is not HEALTHY.
+effective_status:
+  expired_observation: UNKNOWN
+  missing_observation: UNKNOWN
+  future_observation: UNKNOWN
+
+# Two observations of one subject made at the same observed_at (say, a
+# probe and an operator report) are ordered by status, most severe first:
+# the more severe is the newest. Every replica therefore derives the same
+# effective status, and a tie never resolves toward health.
+equal_time_precedence:
+  - UNAVAILABLE
+  - UNKNOWN
+  - DEGRADED
+  - HEALTHY
+
+# The three levels of ADR-BCP-006 SS73 are checked separately, never
+# collapsed into one status. The engine instance level is always
+# checked. The provider and provider-capability levels are checked when
+# the Control Plane holds an observation for them. Every checked level's
+# effective status must be eligible.
+levels:
+  - level: ENGINE_INSTANCE
+    subject: [engine_instance_id]
+    always_checked: true
+  - level: PROVIDER
+    subject: [provider_id]
+    always_checked: false
+  - level: PROVIDER_CAPABILITY
+    subject: [provider_id, capability_key]
+    always_checked: false
+
+# Eligible effective statuses by the capability's health_criticality
+# (capability.schema.json; absent means STANDARD). UNKNOWN is never
+# eligible for a CRITICAL capability: absence of evidence is not evidence
+# of health. UNAVAILABLE is never eligible.
+eligible_statuses:
+  CRITICAL:
+    - HEALTHY
+  STANDARD:
+    - HEALTHY
+    - UNKNOWN
+
+# Codes the Control Plane returns when this policy excludes every
+# candidate, by the ineligible effective status. All are registered in
+# contracts/authorization/v1/reason-code-registry.yaml.
+denial_reason_codes:
+  resolution:
+    UNKNOWN: PROVIDER_HEALTH_UNKNOWN
+    DEGRADED: PROVIDER_UNAVAILABLE
+    UNAVAILABLE: PROVIDER_UNAVAILABLE
+  provisioning: NO_HEALTHY_PROVIDER

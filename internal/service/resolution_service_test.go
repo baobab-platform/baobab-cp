@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/health"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/resolver"
 )
@@ -257,5 +259,64 @@ func TestResolutionServiceEvaluatesGovernedScopesAndTenant(t *testing.T) {
 	// inapplicable, never unscoped.
 	if got := resolve(base, "market-ke"); got != "map_default" {
 		t.Fatalf("an unloaded scope must not apply, got %s", got)
+	}
+}
+
+// healthRepository serves health observations alongside the in-memory
+// repository, as the Postgres repository does.
+type healthRepository struct {
+	*repository.Repository
+	levels health.Levels
+	err    error
+}
+
+func (h healthRepository) HealthLevels(context.Context, string, string, string) (health.Levels, error) {
+	return h.levels, h.err
+}
+
+type failingRegistry struct {
+	repository.CapabilityRegistryRepository
+}
+
+func (failingRegistry) GetCapability(context.Context, string) (capabilitydomain.Capability, error) {
+	return capabilitydomain.Capability{}, errors.New("registry unavailable")
+}
+
+// TestResolutionServiceGatesOnHealth: health gates every resolution, with
+// or without EnforceEntitlement, and a CRITICAL capability is never served
+// by an instance with no current observation (ADR-BCP-006 sections 21-22).
+func TestResolutionServiceGatesOnHealth(t *testing.T) {
+	now := time.Now().UTC()
+	healthy := health.Levels{EngineInstance: &health.Observation{Subject: health.Subject{EngineInstanceID: "instance-1"},
+		Status: health.StatusHealthy, ObservedAt: now.Add(-time.Second), ExpiresAt: now.Add(time.Minute), Source: health.SourceActiveProbe}}
+	critical := func() *repository.Repository {
+		repo := repositoryBackedFixture()
+		repo.Capabilities["commerce.order.create"] = capabilitydomain.Capability{Key: "commerce.order.create", Name: "Order creation", DomainKey: "commerce",
+			Lifecycle: capabilitydomain.CapabilityLifecycleActive, Maturity: capabilitydomain.CapabilityMaturitySupported, HealthCriticality: health.CriticalityCritical}
+		return repo
+	}
+	resolve := func(s ResolutionService) error {
+		s.Pipeline = resolver.ResolutionPipeline{}
+		_, err := s.Resolve(context.Background(), resolveTenant123())
+		return err
+	}
+
+	err := resolve(ResolutionService{Repository: critical()})
+	var ineligible *health.IneligibleError
+	if !errors.As(err, &ineligible) || ineligible.Decision.ReasonCode != "PROVIDER_HEALTH_UNKNOWN" {
+		t.Fatalf("critical capability with no health observation: got %v", err)
+	}
+	if err := resolve(ResolutionService{Repository: healthRepository{Repository: critical(), levels: healthy}}); err != nil {
+		t.Fatalf("critical capability on a healthy instance: %v", err)
+	}
+	if err := resolve(ResolutionService{Repository: repositoryBackedFixture()}); err != nil {
+		t.Fatalf("an unregistered capability is STANDARD and accepts UNKNOWN health: %v", err)
+	}
+	if err := resolve(ResolutionService{Repository: healthRepository{Repository: critical(), err: errors.New("health store unavailable")}}); err == nil {
+		t.Fatal("a health read failure must fail resolution closed")
+	}
+	if err := resolve(ResolutionService{Repository: healthRepository{Repository: repositoryBackedFixture(), levels: healthy},
+		CapabilityRegistry: failingRegistry{}}); err == nil {
+		t.Fatal("a criticality read failure must fail resolution closed, not fall back to STANDARD")
 	}
 }

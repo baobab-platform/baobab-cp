@@ -723,6 +723,18 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Health gates eligibility (ADR-BCP-006 sections 18-22 and 72-73, Shared
+  `capability/v1` `health.schema.json` and `health-policy.yaml`).
+  - Health is a time-bounded observation. A missing, expired or
+    future-dated observation is UNKNOWN.
+  - A capability declares `health_criticality`: `CRITICAL` accepts only
+    HEALTHY; `STANDARD` (the default) accepts HEALTHY or UNKNOWN.
+  - Capability resolution, engine relocation, binding provisioning and the
+    provisioning planner all decide through `internal/health`. A plan with
+    no health-eligible candidate is blocked with `NO_HEALTHY_PROVIDER`.
+  - Migration 000066 adds `capability.health_criticality` and
+    `topology.health_observation`, and drops the unused
+    `topology.engine_instance.health_status`.
 - Executable `POST /v1/context/resolve` with workload OIDC, authoritative
   lifecycle/entitlement checks, 15-second bounded success caching and
   fail-closed behaviour.

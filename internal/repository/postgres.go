@@ -958,7 +958,8 @@ func (r *PostgresRepository) ListBindings(ctx context.Context, capabilityKey str
 			cb.priority,
 			UPPER(cb.status),
 			cb.contract_version,
-			cb.scope_id::text
+			cb.scope_id::text,
+			COALESCE(cb.provider_id::text, '')
 		FROM capability.capability_binding cb
 		JOIN capability.capability cap ON cap.capability_id = cb.capability_id
 		JOIN topology.engine_instance ei ON ei.engine_instance_id = cb.engine_instance_id
@@ -983,6 +984,7 @@ func (r *PostgresRepository) ListBindings(ctx context.Context, capabilityKey str
 			&b.Status,
 			&b.ContractVersion,
 			&b.ScopeID,
+			&b.ProviderID,
 		); err != nil {
 			return nil, err
 		}
@@ -2062,9 +2064,12 @@ func (r *PostgresRepository) GetCapability(ctx context.Context, capabilityKey st
 	var c capabilitydomain.Capability
 	var lifecycle, maturity string
 	err := r.pool.QueryRow(ctx, `
-		SELECT capability_id::text, code, name, COALESCE(description, ''), COALESCE(domain_key, ''), UPPER(status), UPPER(maturity)
+		SELECT capability_id::text, code, name, COALESCE(description, ''), COALESCE(domain_key, ''), UPPER(status), UPPER(maturity), health_criticality
 		FROM capability.capability WHERE code = $1`, capabilityKey).
-		Scan(&c.ID, &c.Key, &c.Name, &c.Description, &c.DomainKey, &lifecycle, &maturity)
+		Scan(&c.ID, &c.Key, &c.Name, &c.Description, &c.DomainKey, &lifecycle, &maturity, &c.HealthCriticality)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return capabilitydomain.Capability{}, fmt.Errorf("get capability %s: %w: %w", capabilityKey, ErrCapabilityNotFound, err)
+	}
 	if err != nil {
 		return capabilitydomain.Capability{}, fmt.Errorf("get capability %s: %w", capabilityKey, err)
 	}
@@ -2084,10 +2089,10 @@ func (r *PostgresRepository) CreateCapability(ctx context.Context, capability ca
 		return fmt.Errorf("validate capability: %w", err)
 	}
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO capability.capability(capability_id, code, name, description, domain_key, status, maturity)
-		VALUES ($1::uuid, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7)`,
+		INSERT INTO capability.capability(capability_id, code, name, description, domain_key, status, maturity, health_criticality)
+		VALUES ($1::uuid, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7, $8)`,
 		capability.ID, capability.Key, capability.Name, capability.Description, capability.DomainKey,
-		string(capability.Lifecycle), string(capability.Maturity))
+		string(capability.Lifecycle), string(capability.Maturity), string(capability.HealthCriticality.OrDefault()))
 	return err
 }
 

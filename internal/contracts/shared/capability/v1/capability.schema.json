@@ -33,6 +33,11 @@
           "items": { "$ref": "#/$defs/capabilityDependency" },
           "default": []
         },
+        "health_criticality": {
+          "$ref": "domain.schema.json#/$defs/capabilityHealthCriticality",
+          "default": "STANDARD",
+          "description": "Which provider health this capability tolerates (ADR-BCP-006 SS22, health-policy.yaml). Absent means STANDARD."
+        },
         "data_classification": {
           "type": "string",
           "enum": ["PUBLIC", "INTERNAL", "TENANT_CONFIDENTIAL", "RESTRICTED"],

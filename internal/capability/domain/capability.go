@@ -18,6 +18,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/baobab-platform/baobab-cp/internal/health"
 )
 
 var capabilityKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$`)
@@ -81,7 +83,11 @@ type Capability struct {
 	DomainKey   string              `json:"domain"`
 	Lifecycle   CapabilityLifecycle `json:"lifecycle"`
 	Maturity    CapabilityMaturity  `json:"maturity"`
-	Version     int64               `json:"version,omitempty"`
+	// HealthCriticality is the health this capability tolerates
+	// (ADR-BCP-006 section 22, capability/v1 health_criticality). Empty
+	// is STANDARD.
+	HealthCriticality health.Criticality `json:"health_criticality,omitempty"`
+	Version           int64              `json:"version,omitempty"`
 }
 
 func (c Capability) Validate() error {
@@ -96,6 +102,9 @@ func (c Capability) Validate() error {
 	}
 	if !c.Maturity.Valid() {
 		return errors.New("maturity must be one of EXPERIMENTAL, PREVIEW, SUPPORTED, DEPRECATED, RETIRED")
+	}
+	if !c.HealthCriticality.Valid() {
+		return errors.New("health_criticality must be CRITICAL or STANDARD")
 	}
 	return nil
 }

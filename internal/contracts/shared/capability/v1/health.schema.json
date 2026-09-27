@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/capability/v1/health.schema.json",
+  "title": "HealthObservation",
+  "description": "One time-bounded observation of an engine instance's, a provider's or a provider capability's operational health (ADR-SHARED-007 §37, ADR-BCP-006 SS18-22, SS72-73). Health is an observation, not a fact: it is valid only from observed_at until expires_at. A consumer that holds no observation, or only an expired one, treats the subject's health as UNKNOWN. How UNKNOWN affects eligibility is health-policy.yaml's rule. Health stays separate from provider lifecycle.",
+  "$defs": {
+    "healthObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "status", "observed_at", "expires_at", "source", "reasons"],
+      "properties": {
+        "subject": { "$ref": "#/$defs/healthSubject" },
+        "status": { "$ref": "domain.schema.json#/$defs/providerHealthStatus" },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the observation was made, not when it was recorded. An observation dated after now is not yet current, and counts as UNKNOWN."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "After this instant the observation says nothing, and the subject's health is UNKNOWN until a newer one arrives. Must be later than observed_at."
+        },
+        "source": { "$ref": "domain.schema.json#/$defs/healthObservationSource" },
+        "reasons": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "domain.schema.json#/$defs/healthReasonCode" },
+          "description": "Registered codes explaining the status. Empty only for HEALTHY."
+        }
+      },
+      "if": {
+        "properties": { "status": { "const": "HEALTHY" } }
+      },
+      "else": {
+        "properties": { "reasons": { "minItems": 1 } }
+      }
+    },
+    "healthSubject": {
+      "description": "What was observed, at one of the three levels ADR-BCP-006 SS73 keeps apart: an engine instance, a provider, or one capability on a provider (SS72). A level is never inferred from another.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engine_instance_id"],
+          "properties": {
+            "engine_instance_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider_id"],
+          "properties": {
+            "provider_id": { "$ref": "domain.schema.json#/$defs/capabilityProviderId" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider_id", "capability_key"],
+          "properties": {
+            "provider_id": { "$ref": "domain.schema.json#/$defs/capabilityProviderId" },
+            "capability_key": { "$ref": "domain.schema.json#/$defs/capabilityKey" }
+          }
+        }
+      ]
+    }
+  }
+}

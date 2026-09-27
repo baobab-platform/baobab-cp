@@ -42,7 +42,7 @@ func TestBindingApplyValidatesExactEngineInstance(t *testing.T) {
 		scope:      capabilitydomain.CapabilityScope{ScopeID: "scope", TenantID: "tn_zuri"},
 		instances: []resolver.EngineInstance{{
 			ID: "instance", EngineID: "engine", Status: "ACTIVE",
-			HealthStatus: "HEALTHY", Environment: "production", Region: "africa-south1",
+			Environment: "production", Region: "africa-south1",
 		}},
 	}
 	p := NewCapabilityBindingProvisioner(f)

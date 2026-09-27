@@ -30,6 +30,9 @@ type CapabilityRepository interface {
 // registry itself (ADR-BCP-003 §4, "Capability Registry") -- distinct from
 // CapabilityRepository above, which reads CapabilityBinding/EngineInstance
 // routing data, not the capability aggregate's own identity and lifecycle.
+// ErrCapabilityNotFound: no capability is registered under the key.
+var ErrCapabilityNotFound = errors.New("capability not found")
+
 type CapabilityRegistryRepository interface {
 	GetCapability(ctx context.Context, capabilityKey string) (capabilitydomain.Capability, error)
 	ListCapabilityDependencies(ctx context.Context, capabilityKey string) ([]capabilitydomain.CapabilityDependency, error)
@@ -1225,7 +1228,7 @@ func (r *Repository) GetCapability(_ context.Context, capabilityKey string) (cap
 	}
 	capability, ok := r.Capabilities[capabilityKey]
 	if !ok {
-		return capabilitydomain.Capability{}, fmt.Errorf("capability %s not found", capabilityKey)
+		return capabilitydomain.Capability{}, fmt.Errorf("capability %s: %w", capabilityKey, ErrCapabilityNotFound)
 	}
 	return capability, nil
 }
