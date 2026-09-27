@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.10.0
+  version: 1.11.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -41,6 +41,8 @@ tags:
     description: Privileged, read-only diagnostics (ADR-BCP-022 section 47).
   - name: Provisioning
     description: Tenant provisioning as desired-state convergence - plan, approve, apply, readiness and drift (ADR-SHARED-015).
+  - name: Topology
+    description: Provider migration - discovery, planning and the migration aggregate (ADR-BCP-006 sections 44-58, 119-122).
   - name: Operations
     description: Durable long-running operations and their retry and cancellation (ADR-BCP-022 sections 54-67).
   - name: Administration
@@ -3038,6 +3040,154 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /provider-migrations/plan:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: previewProviderMigration
+      summary: Discover and plan a provider migration without creating it
+      description: >-
+        The administrative preview of ADR-BCP-006 section 122: discovers the
+        bindings, tenants, estates and markets the migration touches from
+        authoritative state (section 46), assigns them to the request's
+        cohorts, checks every precondition of section 48 and returns the
+        plan with its blockers and warnings. Side-effect free: nothing is
+        created, bound or recorded, and the preview has no
+        provider_migration_id. An unknown source or target provider is a
+        blocker in the plan, not an error.
+      security:
+        - adminOidc: [topology:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./provider-migration.schema.json#/$defs/ProviderMigrationRequest
+      responses:
+        "200":
+          description: The previewed plan
+          content:
+            application/json:
+              schema:
+                $ref: ./provider-migration.schema.json#/$defs/ProviderMigrationPlan
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /provider-migrations:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: createProviderMigration
+      summary: Create a provider migration in PLAN with its first plan
+      description: >-
+        Records the migration and its immutable plan (ADR-BCP-006 sections
+        47, 119-120). Planning is side-effect free: no binding is created or
+        moved until an approved plan is advanced (ADR-BCP-021). A plan with
+        blockers is recorded and the migration is blocked. Replaying the same
+        Idempotency-Key returns the same migration.
+      security:
+        - adminOidc: [topology:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./provider-migration.schema.json#/$defs/ProviderMigrationRequest
+      responses:
+        "201":
+          description: Created in PLAN; blocked when its plan has blockers.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ./provider-migration.schema.json#/$defs/ProviderMigration
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /provider-migrations/{provider_migration_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProviderMigrationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Topology]
+      operationId: getProviderMigration
+      summary: Read a provider migration's stage and progress
+      security:
+        - adminOidc: [topology:read]
+      responses:
+        "200":
+          description: The migration
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ./provider-migration.schema.json#/$defs/ProviderMigration
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /provider-migrations/{provider_migration_id}/plan:
+    parameters:
+      - $ref: "#/components/parameters/ProviderMigrationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Topology]
+      operationId: getProviderMigrationPlan
+      summary: Read the migration's current immutable plan
+      description: >-
+        The plan a reviewer approves: discovery, cohorts, canonical steps,
+        blockers, warnings, impact, risk class and digest. The ETag is the
+        plan digest.
+      security:
+        - adminOidc: [topology:read]
+      responses:
+        "200":
+          description: The current plan
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ./provider-migration.schema.json#/$defs/ProviderMigrationPlan
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /admin/effective-authority:
     parameters:
       - $ref: "#/components/parameters/CorrelationId"
@@ -3254,6 +3404,12 @@ components:
       required: true
       schema:
         $ref: ./domain.schema.json#/$defs/tenantProvisioningId
+    ProviderMigrationId:
+      name: provider_migration_id
+      in: path
+      required: true
+      schema:
+        $ref: ./domain.schema.json#/$defs/providerMigrationId
     OperationId:
       name: operation_id
       in: path

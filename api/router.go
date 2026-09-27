@@ -13,6 +13,7 @@ import (
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/health"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/service"
@@ -116,6 +117,9 @@ type Dependencies struct {
 	// Operations backs the durable operation routes (ADR-BCP-022 sections
 	// 54-67). Nil disables them.
 	Operations repository.OperationRepository
+	// ProviderMigrations backs the /v1/provider-migrations routes
+	// (ADR-BCP-006 Gate 8). Nil disables them.
+	ProviderMigrations repository.ProviderMigrationRepository
 	// AdministrativeGrants backs GET /v1/admin/effective-authority
 	// (ADR-BCP-020): the caller's own administrative grants.
 	AdministrativeGrants repository.AdministrativeGrantReader
@@ -254,6 +258,15 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates", cp.listCandidates)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates/{candidateID}", cp.getCandidate)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/organisation-resolution-candidates/{candidateID}/decision", cp.decide)
+	}
+	if dependencies.ProviderMigrations != nil {
+		// ADR-BCP-006 Gate 8: planning a provider migration binds nothing;
+		// platform administrators only.
+		migrations := providerMigrationHandler{repo: dependencies.ProviderMigrations, identities: a.identities, policy: health.MustDefaultPolicy()}
+		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Post("/v1/provider-migrations/plan", migrations.preview)
+		r.With(a.authorize(a.adminVerifier, "human", "topology:write"), a.requireAdminRole(nil, true)).Post("/v1/provider-migrations", migrations.create)
+		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/provider-migrations/{providerMigrationID}", migrations.get)
+		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/provider-migrations/{providerMigrationID}/plan", migrations.plan)
 	}
 	if dependencies.PlatformAccounts != nil {
 		// ADR-BCP-018 ORG-07: the account lifecycle is canonical registry

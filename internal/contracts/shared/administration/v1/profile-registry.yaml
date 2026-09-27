@@ -39,6 +39,8 @@ profiles:
       - reconciliation.request
       - operation.view
       - operation.control
+      - topology.view
+      - provider-migration.plan
       - audit.view
       - changeset.submit
       - changeset.review
@@ -127,6 +129,7 @@ profiles:
       - readiness.view
       - operation.view
       - tenant.view
+      - topology.view
   - key: platform-auditor
     name: Platform Auditor
     scope_level: PLATFORM
