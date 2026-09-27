@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,8 +31,12 @@ func TestEffectiveAuthorityReportsOnlyTheCallersUsableGrants(t *testing.T) {
 	ctx := context.Background()
 	identities := repository.NewInMemoryRepository()
 	ids := map[string]string{}
-	for _, subject := range []string{"jane", "bob", "nogrants"} {
-		p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "human", Status: "ACTIVE"}
+	for _, subject := range []string{"jane", "bob", "nogrants", "suspended"} {
+		status := "ACTIVE"
+		if subject == "suspended" {
+			status = "SUSPENDED"
+		}
+		p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "human", Status: status}
 		mustNoError(t, identities.CreateIdentity(ctx, p))
 		mustNoError(t, identities.LinkExternalIdentity(ctx, domain.ExternalIdentity{ID: domain.NewExternalIdentityID(),
 			PrincipalID: p.ID, Issuer: testRealm, Subject: subject, Status: "ACTIVE"}))
@@ -47,7 +52,8 @@ func TestEffectiveAuthorityReportsOnlyTheCallersUsableGrants(t *testing.T) {
 	grants := grantsFake{
 		ids["jane"]: {grant("agr_janeview", ids["jane"], "tenant.view", administration.StatusActive),
 			grant("agr_janesusp", ids["jane"], "market.view", administration.StatusSuspended)},
-		ids["bob"]: {grant("agr_bobview1", ids["bob"], "tenant.view", administration.StatusActive)},
+		ids["bob"]:       {grant("agr_bobview1", ids["bob"], "tenant.view", administration.StatusActive)},
+		ids["suspended"]: {grant("agr_suspview", ids["suspended"], "tenant.view", administration.StatusActive)},
 	}
 	principal := func(subject string, scopes ...string) auth.Principal {
 		p := auth.Principal{Subject: subject, Issuer: testRealm, ActorType: "human", TokenID: "t-" + subject,
@@ -60,6 +66,7 @@ func TestEffectiveAuthorityReportsOnlyTheCallersUsableGrants(t *testing.T) {
 	handler := New(Dependencies{Store: &fakeStore{}, AdminVerifier: tokenVerifier{
 		"jane": principal("jane", "authority:self"), "nogrants": principal("nogrants", "authority:self"),
 		"unregistered": principal("stranger", "authority:self"), "noscope": principal("jane"),
+		"suspended": principal("suspended", "authority:self"),
 	}, Identities: identities, AdministrativeGrants: grants})
 	get := func(token string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodGet, "/v1/admin/effective-authority", nil)
@@ -93,6 +100,10 @@ func TestEffectiveAuthorityReportsOnlyTheCallersUsableGrants(t *testing.T) {
 	}
 	if response := get("unregistered"); response.Code != http.StatusForbidden {
 		t.Fatalf("an unregistered caller: %d %s", response.Code, response.Body.String())
+	}
+	// An inactive principal is refused, not shown grants it cannot use.
+	if response := get("suspended"); response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "PRINCIPAL_INACTIVE") {
+		t.Fatalf("a suspended principal: %d %s", response.Code, response.Body.String())
 	}
 	if response := get("noscope"); response.Code != http.StatusForbidden {
 		t.Fatalf("a caller without authority:self: %d", response.Code)

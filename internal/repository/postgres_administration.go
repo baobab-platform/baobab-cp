@@ -24,10 +24,19 @@ type AdministrativeGrantReader interface {
 
 var _ AdministrativeGrantReader = (*PostgresRepository)(nil)
 
-// CreateAdministrativeGrant records a grant with its audit event. The grant
-// must satisfy the catalogue (administration.Grant.Validate); a delegation
-// must name an existing grant held by its grantor.
+// CreateAdministrativeGrant records one grant with its audit event; see
+// CreateAdministrativeGrants.
 func (r *PostgresRepository) CreateAdministrativeGrant(ctx context.Context, g administration.Grant, actor AuditActor) error {
+	return r.CreateAdministrativeGrants(ctx, []administration.Grant{g}, actor)
+}
+
+// CreateAdministrativeGrants records grants and their audit events in one
+// transaction: all of them or none, so a profile never lands half-granted.
+// Each grant must satisfy the catalogue (administration.Grant.Validate); a
+// delegation must name an existing grant held by its grantor; and a
+// BOOTSTRAP grant is refused while its principal still holds a live one for
+// the same permission, so re-running a bootstrap never duplicates authority.
+func (r *PostgresRepository) CreateAdministrativeGrants(ctx context.Context, grants []administration.Grant, actor AuditActor) error {
 	if r == nil || r.pool == nil {
 		return errors.New("repository is not initialized")
 	}
@@ -38,8 +47,22 @@ func (r *PostgresRepository) CreateAdministrativeGrant(ctx context.Context, g ad
 	if err != nil {
 		return err
 	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	for _, g := range grants {
+		if err := insertGrant(ctx, tx, catalogue, g, actor); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func insertGrant(ctx context.Context, tx pgx.Tx, catalogue *administration.Catalogue, g administration.Grant, actor AuditActor) error {
 	if err := g.Validate(catalogue); err != nil {
-		return fmt.Errorf("validate administrative grant: %w", err)
+		return fmt.Errorf("validate administrative grant %s: %w", g.Permission, err)
 	}
 	rowID, err := domain.ParseResourceID(grantIDPrefix, g.GrantID)
 	if err != nil {
@@ -51,7 +74,26 @@ func (r *PostgresRepository) CreateAdministrativeGrant(ctx context.Context, g ad
 		if err != nil {
 			return err
 		}
+		var holder string
+		err = tx.QueryRow(ctx, `SELECT principal_id FROM policy.administrative_grant WHERE grant_id = $1::uuid`, source).Scan(&holder)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && holder != g.GrantedBy) {
+			return errors.New("a delegation names a grant its grantor holds")
+		}
+		if err != nil {
+			return err
+		}
 		delegatedFrom = source
+	}
+	if g.Source == administration.SourceBootstrap {
+		var live bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM policy.administrative_grant
+			WHERE principal_id = $1 AND permission = $2 AND source = 'BOOTSTRAP' AND status IN ('PENDING', 'ACTIVE', 'SUSPENDED')
+				AND valid_until > now())`, g.PrincipalID, g.Permission).Scan(&live); err != nil {
+			return err
+		}
+		if live {
+			return fmt.Errorf("%s already holds live bootstrap authority for %s", g.PrincipalID, g.Permission)
+		}
 	}
 	scope, err := json.Marshal(g.Scope)
 	if err != nil {
@@ -64,21 +106,6 @@ func (r *PostgresRepository) CreateAdministrativeGrant(ctx context.Context, g ad
 			return err
 		}
 		conditions = raw
-	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-	if delegatedFrom != nil {
-		var holder string
-		err := tx.QueryRow(ctx, `SELECT principal_id FROM policy.administrative_grant WHERE grant_id = $1::uuid`, delegatedFrom).Scan(&holder)
-		if errors.Is(err, pgx.ErrNoRows) || (err == nil && holder != g.GrantedBy) {
-			return errors.New("a delegation names a grant its grantor holds")
-		}
-		if err != nil {
-			return err
-		}
 	}
 	created := g.CreatedAt
 	if created.IsZero() {
@@ -96,10 +123,7 @@ func (r *PostgresRepository) CreateAdministrativeGrant(ctx context.Context, g ad
 	}
 	payload := map[string]any{"grant_id": g.GrantID, "principal_id": g.PrincipalID, "permission": g.Permission,
 		"scope": g.Scope, "grant_type": g.GrantType, "source": g.Source, "risk_class": g.RiskClass, "status": g.Status}
-	if err := insertProvisioningAudit(ctx, tx, actor, g.Scope.TenantID, "administrative_grant.created", g.GrantID, payload); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return insertProvisioningAudit(ctx, tx, actor, g.Scope.TenantID, "administrative_grant.created", g.GrantID, payload)
 }
 
 const grantColumns = `g.grant_id::text, g.principal_id, g.permission, g.scope, g.conditions, g.grant_type, g.source,

@@ -43,7 +43,7 @@ func (p *permissionList) Set(v string) error { *p = append(*p, v); return nil }
 // store is what the command needs from the repository.
 type store interface {
 	GetPrincipal(ctx context.Context, principalID string) (domain.Principal, error)
-	CreateAdministrativeGrant(ctx context.Context, g administration.Grant, actor repository.AuditActor) error
+	CreateAdministrativeGrants(ctx context.Context, grants []administration.Grant, actor repository.AuditActor) error
 }
 
 type request struct {
@@ -110,15 +110,18 @@ func run(ctx context.Context, s store, c *administration.Catalogue, q request, c
 		return nil, err
 	}
 	for _, id := range []string{q.Principal, q.Operator} {
-		if _, err := s.GetPrincipal(ctx, id); err != nil {
+		p, err := s.GetPrincipal(ctx, id)
+		if err != nil {
 			return nil, fmt.Errorf("principal %s is not a registered Control Plane principal: %w", id, err)
 		}
-	}
-	actor := repository.AuditActor{ActorID: q.Operator, ActorType: "human", CorrelationID: correlationID}
-	for _, g := range grants {
-		if err := s.CreateAdministrativeGrant(ctx, g, actor); err != nil {
-			return nil, fmt.Errorf("%s: %w", g.Permission, err)
+		if p.Status != "ACTIVE" {
+			return nil, fmt.Errorf("principal %s is %s, not ACTIVE", id, p.Status)
 		}
+	}
+	// All of a profile's grants land together or not at all.
+	actor := repository.AuditActor{ActorID: q.Operator, ActorType: "human", CorrelationID: correlationID}
+	if err := s.CreateAdministrativeGrants(ctx, grants, actor); err != nil {
+		return nil, err
 	}
 	return grants, nil
 }

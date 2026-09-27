@@ -81,6 +81,32 @@ func TestAdministrativeGrantStore(t *testing.T) {
 		t.Fatal("a self-grant was recorded")
 	}
 
+	// A batch lands whole or not at all: one invalid grant rolls back the rest.
+	valid := source
+	valid.GrantID, valid.Permission, valid.ProfileKey = domain.NewResourceID("agr"), "market.view", "tenant-administrator"
+	invalid := valid
+	invalid.GrantID, invalid.GrantedBy = domain.NewResourceID("agr"), jane
+	if err := repo.CreateAdministrativeGrants(ctx, []administration.Grant{valid, invalid}, actor); err == nil {
+		t.Fatal("a batch with an invalid grant was recorded")
+	}
+	var landed int
+	if err := admin.QueryRow(ctx, `SELECT count(*) FROM policy.administrative_grant WHERE principal_id = $1 AND permission = 'market.view'`, jane).Scan(&landed); err != nil || landed != 0 {
+		t.Fatalf("a failed batch left %d grants behind (%v)", landed, err)
+	}
+	// Re-running a bootstrap never duplicates live bootstrap authority.
+	boot := administration.Grant{GrantID: domain.NewResourceID("agr"), PrincipalID: jane, Permission: "tenant.view",
+		Scope: administration.Scope{Level: administration.LevelPlatform}, GrantType: administration.TypeTimeBound,
+		Source: administration.SourceBootstrap, RiskClass: administration.RiskLow, ValidFrom: now, ValidUntil: &until,
+		Status: administration.StatusActive, GrantedBy: "cp-bootstrap-procedure", Reason: "Initial authority", Version: 1}
+	if err := repo.CreateAdministrativeGrants(ctx, []administration.Grant{boot}, actor); err != nil {
+		t.Fatal(err)
+	}
+	again := boot
+	again.GrantID = domain.NewResourceID("agr")
+	if err := repo.CreateAdministrativeGrants(ctx, []administration.Grant{again}, actor); err == nil {
+		t.Fatal("a second live bootstrap grant for the same permission was recorded")
+	}
+
 	grants, sources, err := repo.AdministrativeGrantsOf(ctx, carol)
 	if err != nil || len(grants) != 1 {
 		t.Fatalf("carol's grants: %+v %v", grants, err)

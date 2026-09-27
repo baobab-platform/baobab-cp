@@ -72,10 +72,11 @@ func TestGrantValidation(t *testing.T) {
 		"standing bootstrap": func(g *Grant) {
 			g.Source, g.Scope, g.Permission, g.RiskClass = SourceBootstrap, Scope{Level: LevelPlatform}, "administrator.grant", RiskHigh
 		},
-		"revoked without who":    func(g *Grant) { g.Status = StatusRevoked },
-		"active with revocation": func(g *Grant) { g.RevokedAt, g.RevokedBy, g.RevocationReason = at(0), "prn_sec", "x" },
-		"no reason":              func(g *Grant) { g.Reason = "" },
-		"group mode on a tenant": func(g *Grant) { g.Scope.Mode = ModeDynamicGroupDescendants },
+		"revoked without who":              func(g *Grant) { g.Status = StatusRevoked },
+		"active with revocation":           func(g *Grant) { g.RevokedAt, g.RevokedBy, g.RevocationReason = at(0), "prn_sec", "x" },
+		"no reason":                        func(g *Grant) { g.Reason = "" },
+		"environment outside the contract": func(g *Grant) { g.Scope.Environment = "prod" },
+		"group mode on a tenant":           func(g *Grant) { g.Scope.Mode = ModeDynamicGroupDescendants },
 	}
 	for name, mutate := range bad {
 		g := good
@@ -131,7 +132,7 @@ func TestEvaluateDeniesByDefault(t *testing.T) {
 	org := Grant{GrantID: "agr_org", PrincipalID: jane, Permission: "organisation.view", Scope: Scope{Level: LevelOrganisation, OrganisationID: "ORG-ZA"},
 		GrantType: TypeStanding, Source: SourceDirect, RiskClass: RiskLow, ValidFrom: now.Add(-time.Hour), Status: StatusActive, GrantedBy: "prn_ops", Reason: "x", Version: 1}
 	decide := func(action string, res Resource, grants ...Grant) Decision {
-		return Evaluate(Request{PrincipalID: jane, Action: action, Resource: res, Now: now, Grants: grants})
+		return Evaluate(Request{PrincipalActive: true, PrincipalID: jane, Action: action, Resource: res, Now: now, Grants: grants})
 	}
 	if d := decide("tenant.view", Resource{TenantID: "tn_ug"}, view); !d.Allowed() || d.MatchedGrants[0] != "agr_view" {
 		t.Fatalf("a covering grant must allow: %+v", d)
@@ -146,7 +147,7 @@ func TestEvaluateDeniesByDefault(t *testing.T) {
 		{"grant for another tenant", decide("tenant.view", Resource{TenantID: "tn_za"}, view), "SCOPE_MISMATCH"},
 		// Section 111: tenant.view on UG and organisation.view on ZA never make tenant.view on ZA.
 		{"no union across scope", decide("tenant.view", Resource{TenantID: "tn_za", OrganisationID: "ORG-ZA"}, view, org), "SCOPE_MISMATCH"},
-		{"another principal's grant", Evaluate(Request{PrincipalID: "prn_bob", Action: "tenant.view", Resource: Resource{TenantID: "tn_ug"}, Now: now, Grants: []Grant{view}}), "NO_ADMINISTRATIVE_GRANT"},
+		{"another principal's grant", Evaluate(Request{PrincipalActive: true, PrincipalID: "prn_bob", Action: "tenant.view", Resource: Resource{TenantID: "tn_ug"}, Now: now, Grants: []Grant{view}}), "NO_ADMINISTRATIVE_GRANT"},
 		{"suspended", decide("tenant.view", Resource{TenantID: "tn_ug"}, with(view, func(g *Grant) { g.Status = StatusSuspended })), "ADMINISTRATIVE_GRANT_SUSPENDED"},
 		{"revoked", decide("tenant.view", Resource{TenantID: "tn_ug"}, with(view, func(g *Grant) { g.Status = StatusRevoked })), "ADMINISTRATIVE_GRANT_REVOKED"},
 		{"pending", decide("tenant.view", Resource{TenantID: "tn_ug"}, with(view, func(g *Grant) { g.Status = StatusPending })), "ADMINISTRATIVE_GRANT_PENDING"},
@@ -160,11 +161,14 @@ func TestEvaluateDeniesByDefault(t *testing.T) {
 			t.Errorf("%s: got %+v, want DENY %s", c.name, c.d, c.reason)
 		}
 	}
+	if d := Evaluate(Request{PrincipalID: jane, Action: "tenant.view", Resource: Resource{TenantID: "tn_ug"}, Now: now, Grants: []Grant{view}}); d.Allowed() || d.ReasonCodes[0] != "PRINCIPAL_INACTIVE" {
+		t.Errorf("an inactive principal must be denied whatever its grants: %+v", d)
+	}
 	stepUp := with(view, func(g *Grant) { g.Conditions = &Conditions{MinimumACR: "urn:baobab:acr:mfa"} })
 	if d := decide("tenant.view", Resource{TenantID: "tn_ug"}, stepUp); d.Outcome != OutcomeStepUpRequired || d.Obligations[0] != "STEP_UP_AUTHENTICATION" {
 		t.Errorf("an unmet assurance condition must ask for step-up: %+v", d)
 	}
-	if d := Evaluate(Request{PrincipalID: jane, Action: "tenant.view", Resource: Resource{TenantID: "tn_ug"}, Now: now,
+	if d := Evaluate(Request{PrincipalActive: true, PrincipalID: jane, Action: "tenant.view", Resource: Resource{TenantID: "tn_ug"}, Now: now,
 		SessionACRs: []string{"urn:baobab:acr:mfa"}, Grants: []Grant{stepUp}}); !d.Allowed() {
 		t.Errorf("a met assurance condition must allow: %+v", d)
 	}
@@ -185,7 +189,7 @@ func TestDelegationNeverExceedsItsSource(t *testing.T) {
 		for _, s := range sources {
 			m[s.GrantID] = s
 		}
-		return Evaluate(Request{PrincipalID: "prn_carol", Action: "tenant.view", Resource: Resource{TenantID: "tn_ug"}, Now: now, Grants: []Grant{g}, Sources: m})
+		return Evaluate(Request{PrincipalActive: true, PrincipalID: "prn_carol", Action: "tenant.view", Resource: Resource{TenantID: "tn_ug"}, Now: now, Grants: []Grant{g}, Sources: m})
 	}
 	if d := decide(delegated, source); !d.Allowed() {
 		t.Fatalf("a valid delegation must allow: %+v", d)
@@ -208,7 +212,7 @@ func TestDelegationNeverExceedsItsSource(t *testing.T) {
 	// A delegation cannot widen scope: a grant on another tenant simply
 	// is not the delegation of this source.
 	wider := with(delegated, func(g *Grant) { g.Scope = Scope{Level: LevelTenant, TenantID: "tn_za"} })
-	if d := Evaluate(Request{PrincipalID: "prn_carol", Action: "tenant.view", Resource: Resource{TenantID: "tn_za"}, Now: now,
+	if d := Evaluate(Request{PrincipalActive: true, PrincipalID: "prn_carol", Action: "tenant.view", Resource: Resource{TenantID: "tn_za"}, Now: now,
 		Grants: []Grant{wider}, Sources: map[string]Grant{"agr_src": source}}); d.Allowed() {
 		t.Error("a delegation widened scope beyond its source")
 	}

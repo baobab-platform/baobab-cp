@@ -14,6 +14,7 @@ import (
 
 type fakeStore struct {
 	principals map[string]bool
+	inactive   map[string]bool
 	created    []administration.Grant
 	actor      repository.AuditActor
 }
@@ -22,11 +23,18 @@ func (f *fakeStore) GetPrincipal(_ context.Context, id string) (domain.Principal
 	if !f.principals[id] {
 		return domain.Principal{}, errors.New("not found")
 	}
-	return domain.Principal{ID: id}, nil
+	return domain.Principal{ID: id, Status: f.status(id)}, nil
 }
 
-func (f *fakeStore) CreateAdministrativeGrant(_ context.Context, g administration.Grant, actor repository.AuditActor) error {
-	f.created, f.actor = append(f.created, g), actor
+func (f *fakeStore) status(id string) string {
+	if f.inactive[id] {
+		return "SUSPENDED"
+	}
+	return "ACTIVE"
+}
+
+func (f *fakeStore) CreateAdministrativeGrants(_ context.Context, grants []administration.Grant, actor repository.AuditActor) error {
+	f.created, f.actor = append(f.created, grants...), actor
 	return nil
 }
 
@@ -69,6 +77,13 @@ func TestBootstrapIsBoundedPlatformAuthority(t *testing.T) {
 	unknown := &fakeStore{principals: map[string]bool{"prn_operator": true}}
 	if _, err := run(context.Background(), unknown, c, ok, domain.NewUUIDv7()); err == nil || !strings.Contains(err.Error(), "not a registered") || len(unknown.created) != 0 {
 		t.Fatalf("an unregistered grantee must be refused before anything is written: %v", err)
+	}
+	suspended := &fakeStore{principals: map[string]bool{"prn_first_admin": true, "prn_operator": true}, inactive: map[string]bool{"prn_first_admin": true}}
+	if _, err := run(context.Background(), suspended, c, ok, domain.NewUUIDv7()); err == nil || len(suspended.created) != 0 {
+		t.Fatalf("an inactive grantee must be refused: %v", err)
+	}
+	if _, err := plan(c, with(ok, func(q *request) { q.Environment = "prod" })); err == nil {
+		t.Fatal("an environment outside the contract must be refused")
 	}
 }
 

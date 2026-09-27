@@ -26,6 +26,17 @@ func (h effectiveAuthorityHandler) get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// An inactive principal holds no usable authority (ADR-BCP-020 section
+	// 94): it is refused rather than shown grants it cannot use.
+	caller, err := h.identities.GetPrincipal(r.Context(), principalID)
+	if err != nil {
+		problem(w, r, http.StatusServiceUnavailable, "IDENTITY_UNAVAILABLE", "the caller's identity could not be resolved", true)
+		return
+	}
+	if caller.Status != "ACTIVE" {
+		problem(w, r, http.StatusForbidden, "PRINCIPAL_INACTIVE", "the caller's Control Plane principal is not active", false)
+		return
+	}
 	grants, sources, err := h.grants.AdministrativeGrantsOf(r.Context(), principalID)
 	if err != nil {
 		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "effective authority could not be read", true)

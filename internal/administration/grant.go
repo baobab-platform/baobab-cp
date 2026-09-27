@@ -151,6 +151,11 @@ func (s Scope) Validate() error {
 			return fmt.Errorf("a %s scope may not name %s", s.Level, anchor)
 		}
 	}
+	switch s.Environment {
+	case "", "local", "development", "staging", "production":
+	default:
+		return fmt.Errorf("environment %q is not local, development, staging or production", s.Environment)
+	}
 	switch s.Mode {
 	case "", ModeExact:
 		if len(s.OrganisationIDs) > 0 {

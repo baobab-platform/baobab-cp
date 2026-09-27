@@ -80,9 +80,13 @@ const (
 // Request is one administrative action to decide.
 type Request struct {
 	PrincipalID string
-	Action      string
-	Resource    Resource
-	Now         time.Time
+	// PrincipalActive is whether the principal's Control Plane status is
+	// ACTIVE. An inactive principal holds no usable authority, whatever
+	// its grants say (section 94).
+	PrincipalActive bool
+	Action          string
+	Resource        Resource
+	Now             time.Time
 	// SessionACRs are the authentication assurances the caller's session
 	// holds; a grant with a minimum_acr needs one of them to equal it.
 	SessionACRs []string
@@ -112,6 +116,9 @@ func deny(code string) Decision { return Decision{Outcome: OutcomeDeny, ReasonCo
 // ACTIVE inside its validity window, rests on valid delegation, and whose
 // assurance condition the session meets. Several grants never combine.
 func Evaluate(q Request) Decision {
+	if !q.PrincipalActive {
+		return deny("PRINCIPAL_INACTIVE")
+	}
 	var named, covering []Grant
 	for _, g := range q.Grants {
 		if g.PrincipalID != q.PrincipalID || g.Permission != q.Action {

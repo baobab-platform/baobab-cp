@@ -45,9 +45,8 @@ CREATE TABLE policy.administrative_grant (
         (status = 'REVOKED') = (revoked_at IS NOT NULL AND revoked_by IS NOT NULL AND revocation_reason IS NOT NULL))
 );
 
--- Evaluation and the effective-authority read model load a principal's
--- grants that can still become or stay effective.
-CREATE INDEX administrative_grant_principal_idx ON policy.administrative_grant (principal_id)
-    WHERE status IN ('PENDING', 'ACTIVE', 'SUSPENDED');
+-- Evaluation and the effective-authority read model load every grant of a
+-- principal, in any state, so denials can name why.
+CREATE INDEX administrative_grant_principal_idx ON policy.administrative_grant (principal_id, permission);
 CREATE INDEX administrative_grant_delegated_from_idx ON policy.administrative_grant (delegated_from)
     WHERE delegated_from IS NOT NULL;
