@@ -43,6 +43,8 @@ func (h tenantOnboardingHandler) fail(w http.ResponseWriter, r *http.Request, er
 		problem(w, r, http.StatusForbidden, "SEPARATION_OF_DUTIES", err.Error(), false)
 	case errors.Is(err, onboarding.ErrIsolationDecided):
 		problem(w, r, http.StatusUnprocessableEntity, "ISOLATION_SET_BY_DECISION", err.Error(), false)
+	case errors.Is(err, onboarding.ErrMarketParticipation):
+		problem(w, r, http.StatusUnprocessableEntity, "MARKET_PARTICIPATION_MISMATCH", err.Error(), false)
 	case errors.Is(err, onboarding.ErrIsolationRequired):
 		problem(w, r, http.StatusUnprocessableEntity, "ISOLATION_REQUIRED", err.Error(), false)
 	case errors.Is(err, onboarding.ErrTransition):

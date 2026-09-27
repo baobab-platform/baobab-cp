@@ -24,16 +24,40 @@
       ],
       "description": "REQUESTED: created from an APPROVED decision, awaiting authorisation. AUTHORISED: a second principal authorised provisioning. FULFILLED: provisioning registered the tenant it produced. CANCELLED: withdrawn before fulfilment. FULFILLED and CANCELLED are final."
     },
+    "marketParticipation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "market",
+        "activities"
+      ],
+      "description": "What the tenant will do in one admitted market (ADR-BCP-011 section 6). The requester declares it; a second principal authorises it with the rest of the request.",
+      "properties": {
+        "market": {
+          "$ref": "application.schema.json#/$defs/countryCode"
+        },
+        "activities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 11,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../control-plane/v1/domain.schema.json#/$defs/marketParticipationCapability"
+          }
+        }
+      }
+    },
     "OnboardingDesiredState": {
       "type": "object",
       "additionalProperties": false,
-      "description": "The validated desired state provisioning works from (section 24). subscription_type, market_scope, product_requirements and isolation_strategy come from the AdmissionDecision; display_name and residency_region are supplied by the requester and pass normal tenant registration validation.",
+      "description": "The validated desired state provisioning works from (section 24). subscription_type, market_scope, product_requirements and isolation_strategy come from the AdmissionDecision; display_name, residency_region and market_participation are supplied by the requester and pass normal tenant registration validation.",
       "required": [
         "display_name",
         "residency_region",
         "isolation_strategy",
         "subscription_type",
         "market_scope",
+        "market_participation",
         "product_requirements"
       ],
       "properties": {
@@ -59,6 +83,15 @@
           "items": {
             "$ref": "application.schema.json#/$defs/countryCode"
           }
+        },
+        "market_participation": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/marketParticipation"
+          },
+          "description": "One entry for each market of the decision's market scope, each once. Provisioning plans market participation from it and invents none."
         },
         "product_requirements": {
           "type": "array",
@@ -321,6 +354,7 @@
         "admission_decision_id",
         "display_name",
         "residency_region",
+        "market_participation",
         "reason"
       ],
       "properties": {
@@ -334,6 +368,15 @@
         },
         "residency_region": {
           "$ref": "../../control-plane/v1/tenant-registration.schema.json#/properties/residency_region"
+        },
+        "market_participation": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/marketParticipation"
+          },
+          "description": "One entry for each market of the decision's market scope, each once. Provisioning plans market participation from it and invents none."
         },
         "isolation_strategy": {
           "$ref": "decision.schema.json#/$defs/isolationStrategy"

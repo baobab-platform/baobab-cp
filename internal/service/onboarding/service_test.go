@@ -123,7 +123,8 @@ func (e *env) tenant(t *testing.T, isolation, region string) string {
 
 func body(decision, isolation string) []byte {
 	b := map[string]any{"admission_decision_id": decision, "display_name": "Kilima Traders", "residency_region": "af-south-1",
-		"reason": "Onboard the approved client."}
+		"reason": "Onboard the approved client.", "market_participation": []map[string]any{
+			{"market": "UG", "activities": []string{"LEGAL_PRESENCE", "SOURCING"}}, {"market": "KE", "activities": []string{"SELLING"}}}}
 	if isolation != "" {
 		b["isolation_strategy"] = isolation
 	}
@@ -157,6 +158,19 @@ func TestOnboardingRequestComesFromAnApprovedDecision(t *testing.T) {
 	if _, _, err := e.svc.Request(e.ctx, requester, body(undecided.decisionID, "")); !errors.Is(err, onboarding.ErrIsolationRequired) {
 		t.Fatalf("an isolation strategy is required: %v", err)
 	}
+	// Market participation declares each admitted market once, with governed capabilities.
+	for label, participation := range map[string]string{
+		"a market left undeclared": `[{"market":"UG","activities":["SOURCING"]}]`,
+		"a market not admitted":    `[{"market":"UG","activities":["SOURCING"]},{"market":"KE","activities":["SELLING"]},{"market":"TZ","activities":["SELLING"]}]`,
+		"a market declared twice":  `[{"market":"UG","activities":["SOURCING"]},{"market":"UG","activities":["SELLING"]},{"market":"KE","activities":["SELLING"]}]`,
+		"no activity":              `[{"market":"UG","activities":[]},{"market":"KE","activities":["SELLING"]}]`,
+		"an ungoverned activity":   `[{"market":"UG","activities":["BUYING"]},{"market":"KE","activities":["SELLING"]}]`,
+	} {
+		raw := `{"admission_decision_id":"` + a.decisionID + `","display_name":"X","residency_region":"af-south-1","reason":"x","market_participation":` + participation + `}`
+		if _, _, err := e.svc.Request(e.ctx, requester, []byte(raw)); err == nil {
+			t.Fatalf("%s was accepted", label)
+		}
+	}
 	if _, _, err := e.svc.Request(e.ctx, requester, []byte(`{"admission_decision_id":"`+a.decisionID+`","display_name":"X",
 		"residency_region":"af-south-1","reason":"x","subscription_type":"INTERNAL"}`)); err == nil {
 		t.Fatal("a caller can never set the classification")
@@ -166,6 +180,7 @@ func TestOnboardingRequestComesFromAnApprovedDecision(t *testing.T) {
 	ds := req.DesiredState
 	if err != nil || !created || req.Status != domain.OnboardingRequested || ds.SubscriptionType != domain.SubscriptionCommercial ||
 		strings.Join(ds.MarketScope, ",") != "UG,KE" || strings.Join(ds.ProductRequirements, ",") != "b2b-trade" ||
+		len(ds.MarketParticipation) != 2 || ds.MarketParticipation[1].Activities[0] != "SELLING" ||
 		ds.IsolationStrategy != "schema_per_tenant" || req.RequestedBy != requester.PrincipalID || req.CorrelationID == "" {
 		t.Fatalf("the desired state comes from the decision: %v %v %+v", err, created, req)
 	}

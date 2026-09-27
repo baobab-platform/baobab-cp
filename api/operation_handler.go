@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/operations"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/go-chi/chi/v5"
@@ -15,7 +16,27 @@ import (
 // operationHandler serves durable operations (ADR-BCP-022 sections 54-67,
 // Shared execution-operation.schema.json).
 type operationHandler struct {
-	repo repository.OperationRepository
+	repo          repository.OperationRepository
+	tenantAdminOf func(*http.Request, auth.Principal, string) adminAuthority
+}
+
+// authorised: platform administrators read every operation, a tenant
+// administrator those of a tenant it administers. Anything else is
+// OPERATION_NOT_FOUND, indistinguishable from an operation that does not
+// exist.
+func (h operationHandler) authorised(r *http.Request, op operations.Operation) (adminAuthority, bool) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		return adminDenied, false
+	}
+	if principal.HasRole(RolePlatformAdmin) {
+		return adminAllowed, true
+	}
+	if op.TenantID == "" || h.tenantAdminOf == nil {
+		return adminDenied, false
+	}
+	authority := h.tenantAdminOf(r, principal, op.TenantID)
+	return authority, authority == adminAllowed
 }
 
 type operationSubject struct {
@@ -72,6 +93,14 @@ func newOperationResponse(op operations.Operation) operationResponse {
 // section 67).
 func (h operationHandler) get(w http.ResponseWriter, r *http.Request) {
 	op, err := h.repo.GetOperation(r.Context(), chi.URLParam(r, "operationID"))
+	if err == nil {
+		if authority, ok := h.authorised(r, op); authority == adminUnavailable {
+			problem(w, r, http.StatusServiceUnavailable, "AUTH_VERIFIER_UNAVAILABLE", "authorization is temporarily unavailable", true)
+			return
+		} else if !ok {
+			err = repository.ErrOperationNotFound
+		}
+	}
 	if errors.Is(err, repository.ErrOperationNotFound) {
 		problem(w, r, http.StatusNotFound, "OPERATION_NOT_FOUND", "no such operation", false)
 		return

@@ -129,9 +129,7 @@ var unimplemented = []string{
 	"PATCH /v1/markets/{}",
 	"POST /v1/markets",
 	"POST /v1/markets/{}/activate",
-	"GET /v1/tenants/{}/provisioning/{}/plan",
 	"POST /v1/tenants/{}/provisioning/{}/plan",
-	"POST /v1/tenants/{}/provisioning/{}/approve",
 	"POST /v1/tenants/{}/provisioning/{}/remediate",
 	"POST /v1/tenants/{}/provisioning/{}/withdraw",
 	"POST /v1/admin/operations/{}/cancel",
@@ -139,16 +137,12 @@ var unimplemented = []string{
 }
 
 // nonconforming are served at a described path but not yet to its
-// description: the legacy manifest-driven provisioning routes, which the
+// description: the legacy provisioning evidence routes, which the
 // ADR-SHARED-015 migration conforms. Like unimplemented operations, the
 // Console's client removes them. The list may only shrink.
 var nonconforming = []string{
-	"GET /v1/tenants/{}/provisioning",
-	"GET /v1/tenants/{}/provisioning/{}",
 	"GET /v1/tenants/{}/provisioning/{}/drift",
 	"GET /v1/tenants/{}/provisioning/{}/readiness",
-	"POST /v1/tenants/{}/provisioning",
-	"POST /v1/tenants/{}/provisioning/{}/apply",
 }
 
 // TestOpenAPIDescribesTheRouter: every /v1 route is described by the

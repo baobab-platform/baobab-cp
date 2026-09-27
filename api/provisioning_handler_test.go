@@ -13,7 +13,6 @@ import (
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
-	"github.com/baobab-platform/baobab-cp/internal/provisioning"
 	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
@@ -98,23 +97,6 @@ func seedProvisioningAPIFixture(t *testing.T, ctx context.Context, admin *pgxpoo
 	return f
 }
 
-func (f provisioningAPIFixture) manifest(desiredStateVersion int64) provisioning.TenantManifest {
-	return provisioning.TenantManifest{
-		APIVersion: "baobab.nabhold.com/v1", Kind: "TenantProvisioning",
-		Metadata: provisioning.ManifestMetadata{Name: "zb03-api-fixture", TenantID: f.TenantID, DesiredStateVersion: desiredStateVersion},
-		Spec: provisioning.TenantManifestSpec{
-			LegalEntityID: f.LegalEntityID, DigitalEstate: "estate-" + f.TenantID,
-			Markets: []provisioning.ManifestMarket{
-				{MarketCode: "UG-" + strings.ToUpper(f.suffix()), Capabilities: []string{"EXPORTING", "SELLING"}},
-				{MarketCode: "ZA-" + strings.ToUpper(f.suffix()), Capabilities: []string{"IMPORTING", "SELLING"}},
-			},
-			CapabilityGrants:   []provisioning.ManifestCapabilityGrant{{CapabilityKey: f.CapabilityKey, Source: "PLATFORM_BASELINE"}},
-			CapabilityBindings: []provisioning.ManifestCapabilityBinding{{CapabilityKey: f.CapabilityKey, Engine: f.EngineID, EngineInstance: f.InstanceID, Mode: "PRIMARY", Priority: 10}},
-			TradeLanes:         []provisioning.ManifestTradeLane{{OriginMarket: "UG-" + strings.ToUpper(f.suffix()), DestinationMarket: "ZA-" + strings.ToUpper(f.suffix()), Direction: "CROSS_MARKET", PermittedCapabilityKeys: []string{f.CapabilityKey}}},
-		},
-	}
-}
-
 func (f provisioningAPIFixture) suffix() string {
 	const prefix = "tn_zb03api"
 	return f.TenantID[len(prefix):]
@@ -173,117 +155,6 @@ func doJSON(t *testing.T, handler http.Handler, method, path, idempotencyKey str
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	return rec
-}
-
-func TestProvisioningCreateDrivesManifestToActive(t *testing.T) {
-	handler, repo, admin, _ := newProvisioningTestHandler(t)
-	ctx := context.Background()
-	f := seedProvisioningAPIFixture(t, ctx, admin, repo, "createactive")
-
-	rec := doJSON(t, handler, http.MethodPost, "/v1/tenants/"+f.TenantID+"/provisioning", strings.Repeat("a", 20), f.manifest(1))
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
-	}
-	var op provisioningdomain.TenantProvisioning
-	if err := json.Unmarshal(rec.Body.Bytes(), &op); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if op.Status != provisioningdomain.ProvisioningStatusActive {
-		t.Fatalf("expected ACTIVE, got %s (blocking_reasons=%v)", op.Status, op.BlockingReasons)
-	}
-	if loc := rec.Header().Get("Location"); loc != "/v1/tenants/"+f.TenantID+"/provisioning/"+op.ID {
-		t.Fatalf("unexpected Location header: %q", loc)
-	}
-
-	// GET the same run.
-	rec = doJSON(t, handler, http.MethodGet, "/v1/tenants/"+f.TenantID+"/provisioning/"+op.ID, "", nil)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on get, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	// LIST for the tenant includes it.
-	rec = doJSON(t, handler, http.MethodGet, "/v1/tenants/"+f.TenantID+"/provisioning", "", nil)
-	var list []provisioningdomain.TenantProvisioning
-	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
-	if len(list) != 1 || list[0].ID != op.ID {
-		t.Fatalf("expected exactly the one run in the list, got %+v", list)
-	}
-
-	// READINESS evidence is queryable and shows why it's ready.
-	rec = doJSON(t, handler, http.MethodGet, "/v1/tenants/"+f.TenantID+"/provisioning/"+op.ID+"/readiness", "", nil)
-	var readiness []provisioningdomain.ReadinessSnapshotRecord
-	if err := json.Unmarshal(rec.Body.Bytes(), &readiness); err != nil {
-		t.Fatalf("decode readiness: %v", err)
-	}
-	if len(readiness) == 0 || !readiness[0].OverallReady {
-		t.Fatalf("expected at least one overall_ready readiness snapshot, got %+v", readiness)
-	}
-
-	// DRIFT evidence shows a converged, zero-drift snapshot.
-	rec = doJSON(t, handler, http.MethodGet, "/v1/tenants/"+f.TenantID+"/provisioning/"+op.ID+"/drift", "", nil)
-	var drift []provisioningdomain.ReconciliationSnapshotRecord
-	if err := json.Unmarshal(rec.Body.Bytes(), &drift); err != nil {
-		t.Fatalf("decode drift: %v", err)
-	}
-	if len(drift) == 0 || !drift[0].Converged {
-		t.Fatalf("expected at least one converged reconciliation snapshot, got %+v", drift)
-	}
-
-	// APPLY again on an already-ACTIVE run is a safe, idempotent no-op.
-	rec = doJSON(t, handler, http.MethodPost, "/v1/tenants/"+f.TenantID+"/provisioning/"+op.ID+"/apply", "", nil)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on re-apply, got %d: %s", rec.Code, rec.Body.String())
-	}
-	var reapplied provisioningdomain.TenantProvisioning
-	if err := json.Unmarshal(rec.Body.Bytes(), &reapplied); err != nil {
-		t.Fatalf("decode reapply response: %v", err)
-	}
-	if reapplied.Status != provisioningdomain.ProvisioningStatusActive {
-		t.Fatalf("expected re-apply to remain ACTIVE, got %s", reapplied.Status)
-	}
-
-	// RETRY on a non-FAILED run is rejected, not silently accepted.
-	rec = doJSON(t, handler, http.MethodPost, "/v1/tenants/"+f.TenantID+"/provisioning/"+op.ID+"/retry", "", nil)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409 retrying a non-FAILED run, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	// Re-POSTing the identical manifest with the SAME Idempotency-Key
-	// returns the same run rather than creating a duplicate.
-	rec = doJSON(t, handler, http.MethodPost, "/v1/tenants/"+f.TenantID+"/provisioning", strings.Repeat("a", 20), f.manifest(1))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on idempotent replay, got %d: %s", rec.Code, rec.Body.String())
-	}
-	var replayed provisioningdomain.TenantProvisioning
-	if err := json.Unmarshal(rec.Body.Bytes(), &replayed); err != nil {
-		t.Fatalf("decode replay response: %v", err)
-	}
-	if replayed.ID != op.ID {
-		t.Fatalf("expected the idempotent replay to reuse provisioning id %s, got %s", op.ID, replayed.ID)
-	}
-
-	// The SAME Idempotency-Key with a DIFFERENT body is rejected, not
-	// silently applied as a new desired state under the old identity.
-	other := f.manifest(1)
-	other.Metadata.Name = "a-different-request"
-	rec = doJSON(t, handler, http.MethodPost, "/v1/tenants/"+f.TenantID+"/provisioning", strings.Repeat("a", 20), other)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409 for idempotency key reused with a different request, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	// Cross-tenant access to the same provisioning ID under a different
-	// tenant's path fails closed as 404, never 403 (never confirms
-	// existence to a caller who isn't authorised for it).
-	rec = doJSON(t, handler, http.MethodGet, "/v1/tenants/"+f.OtherTenantID+"/provisioning/"+op.ID, "", nil)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 for cross-tenant provisioning access, got %d: %s", rec.Code, rec.Body.String())
-	}
-	rec = doJSON(t, handler, http.MethodGet, "/v1/tenants/"+f.OtherTenantID+"/provisioning/"+op.ID+"/readiness", "", nil)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 for cross-tenant readiness access, got %d: %s", rec.Code, rec.Body.String())
-	}
 }
 
 func TestProvisioningCancelTransitionsDirectly(t *testing.T) {
