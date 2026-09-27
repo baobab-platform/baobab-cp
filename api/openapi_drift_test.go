@@ -51,7 +51,10 @@ func fullRouter(t *testing.T) chi.Routes {
 		Mappings: struct {
 			repository.MappingAdminRepository
 		}{},
-		Provisioning:    struct{ ProvisioningRepository }{},
+		Provisioning: struct{ ProvisioningRepository }{},
+		Operations: struct {
+			repository.OperationRepository
+		}{},
 		Onboarding:      &onboarding.Service{},
 		Applications:    &application.Service{},
 		Classifications: &subscription.Classifier{},
@@ -110,26 +113,42 @@ func described(t *testing.T) map[string]bool {
 // control-plane/v1 OpenAPI (CP Console FE-00 gap B2). The list may only
 // shrink: describe a route in Shared and remove it here.
 var undescribed = []string{
-	"GET /v1/tenants/{}/provisioning",
-	"GET /v1/tenants/{}/provisioning/{}",
-	"GET /v1/tenants/{}/provisioning/{}/drift",
-	"GET /v1/tenants/{}/provisioning/{}/readiness",
 	"POST /v1/capabilities/resolve",
 	"POST /v1/capabilities/resolve-batch",
 	"POST /v1/platform-context/resolve",
 	"POST /v1/resolve",
-	"POST /v1/tenants/{}/provisioning",
-	"POST /v1/tenants/{}/provisioning/{}/apply",
+	// Retry and cancel move to /v1/admin/operations (ADR-SHARED-015).
 	"POST /v1/tenants/{}/provisioning/{}/cancel",
 	"POST /v1/tenants/{}/provisioning/{}/retry",
 }
 
-// unimplemented are described by Shared but not served (FE-00 gap G2).
+// unimplemented are described by Shared but not served (FE-00 gaps G2, and
+// ADR-SHARED-015 until the provisioning migration lands).
 var unimplemented = []string{
 	"GET /v1/markets/{}",
 	"PATCH /v1/markets/{}",
 	"POST /v1/markets",
 	"POST /v1/markets/{}/activate",
+	"GET /v1/tenants/{}/provisioning/{}/plan",
+	"POST /v1/tenants/{}/provisioning/{}/plan",
+	"POST /v1/tenants/{}/provisioning/{}/approve",
+	"POST /v1/tenants/{}/provisioning/{}/remediate",
+	"POST /v1/tenants/{}/provisioning/{}/withdraw",
+	"POST /v1/admin/operations/{}/cancel",
+	"POST /v1/admin/operations/{}/retry",
+}
+
+// nonconforming are served at a described path but not yet to its
+// description: the legacy manifest-driven provisioning routes, which the
+// ADR-SHARED-015 migration conforms. Like unimplemented operations, the
+// Console's client removes them. The list may only shrink.
+var nonconforming = []string{
+	"GET /v1/tenants/{}/provisioning",
+	"GET /v1/tenants/{}/provisioning/{}",
+	"GET /v1/tenants/{}/provisioning/{}/drift",
+	"GET /v1/tenants/{}/provisioning/{}/readiness",
+	"POST /v1/tenants/{}/provisioning",
+	"POST /v1/tenants/{}/provisioning/{}/apply",
 }
 
 // TestOpenAPIDescribesTheRouter: every /v1 route is described by the
@@ -172,11 +191,17 @@ func TestOpenAPIDescribesTheRouter(t *testing.T) {
 			t.Errorf("%s is listed as unimplemented but not described", op)
 		}
 	}
+	for _, op := range nonconforming {
+		if !served[op] || !spec[op] {
+			t.Errorf("%s is listed as nonconforming but is not both served and described", op)
+		}
+	}
 }
 
 // TestConsoleExcludesUnimplementedOperations: the CP Console's typed client
-// removes exactly the operations listed in unimplemented, so Console code
-// can neither call a route that does not exist nor lose one that does.
+// removes exactly the operations listed in unimplemented and nonconforming,
+// so Console code can neither call a route that does not exist, or does not
+// yet match its description, nor lose one that does.
 func TestConsoleExcludesUnimplementedOperations(t *testing.T) {
 	source, err := os.ReadFile(filepath.Join("..", "frontend", "src", "server", "cp-client", "unimplemented.ts"))
 	if err != nil {
@@ -188,9 +213,9 @@ func TestConsoleExcludesUnimplementedOperations(t *testing.T) {
 		console = append(console, match[1]+" /v1"+params.ReplaceAllString(match[2], "{}"))
 	}
 	sort.Strings(console)
-	want := slices.Clone(unimplemented)
+	want := slices.Concat(unimplemented, nonconforming)
 	sort.Strings(want)
 	if !slices.Equal(console, want) {
-		t.Fatalf("frontend/src/server/cp-client/unimplemented.ts lists %v; the Control Plane leaves %v unimplemented", console, want)
+		t.Fatalf("frontend/src/server/cp-client/unimplemented.ts lists %v; the Control Plane leaves %v unimplemented or nonconforming", console, want)
 	}
 }

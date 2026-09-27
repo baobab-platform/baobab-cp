@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/approval-decision.schema.json",
+  "title": "Approval decision",
+  "description": "A decision on one exact plan (ADR-BCP-021 SS24, SS49-52; ADR-SHARED-015). It binds to the plan's id, version and digest: a materially changed plan has another digest and needs another decision. The approver is always the verified caller and never the requester. Generic: tenant provisioning uses it now, and Changesets reuse it. A definition library.",
+  "$defs": {
+    "approvalOutcome": {
+      "type": "string",
+      "enum": ["APPROVED", "REJECTED", "CHANGES_REQUESTED"]
+    },
+    "ApprovalDecisionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id", "plan_version", "plan_digest", "decision"],
+      "description": "The approver names the exact plan they reviewed. It carries no approver: the Control Plane takes it from the verified token.",
+      "properties": {
+        "plan_id": { "$ref": "domain.schema.json#/$defs/provisioningPlanId" },
+        "plan_version": { "type": "integer", "minimum": 1 },
+        "plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+        "decision": { "$ref": "#/$defs/approvalOutcome" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      },
+      "if": { "properties": { "decision": { "enum": ["REJECTED", "CHANGES_REQUESTED"] } } },
+      "then": { "required": ["reason"] }
+    },
+    "ApprovalDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval_id", "subject_type", "subject_id", "plan_id", "plan_version", "plan_digest", "decision", "decided_by", "decided_at"],
+      "properties": {
+        "approval_id": { "$ref": "domain.schema.json#/$defs/approvalDecisionId" },
+        "subject_type": {
+          "type": "string",
+          "enum": ["TENANT_PROVISIONING", "CHANGESET"],
+          "description": "What the plan belongs to."
+        },
+        "subject_id": { "type": "string", "pattern": "^[a-z][a-z0-9]*_[a-z0-9]+$", "maxLength": 63 },
+        "plan_id": { "$ref": "domain.schema.json#/$defs/provisioningPlanId" },
+        "plan_version": { "type": "integer", "minimum": 1 },
+        "plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+        "decision": { "$ref": "#/$defs/approvalOutcome" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "decided_by": { "$ref": "../../admission/v1/application.schema.json#/$defs/principalId" },
+        "decided_at": { "type": "string", "format": "date-time" },
+        "correlation_id": { "$ref": "domain.schema.json#/$defs/uuid" }
+      },
+      "if": { "properties": { "decision": { "enum": ["REJECTED", "CHANGES_REQUESTED"] } } },
+      "then": { "required": ["reason"] }
+    }
+  }
+}

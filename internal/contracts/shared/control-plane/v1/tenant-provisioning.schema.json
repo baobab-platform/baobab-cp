@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/tenant-provisioning.schema.json",
+  "title": "Tenant provisioning",
+  "description": "The provisioning of a tenant towards its desired state (Technical Specification SS21-27, ADR-SHARED-015). Its state is the canonical lifecycle (tenant-provisioning-lifecycle.yaml); the operation applying its plan and its readiness are separate resources with their own lifecycles. A definition library; validate against a fragment, e.g. tenant-provisioning.schema.json#/$defs/TenantProvisioning.",
+  "$defs": {
+    "legacyProvisioningState": {
+      "type": "string",
+      "enum": ["requested", "accepted", "provisioning", "reconciling", "active", "suspended", "failed", "decommissioning", "cancelled"],
+      "deprecated": true,
+      "description": "Deprecated coarse projection of the canonical state (provisioning-state-machine.yaml), for consumers of the existing provisioning events. The mapping is in tenant-provisioning-lifecycle.yaml. New consumers read state."
+    },
+    "blockingReason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "maxLength": 64,
+          "description": "A known, remediable condition, e.g. NO_RESIDENCY_COMPLIANT_PROVIDER or BINDING_NOT_FOUND (authorization/v1 reason-code-registry.yaml)."
+        },
+        "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
+        "detail": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "TenantProvisioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_provisioning_id", "tenant_id", "state", "provenance", "desired_state_digest", "readiness_status", "revision", "created_by", "created_at", "updated_at"],
+      "properties": {
+        "tenant_provisioning_id": { "$ref": "domain.schema.json#/$defs/tenantProvisioningId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "state": { "$ref": "domain.schema.json#/$defs/tenantProvisioningState" },
+        "legacy_state": { "$ref": "#/$defs/legacyProvisioningState" },
+        "provenance": { "$ref": "provisioning-desired-state.schema.json#/$defs/desiredStateProvenance" },
+        "desired_state_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+        "current_plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plan_id", "plan_version", "plan_digest", "generated_at", "stale"],
+          "description": "The plan generated for the current desired state. A stale plan (its base revision is no longer current, or it expired) cannot be approved or applied; the provisioning is replanned.",
+          "properties": {
+            "plan_id": { "$ref": "domain.schema.json#/$defs/provisioningPlanId" },
+            "plan_version": { "type": "integer", "minimum": 1 },
+            "plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+            "generated_at": { "type": "string", "format": "date-time" },
+            "stale": { "type": "boolean" }
+          }
+        },
+        "approval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["approval_id", "decision", "plan_digest", "decided_by", "decided_at"],
+          "description": "The latest decision on the current plan. It authorises apply only while its plan_digest equals current_plan.plan_digest.",
+          "properties": {
+            "approval_id": { "$ref": "domain.schema.json#/$defs/approvalDecisionId" },
+            "decision": { "$ref": "approval-decision.schema.json#/$defs/approvalOutcome" },
+            "plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+            "decided_by": { "$ref": "../../admission/v1/application.schema.json#/$defs/principalId" },
+            "decided_at": { "type": "string", "format": "date-time" }
+          }
+        },
+        "operation_id": {
+          "$ref": "domain.schema.json#/$defs/operationId",
+          "description": "The operation applying the approved plan, once apply was accepted."
+        },
+        "readiness_status": { "$ref": "domain.schema.json#/$defs/readinessStatus" },
+        "blocking_reasons": { "type": "array", "items": { "$ref": "#/$defs/blockingReason" }, "default": [] },
+        "revision": { "type": "integer", "minimum": 1 },
+        "created_by": { "$ref": "../../admission/v1/application.schema.json#/$defs/principalId" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "if": { "properties": { "state": { "const": "BLOCKED" } } },
+      "then": { "required": ["blocking_reasons"], "properties": { "blocking_reasons": { "minItems": 1 } } }
+    },
+    "TenantProvisioningReplanRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "description": "Regenerates the plan from the current, or the named, desired-state version. The previous plan is superseded, never edited, and any decision on it lapses; the new plan needs its own approval. Business intent is never changed by replanning.",
+      "properties": {
+        "desired_state_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The desired-state version the caller reviewed. When given, a different current version is refused rather than planned."
+        },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "ProvisioningCommandRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "description": "Withdrawing or remediating a provisioning records why. The actor is the verified caller.",
+      "properties": {
+        "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "TenantProvisioningPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": { "type": "array", "items": { "$ref": "#/$defs/TenantProvisioning" } },
+        "next_page_token": { "type": "string", "maxLength": 512 }
+      }
+    },
+    "ProvisioningReadiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_provisioning_id", "tenant_id", "status", "snapshots"],
+      "description": "The readiness hierarchy (Technical Specification SS44) explained: a tenant-level verdict with the snapshots it derives from.",
+      "properties": {
+        "tenant_provisioning_id": { "$ref": "domain.schema.json#/$defs/tenantProvisioningId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "status": { "$ref": "domain.schema.json#/$defs/readinessStatus" },
+        "evaluated_at": { "type": "string", "format": "date-time" },
+        "snapshots": { "type": "array", "items": { "$ref": "readiness.schema.json#/$defs/readinessSnapshot" } }
+      },
+      "if": { "properties": { "status": { "not": { "const": "UNKNOWN" } } } },
+      "then": {
+        "description": "An evaluated verdict carries the snapshots it derives from.",
+        "required": ["evaluated_at"],
+        "properties": { "snapshots": { "minItems": 1 } }
+      }
+    },
+    "ProvisioningDrift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_provisioning_id", "tenant_id", "desired_state_version", "items"],
+      "description": "Per-object differences between desired and observed state (Technical Specification SS42-43).",
+      "properties": {
+        "tenant_provisioning_id": { "$ref": "domain.schema.json#/$defs/tenantProvisioningId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "desired_state_version": { "type": "integer", "minimum": 1 },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "items": { "type": "array", "items": { "$ref": "drift.schema.json#/$defs/driftRecord" } }
+      }
+    }
+  }
+}

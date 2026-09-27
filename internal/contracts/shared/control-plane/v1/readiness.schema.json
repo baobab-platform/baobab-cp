@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/readiness.schema.json",
+  "title": "ReadinessSnapshot",
+  "description": "Hierarchical readiness projection (Technical Specification SS44, SS51): Provider -> Capability -> Product -> Estate -> Tenant. Readiness SHALL be explainable -- never merely `ready: false` where structured reasons are available (SS44) -- so every non-READY snapshot carries blocking_reasons drawn from the same capability_resolution_denial reason-code vocabulary CapabilityResolution and TenantProvisioning.blocking_reasons already use, rather than a separate readiness-specific vocabulary.",
+  "$defs": {
+    "readinessSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["readiness_snapshot_id", "tenant_id", "level", "status", "computed_at"],
+      "properties": {
+        "readiness_snapshot_id": { "$ref": "domain.schema.json#/$defs/readinessSnapshotId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "level": {
+          "type": "string",
+          "enum": ["PROVIDER", "CAPABILITY", "PRODUCT", "ESTATE", "TENANT"],
+          "description": "Which level of the readiness hierarchy this snapshot reports on."
+        },
+        "object_reference": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "The specific object this snapshot is about at its level, e.g. a capability_key when level=CAPABILITY, a product_id when level=PRODUCT, an estate_id when level=ESTATE. Omitted when level=TENANT, since the tenant is already identified by tenant_id."
+        },
+        "status": { "$ref": "domain.schema.json#/$defs/readinessStatus" },
+        "blocking_reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "A capability_resolution_denial code from contracts/authorization/v1/reason-code-registry.yaml, e.g. BINDING_NOT_FOUND (matches the Technical Specification SS51 example verbatim)."
+              },
+              "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
+              "detail": { "type": "string", "maxLength": 500 }
+            }
+          },
+          "default": []
+        },
+        "contributing_snapshots": {
+          "type": "array",
+          "items": { "$ref": "domain.schema.json#/$defs/readinessSnapshotId" },
+          "default": [],
+          "description": "Snapshots at the level below that this one aggregates, e.g. a PRODUCT snapshot referencing the CAPABILITY snapshots of its mandatory capabilities. A snapshot's own status SHALL be derivable from these plus its own direct checks -- never asserted independently of them."
+        },
+        "computed_at": { "type": "string", "format": "date-time" }
+      },
+      "if": {
+        "properties": { "status": { "enum": ["BLOCKED", "NOT_READY"] } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["blocking_reasons"],
+        "properties": { "blocking_reasons": { "minItems": 1 } }
+      }
+    }
+  }
+}

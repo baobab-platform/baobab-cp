@@ -108,6 +108,9 @@ type Dependencies struct {
 	// resolution routes (ADR-SHARED-013). Nil disables them, the same
 	// nil-skip shape Provisioning above already established.
 	Mappings repository.MappingAdminRepository
+	// Operations backs the durable operation routes (ADR-BCP-022 sections
+	// 54-67). Nil disables them.
+	Operations repository.OperationRepository
 	// WorkloadRegistry backs request-time enforcement of ADR-0007 §45's
 	// workload lifecycle status (Gate ZB-03.10, closing the gap
 	// docs/reconciliation/gate-zb03-authority-contract-freeze.md §7 named):
@@ -182,6 +185,13 @@ func New(dependencies Dependencies) http.Handler {
 	r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/canonical-entities/{entityID}", canonical.get)
 	for _, action := range []string{"validate", "activate", "suspend", "retire"} {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/"+action, canonical.lifecycle(action))
+	}
+	if dependencies.Operations != nil {
+		// Platform administrators only until operations carry tenant-scoped
+		// authority checks: fail closed rather than expose another tenant's
+		// operation.
+		ops := operationHandler{repo: dependencies.Operations}
+		r.With(a.authorize(a.adminVerifier, "human", "operation:read"), a.requireAdminRole(nil, true)).Get("/v1/admin/operations/{operationID}", ops.get)
 	}
 	if dependencies.Mappings != nil {
 		mappings := mappingHandler{repo: dependencies.Mappings, contexts: dependencies.Contexts}

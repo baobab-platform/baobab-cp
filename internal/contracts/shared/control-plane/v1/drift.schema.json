@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/drift.schema.json",
+  "title": "Drift",
+  "description": "A detected mismatch between desired and observed state for one object (Technical Specification SS42-43's reconciliation model: Desired State -> Observe -> Compare -> Drift?). Per-object, not per-tenant: Programme Gate P0's classification (phase-0-architecture-inventory-and-lock.md) found only a primitive tenant-level desired_state/observed_state pair implemented (tenants.desired_state/observed_state) and flagged that real Drift must operate per-object -- this schema is that per-object record.",
+  "$defs": {
+    "driftRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["drift_record_id", "tenant_id", "object_type", "object_reference", "desired_state_version", "resolution", "detected_at"],
+      "properties": {
+        "drift_record_id": { "$ref": "domain.schema.json#/$defs/driftRecordId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "object_type": { "$ref": "domain.schema.json#/$defs/driftObjectType" },
+        "object_reference": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Opaque identifier of the specific object within object_type, e.g. a capability_binding_id when object_type=CAPABILITY_BINDING."
+        },
+        "desired_state_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The desired-state version this drift was detected against (TenantProvisioning.desired_state_version at detection time)."
+        },
+        "desired_state_digest": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Opaque content digest of the desired-state record compared, so two drift records can be checked for referring to the same comparison without re-fetching both sides."
+        },
+        "observed_state_digest": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "drift_description": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Human-readable description of what differs, e.g. \"binding_mode=DISABLED observed, PRIMARY desired\"."
+        },
+        "safe_to_reconcile": {
+          "type": "boolean",
+          "description": "Whether the reconciler may fix this drift automatically (Technical Specification SS43 \"Safe to fix?\") or whether it requires the BLOCKED path and human/operator remediation."
+        },
+        "resolution": { "$ref": "domain.schema.json#/$defs/driftResolution" },
+        "detected_at": { "type": "string", "format": "date-time" },
+        "reconciled_at": { "type": ["string", "null"], "format": "date-time" },
+        "reconciliation_run_id": {
+          "type": ["string", "null"],
+          "maxLength": 128,
+          "description": "Opaque reference to the ReconciliationRun that resolved this drift, once resolution=RECONCILED."
+        }
+      },
+      "if": {
+        "properties": { "resolution": { "const": "RECONCILED" } },
+        "required": ["resolution"]
+      },
+      "then": { "required": ["reconciled_at"] }
+    }
+  }
+}
