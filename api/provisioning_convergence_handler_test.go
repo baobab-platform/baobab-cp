@@ -296,6 +296,7 @@ func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
 		t.Fatalf("drift: %v", drift)
 	}
 	refused(call("requester", http.MethodGet, "/v1/tenants/"+f.OtherTenantID+"/provisioning/"+id+"/readiness", "", "", ""), http.StatusNotFound, "PROVISIONING_NOT_FOUND")
+	refused(call("requester", http.MethodGet, base+"/not-a-provisioning/drift", "", "", ""), http.StatusNotFound, "PROVISIONING_NOT_FOUND")
 	refused(call("requester", http.MethodGet, "/v1/tenants/"+f.OtherTenantID+"/provisioning/"+id, "", "", ""), http.StatusNotFound, "PROVISIONING_NOT_FOUND")
 
 	// No provider instance runs where the other tenant must reside: planned
