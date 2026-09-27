@@ -128,13 +128,9 @@ var unimplemented = []string{
 }
 
 // nonconforming are served at a described path but not yet to its
-// description: the legacy provisioning evidence routes, which the
-// ADR-SHARED-015 migration conforms. Like unimplemented operations, the
-// Console's client removes them. The list may only shrink.
-var nonconforming = []string{
-	"GET /v1/tenants/{}/provisioning/{}/drift",
-	"GET /v1/tenants/{}/provisioning/{}/readiness",
-}
+// description. Like unimplemented operations, the Console's client removes
+// them. The list may only shrink; the ADR-SHARED-015 migration emptied it.
+var nonconforming = []string{}
 
 // TestOpenAPIDescribesTheRouter: every /v1 route is described by the
 // pinned Shared OpenAPI or listed as undescribed, every described

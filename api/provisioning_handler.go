@@ -32,9 +32,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning"
-	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -62,49 +60,46 @@ type provisioningHandler struct {
 }
 
 func (h provisioningHandler) readiness(w http.ResponseWriter, r *http.Request) {
-	op, ok := h.loadOwned(w, r)
+	c, ok := h.loadConverged(w, r)
 	if !ok {
 		return
 	}
-	snapshots, err := h.repo.ListReadinessSnapshots(r.Context(), op.ID)
+	snapshots, err := h.repo.ListReadinessSnapshots(r.Context(), c.ID)
 	if err != nil {
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "readiness evidence could not be listed", true)
+		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "readiness evidence could not be read", true)
 		return
 	}
-	writeJSON(w, http.StatusOK, snapshots)
+	writeJSON(w, http.StatusOK, provisioningReadiness(c, snapshots))
 }
 
 func (h provisioningHandler) drift(w http.ResponseWriter, r *http.Request) {
-	op, ok := h.loadOwned(w, r)
+	c, ok := h.loadConverged(w, r)
 	if !ok {
 		return
 	}
-	snapshots, err := h.repo.ListReconciliationSnapshots(r.Context(), op.ID)
+	snapshots, err := h.repo.ListReconciliationSnapshots(r.Context(), c.ID)
 	if err != nil {
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "reconciliation evidence could not be listed", true)
+		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "drift evidence could not be read", true)
 		return
 	}
-	writeJSON(w, http.StatusOK, snapshots)
+	writeJSON(w, http.StatusOK, provisioningDrift(c, snapshots))
 }
 
-// loadOwned fetches the {id}-path provisioning run and fails closed
-// (404, never 403) unless it belongs to the {tenantID}-path tenant.
-func (h provisioningHandler) loadOwned(w http.ResponseWriter, r *http.Request) (provisioningdomain.TenantProvisioning, bool) {
+// loadConverged fetches the {id}-path provisioning, by its tp_ id, and
+// fails closed (404, never 403) unless it belongs to the {tenantID}-path
+// tenant. A malformed tenant id belongs to no provisioning, so it is the
+// same documented 404.
+func (h provisioningHandler) loadConverged(w http.ResponseWriter, r *http.Request) (repository.ConvergedProvisioning, bool) {
 	tenantID := chi.URLParam(r, "tenantID")
-	id := chi.URLParam(r, "provisioningID")
-	if row, err := repository.ProvisioningUUID(id); err == nil {
-		id = row
+	id, err := repository.ProvisioningUUID(chi.URLParam(r, "provisioningID"))
+	if err == nil {
+		var c repository.ConvergedProvisioning
+		if c, err = h.repo.GetConvergedProvisioning(r.Context(), id); err == nil && c.TenantID == tenantID {
+			return c, true
+		}
 	}
-	if !domain.ValidTenantID(tenantID) {
-		problem(w, r, http.StatusBadRequest, "INVALID_TENANT_ID", "tenant_id is invalid", false)
-		return provisioningdomain.TenantProvisioning{}, false
-	}
-	op, err := h.repo.GetTenantProvisioning(r.Context(), id)
-	if err != nil || op.TenantID != tenantID {
-		problem(w, r, http.StatusNotFound, "PROVISIONING_NOT_FOUND", errProvisioningNotFound.Error(), false)
-		return provisioningdomain.TenantProvisioning{}, false
-	}
-	return op, true
+	problem(w, r, http.StatusNotFound, "PROVISIONING_NOT_FOUND", errProvisioningNotFound.Error(), false)
+	return repository.ConvergedProvisioning{}, false
 }
 
 func sha256Hex(raw []byte) string {
