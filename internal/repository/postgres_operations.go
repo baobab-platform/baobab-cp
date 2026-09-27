@@ -77,17 +77,29 @@ func (r *PostgresRepository) ClaimOperation(ctx context.Context, opType string, 
 	return op, err == nil, err
 }
 
-// CompleteOperation records the outcome and releases the lease.
-func (r *PostgresRepository) CompleteOperation(ctx context.Context, id string, outcome operations.Outcome) error {
+// ErrOperationLeaseLost: the executor's claim on the operation lapsed and
+// another executor resumed it; the stale executor records nothing.
+var ErrOperationLeaseLost = errors.New("the operation was resumed by another executor")
+
+// CompleteOperation records the outcome of the execution attempt that
+// claimed the operation and releases its lease. It changes nothing when the
+// operation has since been resumed as another attempt.
+func (r *PostgresRepository) CompleteOperation(ctx context.Context, id string, attempt int, outcome operations.Outcome) error {
 	terminal := outcome.Status == operations.StatusSucceeded || outcome.Status == operations.StatusFailed
-	_, err := r.pool.Exec(ctx, `
+	tag, err := r.pool.Exec(ctx, `
 		UPDATE operations.execution_operation
 		SET status = $2, current_phase = NULLIF($3, ''), retryable = $4, result = $5, problem = $6,
 			completed_at = CASE WHEN $7 THEN now() END, lease_expires_at = NULL,
 			revision = revision + 1, updated_at = now()
-		WHERE operation_id = $1`,
-		id, string(outcome.Status), outcome.CurrentPhase, outcome.Retryable, nullJSON(outcome.Result), nullJSON(outcome.Problem), terminal)
-	return err
+		WHERE operation_id = $1 AND execution_attempt = $8 AND status IN ('PREPARING', 'RUNNING')`,
+		id, string(outcome.Status), outcome.CurrentPhase, outcome.Retryable, nullJSON(outcome.Result), nullJSON(outcome.Problem), terminal, attempt)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrOperationLeaseLost
+	}
+	return nil
 }
 
 func nullJSON(raw json.RawMessage) any {

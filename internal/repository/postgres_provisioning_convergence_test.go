@@ -166,4 +166,16 @@ func TestAnInterruptedOperationIsResumed(t *testing.T) {
 	if err != nil || !ok || resumed.ID != id || resumed.ExecutionAttempt != 2 {
 		t.Fatalf("an expired lease was not resumed: %v %v %+v", ok, err, resumed)
 	}
+	// The interrupted attempt cannot record over the resumed one; the
+	// resumed attempt records its outcome.
+	outcome := operations.Outcome{Status: operations.StatusBlocked, CurrentPhase: "BLOCKED", Retryable: true}
+	if err := repo.CompleteOperation(ctx, id, 1, outcome); !errors.Is(err, ErrOperationLeaseLost) {
+		t.Fatalf("the interrupted attempt recorded its outcome: %v", err)
+	}
+	if err := repo.CompleteOperation(ctx, id, 2, outcome); err != nil {
+		t.Fatalf("the resumed attempt could not record its outcome: %v", err)
+	}
+	if err := repo.CompleteOperation(ctx, id, 2, outcome); !errors.Is(err, ErrOperationLeaseLost) {
+		t.Fatalf("a completed operation was completed again: %v", err)
+	}
 }

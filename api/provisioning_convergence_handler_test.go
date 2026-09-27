@@ -17,6 +17,7 @@ import (
 	productdomain "github.com/baobab-platform/baobab-cp/internal/product/domain"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/apply"
+	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 )
@@ -228,7 +229,7 @@ func TestProvisioningIsPlannedApprovedAndApplied(t *testing.T) {
 	}
 	refused(call("requester", http.MethodPost, base+"/"+id+"/apply", "apply-key2-"+suffix, `"3"`, ""), http.StatusConflict, "OPERATION_IN_PROGRESS")
 
-	executor := apply.Executor{Store: repo, Registry: repo, Pipeline: apply.StandardPipeline(provisioning.ZB02Dependencies{Tenants: tenantStore, Repo: repo, Provisioning: repo})}
+	executor := apply.Executor{Store: repo, Registry: repo, Planner: convergence.Planner{Registry: repo}, Pipeline: apply.StandardPipeline(provisioning.ZB02Dependencies{Tenants: tenantStore, Repo: repo, Provisioning: repo})}
 	if ran, err := executor.RunOnce(ctx); !ran || err != nil {
 		t.Fatalf("executor: ran %v, %v", ran, err)
 	}

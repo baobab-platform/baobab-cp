@@ -19,8 +19,8 @@ import (
 
 // TestOperationsArePolledAsTheirOwnResource: an operation is read by id with
 // its revision as ETag, polling with that ETag is 304, a failed operation
-// carries its problem, and only platform administrators read operations until
-// tenant-scoped authority exists (ADR-BCP-022 sections 58-67).
+// carries its problem, and a tenant administrator reads only its own
+// tenants' operations (ADR-BCP-022 sections 58-67).
 func TestOperationsArePolledAsTheirOwnResource(t *testing.T) {
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
@@ -81,13 +81,25 @@ func TestOperationsArePolledAsTheirOwnResource(t *testing.T) {
 		t.Fatal("a FAILED operation without its problem was stored")
 	}
 
-	principal := func(role string) auth.Principal {
-		return auth.Principal{Subject: "admin-" + suffix, ActorType: "human", TokenID: "t-" + role,
+	principal := func(role, subject string) auth.Principal {
+		return auth.Principal{Subject: subject + suffix, Issuer: testRealm, ActorType: "human", TokenID: "t-" + subject,
 			Scopes: map[string]struct{}{"operation:read": {}}, Roles: map[string]struct{}{role: {}}}
 	}
+	// A tenant administrator of the running operation's tenant, and one of
+	// another tenant.
+	memberships := repository.NewInMemoryRepository()
+	for subject, tenant := range map[string]string{"member-": "tn_" + suffix[:20], "outsider-": "tn_othertenanthere"} {
+		p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "human", Status: "ACTIVE"}
+		mustNoError(t, memberships.CreateIdentity(ctx, p))
+		mustNoError(t, memberships.LinkExternalIdentity(ctx, domain.ExternalIdentity{ID: domain.NewExternalIdentityID(),
+			PrincipalID: p.ID, Issuer: testRealm, Subject: subject + suffix, Status: "ACTIVE"}))
+		mustNoError(t, memberships.CreateWorkforceMembership(ctx, domain.WorkforceMembership{ID: domain.NewWorkforceMembershipID(),
+			PrincipalID: p.ID, TenantID: tenant, Roles: []string{RoleTenantAdmin}, Status: "ACTIVE"}))
+	}
 	handler := New(Dependencies{Store: &fakeStore{}, AdminVerifier: tokenVerifier{
-		"platform": principal(RolePlatformAdmin), "tenant": principal(RoleTenantAdmin),
-	}, Operations: repo})
+		"platform": principal(RolePlatformAdmin, "admin-"), "member": principal(RoleTenantAdmin, "member-"),
+		"outsider": principal(RoleTenantAdmin, "outsider-"),
+	}, Operations: repo, Identities: memberships, Memberships: memberships})
 	get := func(token, id, ifNoneMatch string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodGet, "/v1/admin/operations/"+id, nil)
 		request.Header.Set("Authorization", "Bearer "+token)
@@ -138,7 +150,15 @@ func TestOperationsArePolledAsTheirOwnResource(t *testing.T) {
 	if missing := get("platform", "op_absent1", ""); missing.Code != http.StatusNotFound {
 		t.Fatalf("unknown operation: %d", missing.Code)
 	}
-	if tenantAdmin := get("tenant", running, ""); tenantAdmin.Code != http.StatusForbidden {
-		t.Fatalf("a tenant administrator read an operation: %d", tenantAdmin.Code)
+	// A tenant administrator polls the operations of its tenant; any other
+	// operation is not found, indistinguishable from one that does not exist.
+	validate(get("member", running, ""))
+	for label, id := range map[string]string{"another tenant's operation": running, "an operation of no tenant": failed} {
+		if denied := get("outsider", id, ""); denied.Code != http.StatusNotFound {
+			t.Fatalf("a tenant administrator read %s: %d", label, denied.Code)
+		}
+	}
+	if denied := get("member", failed, ""); denied.Code != http.StatusNotFound {
+		t.Fatalf("a tenant administrator read an operation of no tenant: %d", denied.Code)
 	}
 }

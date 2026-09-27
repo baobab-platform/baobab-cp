@@ -22,7 +22,7 @@ type ExecutorStore interface {
 	LoadExecuted(ctx context.Context, key string) (convergence.ExecutedProvisioning, error)
 	SaveExecutionManifest(ctx context.Context, m provisioningdomain.TenantManifestRecord) error
 	MarkProvisioningBlocked(ctx context.Context, id string) error
-	CompleteOperation(ctx context.Context, id string, outcome operations.Outcome) error
+	CompleteOperation(ctx context.Context, id string, attempt int, outcome operations.Outcome) error
 	LegalEntityOf(ctx context.Context, tenantID string) (string, error)
 }
 
@@ -41,6 +41,10 @@ const maxAttempts = 5
 type Executor struct {
 	Store    ExecutorStore
 	Registry convergence.ExecutionRegistry
+	// Planner re-plans the desired state before execution: a plan whose
+	// assumptions no longer hold is never executed (ADR-BCP-021 section 30).
+	Planner  convergence.Planner
+	Now      func() time.Time
 	Pipeline Pipeline
 	Lease    time.Duration
 }
@@ -59,7 +63,7 @@ func (e Executor) RunOnce(ctx context.Context) (bool, error) {
 	outcome := e.execute(ctx, op)
 	slog.InfoContext(ctx, "provisioning operation executed", "operation_id", op.ID, "tenant_provisioning_id", op.SubjectID,
 		"tenant_id", op.TenantID, "attempt", op.ExecutionAttempt, "status", string(outcome.Status))
-	return true, e.Store.CompleteOperation(ctx, op.ID, outcome)
+	return true, e.Store.CompleteOperation(ctx, op.ID, op.ExecutionAttempt, outcome)
 }
 
 // Run executes operations until ctx ends, polling every interval while none
@@ -96,6 +100,25 @@ func (e Executor) execute(ctx context.Context, op operations.Operation) operatio
 	// apply command checked, in case anything changed since.
 	if p.Plan == nil || p.Desired == nil || !p.Approved || p.Plan.PlanDigest != op.PlanDigest || p.ApprovedDigest != op.PlanDigest || p.ApprovalID != op.ApprovalID {
 		return failed("PLAN_DIGEST_MISMATCH", "the plan being applied is no longer the approved plan", false)
+	}
+	// Authoritative state may have changed while the operation was queued
+	// or interrupted: re-plan and execute only unchanged material. An
+	// execution that has begun is not abandoned merely because the plan's
+	// validity window closed while it ran.
+	now := time.Now().UTC()
+	if e.Now != nil {
+		now = e.Now()
+	}
+	if op.ExecutionAttempt == 1 && p.Plan.Expired(now) {
+		return failed("PLAN_STALE", "the approved plan expired before execution; replan", false)
+	}
+	again, err := e.Planner.Plan(ctx, convergence.Input{Desired: *p.Desired, TenantProvisioningID: p.Key, PlanID: p.Plan.PlanID,
+		PlanVersion: p.Plan.PlanVersion, BaseRevision: p.Plan.BaseRevision, Now: p.Plan.GeneratedAt})
+	if err != nil {
+		return failed("PROVISIONING_UNAVAILABLE", "authoritative state could not be read to revalidate the plan", true)
+	}
+	if convergence.Material(again) != convergence.Material(*p.Plan) {
+		return failed("PLAN_STALE", "authoritative state changed since the plan was approved; replan", false)
 	}
 	legalEntity, err := e.Store.LegalEntityOf(ctx, p.TenantID)
 	if err != nil {

@@ -192,11 +192,11 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/"+action, canonical.lifecycle(action))
 	}
 	if dependencies.Operations != nil {
-		// Platform administrators only until operations carry tenant-scoped
-		// authority checks: fail closed rather than expose another tenant's
-		// operation.
-		ops := operationHandler{repo: dependencies.Operations}
-		r.With(a.authorize(a.adminVerifier, "human", "operation:read"), a.requireAdminRole(nil, true)).Get("/v1/admin/operations/{operationID}", ops.get)
+		// Platform administrators read every operation; a tenant
+		// administrator reads those of its own tenants (the handler decides
+		// once it knows the operation's tenant).
+		ops := operationHandler{repo: dependencies.Operations, tenantAdminOf: a.tenantAdminOf}
+		r.With(a.authorize(a.adminVerifier, "human", "operation:read")).Get("/v1/admin/operations/{operationID}", ops.get)
 	}
 	if dependencies.Mappings != nil {
 		mappings := mappingHandler{repo: dependencies.Mappings, contexts: dependencies.Contexts}
@@ -478,33 +478,48 @@ func (a *API) requireAdminRole(tenantID func(*http.Request) string, platformAdmi
 			if tenantID != nil {
 				target = tenantID(r)
 			}
-			if !domain.ValidTenantID(target) {
-				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
-				return
-			}
-			if a.identities == nil || a.memberships == nil {
+			switch a.tenantAdminOf(r, principal, target) {
+			case adminUnavailable:
 				problem(w, r, http.StatusServiceUnavailable, "AUTH_VERIFIER_UNAVAILABLE", "authorization is temporarily unavailable", true)
-				return
-			}
-			// Read-only resolution, deliberately not IdentityService.Resolve:
-			// a "cp:tenant-admin" token with no matching canonical identity
-			// yet must never be auto-provisioned into one just to fail the
-			// membership check that follows -- ADR-0009 §29, mirroring the
-			// no-JIT-provisioning precedent already established for
-			// workforce membership itself.
-			caller, err := a.identities.ResolveIdentity(r.Context(), principal.Issuer, principal.Subject)
-			if err != nil {
+			case adminDenied:
 				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
-				return
+			default:
+				next.ServeHTTP(w, r)
 			}
-			membership, err := a.memberships.GetWorkforceMembership(r.Context(), caller.ID, target)
-			if err != nil || membership.Status != "ACTIVE" {
-				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
-				return
-			}
-			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+type adminAuthority int
+
+const (
+	adminDenied adminAuthority = iota
+	adminAllowed
+	adminUnavailable
+)
+
+// tenantAdminOf decides whether a "cp:tenant-admin" principal administers
+// tenantID: an ACTIVE WorkforceMembership of its canonical identity for that
+// tenant. Resolution is read-only, deliberately not IdentityService.Resolve:
+// a tenant-admin token with no canonical identity yet is never
+// auto-provisioned into one just to fail the membership check (ADR-0009
+// section 29, the no-JIT-provisioning precedent for workforce membership).
+func (a *API) tenantAdminOf(r *http.Request, principal auth.Principal, tenantID string) adminAuthority {
+	if !principal.HasRole(RoleTenantAdmin) || !domain.ValidTenantID(tenantID) {
+		return adminDenied
+	}
+	if a.identities == nil || a.memberships == nil {
+		return adminUnavailable
+	}
+	caller, err := a.identities.ResolveIdentity(r.Context(), principal.Issuer, principal.Subject)
+	if err != nil {
+		return adminDenied
+	}
+	membership, err := a.memberships.GetWorkforceMembership(r.Context(), caller.ID, tenantID)
+	if err != nil || membership.Status != "ACTIVE" {
+		return adminDenied
+	}
+	return adminAllowed
 }
 
 func bearerToken(header string) (string, bool) {
