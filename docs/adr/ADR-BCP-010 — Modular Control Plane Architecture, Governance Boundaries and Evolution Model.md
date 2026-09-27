@@ -1,6 +1,6 @@
 # ADR-BCP-010 — Modular Control Plane Architecture, Governance Boundaries and Evolution Model
 
-**Status:** Proposed — Normative Platform Architecture  
+**Status:** Accepted — Normative Platform Architecture  
 **Date:** 2026-09-11  
 **Repository:** `baobab-platform/baobab-cp`  
 **Related Repositories:** `baobab-platform/shared`, `baobab-platform/baobab-iam`, domain provider repositories  

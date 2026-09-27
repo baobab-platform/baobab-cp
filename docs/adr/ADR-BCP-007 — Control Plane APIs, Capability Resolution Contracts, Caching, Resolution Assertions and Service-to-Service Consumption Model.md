@@ -1,6 +1,7 @@
 # ADR-BCP-007 — Control Plane APIs, Capability Resolution Contracts, Caching, Resolution Assertions and Service-to-Service Consumption Model
 
-**Status:** Proposed — Normative Platform Architecture  
+**Status:** Accepted — Normative Platform Architecture, amended in part  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`)  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  
@@ -3251,9 +3252,9 @@ be performed on this resource now?"
 
 # 165. Decision
 
-**ACCEPTED TARGET CONTROL-PLANE API AND CONSUMPTION ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET CONTROL-PLANE API AND CONSUMPTION ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. `baobab-cp` SHALL expose canonical context and capability-resolution APIs;
 2. Digital Estates SHALL consume capabilities rather than engine identities;

@@ -1,17 +1,39 @@
 # Architecture Decision Records
 
-- [ADR-0001: Use Go for the Baobab control-plane runtime](0001-go-control-plane-runtime.md)
-- [ADR-0003: Multi-tenant control-plane architecture](0003-multi-tenant-control-plane-architecture.md)
-- [ADR-0004: Executable tenant context resolution policy](0004-context-resolution-policy.md)
-- [ADR-0006: Supplier organisation canonical entity registration](0006-supplier-organisation-canonical-entity.md)
-- [ADR-BCP-001: Baobab Control Plane — Parent Implementation Contract and Derived Artefacts](ADR-BCP-001-Baobab%20Control%20Plane%20—%20Parent%20Implementation%20Contract%20and%20Derived%20Artefacts.md)
-- [ADR-BCP-016: Buyer Organisation Canonical Entity Registration and OrganisationID Context Resolution](ADR-BCP-016%20—%20Buyer%20Organisation%20Canonical%20Entity%20Registration%20and%20OrganisationID%20Context%20Resolution.md)
-- [ADR-BCP-024: Kind-Specific Canonical Organisation Attestation](ADR-BCP-024%20—%20Kind-Specific%20Canonical%20Organisation%20Attestation.md)
+The register of this repository's architecture decisions and normative specifications, with the status each one declares. `baobab-platform/shared` keeps its own register in `docs/adr/README.md`.
 
-ADR-0005 ("BCP-DB-001/BCP-GO-001 conformance gap and remediation") is referenced from a
-source comment in `internal/repository/postgres.go` but has not been authored as a
-committed ADR. See
-[`docs/reconciliation/shared-control-plane-audit.md`](../reconciliation/shared-control-plane-audit.md)
-and
-[`docs/reconciliation/canonical-contract-matrix.md`](../reconciliation/canonical-contract-matrix.md)
-for the current evidence base a future ADR-0005 can cite.
+An ADR marked *amended in part* or *refined* stays authoritative except where the document named in its `Amended By` or `Refined By` header decides otherwise. A *superseded in part* ADR stands only where no later ADR decides otherwise; its note says which parts survive.
+
+| Document | Status |
+|---|---|
+| [ADR-0001: Use Go for the Baobab control-plane runtime](0001-go-control-plane-runtime.md) | Accepted |
+| [ADR-0003: Multi-Tenant, Production-Ready Control Plane Architecture](0003-multi-tenant-control-plane-architecture.md) | Superseded in part by ADR-BCP-001 to ADR-BCP-010 and ADR-BCP-018 |
+| [ADR-0004: Executable Tenant Context Resolution Policy](0004-context-resolution-policy.md) | Accepted |
+| [ADR-0006: Supplier Organisation Canonical Entity Registration](0006-supplier-organisation-canonical-entity.md) | Accepted |
+| [Baobab Control Plane — Parent Implementation Contract and Derived Artefacts](ADR-BCP-001-Baobab%20Control%20Plane%20%E2%80%94%20Parent%20Implementation%20Contract%20and%20Derived%20Artefacts.md) | Accepted — Normative Implementation Baseline, amended in part |
+| [ADR-BCP-002 — Capability-Centric Baobab Platform Architecture and Digital Estate Consumption Model](ADR-BCP-002%20%E2%80%94%20Capability-Centric%20Baobab%20Platform%20Architecture%20and%20Digital%20Estate%20Consumption%20Model.md) | Accepted — Normative Target Architecture, amended in part |
+| [ADR-BCP-003 — Capability Registry, Grants, Scopes, Bindings and Deterministic Resolution Model](ADR-BCP-003%20%E2%80%94%20Capability%20Registry%2C%20Grants%2C%20Scopes%2C%20Bindings%20and%20Deterministic%20Resolution%20Model.md) | Accepted — Normative Implementation Architecture, amended in part |
+| [ADR-BCP-004 — Context, Market, Geography, Legal-Entity and Digital Estate Resolution Model](ADR-BCP-004%20%E2%80%94%20Context%2C%20Market%2C%20Geography%2C%20Legal-Entity%20and%20Digital%20Estate%20Resolution%20Model.md) | Accepted — Normative Platform Architecture, amended in part |
+| [ADR-BCP-005 — Product, Capability Composition, Subscription, Entitlement and Digital Estate Provisioning Model](ADR-BCP-005%20%E2%80%94%20Product%2C%20Capability%20Composition%2C%20Subscription%2C%20Entitlement%20and%20Digital%20Estate%20Provisioning%20Model.md) | Accepted — Normative Platform Architecture, amended in part |
+| [ADR-BCP-006 — Capability Provider Lifecycle, Engine Topology, Health, Failover and Migration Model](ADR-BCP-006%20%E2%80%94%20Capability%20Provider%20Lifecycle%2C%20Engine%20Topology%2C%20Health%2C%20Failover%20and%20Migration%20Model.md) | Accepted — Normative Platform Architecture, amended in part |
+| [ADR-BCP-007 — Control Plane APIs, Capability Resolution Contracts, Caching, Resolution Assertions and Service-to-Service Consumption Model](ADR-BCP-007%20%E2%80%94%20Control%20Plane%20APIs%2C%20Capability%20Resolution%20Contracts%2C%20Caching%2C%20Resolution%20Assertions%20and%20Service-to-Service%20Consumption%20Model.md) | Accepted — Normative Platform Architecture, amended in part |
+| [ADR-BCP-008 — Control Plane Audit, Observability, Reconciliation, Readiness and Operational Governance Model](ADR-BCP-008%20%E2%80%94%20Control%20Plane%20Audit%2C%20Observability%2C%20Reconciliation%2C%20Readiness%20and%20Operational%20Governance%20Model.md) | Accepted — Normative Platform Architecture, amended in part |
+| [ADR-BCP-009 — Capability-Centric Security, Isolation, Residency, Revocation and Failure Semantics](ADR-BCP-009%20%E2%80%94%20Capability-Centric%20Security%2C%20Isolation%2C%20Residency%2C%20Revocation%20and%20Failure%20Semantics.md) | Accepted — Normative Platform Security Architecture |
+| [ADR-BCP-010 — Modular Control Plane Architecture, Governance Boundaries and Evolution Model](ADR-BCP-010%20%E2%80%94%20Modular%20Control%20Plane%20Architecture%2C%20Governance%20Boundaries%20and%20Evolution%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-011 — Market Participation, Trade Lanes and Cross-Market Trading Model](ADR-BCP-011%20%E2%80%94%20Market%20Participation%2C%20Trade%20Lanes%20and%20Cross-Market%20Trading%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-012 — Intercompany and Inter-Branch Trading, Legal-Entity Relationship and Internal Settlement Model](ADR-BCP-012%20%E2%80%94%20Intercompany%20and%20Inter-Branch%20Trading%2C%20Legal-Entity%20Relationship%20and%20Internal%20Settlement%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-013 — Canonical Inventory Ownership, Custody, Location and In-Transit Model](ADR-BCP-013%20%E2%80%94%20Canonical%20Inventory%20Ownership%2C%20Custody%2C%20Location%20and%20In-Transit%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-014 — Canonical Counterparty Identity, Roles and Relationships Model](ADR-BCP-014%20%E2%80%94%20Canonical%20Counterparty%20Identity%2C%20Roles%20and%20Relationships%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-015 — Gate ZB-00 Capability Vocabulary Alignment, Quality-State Ownership and Roadmap Conflict Resolution](ADR-BCP-015%20%E2%80%94%20Gate%20ZB-00%20Capability%20Vocabulary%20Alignment%2C%20Quality-State%20Ownership%20and%20Roadmap%20Conflict%20Resolution.md) | Accepted — Normative Erratum and Conflict Resolution |
+| [ADR-BCP-016 — Buyer Organisation Canonical Entity Registration and OrganisationID Context Resolution](ADR-BCP-016%20%E2%80%94%20Buyer%20Organisation%20Canonical%20Entity%20Registration%20and%20OrganisationID%20Context%20Resolution.md) | Accepted |
+| [ADR-BCP-017 — Organisation Admission, Subscription Classification and Tenant Onboarding Lifecycle Model](ADR-BCP-017%20%E2%80%94%20Organisation%20Admission%2C%20Subscription%20Classification%20and%20Tenant%20Onboarding%20Lifecycle%20Model.md) | Accepted |
+| [ADR-BCP-018 — Canonical Organisation, Corporate Group, Platform Account and Tenant Relationship Model](ADR-BCP-018%20%E2%80%94%20Canonical%20Organisation%2C%20Corporate%20Group%2C%20Platform%20Account%20and%20Tenant%20Relationship%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-019 — Control Plane Administrative Frontend, Organisation Onboarding Experience and Repository Composition Model](ADR-BCP-019%20%E2%80%94%20Control%20Plane%20Administrative%20Frontend%2C%20Organisation%20Onboarding%20Experience%20and%20Repository%20Composition%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-020 — Administrative Authority, Delegated Administration, Privileged Access and Separation-of-Duties Model](ADR-BCP-020%20%E2%80%94%20Administrative%20Authority%2C%20Delegated%20Administration%2C%20Privileged%20Access%20and%20Separation-of-Duties%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-021 — Changeset, Impact Analysis, Approval and Controlled Mutation Model](ADR-BCP-021%20%E2%80%94%20Changeset%2C%20Impact%20Analysis%2C%20Approval%20and%20Controlled%20Mutation%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-022 — Administrative API, Command/Query, Long-Running Operation and Error Contract Model](ADR-BCP-022%20%E2%80%94%20Administrative%20API%2C%20Command-Query%2C%20Long-Running%20Operation%20and%20Error%20Contract%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-023 — Organisation Evidence, Verification, Trust and Compliance Record Model](ADR-BCP-023%20%E2%80%94%20Organisation%20Evidence%2C%20Verification%2C%20Trust%20and%20Compliance%20Record%20Model.md) | Accepted — Normative Platform Architecture |
+| [ADR-BCP-024 — Kind-Specific Canonical Organisation Attestation](ADR-BCP-024%20%E2%80%94%20Kind-Specific%20Canonical%20Organisation%20Attestation.md) | Accepted |
+| [Baobab Control Plane Tenant Onboarding & Provisioning Technical Specification](Baobab%20Control%20Plane%20Tenant%20Onboarding%20%26%20Provisioning%20Technical%20Specification.md) | Accepted — Normative Implementation Specification, amended in part |
+
+ADR-0002 (`0002-adopting-zensical.md`) and ADR-0005 ("BCP-DB-001/BCP-GO-001 conformance gap and remediation") are referenced but are not in this repository. ADR-0005 is cited from a source comment in `internal/repository/postgres.go`; [`docs/reconciliation/shared-control-plane-audit.md`](../reconciliation/shared-control-plane-audit.md) and [`docs/reconciliation/canonical-contract-matrix.md`](../reconciliation/canonical-contract-matrix.md) hold the evidence a future ADR-0005 can cite.

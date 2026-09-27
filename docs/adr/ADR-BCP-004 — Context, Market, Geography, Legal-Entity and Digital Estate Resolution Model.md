@@ -1,6 +1,7 @@
 # ADR-BCP-004 — Context, Market, Geography, Legal-Entity and Digital Estate Resolution Model
 
-**Status:** Proposed — Normative Platform Architecture  
+**Status:** Accepted — Normative Platform Architecture, amended in part  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`)  
 **Date:** 2026-09-10  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  
@@ -3308,9 +3309,9 @@ If the answer belongs to different categories, the fields SHALL remain different
 
 # 126. Decision
 
-**ACCEPTED TARGET CONTEXT ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET CONTEXT ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. the existing CP context model SHALL be audited against this ADR;
 2. tenant/legal-entity conflation SHALL be removed;

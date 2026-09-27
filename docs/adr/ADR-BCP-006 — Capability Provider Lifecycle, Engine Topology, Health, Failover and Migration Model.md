@@ -1,6 +1,7 @@
 # ADR-BCP-006 — Capability Provider Lifecycle, Engine Topology, Health, Failover and Migration Model
 
-**Status:** Proposed — Normative Platform Architecture  
+**Status:** Accepted — Normative Platform Architecture, amended in part  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`)  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  
@@ -3014,9 +3015,9 @@ PRIMARY
 
 # 143. Decision
 
-**ACCEPTED TARGET PROVIDER AND ENGINE TOPOLOGY ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET PROVIDER AND ENGINE TOPOLOGY ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. provider identity SHALL become distinct from engine identity;
 2. engine instances SHALL become explicit topology entities;

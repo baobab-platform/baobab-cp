@@ -1,6 +1,7 @@
 # ADR-BCP-008 — Control Plane Audit, Observability, Reconciliation, Readiness and Operational Governance Model
 
-**Status:** Proposed — Normative Platform Architecture  
+**Status:** Accepted — Normative Platform Architecture, amended in part  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`)  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  
@@ -3613,9 +3614,9 @@ Rejected.
 
 # 196. Operational Decision
 
-**ACCEPTED TARGET AUDIT, OBSERVABILITY, RECONCILIATION AND READINESS ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET AUDIT, OBSERVABILITY, RECONCILIATION AND READINESS ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. audit SHALL become first-class;
 2. readiness SHALL become a hierarchical platform model;

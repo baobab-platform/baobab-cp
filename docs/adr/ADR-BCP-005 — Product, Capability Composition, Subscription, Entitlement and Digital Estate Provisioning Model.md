@@ -1,6 +1,7 @@
 # ADR-BCP-005 — Product, Capability Composition, Subscription, Entitlement and Digital Estate Provisioning Model
 
-**Status:** Proposed — Normative Platform Architecture  
+**Status:** Accepted — Normative Platform Architecture, amended in part  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`)  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  
@@ -3086,9 +3087,9 @@ Rejected.
 
 # 136. Decision
 
-**ACCEPTED TARGET PRODUCT AND PROVISIONING ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET PRODUCT AND PROVISIONING ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. product packaging SHALL be separated from engine topology;
 2. capability compositions SHALL define products and profiles;

@@ -8,7 +8,8 @@
 **HTTP Contract:** OpenAPI 3.2.0
 **Event Contract:** AsyncAPI 3.0.0
 **Contract Authority:** `baobab-platform/shared`
-**Status:** Proposed Normative Implementation Baseline
+**Status:** Accepted — Normative Implementation Baseline, amended in part  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-002 (`binding_mode` is PRIMARY, FALLBACK, SHADOW, MIGRATION or DISABLED), CR-004 (migration-count erratum) and CR-005 (bindings go through a CapabilityProvider); `shared` ADR-SHARED-008 (§96: canonical event types are `com.baobab-platform.<context>.<...>.v<N>`, not `baobab.*`)  
 **Architecture Style:** Modular monolith control plane with explicit bounded contexts and independently evolvable adapters
 **Scope:** Canonical identity, mappings, markets, estates, topology, capabilities, isolation, context resolution, audit and messaging
 
@@ -4556,6 +4557,8 @@ CanonicalEvent:
 ---
 
 # 96. Event naming convention
+
+> **Superseded by `shared` ADR-SHARED-008**: canonical event types are `com.baobab-platform.<context>.<...>.v<N>`, the pattern `contracts/events/v1/envelope.schema.json` enforces. The `baobab.*` names below are not valid.
 
 Format:
 

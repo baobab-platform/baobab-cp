@@ -1,6 +1,7 @@
 # ADR-BCP-002 — Capability-Centric Baobab Platform Architecture and Digital Estate Consumption Model
 
-**Status:** Proposed — Normative Target Architecture  
+**Status:** Accepted — Normative Target Architecture, amended in part  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`); CR-002 (`READ_ONLY` is not a binding mode)  
 **Date:** 2026-09-10  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  
@@ -3139,9 +3140,9 @@ All future Control Plane development SHALL be judged against whether it moves Ba
 
 # 73. Decision
 
-**ACCEPTED TARGET ARCHITECTURE, subject to formal approval.**
+**ACCEPTED TARGET ARCHITECTURE.**
 
-Upon approval:
+Accordingly:
 
 1. `ADR-BCP-002` SHALL become the architectural authority for capability-centric platform consumption.
 2. `ADR-BCP-001` SHALL remain authoritative where it does not conflict with this decision.
