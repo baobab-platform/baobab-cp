@@ -723,6 +723,18 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Administrative grants and the effective-authority read model (ADR-BCP-020
+  gates ADA-01 to ADA-03, FE-00 G5; Shared `administration/v1`).
+  - `internal/administration`: the permission and profile catalogue, scope
+    coverage, deny-by-default evaluation that never combines grants across
+    scope, delegation validation, and effective authority.
+  - Migration 000067 adds `policy.administrative_grant`.
+  - `GET /v1/admin/effective-authority` (scope `authority:self`) reports the
+    caller's own usable grants, derived from grants only.
+  - `cmd/admin-bootstrap` creates bounded, audited initial platform
+    authority.
+  - `docs/reconciliation/ada-00-administrative-authority-inventory.md`
+    records today's role checks and their migration.
 - Health gates eligibility (ADR-BCP-006 sections 18-22 and 72-73, Shared
   `capability/v1` `health.schema.json` and `health-policy.yaml`).
   - Health is a time-bounded observation. A missing, expired or

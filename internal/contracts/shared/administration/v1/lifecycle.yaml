@@ -1,0 +1,32 @@
+# ADR-BCP-020 sections 57-64: the AdministrativeGrant lifecycle.
+#
+# Every permitted transition, the command that performs it and the actor
+# who may issue it. Anything not listed is refused. Implementations test
+# their transition table against this file.
+#
+# Actors:
+#   GRANTOR    a principal holding administrator.grant over the grant's
+#              scope, who is not the grantee (section 39)
+#   REVOKER    a principal holding administrator.revoke over the grant's
+#              scope. Revoking or suspending is never refused merely
+#              because the revoker also granted it.
+#   PLATFORM   the Control Plane itself: activation once a pending grant's
+#              approval is recorded and valid_from is reached, and expiry
+#              once valid_until has passed, with no manual clean-up (section 61)
+version: 1
+initial: PENDING
+terminal: [EXPIRED, REVOKED]
+transitions:
+  - {command: activate, from: PENDING,   to: ACTIVE,    actor: PLATFORM}
+  - {command: withdraw, from: PENDING,   to: REVOKED,   actor: GRANTOR}
+  - {command: suspend,  from: ACTIVE,    to: SUSPENDED, actor: REVOKER}
+  - {command: resume,   from: SUSPENDED, to: ACTIVE,    actor: REVOKER}
+  - {command: revoke,   from: ACTIVE,    to: REVOKED,   actor: REVOKER}
+  - {command: revoke,   from: SUSPENDED, to: REVOKED,   actor: REVOKER}
+  - {command: expire,   from: PENDING,   to: EXPIRED,   actor: PLATFORM}
+  - {command: expire,   from: ACTIVE,    to: EXPIRED,   actor: PLATFORM}
+  - {command: expire,   from: SUSPENDED, to: EXPIRED,   actor: PLATFORM}
+# Only an ACTIVE grant, inside its validity window, is eligible for
+# evaluation (section 59). An expired window denies even before the stored
+# status catches up.
+eligible_for_evaluation: [ACTIVE]

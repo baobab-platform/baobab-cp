@@ -1,0 +1,159 @@
+# profile-registry.yaml
+# Administrative profiles (ADR-BCP-020 sections 21-35): named policy
+# templates that expand into scoped grants, one per permission. A profile is
+# never itself a grant, and never confers authority beyond the grants it
+# expands into. scope_level is the anchor its grants take; every permission
+# must be grantable at that level.
+
+registry_version: 1
+
+profiles:
+  - key: platform-administrator
+    name: Platform Administrator
+    scope_level: PLATFORM
+    description: "Broad Control Plane administration (section 24). Excludes break-glass, residency override and tenant decommission, which stay separately and explicitly granted; never IAM realm, ERP, Trade, database or infrastructure administration."
+    permissions:
+      - application.review
+      - application.request-information
+      - organisation.view
+      - organisation.manage
+      - platform-account.view
+      - platform-account.manage
+      - tenant.view
+      - tenant.provision
+      - tenant.activate
+      - tenant.suspend
+      - tenant.reinstate
+      - market.view
+      - market.request
+      - market.activate
+      - market.deactivate
+      - subscription.view
+      - subscription.manage
+      - digital-estate.view
+      - digital-estate.manage
+      - administrator.view
+      - security.isolation.view
+      - security.residency.view
+      - readiness.view
+      - reconciliation.request
+      - operation.view
+      - operation.control
+      - audit.view
+      - changeset.submit
+      - changeset.review
+  - key: admission-reviewer
+    name: Admission Reviewer
+    scope_level: PLATFORM
+    description: "Reviews applications; never decides them (section 34)."
+    permissions:
+      - application.review
+      - application.request-information
+      - organisation.view
+  - key: admission-approver
+    name: Admission Approver
+    scope_level: PLATFORM
+    description: "Decides applications, separately from review (section 35)."
+    permissions:
+      - application.decide
+      - organisation.view
+  - key: organisation-administrator
+    name: Organisation Administrator
+    scope_level: ORGANISATION
+    description: "Administers one organisation's Control Plane configuration (sections 22, 25). Never its ownership."
+    permissions:
+      - organisation.view
+      - organisation.manage
+      - tenant.view
+      - market.view
+      - market.request
+      - subscription.view
+      - digital-estate.view
+      - readiness.view
+      - administrator.view
+      - operation.view
+  - key: group-administrator
+    name: Group Administrator
+    scope_level: CORPORATE_GROUP
+    description: "Administers explicitly authorised organisations of a corporate group (section 27)."
+    permissions:
+      - organisation.view
+      - organisation.manage
+      - tenant.view
+      - market.view
+      - readiness.view
+      - administrator.view
+  - key: tenant-administrator
+    name: Tenant Administrator
+    scope_level: TENANT
+    description: "Administers one tenant's configuration (section 28)."
+    permissions:
+      - tenant.view
+      - market.view
+      - market.request
+      - subscription.view
+      - digital-estate.view
+      - digital-estate.manage
+      - readiness.view
+      - administrator.view
+      - operation.view
+      - changeset.submit
+  - key: market-administrator
+    name: Market Administrator
+    scope_level: MARKET
+    description: "Administers one market's participation (section 29)."
+    permissions:
+      - market.view
+      - market.request
+      - market.activate
+      - market.deactivate
+      - readiness.view
+  - key: security-administrator
+    name: Security Administrator
+    scope_level: PLATFORM
+    description: "Security controls, separately assignable (section 31)."
+    permissions:
+      - security.isolation.view
+      - security.isolation.manage
+      - security.residency.view
+      - administrator.view
+      - audit.view
+  - key: support-operator
+    name: Support Operator
+    scope_level: PLATFORM
+    description: "Diagnostic read access only (section 33)."
+    permissions:
+      - support.diagnostics.view
+      - readiness.view
+      - operation.view
+      - tenant.view
+  - key: platform-auditor
+    name: Platform Auditor
+    scope_level: PLATFORM
+    description: "Platform-wide read-only visibility (section 32)."
+    permissions:
+      - organisation.view
+      - platform-account.view
+      - tenant.view
+      - market.view
+      - subscription.view
+      - digital-estate.view
+      - administrator.view
+      - security.isolation.view
+      - security.residency.view
+      - readiness.view
+      - operation.view
+      - audit.view
+  - key: organisation-auditor
+    name: Organisation Auditor
+    scope_level: ORGANISATION
+    description: "Read-only visibility of one organisation (section 32)."
+    permissions:
+      - organisation.view
+      - tenant.view
+      - market.view
+      - subscription.view
+      - digital-estate.view
+      - administrator.view
+      - readiness.view
+      - audit.view

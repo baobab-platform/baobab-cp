@@ -1,14 +1,16 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.9.0
+  version: 1.10.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
     operation also requires Control Plane authority beyond its scope (the
     platform-administrator role, or tenant-administrator membership for
     tenant-scoped operations) and, for administrative commands, a registered
-    Control Plane principal; the scope is necessary, never sufficient.
+    Control Plane principal; the scope is necessary, never sufficient. The
+    one exception is getEffectiveAuthority, which reports the caller's own
+    administrative grants and so needs no authority beyond its scope.
   license:
     name: Apache-2.0
     identifier: Apache-2.0
@@ -41,6 +43,8 @@ tags:
     description: Tenant provisioning as desired-state convergence - plan, approve, apply, readiness and drift (ADR-SHARED-015).
   - name: Operations
     description: Durable long-running operations and their retry and cancellation (ADR-BCP-022 sections 54-67).
+  - name: Administration
+    description: Administrative authority - what the caller may administer and where (ADR-BCP-020).
 servers:
   - url: https://control.baobab-platform.com/v1
     description: Production placeholder; activation requires an approved domain binding.
@@ -3032,6 +3036,42 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/effective-authority:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Administration]
+      operationId: getEffectiveAuthority
+      summary: The caller's effective administrative authority
+      description: >-
+        Who the caller is to the Control Plane and what they may administer
+        where: every AdministrativeGrant that is ACTIVE and valid now, with
+        its permission and scope (ADR-BCP-020 sections 99-102, 110). The CP
+        Console drives navigation, scope display and elevated-access notices
+        from it. It is derived from grants only: no IAM role, membership or
+        token scope is reported, and nothing here authorises an action -
+        every administrative request is evaluated again when it is made. A
+        principal with no grants receives an empty list, not an error. Never
+        cached across principals.
+      security:
+        - adminOidc: [authority:self]
+      responses:
+        "200":
+          description: The caller's effective authority
+          headers:
+            Cache-Control:
+              description: private, no-store
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: ../../administration/v1/grant.schema.json#/$defs/EffectiveAuthority
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
   /admin/operations/{operation_id}:

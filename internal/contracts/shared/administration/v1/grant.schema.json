@@ -1,0 +1,467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/administration/v1/grant.schema.json",
+  "title": "AdministrativeGrant, AdministrativeDecision and EffectiveAuthority",
+  "description": "Control Plane administrative authority (ADR-BCP-020). An AdministrativeGrant gives one principal one permission within one scope for a bounded or standing time (section 6); an AdministrativeDecision records one evaluation (sections 95-98); EffectiveAuthority is what a principal may currently do, the read model the CP Console drives navigation from (sections 99-102, 110). The Control Plane persists and evaluates these; Shared owns their shape only (sections 130-131). A definition library: validate against the fragments.",
+  "$defs": {
+    "AdministrativeGrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "principal_id",
+        "permission",
+        "scope",
+        "grant_type",
+        "source",
+        "risk_class",
+        "valid_from",
+        "status",
+        "granted_by",
+        "reason",
+        "created_at",
+        "version"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "domain.schema.json#/$defs/administrativeGrantId"
+        },
+        "principal_id": {
+          "$ref": "domain.schema.json#/$defs/principalId"
+        },
+        "permission": {
+          "$ref": "domain.schema.json#/$defs/administrativePermissionKey"
+        },
+        "scope": {
+          "$ref": "scope.schema.json#/$defs/AdministrativeScope"
+        },
+        "conditions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minimum_acr": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "The least authentication assurance (acr) a session needs to use this grant (sections 72-74)."
+            }
+          },
+          "description": "Further conditions the evaluation applies. Assurance is never itself a permission (section 74)."
+        },
+        "grant_type": {
+          "$ref": "domain.schema.json#/$defs/grantType"
+        },
+        "source": {
+          "$ref": "domain.schema.json#/$defs/grantSource"
+        },
+        "profile_key": {
+          "$ref": "domain.schema.json#/$defs/administrativeProfileKey",
+          "description": "PROFILE only: the profile this grant was expanded from."
+        },
+        "delegated_from_grant_id": {
+          "$ref": "domain.schema.json#/$defs/administrativeGrantId",
+          "description": "DELEGATION only: the grant whose authority this delegates (section 47)."
+        },
+        "delegation_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3,
+          "description": "DELEGATION only: 1 for a direct delegation, one more for each further hop (section 48)."
+        },
+        "delegable_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 0,
+          "description": "How many further delegations this grant allows. 0, the default, allows none."
+        },
+        "risk_class": {
+          "$ref": "domain.schema.json#/$defs/riskClass",
+          "description": "The permission's risk class at grant time, raised to CRITICAL where the scope makes it so (section 41)."
+        },
+        "valid_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Required for TIME_BOUND and JUST_IN_TIME grants. A delegated grant never outlives its source (section 46)."
+        },
+        "status": {
+          "$ref": "domain.schema.json#/$defs/grantStatus"
+        },
+        "granted_by": {
+          "$ref": "domain.schema.json#/$defs/principalId",
+          "description": "The principal who granted it. Never the grantee (section 39)."
+        },
+        "approval_reference": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/approvalDecisionId"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "revoked_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "revoked_by": {
+          "$ref": "domain.schema.json#/$defs/principalId"
+        },
+        "revocation_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "grant_type": {
+                "enum": [
+                  "TIME_BOUND",
+                  "JUST_IN_TIME"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "valid_until"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "grant_type": {
+                "const": "STANDING"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "valid_until": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "PROFILE"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "profile_key"
+            ]
+          },
+          "else": {
+            "properties": {
+              "profile_key": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "DELEGATION"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "delegated_from_grant_id",
+              "delegation_depth"
+            ]
+          },
+          "else": {
+            "properties": {
+              "delegated_from_grant_id": false,
+              "delegation_depth": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "BOOTSTRAP"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "grant_type": {
+                "const": "TIME_BOUND"
+              },
+              "scope": {
+                "properties": {
+                  "level": {
+                    "const": "PLATFORM"
+                  }
+                }
+              }
+            }
+          },
+          "description": "Bootstrap authority is platform-scoped and never permanent (sections 128-129)."
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "REVOKED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "revoked_at",
+              "revoked_by",
+              "revocation_reason"
+            ]
+          },
+          "else": {
+            "properties": {
+              "revoked_at": false,
+              "revoked_by": false,
+              "revocation_reason": false
+            }
+          }
+        }
+      ]
+    },
+    "AdministrativeDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_id",
+        "principal_id",
+        "action",
+        "scope",
+        "outcome",
+        "matched_grants",
+        "obligations",
+        "reason_codes",
+        "evaluated_at",
+        "correlation_id"
+      ],
+      "properties": {
+        "decision_id": {
+          "$ref": "domain.schema.json#/$defs/administrativeDecisionId"
+        },
+        "principal_id": {
+          "$ref": "domain.schema.json#/$defs/principalId"
+        },
+        "action": {
+          "$ref": "domain.schema.json#/$defs/administrativePermissionKey"
+        },
+        "scope": {
+          "$ref": "scope.schema.json#/$defs/AdministrativeScope",
+          "description": "The scope of the resource acted on, resolved by the Control Plane, never taken from the caller unchecked."
+        },
+        "outcome": {
+          "$ref": "domain.schema.json#/$defs/decisionOutcome"
+        },
+        "matched_grants": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/administrativeGrantId"
+          },
+          "description": "The grants that permitted the action. Empty unless the outcome is ALLOW. A single grant must cover both the permission and the scope; grants are never combined across scope (section 111)."
+        },
+        "obligations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "STEP_UP_AUTHENTICATION",
+              "APPROVAL"
+            ]
+          }
+        },
+        "reason_codes": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/administrativeReasonCode"
+          }
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "correlation_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/uuid"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "ALLOW"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "matched_grants": {
+                "minItems": 1
+              },
+              "reason_codes": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "matched_grants": {
+                "maxItems": 0
+              },
+              "reason_codes": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "STEP_UP_REQUIRED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "obligations": {
+                "contains": {
+                  "const": "STEP_UP_AUTHENTICATION"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "APPROVAL_REQUIRED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "obligations": {
+                "contains": {
+                  "const": "APPROVAL"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "EffectiveAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principal_id",
+        "evaluated_at",
+        "grants"
+      ],
+      "properties": {
+        "principal_id": {
+          "$ref": "domain.schema.json#/$defs/principalId"
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "grants": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/EffectiveGrant"
+          },
+          "description": "Every grant eligible for evaluation at evaluated_at: ACTIVE, and valid now. Nothing else confers authority: no role, membership or scope token is reported here."
+        },
+        "elevated_until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Present while a JUST_IN_TIME grant is in effect: when the earliest one expires, so the Console can show elevated access clearly (section 102)."
+        }
+      }
+    },
+    "EffectiveGrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "permission",
+        "scope",
+        "grant_type",
+        "source",
+        "risk_class"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "domain.schema.json#/$defs/administrativeGrantId"
+        },
+        "permission": {
+          "$ref": "domain.schema.json#/$defs/administrativePermissionKey"
+        },
+        "scope": {
+          "$ref": "scope.schema.json#/$defs/AdministrativeScope"
+        },
+        "grant_type": {
+          "$ref": "domain.schema.json#/$defs/grantType"
+        },
+        "source": {
+          "$ref": "domain.schema.json#/$defs/grantSource"
+        },
+        "profile_key": {
+          "$ref": "domain.schema.json#/$defs/administrativeProfileKey",
+          "description": "PROFILE only: the profile this grant was expanded from."
+        },
+        "risk_class": {
+          "$ref": "domain.schema.json#/$defs/riskClass",
+          "description": "The permission's risk class at grant time, raised to CRITICAL where the scope makes it so (section 41)."
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Required for TIME_BOUND and JUST_IN_TIME grants. A delegated grant never outlives its source (section 46)."
+        },
+        "elevated": {
+          "type": "boolean",
+          "description": "True for a JUST_IN_TIME grant."
+        }
+      },
+      "description": "One grant as its principal may see it: what it permits and where, not who granted it or why."
+    }
+  }
+}

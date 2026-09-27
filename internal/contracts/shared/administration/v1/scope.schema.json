@@ -1,0 +1,380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/administration/v1/scope.schema.json",
+  "title": "AdministrativeScope",
+  "description": "Where an administrative grant applies (ADR-BCP-020 sections 11-20). A scope names exactly one anchor level and that level's identifiers, never more: unknown scope is never global scope, and nothing is inherited (sections 14-15). A corporate group grant covers its organisations only by an explicit mode; the default is no automatic expansion (section 20).",
+  "$defs": {
+    "AdministrativeScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ],
+      "properties": {
+        "level": {
+          "$ref": "domain.schema.json#/$defs/scopeLevel"
+        },
+        "mode": {
+          "$ref": "domain.schema.json#/$defs/scopeMode",
+          "default": "EXACT"
+        },
+        "platform_account_id": {
+          "$ref": "../../organisation/v1/domain.schema.json#/$defs/platformAccountId"
+        },
+        "corporate_group_id": {
+          "$ref": "../../organisation/v1/domain.schema.json#/$defs/corporateGroupId"
+        },
+        "organisation_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId",
+          "description": "The organisation's canonical entity identifier."
+        },
+        "organisation_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId"
+          },
+          "description": "STATIC_MEMBERSHIP only: the group's organisations the grant covers, fixed at grant time (section 18)."
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "legal_entity_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId"
+        },
+        "market_id": {
+          "$ref": "../../control-plane/v1/market.schema.json#/$defs/marketId"
+        },
+        "digital_estate_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/estateId"
+        },
+        "resource_type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$",
+          "minLength": 3,
+          "maxLength": 63,
+          "description": "RESOURCE only, e.g. application-queue."
+        },
+        "resource_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "environment": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/environment",
+          "description": "Optional qualifier: the grant applies in this environment only."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "PLATFORM"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "properties": {
+              "platform_account_id": false,
+              "corporate_group_id": false,
+              "organisation_id": false,
+              "organisation_ids": false,
+              "tenant_id": false,
+              "legal_entity_id": false,
+              "market_id": false,
+              "digital_estate_id": false,
+              "resource_type": false,
+              "resource_id": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "PLATFORM_ACCOUNT"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "required": [
+              "platform_account_id"
+            ],
+            "properties": {
+              "corporate_group_id": false,
+              "organisation_id": false,
+              "organisation_ids": false,
+              "tenant_id": false,
+              "legal_entity_id": false,
+              "market_id": false,
+              "digital_estate_id": false,
+              "resource_type": false,
+              "resource_id": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "CORPORATE_GROUP"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "required": [
+              "corporate_group_id"
+            ],
+            "properties": {
+              "platform_account_id": false,
+              "organisation_id": false,
+              "tenant_id": false,
+              "legal_entity_id": false,
+              "market_id": false,
+              "digital_estate_id": false,
+              "resource_type": false,
+              "resource_id": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "ORGANISATION"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "required": [
+              "organisation_id"
+            ],
+            "properties": {
+              "platform_account_id": false,
+              "corporate_group_id": false,
+              "organisation_ids": false,
+              "tenant_id": false,
+              "legal_entity_id": false,
+              "market_id": false,
+              "digital_estate_id": false,
+              "resource_type": false,
+              "resource_id": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "TENANT"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "required": [
+              "tenant_id"
+            ],
+            "properties": {
+              "platform_account_id": false,
+              "corporate_group_id": false,
+              "organisation_id": false,
+              "organisation_ids": false,
+              "legal_entity_id": false,
+              "market_id": false,
+              "digital_estate_id": false,
+              "resource_type": false,
+              "resource_id": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "LEGAL_ENTITY"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "required": [
+              "legal_entity_id"
+            ],
+            "properties": {
+              "platform_account_id": false,
+              "corporate_group_id": false,
+              "organisation_id": false,
+              "organisation_ids": false,
+              "tenant_id": false,
+              "market_id": false,
+              "digital_estate_id": false,
+              "resource_type": false,
+              "resource_id": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "MARKET"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "required": [
+              "market_id"
+            ],
+            "properties": {
+              "platform_account_id": false,
+              "corporate_group_id": false,
+              "organisation_ids": false,
+              "legal_entity_id": false,
+              "digital_estate_id": false,
+              "resource_type": false,
+              "resource_id": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "DIGITAL_ESTATE"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "required": [
+              "digital_estate_id"
+            ],
+            "properties": {
+              "platform_account_id": false,
+              "corporate_group_id": false,
+              "organisation_id": false,
+              "organisation_ids": false,
+              "tenant_id": false,
+              "legal_entity_id": false,
+              "market_id": false,
+              "resource_type": false,
+              "resource_id": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "RESOURCE"
+              }
+            },
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "required": [
+              "resource_type",
+              "resource_id"
+            ],
+            "properties": {
+              "platform_account_id": false,
+              "corporate_group_id": false,
+              "organisation_id": false,
+              "organisation_ids": false,
+              "tenant_id": false,
+              "legal_entity_id": false,
+              "market_id": false,
+              "digital_estate_id": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "STATIC_MEMBERSHIP",
+                  "DYNAMIC_GROUP_DESCENDANTS"
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "level": {
+                "const": "CORPORATE_GROUP"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "STATIC_MEMBERSHIP"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "organisation_ids"
+            ]
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "properties": {
+                "mode": {
+                  "const": "STATIC_MEMBERSHIP"
+                }
+              },
+              "required": [
+                "mode"
+              ]
+            }
+          },
+          "then": {
+            "properties": {
+              "organisation_ids": false
+            }
+          }
+        }
+      ]
+    }
+  }
+}
