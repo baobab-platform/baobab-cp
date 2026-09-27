@@ -95,8 +95,8 @@
     },
     "shadowGrantsOutcome": {
       "type": "string",
-      "enum": ["allow", "deny", "step_up", "unresolved", "unmapped", "error"],
-      "description": "unresolved: the caller has no ACTIVE principal. unmapped: the route names no registered permission yet. error: grants could not be read in time."
+      "enum": ["allow", "deny", "step_up", "approval_required", "not_ready", "unresolved", "unmapped", "error"],
+      "description": "One value per decisionOutcome (ALLOW allow, DENY deny, STEP_UP_REQUIRED step_up, APPROVAL_REQUIRED approval_required, NOT_READY not_ready), plus three for when no decision was made. unresolved: the caller has no ACTIVE principal. unmapped: the route names no registered permission yet. error: grants could not be read in time. Every value but allow counts as grants not allowing."
     },
     "shadowAgreement": {
       "type": "string",

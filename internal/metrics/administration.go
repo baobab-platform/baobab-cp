@@ -6,6 +6,8 @@ const (
 	ShadowAllow      = "allow"
 	ShadowDeny       = "deny"
 	ShadowStepUp     = "step_up"
+	ShadowApproval   = "approval_required"
+	ShadowNotReady   = "not_ready"
 	ShadowUnmapped   = "unmapped"   // the route has no registered permission yet
 	ShadowUnresolved = "unresolved" // the caller has no ACTIVE Control Plane principal
 	ShadowError      = "error"      // grants could not be read in time

@@ -37,7 +37,7 @@ After the legacy decision, `requireAdminRole` evaluates the caller's grants for 
 |---|---|
 | `permission` | a registered permission, or `unregistered` |
 | `legacy` | `allow`, `deny` |
-| `grants` | `allow`, `deny`, `step_up`, `unresolved`, `unmapped`, `error` |
+| `grants` | `allow`, `deny`, `step_up`, `approval_required`, `not_ready`, `unresolved`, `unmapped`, `error` |
 | `agreement` | `agree`, `grants_broader`, `grants_narrower`, `not_evaluated` |
 
 All label values come from closed sets. The response is never changed, and evaluation has a 250 ms budget. `grants_broader` also logs a warning.

@@ -147,6 +147,10 @@ func (a *API) shadowGrants(ctx context.Context, r *http.Request, principal auth.
 		return metrics.ShadowAllow
 	case administration.OutcomeStepUpRequired:
 		return metrics.ShadowStepUp
+	case administration.OutcomeApprovalRequired:
+		return metrics.ShadowApproval
+	case administration.OutcomeNotReady:
+		return metrics.ShadowNotReady
 	}
 	return metrics.ShadowDeny
 }
@@ -172,7 +176,7 @@ func (a *API) recordShadow(permission, legacy, grants, pattern string) {
 	agreement := metrics.ShadowNotEvaluated
 	grantsAllow := grants == metrics.ShadowAllow
 	switch grants {
-	case metrics.ShadowAllow, metrics.ShadowDeny, metrics.ShadowStepUp, metrics.ShadowUnresolved:
+	case metrics.ShadowAllow, metrics.ShadowDeny, metrics.ShadowStepUp, metrics.ShadowApproval, metrics.ShadowNotReady, metrics.ShadowUnresolved:
 		switch {
 		case grantsAllow == (legacy == metrics.ShadowAllow):
 			agreement = metrics.ShadowAgree
