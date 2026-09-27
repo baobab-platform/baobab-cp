@@ -55,6 +55,9 @@ func fullRouter(t *testing.T) chi.Routes {
 		Operations: struct {
 			repository.OperationRepository
 		}{},
+		AdministrativeGrants: struct {
+			repository.AdministrativeGrantReader
+		}{},
 		Onboarding:      &onboarding.Service{},
 		Applications:    &application.Service{},
 		Classifications: &subscription.Classifier{},

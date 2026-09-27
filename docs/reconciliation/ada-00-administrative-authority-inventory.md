@@ -1,0 +1,39 @@
+# ADA-00: Administrative authority inventory
+
+**ADR:** ADR-BCP-020 §141, gate ADA-00 ("No blind migration") and §143 (migration from broad roles).
+**Date:** 2026-09-27.
+**Scope:** how the Control Plane authorises administration today, and what each mechanism becomes under AdministrativeGrants.
+
+## What exists today
+
+| Mechanism | Where | What it decides | Classification |
+|---|---|---|---|
+| `cp:platform-admin` Keycloak realm role | `api/router.go` `requireAdminRole`, `api/operation_handler.go` | Authorises every administrative route for every tenant. | **REPLACE.** It becomes platform-scoped grants, starting from the `platform-administrator` profile. It is not removed until shadow evaluation shows grants decide equally or more narrowly (§143–144). |
+| `cp:tenant-admin` realm role plus an ACTIVE `WorkforceMembership` for the tenant | `requireAdminRole`, `tenantAdminOf` | Authorises tenant-scoped routes for that tenant only. | **REMODEL.** It becomes `tenant-administrator` profile grants at TENANT scope. The membership stays an identity fact, not authority (§15, §28). |
+| OAuth scopes (`tenant:write`, `admission:decide`, `operation:control`, …) | `authorize()` on every route; `contracts/authorization/v1/scope-registry.yaml` | Coarse permission to call a route; necessary, never sufficient. | **KEEP.** Scopes stay a coarse client capability (§76). Grants add the per-principal, per-scope decision. |
+| Registered Control Plane principal required for commands | `resolveActor` | Every administrative command is attributable to a canonical principal. | **KEEP.** Grants key on the same canonical principal id (§7). |
+
+Route coverage: 53 routes run `requireAdminRole`.
+
+- **37 are platform-only** (`requireAdminRole(nil, true)`): tenant registration, canonical registry, capability diagnostics, onboarding, admission decisions and similar.
+- **14 are tenant-scoped by path** (`tenantIDFromPath`).
+- **1 is tenant-scoped by query** (`/v1/entitlements`).
+
+## What this change adds (ADA-01 to ADA-03, partial ADA-10)
+
+- **Contracts:** the Shared `administration/v1` contracts, pinned.
+- **`internal/administration`:** the permission and profile catalogue, scope coverage, deny-by-default evaluation with no union across scope (§111), delegation validation (§43–48), and the effective authority read model.
+- **Migration 000067:** `policy.administrative_grant`, with self-grants, standing bootstrap grants and incomplete revocations refused in the database too.
+- **`GET /v1/admin/effective-authority`:** the caller's own usable grants, derived from grants only (G5).
+- **`cmd/admin-bootstrap`:** the controlled initial authority procedure (§128–129). Grants are platform-scoped and TIME_BOUND for at most 30 days, the operator is audited, and CRITICAL or EMERGENCY permissions are never granted.
+
+## Not yet (next gates)
+
+- **Shadow evaluation (§144):**
+  - Map every administrative route to a permission and the resource it acts on.
+  - Evaluate grants beside `requireAdminRole`.
+  - Record differences as bounded metrics without changing any decision.
+  - Enforcement moves to grants, and the realm roles retire, only after the comparison shows no broadening.
+- **Grant administration routes** (`administrator.grant`, `.revoke`, `.delegate`), SoD and approval (ADA-05, ADA-06), JIT (ADA-07), support and break-glass (ADA-08, ADA-09).
+- **An expiry sweeper.** Evaluation already treats an elapsed window as expired, so it is housekeeping, not a security gap.
+- **IAM issuance of `authority:self`.** Keycloak configuration stays untouched pending its ADRs; until the scope is issued, the route answers 403.

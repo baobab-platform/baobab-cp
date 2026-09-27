@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/administration/v1/domain.schema.json",
+  "title": "Administrative authority vocabulary",
+  "description": "Identifier grammars and closed enumerations of Control Plane administrative authority (ADR-BCP-020). A definition library: validate against the fragments.",
+  "$defs": {
+    "administrativeGrantId": {
+      "type": "string",
+      "pattern": "^agr_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of an AdministrativeGrant."
+    },
+    "administrativeDecisionId": {
+      "type": "string",
+      "pattern": "^adec_[a-z0-9]+$",
+      "minLength": 9,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of an AdministrativeDecision."
+    },
+    "principalId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "minLength": 3,
+      "maxLength": 128,
+      "description": "Canonical Control Plane principal identifier (ADR-BCP-020 section 7). Never an email address, display name, username or an IAM provider's internal user id."
+    },
+    "administrativePermissionKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$",
+      "minLength": 3,
+      "maxLength": 96,
+      "description": "A permission registered in permission-registry.yaml, e.g. tenant.suspend. An administrative action over Control Plane resources, never a product capability key (section 9)."
+    },
+    "administrativeProfileKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "minLength": 3,
+      "maxLength": 63,
+      "description": "A profile registered in profile-registry.yaml, e.g. tenant-administrator. A policy template, never a grant (section 21)."
+    },
+    "permissionDomain": {
+      "type": "string",
+      "enum": ["ADMISSION", "ORGANISATION", "ACCOUNT", "TENANT", "MARKET", "SUBSCRIPTION", "DIGITAL_ESTATE", "ADMINISTRATION", "SECURITY", "OPERATIONS", "AUDIT", "CHANGE_CONTROL", "EMERGENCY"],
+      "description": "Policy domain of an administrative permission (section 10)."
+    },
+    "riskClass": {
+      "type": "string",
+      "enum": ["LOW", "MODERATE", "HIGH", "CRITICAL"],
+      "description": "Risk classification of an administrative permission (section 40)."
+    },
+    "scopeLevel": {
+      "type": "string",
+      "enum": ["PLATFORM", "PLATFORM_ACCOUNT", "CORPORATE_GROUP", "ORGANISATION", "TENANT", "LEGAL_ENTITY", "MARKET", "DIGITAL_ESTATE", "RESOURCE"],
+      "description": "The anchor an administrative scope is expressed at (section 11). A permission names the levels it may be granted at."
+    },
+    "scopeMode": {
+      "type": "string",
+      "enum": ["EXACT", "STATIC_MEMBERSHIP", "DYNAMIC_GROUP_DESCENDANTS"],
+      "description": "EXACT: the named anchor only. STATIC_MEMBERSHIP: a corporate group's organisations as listed at grant time; later members are not added (section 18). DYNAMIC_GROUP_DESCENDANTS: the group's current descendants, stated explicitly on the grant (section 19). The default is no automatic expansion (section 20)."
+    },
+    "grantStatus": {
+      "type": "string",
+      "enum": ["PENDING", "ACTIVE", "SUSPENDED", "EXPIRED", "REVOKED"],
+      "description": "Administrative grant lifecycle (sections 57-62, lifecycle.yaml). Only ACTIVE is eligible for evaluation."
+    },
+    "grantType": {
+      "type": "string",
+      "enum": ["STANDING", "TIME_BOUND", "JUST_IN_TIME"],
+      "description": "Section 54. TIME_BOUND and JUST_IN_TIME grants carry valid_until."
+    },
+    "grantSource": {
+      "type": "string",
+      "enum": ["DIRECT", "PROFILE", "DELEGATION", "BOOTSTRAP"],
+      "description": "How the grant came to exist. PROFILE: expanded from an administrative profile (section 22). DELEGATION: delegated from another grant, which it names (sections 42-48). BOOTSTRAP: the controlled initial platform authority of section 128, never a routine mechanism (section 129)."
+    },
+    "decisionOutcome": {
+      "type": "string",
+      "enum": ["ALLOW", "DENY", "STEP_UP_REQUIRED", "APPROVAL_REQUIRED", "NOT_READY"],
+      "description": "Section 97. Anything but ALLOW does not permit the action."
+    },
+    "administrativeReasonCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$",
+      "maxLength": 64,
+      "description": "A code registered in the administrative_denial category of contracts/authorization/v1/reason-code-registry.yaml. Safe to show: it never reveals internal policy detail (section 98)."
+    }
+  }
+}

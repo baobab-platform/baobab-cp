@@ -116,6 +116,9 @@ type Dependencies struct {
 	// Operations backs the durable operation routes (ADR-BCP-022 sections
 	// 54-67). Nil disables them.
 	Operations repository.OperationRepository
+	// AdministrativeGrants backs GET /v1/admin/effective-authority
+	// (ADR-BCP-020): the caller's own administrative grants.
+	AdministrativeGrants repository.AdministrativeGrantReader
 	// WorkloadRegistry backs request-time enforcement of ADR-0007 §45's
 	// workload lifecycle status (Gate ZB-03.10, closing the gap
 	// docs/reconciliation/gate-zb03-authority-contract-freeze.md §7 named):
@@ -190,6 +193,10 @@ func New(dependencies Dependencies) http.Handler {
 	r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/canonical-entities/{entityID}", canonical.get)
 	for _, action := range []string{"validate", "activate", "suspend", "retire"} {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/canonical-entities/{entityID}/"+action, canonical.lifecycle(action))
+	}
+	if dependencies.AdministrativeGrants != nil {
+		authority := effectiveAuthorityHandler{identities: dependencies.Identities, grants: dependencies.AdministrativeGrants}
+		r.With(a.authorize(a.adminVerifier, "human", "authority:self")).Get("/v1/admin/effective-authority", authority.get)
 	}
 	if dependencies.Operations != nil {
 		// Platform administrators read every operation; a tenant

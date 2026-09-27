@@ -1,0 +1,311 @@
+# permission-registry.yaml
+# The canonical AdministrativePermission vocabulary (ADR-BCP-020 sections 8-10,
+# 40-41, 49). A permission is an administrative action over Control Plane
+# resources; it is never a product capability (section 9).
+#
+#   domain           policy domain (section 10)
+#   risk_class       LOW, MODERATE, HIGH or CRITICAL (sections 40-41)
+#   scope_levels     the anchors a grant of it may be scoped to (section 11);
+#                    a grant at any other level is invalid
+#   delegable        false: never delegated (section 49), only granted
+#   read_only        true: the permission never mutates anything
+#
+# Adding a permission is additive. Removing or renaming one is breaking.
+
+registry_version: 1
+
+permissions:
+  - key: application.review
+    domain: ADMISSION
+    risk_class: MODERATE
+    scope_levels: [PLATFORM]
+    delegable: true
+    read_only: false
+    description: "Inspect applications and their evidence, record an assessment and move them through review (section 34)."
+  - key: application.request-information
+    domain: ADMISSION
+    risk_class: LOW
+    scope_levels: [PLATFORM]
+    delegable: true
+    read_only: false
+    description: "Ask an applicant for more information (section 34)."
+  - key: application.decide
+    domain: ADMISSION
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Approve or reject an application under review. Never on an application the decider made or reviewed where policy requires independence (sections 35-39)."
+  - key: organisation.view
+    domain: ORGANISATION
+    risk_class: LOW
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION]
+    delegable: true
+    read_only: true
+    description: "View organisation configuration."
+  - key: organisation.manage
+    domain: ORGANISATION
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION]
+    delegable: true
+    read_only: false
+    description: "Manage permitted organisation metadata. Never corporate or legal ownership (section 26)."
+  - key: organisation.relationship.manage
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [PLATFORM, CORPORATE_GROUP]
+    delegable: false
+    read_only: false
+    description: "Manage corporate relationships, which can change effective administrative scope (sections 17, 113)."
+  - key: platform-account.view
+    domain: ACCOUNT
+    risk_class: LOW
+    scope_levels: [PLATFORM, PLATFORM_ACCOUNT]
+    delegable: true
+    read_only: true
+    description: "View PlatformAccount configuration."
+  - key: platform-account.manage
+    domain: ACCOUNT
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, PLATFORM_ACCOUNT]
+    delegable: true
+    read_only: false
+    description: "Manage PlatformAccount configuration, separately from organisation administration (section 112)."
+  - key: tenant.view
+    domain: TENANT
+    risk_class: LOW
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT]
+    delegable: true
+    read_only: true
+    description: "View tenants."
+  - key: tenant.provision
+    domain: TENANT
+    risk_class: HIGH
+    scope_levels: [PLATFORM, ORGANISATION]
+    delegable: true
+    read_only: false
+    description: "Request and plan tenant provisioning."
+  - key: tenant.activate
+    domain: TENANT
+    risk_class: HIGH
+    scope_levels: [PLATFORM, TENANT]
+    delegable: true
+    read_only: false
+    description: "Activate a tenant."
+  - key: tenant.suspend
+    domain: TENANT
+    risk_class: HIGH
+    scope_levels: [PLATFORM, TENANT]
+    delegable: true
+    read_only: false
+    description: "Suspend a tenant."
+  - key: tenant.reinstate
+    domain: TENANT
+    risk_class: HIGH
+    scope_levels: [PLATFORM, TENANT]
+    delegable: true
+    read_only: false
+    description: "Reinstate a suspended tenant."
+  - key: tenant.decommission
+    domain: TENANT
+    risk_class: CRITICAL
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Decommission a tenant."
+  - key: market.view
+    domain: MARKET
+    risk_class: LOW
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT, MARKET]
+    delegable: true
+    read_only: true
+    description: "View market participation."
+  - key: market.request
+    domain: MARKET
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, ORGANISATION, TENANT, MARKET]
+    delegable: true
+    read_only: false
+    description: "Request a market participation change."
+  - key: market.activate
+    domain: MARKET
+    risk_class: HIGH
+    scope_levels: [PLATFORM, ORGANISATION, TENANT, MARKET]
+    delegable: true
+    read_only: false
+    description: "Activate market participation."
+  - key: market.deactivate
+    domain: MARKET
+    risk_class: HIGH
+    scope_levels: [PLATFORM, ORGANISATION, TENANT, MARKET]
+    delegable: true
+    read_only: false
+    description: "Deactivate market participation."
+  - key: subscription.view
+    domain: SUBSCRIPTION
+    risk_class: LOW
+    scope_levels: [PLATFORM, PLATFORM_ACCOUNT, CORPORATE_GROUP, ORGANISATION, TENANT]
+    delegable: true
+    read_only: true
+    description: "View product subscriptions."
+  - key: subscription.manage
+    domain: SUBSCRIPTION
+    risk_class: HIGH
+    scope_levels: [PLATFORM, PLATFORM_ACCOUNT, TENANT]
+    delegable: true
+    read_only: false
+    description: "Manage product subscription state."
+  - key: digital-estate.view
+    domain: DIGITAL_ESTATE
+    risk_class: LOW
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT, DIGITAL_ESTATE]
+    delegable: true
+    read_only: true
+    description: "View Digital Estates."
+  - key: digital-estate.manage
+    domain: DIGITAL_ESTATE
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, TENANT, DIGITAL_ESTATE]
+    delegable: true
+    read_only: false
+    description: "Manage Control Plane-owned Digital Estate configuration. Never the business application itself (section 30)."
+  - key: administrator.view
+    domain: ADMINISTRATION
+    risk_class: LOW
+    scope_levels: [PLATFORM, PLATFORM_ACCOUNT, CORPORATE_GROUP, ORGANISATION, TENANT, LEGAL_ENTITY, MARKET, DIGITAL_ESTATE]
+    delegable: true
+    read_only: true
+    description: "View administrative grants within the scope."
+  - key: administrator.grant
+    domain: ADMINISTRATION
+    risk_class: HIGH
+    scope_levels: [PLATFORM, PLATFORM_ACCOUNT, CORPORATE_GROUP, ORGANISATION, TENANT, LEGAL_ENTITY, MARKET, DIGITAL_ESTATE]
+    delegable: false
+    read_only: false
+    description: "Create administrative grants within the scope. A grant at PLATFORM scope is CRITICAL (section 41)."
+  - key: administrator.revoke
+    domain: ADMINISTRATION
+    risk_class: HIGH
+    scope_levels: [PLATFORM, PLATFORM_ACCOUNT, CORPORATE_GROUP, ORGANISATION, TENANT, LEGAL_ENTITY, MARKET, DIGITAL_ESTATE]
+    delegable: false
+    read_only: false
+    description: "Suspend or revoke administrative grants within the scope."
+  - key: administrator.delegate
+    domain: ADMINISTRATION
+    risk_class: HIGH
+    scope_levels: [PLATFORM, PLATFORM_ACCOUNT, CORPORATE_GROUP, ORGANISATION, TENANT, LEGAL_ENTITY, MARKET, DIGITAL_ESTATE]
+    delegable: false
+    read_only: false
+    description: "Delegate part of one's own authority (sections 42-48)."
+  - key: security.isolation.view
+    domain: SECURITY
+    risk_class: LOW
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT]
+    delegable: true
+    read_only: true
+    description: "View isolation requirements."
+  - key: security.isolation.manage
+    domain: SECURITY
+    risk_class: HIGH
+    scope_levels: [PLATFORM, TENANT]
+    delegable: false
+    read_only: false
+    description: "Change isolation requirements (section 31)."
+  - key: security.residency.view
+    domain: SECURITY
+    risk_class: LOW
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT]
+    delegable: true
+    read_only: true
+    description: "View residency policy."
+  - key: security.residency.manage
+    domain: SECURITY
+    risk_class: CRITICAL
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Change residency policy (sections 31, 41)."
+  - key: readiness.view
+    domain: OPERATIONS
+    risk_class: LOW
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT, MARKET, DIGITAL_ESTATE]
+    delegable: true
+    read_only: true
+    description: "View readiness."
+  - key: reconciliation.request
+    domain: OPERATIONS
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, TENANT]
+    delegable: true
+    read_only: false
+    description: "Request reconciliation."
+  - key: operation.view
+    domain: OPERATIONS
+    risk_class: LOW
+    scope_levels: [PLATFORM, ORGANISATION, TENANT]
+    delegable: true
+    read_only: true
+    description: "View long-running operations (ADR-BCP-022 section 58)."
+  - key: operation.control
+    domain: OPERATIONS
+    risk_class: HIGH
+    scope_levels: [PLATFORM, TENANT]
+    delegable: true
+    read_only: false
+    description: "Retry or cancel long-running operations."
+  - key: support.diagnostics.view
+    domain: OPERATIONS
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, ORGANISATION, TENANT]
+    delegable: true
+    read_only: true
+    description: "View support diagnostics. Never secrets, customer configuration mutation or business-domain authority (section 33)."
+  - key: audit.view
+    domain: AUDIT
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, PLATFORM_ACCOUNT, CORPORATE_GROUP, ORGANISATION, TENANT, LEGAL_ENTITY, MARKET, DIGITAL_ESTATE]
+    delegable: true
+    read_only: true
+    description: "View audit history within the scope (section 32)."
+  - key: changeset.submit
+    domain: CHANGE_CONTROL
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT]
+    delegable: true
+    read_only: false
+    description: "Submit a changeset (ADR-BCP-021)."
+  - key: changeset.review
+    domain: CHANGE_CONTROL
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT]
+    delegable: true
+    read_only: false
+    description: "Review a changeset."
+  - key: changeset.approve
+    domain: CHANGE_CONTROL
+    risk_class: HIGH
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT]
+    delegable: false
+    read_only: false
+    description: "Approve a changeset. Never one the approver submitted (section 39)."
+  - key: changeset.apply
+    domain: CHANGE_CONTROL
+    risk_class: HIGH
+    scope_levels: [PLATFORM, CORPORATE_GROUP, ORGANISATION, TENANT]
+    delegable: false
+    read_only: false
+    description: "Apply an approved changeset."
+  - key: breakglass.request
+    domain: EMERGENCY
+    risk_class: CRITICAL
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Request break-glass authority (sections 89-93)."
+  - key: breakglass.approve
+    domain: EMERGENCY
+    risk_class: CRITICAL
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Approve break-glass authority. Never one's own request."
