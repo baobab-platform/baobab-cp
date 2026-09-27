@@ -2,10 +2,12 @@ package resolver
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/health"
 )
 
 // RelocationPlan is an atomic topology transition: the prior binding is
@@ -19,12 +21,21 @@ type RelocationPlan struct {
 // PlanEngineRelocation creates a temporally contiguous binding transition.
 // Canonical entities and external references are intentionally absent: an
 // infrastructure move must never rewrite business identity.
-func PlanEngineRelocation(binding capabilitydomain.CapabilityBinding, from, to domain.EngineInstance, cutover time.Time) (RelocationPlan, error) {
+//
+// The target must be healthy enough, now, for the capability's health
+// criticality: targetHealth is what the Control Plane holds for it, and a
+// target with no current observation is UNKNOWN (ADR-BCP-006 section 21),
+// which a CRITICAL capability never moves to.
+func PlanEngineRelocation(binding capabilitydomain.CapabilityBinding, from, to domain.EngineInstance,
+	criticality health.Criticality, targetHealth health.Levels, now, cutover time.Time) (RelocationPlan, error) {
 	if cutover.IsZero() || binding.EngineInstanceID != from.ID || from.EngineID == "" || from.EngineID != to.EngineID {
 		return RelocationPlan{}, errors.New("invalid engine relocation")
 	}
-	if to.Status != "ACTIVE" || (to.HealthStatus != "" && to.HealthStatus != "UNKNOWN" && to.HealthStatus != "HEALTHY") {
+	if to.Status != "ACTIVE" {
 		return RelocationPlan{}, errors.New("relocation target is not eligible")
+	}
+	if err := healthPolicy.Check(criticality, targetHealth, now); err != nil {
+		return RelocationPlan{}, fmt.Errorf("relocation target is not eligible: %w", err)
 	}
 	if !to.EffectiveFrom.IsZero() && cutover.Before(to.EffectiveFrom) {
 		return RelocationPlan{}, errors.New("relocation target is not yet effective")

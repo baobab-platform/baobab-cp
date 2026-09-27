@@ -60,6 +60,8 @@ contracts:
   - contracts/product/v1/billing-policy.yaml
   - contracts/capability/v1/capability.schema.json
   - contracts/capability/v1/registration.schema.json
+  - contracts/capability/v1/health.schema.json
+  - contracts/capability/v1/health-policy.yaml
   - contracts/subscriptions/v1/domain.schema.json
   - contracts/subscriptions/v1/billing.schema.json
   - contracts/subscriptions/v1/events.schema.json

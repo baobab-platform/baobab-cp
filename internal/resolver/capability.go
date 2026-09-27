@@ -45,8 +45,10 @@ type ResolvedCapability struct {
 	BindingMode      string
 	EngineID         string
 	EngineInstanceID string
-	ContractVersion  string
-	Specificity      int
+	// ProviderID is the binding's provider, when it names one.
+	ProviderID      string
+	ContractVersion string
+	Specificity     int
 }
 
 // CapabilityResolverImpl resolves a capability to the highest-priority active binding.
@@ -148,6 +150,7 @@ func (CapabilityResolverImpl) Resolve(_ context.Context, q CapabilityResolutionQ
 		BindingMode:      string(chosen.binding.BindingMode),
 		EngineID:         chosen.binding.EngineID,
 		EngineInstanceID: chosen.binding.EngineInstanceID,
+		ProviderID:       chosen.binding.ProviderID,
 		ContractVersion:  chosen.binding.ContractVersion,
 		Specificity:      chosen.specificity,
 	}, nil

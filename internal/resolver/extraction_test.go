@@ -18,13 +18,13 @@ func TestCapabilityExtractionKeepsConsumerContractStable(t *testing.T) {
 		ID: "binding-idempiere", CapabilityKey: "warehouse.execution", EngineID: "idempiere",
 		EngineInstanceID: "ERP-AF-SOUTH-02", ScopeID: "zuribeans-production", BindingMode: "PRIMARY",
 		Priority: 100, Status: "ACTIVE", ContractVersion: "1.0.0", EffectiveFrom: now.Add(-time.Hour),
-	}, domain.EngineInstance{ID: "ERP-AF-SOUTH-02", EngineID: "idempiere", Region: "af-south-1", Environment: "production", Status: "ACTIVE", HealthStatus: "HEALTHY"})
+	}, domain.EngineInstance{ID: "ERP-AF-SOUTH-02", EngineID: "idempiere", Region: "af-south-1", Environment: "production", Status: "ACTIVE"})
 
 	after := resolveExtractedCapability(t, ctx, scope, capabilitydomain.CapabilityBinding{
 		ID: "binding-wms", CapabilityKey: "warehouse.execution", EngineID: "wms",
 		EngineInstanceID: "WMS-AF-SOUTH-01", ScopeID: "zuribeans-production", BindingMode: "PRIMARY",
 		Priority: 100, Status: "ACTIVE", ContractVersion: "1.0.0", EffectiveFrom: now,
-	}, domain.EngineInstance{ID: "WMS-AF-SOUTH-01", EngineID: "wms", Region: "af-south-1", Environment: "production", Status: "ACTIVE", HealthStatus: "HEALTHY"})
+	}, domain.EngineInstance{ID: "WMS-AF-SOUTH-01", EngineID: "wms", Region: "af-south-1", Environment: "production", Status: "ACTIVE"})
 
 	if before.CapabilityKey != after.CapabilityKey || before.ContractVersion != after.ContractVersion {
 		t.Fatalf("consumer contract changed during extraction: before=%#v after=%#v", before, after)

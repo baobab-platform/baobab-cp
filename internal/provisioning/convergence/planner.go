@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/baobab-platform/baobab-cp/internal/health"
 )
 
 // Product is a product's current ACTIVE version, reduced to what planning
@@ -34,6 +36,11 @@ type Candidate struct {
 	Region              string
 	Environment         string
 	ProductionPermitted bool
+	// HealthCriticality is the capability's; empty is STANDARD.
+	HealthCriticality health.Criticality
+	// Health is what the Control Plane holds for the instance, its provider
+	// and the provider's capability.
+	Health health.Levels
 }
 
 // Registry is the authoritative state planning reads. found is false when a
@@ -46,6 +53,10 @@ type Registry interface {
 	PlanningCapability(ctx context.Context, capabilityKey string) (resolvable bool, err error)
 	PlanningCandidates(ctx context.Context, capabilityKey string) ([]Candidate, error)
 }
+
+// healthPolicy is capability/v1 health-policy.yaml at the pinned Shared
+// commit, the same policy capability resolution applies.
+var healthPolicy = health.MustDefaultPolicy()
 
 // Criticality of a composition member (capability/v1
 // capabilityMembershipCriticality).
@@ -187,7 +198,7 @@ func (p Planner) Plan(ctx context.Context, in Input) (Plan, error) {
 		if err != nil {
 			return Plan{}, fmt.Errorf("read providers of %s: %w", key, err)
 		}
-		selected, reason := p.choose(candidates, d.ResidencyRequirement, production)
+		selected, reason := p.choose(candidates, d.ResidencyRequirement, production, plan.GeneratedAt)
 		if reason != "" {
 			p.report(&plan, n.criticality, Finding{Code: reason, StepID: grant,
 				Message: fmt.Sprintf("No eligible provider instance for %s in %s: %s.", key, d.ResidencyRequirement, describe(reason))})
@@ -259,11 +270,13 @@ func (p Planner) report(plan *Plan, criticality string, f Finding) {
 	plan.Warnings = append(plan.Warnings, f)
 }
 
-// choose picks the eligible candidate: in the residency region and, in
-// production, a production instance of a provider permitted there. Ties are
-// broken by provider key, then instance, so selection is deterministic. The
-// reason names why none is eligible.
-func (p Planner) choose(candidates []Candidate, residency string, production bool) (Candidate, string) {
+// choose picks the eligible candidate: in the residency region, in
+// production a production instance of a provider permitted there, and
+// healthy enough now for the capability's health criticality (ADR-BCP-006
+// section 22, the same policy resolution applies). Ties are broken by
+// provider key, then instance, so selection is deterministic. The reason
+// names why none is eligible.
+func (p Planner) choose(candidates []Candidate, residency string, production bool, now time.Time) (Candidate, string) {
 	if len(candidates) == 0 {
 		return Candidate{}, "NO_PROVIDER"
 	}
@@ -284,6 +297,16 @@ func (p Planner) choose(candidates []Candidate, residency string, production boo
 	if len(eligible) == 0 {
 		return Candidate{}, "NO_PRODUCTION_PERMITTED_PROVIDER"
 	}
+	healthy := eligible[:0:0]
+	for _, c := range eligible {
+		if healthPolicy.Evaluate(c.HealthCriticality, c.Health, now).Eligible {
+			healthy = append(healthy, c)
+		}
+	}
+	if len(healthy) == 0 {
+		return Candidate{}, healthPolicy.ProvisioningBlocker()
+	}
+	eligible = healthy
 	sort.Slice(eligible, func(i, j int) bool {
 		if eligible[i].ProviderKey != eligible[j].ProviderKey {
 			return eligible[i].ProviderKey < eligible[j].ProviderKey
@@ -299,6 +322,8 @@ func describe(reason string) string {
 		return "no ACTIVE provider supports it"
 	case "NO_RESIDENCY_COMPLIANT_PROVIDER":
 		return "no provider instance runs in the residency region"
+	case healthPolicy.ProvisioningBlocker():
+		return "no provider instance is healthy enough for it"
 	default:
 		return "no provider instance in the region is permitted in production"
 	}

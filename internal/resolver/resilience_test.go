@@ -74,7 +74,7 @@ func resilientResolutionRequest() ResolutionRequest {
 			BindingMode: "PRIMARY", Priority: 100, Status: "ACTIVE", ContractVersion: "1.0.0", EffectiveFrom: now.Add(-time.Hour),
 		}},
 		EngineInstances: []EngineInstance{{
-			ID: "instance-1", EngineID: "trade", Status: "ACTIVE", HealthStatus: "HEALTHY", EffectiveFrom: now.Add(-time.Hour),
+			ID: "instance-1", EngineID: "trade", Status: "ACTIVE", EffectiveFrom: now.Add(-time.Hour),
 		}},
 	}
 }

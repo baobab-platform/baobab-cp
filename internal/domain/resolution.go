@@ -103,7 +103,6 @@ type EngineInstance struct {
 	IsolationProfileID string     `json:"isolation_profile_id,omitempty"`
 	ResidencyRegion    string     `json:"residency_region,omitempty"`
 	Status             string     `json:"status"`
-	HealthStatus       string     `json:"health_status,omitempty"`
 	EffectiveFrom      time.Time  `json:"effective_from,omitempty"`
 	EffectiveTo        *time.Time `json:"effective_to,omitempty"`
 }

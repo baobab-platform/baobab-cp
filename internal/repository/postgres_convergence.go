@@ -138,11 +138,14 @@ func (r *PostgresRepository) PlanningCapability(ctx context.Context, capabilityK
 // PlanningCandidates lists the active engine instances of ACTIVE providers
 // currently supporting the capability. Only engines whose code is a
 // conforming ADR-SHARED-012 engineId are candidates: a plan never names a
-// nonconforming engine.
+// nonconforming engine. Each carries the capability's health criticality
+// and the health held for the instance, the provider and the provider's
+// capability, which the planner judges as resolution does.
 func (r *PostgresRepository) PlanningCandidates(ctx context.Context, capabilityKey string) ([]convergence.Candidate, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT p.provider_key, e.code, ei.engine_instance_key, ei.region, ei.environment,
-			COALESCE(p.metadata->>'production_permitted', '') = 'true'
+			COALESCE(p.metadata->>'production_permitted', '') = 'true',
+			c.health_criticality, ei.engine_instance_id::text, p.provider_id::text
 		FROM capability.capability_provider p
 		JOIN capability.provider_capability_support s ON s.provider_id = p.provider_id
 		JOIN capability.capability c ON c.capability_id = s.capability_id
@@ -157,15 +160,34 @@ func (r *PostgresRepository) PlanningCandidates(ctx context.Context, capabilityK
 		return nil, err
 	}
 	defer rows.Close()
-	var out []convergence.Candidate
+	type row struct {
+		candidate                  convergence.Candidate
+		instanceRowID, providerRow string
+	}
+	var found []row
 	for rows.Next() {
-		var c convergence.Candidate
-		if err := rows.Scan(&c.ProviderKey, &c.EngineID, &c.EngineInstanceID, &c.Region, &c.Environment, &c.ProductionPermitted); err != nil {
+		var f row
+		c := &f.candidate
+		if err := rows.Scan(&c.ProviderKey, &c.EngineID, &c.EngineInstanceID, &c.Region, &c.Environment, &c.ProductionPermitted,
+			&c.HealthCriticality, &f.instanceRowID, &f.providerRow); err != nil {
 			return nil, err
 		}
-		out = append(out, c)
+		found = append(found, f)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	out := make([]convergence.Candidate, 0, len(found))
+	for _, f := range found {
+		levels, err := r.HealthLevels(ctx, f.instanceRowID, f.providerRow, capabilityKey)
+		if err != nil {
+			return nil, err
+		}
+		f.candidate.Health = levels
+		out = append(out, f.candidate)
+	}
+	return out, nil
 }
 
 // EngineRowIDByCode returns the row id of the engine whose engineId is code.

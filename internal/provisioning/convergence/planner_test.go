@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/health"
 )
 
 type fakeRegistry struct {
@@ -198,5 +199,59 @@ func TestUndeclaredActivitiesBlockTheMarket(t *testing.T) {
 	}
 	if _, ok := step(p, "market-za"); ok {
 		t.Fatal("a market without declared activities was planned")
+	}
+}
+
+// TestPlanningAppliesTheHealthPolicy: the planner judges candidates' health
+// as resolution does (ADR-BCP-006 section 22), so it never plans a binding
+// resolution would refuse.
+func TestPlanningAppliesTheHealthPolicy(t *testing.T) {
+	d := desired(t)
+	at := time.Date(2026, 9, 27, 9, 0, 1, 0, time.UTC)
+	observed := func(instance string, status health.Status) *health.Observation {
+		o := &health.Observation{Subject: health.Subject{EngineInstanceID: instance}, Status: status,
+			ObservedAt: at.Add(-time.Second), ExpiresAt: at.Add(time.Minute), Source: health.SourceActiveProbe}
+		if status != health.StatusHealthy {
+			o.Reasons = []string{"HEALTH_PROBE_FAILED"}
+		}
+		return o
+	}
+	const first, second = "ei_0000000000000000000000000000000a", "ei_0000000000000000000000000000000b"
+	with := func(criticality health.Criticality, levels map[string]*health.Observation) fakeRegistry {
+		r := registry()
+		cs := r.candidates["commerce.order.manage"]
+		for i := range cs {
+			cs[i].HealthCriticality = criticality
+			cs[i].Health = health.Levels{EngineInstance: levels[cs[i].EngineInstanceID]}
+		}
+		return r
+	}
+	bound := func(p Plan) string {
+		s, ok := step(p, "bind-commerce-order-manage")
+		if !ok {
+			return ""
+		}
+		return s.Resources.EngineInstanceID
+	}
+
+	// Unobserved instances still serve a STANDARD capability: no change from today.
+	if p := plan(t, with(health.CriticalityStandard, nil), "production", d); len(p.Blockers) != 0 || bound(p) != first {
+		t.Errorf("standard, unobserved: blockers %v bound %s", p.Blockers, bound(p))
+	}
+	// A DEGRADED instance is passed over for a healthy one.
+	p := plan(t, with(health.CriticalityStandard, map[string]*health.Observation{
+		first: observed(first, health.StatusDegraded), second: observed(second, health.StatusHealthy)}), "production", d)
+	if len(p.Blockers) != 0 || bound(p) != second {
+		t.Errorf("standard, first degraded: blockers %v bound %s", p.Blockers, bound(p))
+	}
+	// A CRITICAL capability takes only an instance observed HEALTHY.
+	p = plan(t, with(health.CriticalityCritical, map[string]*health.Observation{second: observed(second, health.StatusHealthy)}), "production", d)
+	if len(p.Blockers) != 0 || bound(p) != second {
+		t.Errorf("critical, only second observed: blockers %v bound %s", p.Blockers, bound(p))
+	}
+	// With none observed, a mandatory CRITICAL capability blocks the plan.
+	p = plan(t, with(health.CriticalityCritical, nil), "production", d)
+	if len(p.Blockers) != 1 || p.Blockers[0].Code != "NO_HEALTHY_PROVIDER" || !strings.Contains(p.Blockers[0].Message, "healthy enough") {
+		t.Errorf("critical, unobserved: blockers %v", p.Blockers)
 	}
 }

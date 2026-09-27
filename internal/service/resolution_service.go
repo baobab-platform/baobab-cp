@@ -7,6 +7,7 @@ import (
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/health"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/resolver"
 )
@@ -77,6 +78,7 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 		return ResolutionResult{}, errors.New("capability_key is invalid")
 	}
 	var mappingScopes map[string]domain.MappingScope
+	var bindingHealth map[string]health.Levels
 	if s.Repository != nil {
 		mappings, err := s.Repository.ListMappings(ctx, req.CanonicalEntityID)
 		if err != nil {
@@ -94,6 +96,19 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 			}
 		}
 		req.Mappings, req.Bindings, req.EngineInstances = mappings, bindings, instances
+		// Health of every candidate binding, at each level it names. A
+		// repository that holds no health leaves every instance UNKNOWN,
+		// which a CRITICAL capability never accepts.
+		if reader, ok := s.Repository.(repository.HealthReader); ok {
+			bindingHealth = make(map[string]health.Levels, len(bindings))
+			for _, b := range bindings {
+				levels, err := reader.HealthLevels(ctx, b.EngineInstanceID, b.ProviderID, req.CapabilityKey)
+				if err != nil {
+					return ResolutionResult{}, fmt.Errorf("load binding health: %w", err)
+				}
+				bindingHealth[b.ID] = levels
+			}
+		}
 		// Governed mapping scopes are evaluated against the context; a
 		// repository that cannot load them leaves every scoped mapping
 		// inapplicable rather than unscoped.
@@ -123,7 +138,13 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 		MappingScopes:     mappingScopes,
 		Bindings:          req.Bindings,
 		EngineInstances:   req.EngineInstances,
+		Health:            bindingHealth,
 	}
+	criticality, err := s.healthCriticality(ctx, req.CapabilityKey)
+	if err != nil {
+		return ResolutionResult{}, err
+	}
+	pipelineReq.HealthCriticality = criticality
 
 	if s.EnforceEntitlement {
 		if s.Grants != nil {
@@ -181,4 +202,29 @@ func (s ResolutionService) Resolve(ctx context.Context, req ResolutionRequest) (
 		Topology:   pipelineResult.Topology,
 		Trace:      pipelineResult.Trace,
 	}, nil
+}
+
+// healthCriticality is the capability's declared health criticality
+// (ADR-BCP-006 section 22), read whether or not EnforceEntitlement is on:
+// health gates every resolution. A capability that is not registered
+// declares none and is STANDARD; one that cannot be read fails resolution
+// closed rather than being treated as STANDARD.
+func (s ResolutionService) healthCriticality(ctx context.Context, capabilityKey string) (health.Criticality, error) {
+	registry := s.CapabilityRegistry
+	if registry == nil {
+		if r, ok := s.Repository.(repository.CapabilityRegistryRepository); ok {
+			registry = r
+		}
+	}
+	if registry == nil {
+		return health.CriticalityStandard, nil
+	}
+	capability, err := registry.GetCapability(ctx, capabilityKey)
+	if errors.Is(err, repository.ErrCapabilityNotFound) {
+		return health.CriticalityStandard, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("load capability health criticality: %w", err)
+	}
+	return capability.HealthCriticality.OrDefault(), nil
 }

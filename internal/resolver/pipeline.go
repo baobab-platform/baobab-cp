@@ -6,6 +6,7 @@ import (
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/health"
 )
 
 // ResolutionRequest is the combined request used by the full resolver pipeline.
@@ -43,6 +44,13 @@ type ResolutionRequest struct {
 	// scope_id. A candidate naming a governed scope that is absent here never
 	// applies.
 	MappingScopes map[string]domain.MappingScope
+	// HealthCriticality is the requested capability's declared health
+	// criticality; empty is STANDARD.
+	HealthCriticality health.Criticality
+	// Health holds each candidate binding's health, by binding ID. A binding
+	// absent here has no observation at any level, so its instance is
+	// UNKNOWN.
+	Health map[string]health.Levels
 }
 
 // ResolutionResult is the final output from the composed resolver pipeline.
@@ -142,6 +150,8 @@ func (ResolutionPipeline) Resolve(ctx context.Context, req ResolutionRequest) (R
 		SelectedEngineInstanceID: capabilityResult.EngineInstanceID,
 		EngineInstances:          req.EngineInstances,
 		At:                       req.Context.ResolvedAt,
+		HealthCriticality:        req.HealthCriticality,
+		Health:                   req.Health[capabilityResult.BindingID],
 	})
 	if err != nil {
 		return ResolutionResult{}, resolutionFailure(trace, err)
