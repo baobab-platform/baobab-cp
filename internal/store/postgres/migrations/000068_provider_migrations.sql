@@ -8,8 +8,9 @@ CREATE TABLE topology.provider_migration (
     target_provider_key   text NOT NULL,
     capability_keys       text[] NOT NULL CHECK (cardinality(capability_keys) > 0),
     request               jsonb NOT NULL,
-    stage                 text NOT NULL CHECK (stage IN ('DISCOVER', 'PLAN', 'PREPARE', 'SHADOW', 'CANARY', 'SHIFT',
-                              'VALIDATE', 'RETIRE_OLD', 'COMPLETE', 'CANCELLED', 'ROLLED_BACK')),
+    -- Section 45's DISCOVER is the side-effect-free preview, never a stage.
+    stage                 text NOT NULL CHECK (stage IN ('PLAN', 'PREPARE', 'SHADOW', 'CANARY', 'SHIFT', 'VALIDATE',
+                              'RETIRE_OLD', 'COMPLETE', 'CANCELLED', 'ROLLED_BACK')),
     current_cohort_key    text,
     plan_id               text NOT NULL,
     plan_version          integer NOT NULL CHECK (plan_version >= 1),

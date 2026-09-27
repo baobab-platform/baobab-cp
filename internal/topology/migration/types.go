@@ -157,14 +157,17 @@ type Discovery struct {
 
 // Plan is ProviderMigrationPlan. A preview has no ProviderMigrationID.
 type Plan struct {
-	PlanID                string         `json:"plan_id"`
-	PlanVersion           int            `json:"plan_version"`
-	PlanDigest            string         `json:"plan_digest"`
-	BaseRevision          int64          `json:"base_revision"`
-	GeneratedAt           time.Time      `json:"generated_at"`
-	ExpiresAt             time.Time      `json:"expires_at"`
-	RiskClass             string         `json:"risk_class"`
-	ProviderMigrationID   string         `json:"provider_migration_id,omitempty"`
+	PlanID              string    `json:"plan_id"`
+	PlanVersion         int       `json:"plan_version"`
+	PlanDigest          string    `json:"plan_digest"`
+	BaseRevision        int64     `json:"base_revision"`
+	GeneratedAt         time.Time `json:"generated_at"`
+	ExpiresAt           time.Time `json:"expires_at"`
+	RiskClass           string    `json:"risk_class"`
+	ProviderMigrationID string    `json:"provider_migration_id,omitempty"`
+	// Request is the complete intent the plan executes; it is part of the
+	// material an approval binds.
+	Request               Request        `json:"request"`
 	SourceProviderKey     string         `json:"source_provider_key"`
 	TargetProviderKey     string         `json:"target_provider_key"`
 	MigrationMode         string         `json:"migration_mode"`

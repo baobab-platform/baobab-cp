@@ -8,17 +8,15 @@
 # a durable operation (ADR-BCP-022). CANARY and SHIFT move one cohort at a
 # time, in the request's order; VALIDATE follows each cohort.
 id: baobab-platform.control-plane.provider-migration-lifecycle.v1
-# DISCOVER is the side-effect-free preview (POST /provider-migrations/plan);
-# a created migration has already been discovered and starts in PLAN.
+# Section 45's DISCOVER is the side-effect-free preview
+# (POST /provider-migrations/plan), never a stage a migration is in: a
+# created migration has already been discovered and starts in PLAN.
 initial_state: PLAN
 terminal_states:
   - COMPLETE
   - CANCELLED
   - ROLLED_BACK
 states:
-  DISCOVER:
-    transitions:
-      plan: PLAN
   PLAN:
     transitions:
       replan: PLAN

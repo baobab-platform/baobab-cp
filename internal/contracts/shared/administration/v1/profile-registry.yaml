@@ -129,7 +129,6 @@ profiles:
       - readiness.view
       - operation.view
       - tenant.view
-      - topology.view
   - key: platform-auditor
     name: Platform Auditor
     scope_level: PLATFORM

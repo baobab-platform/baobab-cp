@@ -122,6 +122,7 @@ func (p Planner) Plan(ctx context.Context, in Input) (Plan, error) {
 		return Plan{}, errors.New("migration planning needs facts and a health policy")
 	}
 	r := in.Request
+	r.Normalize()
 	if err := Validate(r); err != nil {
 		return Plan{}, err
 	}
@@ -132,8 +133,8 @@ func (p Planner) Plan(ctx context.Context, in Input) (Plan, error) {
 	plan := Plan{
 		PlanID: in.PlanID, PlanVersion: in.PlanVersion, BaseRevision: in.BaseRevision,
 		GeneratedAt: in.Now.UTC(), ExpiresAt: in.Now.UTC().Add(ttl),
-		ProviderMigrationID: in.ProviderMigrationID,
-		SourceProviderKey:   r.SourceProviderKey, TargetProviderKey: r.TargetProviderKey, MigrationMode: r.MigrationMode,
+		ProviderMigrationID: in.ProviderMigrationID, Request: r,
+		SourceProviderKey: r.SourceProviderKey, TargetProviderKey: r.TargetProviderKey, MigrationMode: r.MigrationMode,
 		Steps: []Step{}, SecurityChecks: []Check{}, ReadinessRequirements: []Check{}, Blockers: []Finding{}, Warnings: []Finding{},
 	}
 	keys := make([]string, 0, len(r.Capabilities))
@@ -417,6 +418,7 @@ func compensation(strategy string) string {
 func Material(p Plan) string {
 	type material struct {
 		ProviderMigrationID string
+		Request             Request
 		SourceProviderKey   string
 		TargetProviderKey   string
 		MigrationMode       string
@@ -430,7 +432,7 @@ func Material(p Plan) string {
 	for _, b := range p.Blockers {
 		codes = append(codes, b.Code+":"+b.Message)
 	}
-	return digestOf(material{p.ProviderMigrationID, p.SourceProviderKey, p.TargetProviderKey, p.MigrationMode, p.RiskClass,
+	return digestOf(material{p.ProviderMigrationID, p.Request, p.SourceProviderKey, p.TargetProviderKey, p.MigrationMode, p.RiskClass,
 		p.Discovery, p.Steps, p.ReadinessRequirements, codes})
 }
 

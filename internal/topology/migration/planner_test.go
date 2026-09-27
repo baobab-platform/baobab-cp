@@ -234,6 +234,16 @@ func TestPlanningIsDeterministic(t *testing.T) {
 	if Material(first) != Material(second) || first.PlanDigest != second.PlanDigest {
 		t.Fatal("reordered authoritative state changed the plan")
 	}
+	// The request is part of the material: an approval covers every
+	// strategy the plan executes, not only its steps.
+	if first.Request.RollbackStrategy != request.RollbackStrategy {
+		t.Fatal("the plan does not embed its request")
+	}
+	changed := request
+	changed.RollbackStrategy = "RESTORE_AND_REBIND_SOURCE"
+	if Material(plan(t, facts, changed)) == Material(first) {
+		t.Fatal("a different rollback strategy produced the same material")
+	}
 	facts.bindings = facts.bindings[:1]
 	if Material(plan(t, facts, request)) == Material(first) {
 		t.Fatal("a different binding set produced the same material")

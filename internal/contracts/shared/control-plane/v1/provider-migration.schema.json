@@ -6,30 +6,57 @@
   "$defs": {
     "migrationStage": {
       "type": "string",
-      "enum": ["DISCOVER", "PLAN", "PREPARE", "SHADOW", "CANARY", "SHIFT", "VALIDATE", "RETIRE_OLD", "COMPLETE", "CANCELLED", "ROLLED_BACK"],
-      "description": "ADR-BCP-006 section 45, plus the two ways a migration ends without completing. COMPLETE, CANCELLED and ROLLED_BACK are terminal. Transitions are in provider-migration-lifecycle.yaml."
+      "enum": [
+        "PLAN",
+        "PREPARE",
+        "SHADOW",
+        "CANARY",
+        "SHIFT",
+        "VALIDATE",
+        "RETIRE_OLD",
+        "COMPLETE",
+        "CANCELLED",
+        "ROLLED_BACK"
+      ],
+      "description": "ADR-BCP-006 section 45, plus the two ways a migration ends without completing. Section 45's DISCOVER is the side-effect-free preview (POST /provider-migrations/plan), never a stage a migration is in: a migration is created in PLAN, already discovered. COMPLETE, CANCELLED and ROLLED_BACK are terminal. Transitions are in provider-migration-lifecycle.yaml."
     },
     "migrationMode": {
       "type": "string",
-      "enum": ["STATELESS_REBIND", "STATEFUL_CUTOVER"],
+      "enum": [
+        "STATELESS_REBIND",
+        "STATEFUL_CUTOVER"
+      ],
       "description": "Section 54. STATELESS_REBIND: the capabilities hold no business state the source owns, so moving bindings migrates them. STATEFUL_CUTOVER: the source is a system of record for mutable state; exactly one provider stays authoritative at every moment (section 55), and the data strategy moves the state before each cohort's authority moves."
     },
     "dataStrategy": {
       "type": "string",
-      "enum": ["NONE", "BULK_MIGRATE_THEN_CUTOVER", "INCREMENTAL_SYNC_THEN_CUTOVER"],
+      "enum": [
+        "NONE",
+        "BULK_MIGRATE_THEN_CUTOVER",
+        "INCREMENTAL_SYNC_THEN_CUTOVER"
+      ],
       "description": "How business state reaches the target before authority moves. NONE only for STATELESS_REBIND, and required there. Both cutover strategies end with a write freeze on the cohort, reconciliation and post-cutover verification (section 54). Dual write is deliberately absent: it needs its own architecture decision (section 56)."
     },
     "rollbackStrategy": {
       "type": "string",
-      "enum": ["REBIND_SOURCE", "RESTORE_AND_REBIND_SOURCE", "FORWARD_FIX_ONLY"],
+      "enum": [
+        "REBIND_SOURCE",
+        "RESTORE_AND_REBIND_SOURCE",
+        "FORWARD_FIX_ONLY"
+      ],
       "description": "How a cohort returns to the source. REBIND_SOURCE: bindings move back; valid when the source still holds authoritative state. RESTORE_AND_REBIND_SOURCE: state written to the target after cutover is migrated back first. FORWARD_FIX_ONLY: no return; the plan warns MIGRATION_NOT_REVERSIBLE and its risk class is at least HIGH."
     },
     "migrationCapability": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["capability_key", "contract_version"],
+      "required": [
+        "capability_key",
+        "contract_version"
+      ],
       "properties": {
-        "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
+        "capability_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey"
+        },
         "contract_version": {
           "type": "integer",
           "minimum": 1,
@@ -43,86 +70,202 @@
       "minProperties": 1,
       "description": "A deterministic set of contexts (section 51): dimensions combine with AND, values within a dimension with OR. Never a percentage: percentage rollout needs a formal traffic policy this contract does not define (sections 51-52).",
       "properties": {
-        "tenant_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "domain.schema.json#/$defs/tenantId" } },
-        "legal_entity_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "domain.schema.json#/$defs/canonicalLegalEntityId" } },
-        "estate_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "domain.schema.json#/$defs/estateId" } },
-        "markets": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "../../admission/v1/application.schema.json#/$defs/countryCode" } },
+        "tenant_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/tenantId"
+          }
+        },
+        "legal_entity_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/canonicalLegalEntityId"
+          }
+        },
+        "estate_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/estateId"
+          }
+        },
+        "markets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../admission/v1/application.schema.json#/$defs/countryCode"
+          }
+        },
         "regions": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^[a-z]{2}-[a-z]+-[0-9]+$" }
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z]{2}-[a-z]+-[0-9]+$"
+          }
         }
       }
     },
     "migrationCohort": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cohort_key"],
+      "required": [
+        "cohort_key"
+      ],
       "description": "One step of the rollout, in order. The first cohort is the canary (section 50). Exactly one cohort, the last, may omit its selector: it takes every affected context the earlier cohorts did not.",
       "properties": {
-        "cohort_key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 64 },
-        "selector": { "$ref": "#/$defs/cohortSelector" }
+        "cohort_key": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "maxLength": 64
+        },
+        "selector": {
+          "$ref": "#/$defs/cohortSelector"
+        }
       }
     },
     "cutoverWindow": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["starts_at", "ends_at"],
+      "required": [
+        "starts_at",
+        "ends_at"
+      ],
       "properties": {
-        "starts_at": { "type": "string", "format": "date-time" },
-        "ends_at": { "type": "string", "format": "date-time" }
+        "starts_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "ends_at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "ProviderMigrationRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source_provider_key", "target_provider_key", "capabilities", "migration_mode", "data_strategy", "rollback_strategy", "cohorts", "owners", "reason"],
+      "required": [
+        "source_provider_key",
+        "target_provider_key",
+        "capabilities",
+        "migration_mode",
+        "data_strategy",
+        "rollback_strategy",
+        "cohorts",
+        "owners",
+        "reason"
+      ],
       "description": "What an operator asks to migrate (section 120). The same body previews a plan (POST /provider-migrations/plan, side-effect free) and creates the migration (POST /provider-migrations). Everything else a plan needs (affected bindings, tenants, estates, markets, contract compatibility, target readiness) the Control Plane discovers from authoritative state (section 46); the request never supplies it.",
       "properties": {
-        "source_provider_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey" },
+        "source_provider_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey"
+        },
         "target_provider_key": {
           "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey",
           "description": "Must differ from source_provider_key: moving a provider's own instances is an engine upgrade or instance replacement (sections 59-60), not a provider migration."
         },
-        "capabilities": { "type": "array", "minItems": 1, "maxItems": 50, "items": { "$ref": "#/$defs/migrationCapability" } },
-        "migration_mode": { "$ref": "#/$defs/migrationMode" },
-        "data_strategy": { "$ref": "#/$defs/dataStrategy" },
-        "rollback_strategy": { "$ref": "#/$defs/rollbackStrategy" },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/migrationCapability"
+          }
+        },
+        "migration_mode": {
+          "$ref": "#/$defs/migrationMode"
+        },
+        "data_strategy": {
+          "$ref": "#/$defs/dataStrategy"
+        },
+        "rollback_strategy": {
+          "$ref": "#/$defs/rollbackStrategy"
+        },
         "shadow": {
           "type": "boolean",
           "default": false,
           "description": "Request a SHADOW stage (section 49). The Control Plane refuses shadow for capabilities whose operations mutate state unless the provider declares them shadow-safe (MIGRATION_SHADOW_UNSAFE); shadow never determines a result (section 41)."
         },
-        "cohorts": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/migrationCohort" } },
+        "cohorts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/migrationCohort"
+          }
+        },
         "validation_checks": {
           "type": "array",
           "maxItems": 50,
-          "items": { "$ref": "change-plan.schema.json#/$defs/planCheck" },
+          "items": {
+            "$ref": "change-plan.schema.json#/$defs/planCheck"
+          },
           "default": [],
           "description": "Operator-specified checks each cohort must pass in VALIDATE, beyond the checks the Control Plane always adds."
         },
-        "cutover_window": { "$ref": "#/$defs/cutoverWindow" },
+        "cutover_window": {
+          "$ref": "#/$defs/cutoverWindow"
+        },
         "owners": {
           "type": "array",
           "minItems": 1,
           "maxItems": 10,
           "uniqueItems": true,
-          "items": { "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId" },
+          "items": {
+            "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId"
+          },
           "description": "Canonical principals accountable for the migration (section 120). Never emails."
         },
-        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "migration_mode": { "const": "STATELESS_REBIND" } } },
-          "then": { "properties": { "data_strategy": { "const": "NONE" } } }
+          "if": {
+            "properties": {
+              "migration_mode": {
+                "const": "STATELESS_REBIND"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data_strategy": {
+                "const": "NONE"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "migration_mode": { "const": "STATEFUL_CUTOVER" } } },
+          "if": {
+            "properties": {
+              "migration_mode": {
+                "const": "STATEFUL_CUTOVER"
+              }
+            }
+          },
           "then": {
-            "properties": { "data_strategy": { "not": { "const": "NONE" } } },
-            "required": ["cutover_window"]
+            "properties": {
+              "data_strategy": {
+                "not": {
+                  "const": "NONE"
+                }
+              }
+            },
+            "required": [
+              "cutover_window"
+            ]
           }
         }
       ]
@@ -149,91 +292,231 @@
       "additionalProperties": false,
       "description": "The resolved resources a step acts on, in ADR-SHARED-012 identifiers.",
       "properties": {
-        "cohort_key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 64 },
-        "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
-        "provider_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey" },
-        "binding_mode": { "$ref": "../../capability/v1/domain.schema.json#/$defs/bindingMode" },
-        "engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
-        "binding_count": { "type": "integer", "minimum": 0 }
+        "cohort_key": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "maxLength": 64
+        },
+        "capability_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey"
+        },
+        "provider_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey"
+        },
+        "binding_mode": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/bindingMode"
+        },
+        "engine_instance_id": {
+          "$ref": "domain.schema.json#/$defs/engineInstanceId"
+        },
+        "binding_count": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "migrationStep": {
-      "allOf": [{ "$ref": "change-plan.schema.json#/$defs/planStep" }],
+      "allOf": [
+        {
+          "$ref": "change-plan.schema.json#/$defs/planStep"
+        }
+      ],
       "properties": {
-        "operation": { "$ref": "#/$defs/migrationOperation" },
-        "resources": { "$ref": "#/$defs/migrationStepResources" }
+        "operation": {
+          "$ref": "#/$defs/migrationOperation"
+        },
+        "resources": {
+          "$ref": "#/$defs/migrationStepResources"
+        }
       },
-      "required": ["resources"]
+      "required": [
+        "resources"
+      ]
     },
     "migrationDiscovery": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["binding_count", "tenant_ids", "estate_ids", "markets", "cohorts"],
+      "required": [
+        "binding_count",
+        "tenant_ids",
+        "estate_ids",
+        "markets",
+        "cohorts"
+      ],
       "description": "What the migration touches, discovered from authoritative state (section 46). Every affected context belongs to exactly one cohort; a context no cohort takes is the blocker MIGRATION_CONTEXT_UNASSIGNED.",
       "properties": {
-        "binding_count": { "type": "integer", "minimum": 0 },
-        "tenant_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "domain.schema.json#/$defs/tenantId" } },
-        "estate_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "domain.schema.json#/$defs/estateId" } },
-        "markets": { "type": "array", "uniqueItems": true, "items": { "$ref": "../../admission/v1/application.schema.json#/$defs/countryCode" } },
+        "binding_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tenant_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/tenantId"
+          }
+        },
+        "estate_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/estateId"
+          }
+        },
+        "markets": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../admission/v1/application.schema.json#/$defs/countryCode"
+          }
+        },
         "cohorts": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["cohort_key", "binding_count", "tenant_count"],
+            "required": [
+              "cohort_key",
+              "binding_count",
+              "tenant_count"
+            ],
             "properties": {
-              "cohort_key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 64 },
-              "binding_count": { "type": "integer", "minimum": 0 },
-              "tenant_count": { "type": "integer", "minimum": 0 }
+              "cohort_key": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$",
+                "maxLength": 64
+              },
+              "binding_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tenant_count": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           }
         }
       }
     },
     "ProviderMigrationPlan": {
-      "allOf": [{ "$ref": "change-plan.schema.json#/$defs/ChangePlan" }],
-      "required": ["source_provider_key", "target_provider_key", "migration_mode", "discovery"],
-      "description": "The immutable migration plan (sections 47, 120, 123): a ChangePlan whose steps are canonical migration operations and whose blockers include every unmet precondition of section 48 (see provider-migration-lifecycle.yaml blocking_codes). A previewed plan has no provider_migration_id; a created migration's plan does.",
+      "allOf": [
+        {
+          "$ref": "change-plan.schema.json#/$defs/ChangePlan"
+        }
+      ],
+      "required": [
+        "request",
+        "source_provider_key",
+        "target_provider_key",
+        "migration_mode",
+        "discovery"
+      ],
+      "description": "The immutable migration plan (sections 47, 120, 123): a ChangePlan whose steps are canonical migration operations and whose blockers include every unmet precondition of section 48 (see provider-migration-lifecycle.yaml blocking_codes). It embeds the request it was planned from, so the reviewed artifact is the whole intent. source_provider_key, target_provider_key and migration_mode repeat the request's for readers and must equal them. A previewed plan has no provider_migration_id; a created migration's plan does.",
       "properties": {
-        "provider_migration_id": { "$ref": "domain.schema.json#/$defs/providerMigrationId" },
-        "source_provider_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey" },
-        "target_provider_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey" },
-        "migration_mode": { "$ref": "#/$defs/migrationMode" },
-        "discovery": { "$ref": "#/$defs/migrationDiscovery" },
-        "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/migrationStep" } }
+        "provider_migration_id": {
+          "$ref": "domain.schema.json#/$defs/providerMigrationId"
+        },
+        "request": {
+          "$ref": "#/$defs/ProviderMigrationRequest",
+          "description": "The complete intent the plan executes: capabilities, cohorts, data, rollback and shadow strategy, cutover window, validation checks and owners. Part of the plan's material, so an approval bound to the digest covers all of it."
+        },
+        "source_provider_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey"
+        },
+        "target_provider_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey"
+        },
+        "migration_mode": {
+          "$ref": "#/$defs/migrationMode"
+        },
+        "discovery": {
+          "$ref": "#/$defs/migrationDiscovery"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/migrationStep"
+          }
+        }
       },
       "unevaluatedProperties": false
     },
     "ProviderMigration": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["provider_migration_id", "request", "stage", "plan_id", "plan_version", "plan_digest", "created_by", "created_at", "updated_at", "revision"],
+      "required": [
+        "provider_migration_id",
+        "request",
+        "stage",
+        "plan_id",
+        "plan_version",
+        "plan_digest",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "revision"
+      ],
       "description": "The migration aggregate (section 119). Created in PLAN with its first plan. Advancing past PLAN is a controlled mutation (ADR-BCP-021): an approval binds to the plan digest, and stages execute as durable operations (ADR-BCP-022).",
       "properties": {
-        "provider_migration_id": { "$ref": "domain.schema.json#/$defs/providerMigrationId" },
-        "request": { "$ref": "#/$defs/ProviderMigrationRequest" },
-        "stage": { "$ref": "#/$defs/migrationStage" },
+        "provider_migration_id": {
+          "$ref": "domain.schema.json#/$defs/providerMigrationId"
+        },
+        "request": {
+          "$ref": "#/$defs/ProviderMigrationRequest"
+        },
+        "stage": {
+          "$ref": "#/$defs/migrationStage"
+        },
         "current_cohort_key": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9-]*$",
           "maxLength": 64,
           "description": "The cohort in CANARY or SHIFT, or being validated."
         },
-        "plan_id": { "$ref": "domain.schema.json#/$defs/provisioningPlanId" },
-        "plan_version": { "type": "integer", "minimum": 1 },
-        "plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+        "plan_id": {
+          "$ref": "domain.schema.json#/$defs/provisioningPlanId"
+        },
+        "plan_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "plan_digest": {
+          "$ref": "domain.schema.json#/$defs/planDigest"
+        },
         "blocked": {
           "type": "boolean",
           "default": false,
           "description": "The current plan has blockers; the migration cannot advance until a new plan clears them."
         },
-        "failure_reason": { "type": "string", "maxLength": 1000 },
-        "created_by": { "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId" },
-        "created_at": { "type": "string", "format": "date-time" },
-        "updated_at": { "type": "string", "format": "date-time" },
-        "started_at": { "type": "string", "format": "date-time" },
-        "completed_at": { "type": "string", "format": "date-time" },
-        "revision": { "type": "integer", "minimum": 1 }
+        "failure_reason": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "created_by": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     }
   }
