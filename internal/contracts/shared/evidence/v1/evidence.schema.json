@@ -1,0 +1,543 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/evidence/v1/evidence.schema.json",
+  "title": "Evidence records, sources and claims",
+  "description": "ADR-BCP-023 gate OEV-01: evidence is modelled separately from its binary content (section 10), its provenance is an EvidenceSource (section 19), and what it is offered to support is an EvidenceClaim (section 7). No schema here carries document content: binaries live behind the storage boundary as EvidenceArtifacts (sections 12-13), referenced by id.",
+  "$defs": {
+    "EvidenceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id",
+        "evidence_type",
+        "subject",
+        "purpose",
+        "source_id",
+        "classification",
+        "retention_policy",
+        "status",
+        "created_at",
+        "version"
+      ],
+      "description": "One piece of evidence: what it is, what it concerns, where it came from, and how it is protected. It points at its material (an artifact, a source record or a credential) and never contains it.",
+      "properties": {
+        "evidence_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceRecordId"
+        },
+        "evidence_type": {
+          "$ref": "domain.schema.json#/$defs/evidenceType"
+        },
+        "subject": {
+          "$ref": "domain.schema.json#/$defs/subjectReference"
+        },
+        "purpose": {
+          "$ref": "domain.schema.json#/$defs/verificationPurpose"
+        },
+        "source_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceSourceId"
+        },
+        "source_record_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The source's own identifier for the record observed, for example a registry filing number. Opaque to the Control Plane."
+        },
+        "artifact_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceArtifactId"
+        },
+        "credential_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Identifier of a verifiable credential or LEI record (sections 37-42)."
+        },
+        "submitted_by": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId",
+          "description": "The principal who submitted it, for applicant or reviewer uploads. Server-derived from the authenticated caller."
+        },
+        "obtained_by": {
+          "type": "string",
+          "pattern": "^(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*|principal:[A-Za-z0-9][A-Za-z0-9._:-]*)$",
+          "maxLength": 128,
+          "description": "The process that retrieved it from its source: a verification provider key, or principal:<id> for a manual lookup."
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "classification": {
+          "$ref": "domain.schema.json#/$defs/dataClassification"
+        },
+        "retention_policy": {
+          "$ref": "domain.schema.json#/$defs/retentionPolicyKey"
+        },
+        "status": {
+          "$ref": "domain.schema.json#/$defs/evidenceStatus"
+        },
+        "supersedes": {
+          "$ref": "domain.schema.json#/$defs/evidenceRecordId",
+          "description": "The earlier record this one replaces. The earlier record is kept and marked SUPERSEDED, never overwritten (sections 17-18)."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "artifact_id"
+          ]
+        },
+        {
+          "required": [
+            "source_record_reference"
+          ]
+        },
+        {
+          "required": [
+            "credential_reference"
+          ]
+        }
+      ],
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "required": [
+                "submitted_by"
+              ]
+            },
+            {
+              "required": [
+                "obtained_by"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "EvidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id",
+        "evidence_type",
+        "status",
+        "classification"
+      ],
+      "description": "Metadata-only view of an EvidenceRecord, for lists and for other records to cite. Artifact content always needs a separate, authorised action (section 270).",
+      "properties": {
+        "evidence_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceRecordId"
+        },
+        "evidence_type": {
+          "$ref": "domain.schema.json#/$defs/evidenceType"
+        },
+        "status": {
+          "$ref": "domain.schema.json#/$defs/evidenceStatus"
+        },
+        "classification": {
+          "$ref": "domain.schema.json#/$defs/dataClassification"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "trustedClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_type",
+        "jurisdiction"
+      ],
+      "description": "One claim type, in one jurisdiction, that a source is authoritative for (sections 21-22).",
+      "properties": {
+        "claim_type": {
+          "$ref": "domain.schema.json#/$defs/claimType"
+        },
+        "jurisdiction": {
+          "$ref": "domain.schema.json#/$defs/jurisdiction"
+        }
+      }
+    },
+    "EvidenceSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "source_class",
+        "name",
+        "trusted_for",
+        "access_classification",
+        "effective_from",
+        "status"
+      ],
+      "description": "Where evidence comes from, and what it is authoritative for. A provider that retrieves from a source is not the source (section 25).",
+      "properties": {
+        "source_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceSourceId"
+        },
+        "source_class": {
+          "$ref": "domain.schema.json#/$defs/sourceClass"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "jurisdiction": {
+          "$ref": "domain.schema.json#/$defs/jurisdiction"
+        },
+        "authority_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The legal or regulatory basis of the source's authority."
+        },
+        "issuer_identifier": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "source_uri": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 512
+        },
+        "trusted_for": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/trustedClaim"
+          },
+          "description": "Every claim type and jurisdiction the source is authoritative for. Empty means it corroborates but never verifies on its own."
+        },
+        "access_classification": {
+          "$ref": "domain.schema.json#/$defs/dataClassification"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "$ref": "domain.schema.json#/$defs/sourceStatus"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source_class": {
+                "const": "APPLICANT_SUPPLIED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "trusted_for": {
+                "maxItems": 0
+              }
+            }
+          },
+          "description": "An applicant is never an authority for its own claims (sections 9, 180)."
+        }
+      ]
+    },
+    "claimedValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value"
+      ],
+      "description": "The value as asserted, and its normalised form where one was derived. Both are kept, and normalisation never rewrites meaning (sections 77-78).",
+      "properties": {
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "normalised_value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "EvidenceClaimSubmission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject",
+        "claim_type",
+        "claimed_value",
+        "purpose"
+      ],
+      "description": "What an applicant or reviewer may submit as a claim. It has no status and no verification field: the Control Plane records it SELF_ASSERTED (or UNDER_VERIFICATION for a reviewer's) and only a verification result changes that (section 9).",
+      "properties": {
+        "subject": {
+          "$ref": "domain.schema.json#/$defs/subjectReference"
+        },
+        "claim_type": {
+          "$ref": "domain.schema.json#/$defs/claimType"
+        },
+        "jurisdiction": {
+          "$ref": "domain.schema.json#/$defs/jurisdiction",
+          "description": "The jurisdiction the claim is made under, where it has one (section 22): a source verifies it only if trusted for this claim type there."
+        },
+        "claimed_value": {
+          "$ref": "#/$defs/claimedValue"
+        },
+        "purpose": {
+          "$ref": "domain.schema.json#/$defs/verificationPurpose"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 50,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/evidenceRecordId"
+          }
+        }
+      }
+    },
+    "EvidenceClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "subject",
+        "claim_type",
+        "claimed_value",
+        "asserted_by",
+        "asserted_via",
+        "asserted_at",
+        "purpose",
+        "status",
+        "evidence_ids",
+        "version"
+      ],
+      "description": "A proposition about a subject, who asserted it, the evidence offered for it, and its current standing.",
+      "properties": {
+        "claim_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceClaimId"
+        },
+        "subject": {
+          "$ref": "domain.schema.json#/$defs/subjectReference"
+        },
+        "claim_type": {
+          "$ref": "domain.schema.json#/$defs/claimType"
+        },
+        "jurisdiction": {
+          "$ref": "domain.schema.json#/$defs/jurisdiction",
+          "description": "The jurisdiction the claim is made under, where it has one (section 22): a source verifies it only if trusted for this claim type there."
+        },
+        "claimed_value": {
+          "$ref": "#/$defs/claimedValue"
+        },
+        "asserted_by": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId"
+        },
+        "asserted_via": {
+          "$ref": "domain.schema.json#/$defs/assertionOrigin"
+        },
+        "asserted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_application_id": {
+          "$ref": "../../admission/v1/application.schema.json#/$defs/clientApplicationId"
+        },
+        "purpose": {
+          "$ref": "domain.schema.json#/$defs/verificationPurpose"
+        },
+        "status": {
+          "$ref": "domain.schema.json#/$defs/claimStatus"
+        },
+        "freshness": {
+          "$ref": "domain.schema.json#/$defs/freshnessState"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 50,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/evidenceRecordId"
+          }
+        },
+        "current_result_id": {
+          "$ref": "domain.schema.json#/$defs/verificationResultId",
+          "description": "The VerificationResult the status is taken from."
+        },
+        "supersedes": {
+          "$ref": "domain.schema.json#/$defs/evidenceClaimId"
+        },
+        "metadata": {
+          "type": "object",
+          "maxProperties": 20,
+          "description": "Non-authoritative, source-specific detail (section 275)."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "VERIFIED",
+                  "PARTIALLY_VERIFIED",
+                  "NOT_VERIFIED",
+                  "CONFLICTED",
+                  "EXPIRED",
+                  "REVOKED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "current_result_id",
+              "freshness"
+            ]
+          },
+          "description": "A verified, unverified or conflicted standing comes only from a recorded result."
+        }
+      ]
+    },
+    "EvidenceRegistrationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_type",
+        "subject",
+        "purpose",
+        "source_id",
+        "classification",
+        "retention_policy"
+      ],
+      "description": "Registers evidence obtained from a source: a registry record or a credential. The Control Plane mints evidence_id, records the caller as obtained_by and the record as AVAILABLE. Uploaded documents are not registered here: they arrive through the storage boundary (gate OEV-02) and are quarantined first.",
+      "properties": {
+        "evidence_type": {
+          "$ref": "domain.schema.json#/$defs/evidenceType"
+        },
+        "subject": {
+          "$ref": "domain.schema.json#/$defs/subjectReference"
+        },
+        "purpose": {
+          "$ref": "domain.schema.json#/$defs/verificationPurpose"
+        },
+        "source_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceSourceId"
+        },
+        "source_record_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The source's own identifier for the record observed."
+        },
+        "credential_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "classification": {
+          "$ref": "domain.schema.json#/$defs/dataClassification"
+        },
+        "retention_policy": {
+          "$ref": "domain.schema.json#/$defs/retentionPolicyKey"
+        },
+        "supersedes": {
+          "$ref": "domain.schema.json#/$defs/evidenceRecordId"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "source_record_reference"
+          ]
+        },
+        {
+          "required": [
+            "credential_reference"
+          ]
+        }
+      ]
+    },
+    "EvidenceSourceList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceSource"
+          }
+        },
+        "next_page_token": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    },
+    "EvidenceClaimList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceClaim"
+          }
+        },
+        "next_page_token": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    }
+  }
+}

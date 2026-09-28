@@ -1,0 +1,1378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/evidence/v1/verification.schema.json",
+  "title": "Verification cases, checks, results and discrepancies",
+  "description": "ADR-BCP-023 gate OEV-01: the verification work performed for a purpose (VerificationCase, section 26), each actual check (VerificationCheck, section 30), the standing of one claim that the checks establish (VerificationResult, section 32), and a material disagreement between sources (EvidenceDiscrepancy, section 74). Together with evidence.schema.json they make the chain of section 178 reconstructable: result, check, claim, evidence, source.",
+  "$defs": {
+    "dimensionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dimension",
+        "outcome"
+      ],
+      "properties": {
+        "dimension": {
+          "$ref": "domain.schema.json#/$defs/verificationDimension"
+        },
+        "outcome": {
+          "$ref": "domain.schema.json#/$defs/dimensionOutcome"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "VerificationCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "subject",
+        "purpose",
+        "status",
+        "claim_ids",
+        "opened_at",
+        "version"
+      ],
+      "properties": {
+        "case_id": {
+          "$ref": "domain.schema.json#/$defs/verificationCaseId"
+        },
+        "subject": {
+          "$ref": "domain.schema.json#/$defs/subjectReference"
+        },
+        "application_id": {
+          "$ref": "../../admission/v1/application.schema.json#/$defs/clientApplicationId"
+        },
+        "organisation_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId"
+        },
+        "purpose": {
+          "$ref": "domain.schema.json#/$defs/verificationPurpose"
+        },
+        "policy_profile": {
+          "$ref": "domain.schema.json#/$defs/compliancePolicyRef"
+        },
+        "policy_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "$ref": "domain.schema.json#/$defs/verificationCaseStatus"
+        },
+        "claim_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 200,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/evidenceClaimId"
+          }
+        },
+        "assigned_reviewer": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId",
+          "description": "Assignment is work routing, never authority (section 220)."
+        },
+        "opened_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "submitted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "next_review_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "supersedes": {
+          "$ref": "domain.schema.json#/$defs/verificationCaseId",
+          "description": "The earlier case a re-verification replaces; both stay attributable (section 72)."
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "VERIFIED",
+                  "NOT_VERIFIED",
+                  "CANCELLED",
+                  "SUPERSEDED",
+                  "EXPIRED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "completed_at"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "VERIFIED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "claim_ids": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "policy_version"
+            ]
+          },
+          "then": {
+            "required": [
+              "policy_profile"
+            ]
+          }
+        }
+      ]
+    },
+    "VerificationCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check_id",
+        "case_id",
+        "claim_id",
+        "method",
+        "source_id",
+        "requested_at",
+        "outcome",
+        "dimensions",
+        "reason_codes",
+        "evidence_ids"
+      ],
+      "description": "One verification action actually performed, or requested. A check against a source records what that source reported at a time, not that it stays true (section 67).",
+      "properties": {
+        "check_id": {
+          "$ref": "domain.schema.json#/$defs/verificationCheckId"
+        },
+        "case_id": {
+          "$ref": "domain.schema.json#/$defs/verificationCaseId"
+        },
+        "claim_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceClaimId"
+        },
+        "method": {
+          "$ref": "domain.schema.json#/$defs/verificationMethod"
+        },
+        "source_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceSourceId"
+        },
+        "provider": {
+          "$ref": "domain.schema.json#/$defs/verificationProviderKey"
+        },
+        "requested_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "performed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "performed_by": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId",
+          "description": "The reviewer who performed a human check. Never the claim's applicant (section 169)."
+        },
+        "source_observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_record_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "outcome": {
+          "$ref": "domain.schema.json#/$defs/verificationOutcome"
+        },
+        "dimensions": {
+          "$ref": "#/$defs/dimensionResults"
+        },
+        "reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 20,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/reasonCode"
+          }
+        },
+        "freshness_until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 50,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/evidenceRecordId"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "not": {
+                  "enum": [
+                    "NOT_RUN",
+                    "PENDING"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "performed_at"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "OFFICIAL_DOCUMENT_REVIEW",
+                  "HUMAN_ATTESTATION_REVIEW",
+                  "MANUAL_REGISTRY_LOOKUP",
+                  "CROSS_SOURCE_MATCH"
+                ]
+              },
+              "outcome": {
+                "not": {
+                  "enum": [
+                    "NOT_RUN",
+                    "PENDING"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "performed_by"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "MATCHED",
+                  "VERIFIED",
+                  "PARTIALLY_VERIFIED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "properties": {
+                  "evidence_ids": {
+                    "minItems": 1
+                  }
+                }
+              },
+              {
+                "required": [
+                  "source_record_reference"
+                ]
+              }
+            ],
+            "properties": {
+              "dimensions": {
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "dimension": {
+                      "const": "CLAIM_MATCH"
+                    },
+                    "outcome": {
+                      "const": "PASSED"
+                    }
+                  },
+                  "required": [
+                    "dimension",
+                    "outcome"
+                  ]
+                }
+              }
+            }
+          },
+          "description": "A positive check traces to independent evidence or a source record (section 180) and states that the claim matched (section 36)."
+        }
+      ]
+    },
+    "VerificationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result_id",
+        "claim_id",
+        "case_id",
+        "outcome",
+        "check_ids",
+        "dimensions",
+        "freshness",
+        "decided_at",
+        "reason_codes"
+      ],
+      "description": "The standing of one claim, established by the checks it cites. A newer result supersedes an older one; both remain (section 72).",
+      "properties": {
+        "result_id": {
+          "$ref": "domain.schema.json#/$defs/verificationResultId"
+        },
+        "claim_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceClaimId"
+        },
+        "case_id": {
+          "$ref": "domain.schema.json#/$defs/verificationCaseId"
+        },
+        "outcome": {
+          "$ref": "domain.schema.json#/$defs/verificationOutcome"
+        },
+        "check_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 50,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/verificationCheckId"
+          }
+        },
+        "dimensions": {
+          "$ref": "#/$defs/dimensionResults"
+        },
+        "freshness": {
+          "$ref": "domain.schema.json#/$defs/freshnessState"
+        },
+        "freshness_until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "decided_by": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId",
+          "description": "The reviewer who concluded the result, when a person did."
+        },
+        "decided_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "discrepancy_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 20,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/evidenceDiscrepancyId"
+          }
+        },
+        "supersedes": {
+          "$ref": "domain.schema.json#/$defs/verificationResultId"
+        },
+        "reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 20,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/reasonCode"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "VERIFIED",
+                  "PARTIALLY_VERIFIED",
+                  "MATCHED",
+                  "NOT_VERIFIED",
+                  "CONFLICTED",
+                  "INCONCLUSIVE"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "check_ids": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "VERIFIED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "dimensions": {
+                "allOf": [
+                  {
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": {
+                          "const": "CLAIM_MATCH"
+                        },
+                        "outcome": {
+                          "const": "PASSED"
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "outcome"
+                      ]
+                    }
+                  },
+                  {
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": {
+                          "const": "ISSUER_AUTHORITY"
+                        },
+                        "outcome": {
+                          "const": "PASSED"
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "outcome"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "description": "VERIFIED needs both the claim matched and the source authoritative for it: integrity alone is never truth (section 36)."
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "CONFLICTED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "discrepancy_ids"
+            ],
+            "properties": {
+              "discrepancy_ids": {
+                "minItems": 1
+              }
+            }
+          },
+          "description": "A conflict is always a recorded discrepancy, never silently resolved (section 76)."
+        }
+      ]
+    },
+    "sourceValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "value"
+      ],
+      "description": "What one source says.",
+      "properties": {
+        "source_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceSourceId"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "normalised_value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evidence_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceRecordId"
+        },
+        "check_id": {
+          "$ref": "domain.schema.json#/$defs/verificationCheckId"
+        }
+      }
+    },
+    "EvidenceDiscrepancy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discrepancy_id",
+        "subject",
+        "claim_type",
+        "conflicting_values",
+        "severity",
+        "status",
+        "detected_at",
+        "version"
+      ],
+      "description": "Reliable sources disagree materially about one claim type. The platform records the disagreement and a reviewer resolves it; nothing picks the convenient value (sections 34, 74-76).",
+      "properties": {
+        "discrepancy_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceDiscrepancyId"
+        },
+        "subject": {
+          "$ref": "domain.schema.json#/$defs/subjectReference"
+        },
+        "claim_type": {
+          "$ref": "domain.schema.json#/$defs/claimType"
+        },
+        "case_id": {
+          "$ref": "domain.schema.json#/$defs/verificationCaseId"
+        },
+        "conflicting_values": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/sourceValue"
+          }
+        },
+        "severity": {
+          "$ref": "domain.schema.json#/$defs/discrepancySeverity"
+        },
+        "status": {
+          "$ref": "domain.schema.json#/$defs/discrepancyStatus"
+        },
+        "detected_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "resolution": {
+          "$ref": "domain.schema.json#/$defs/discrepancyResolution"
+        },
+        "resolved_by": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId"
+        },
+        "resolved_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optimistic-concurrency version; a transition names it in If-Match."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "RESOLVED",
+                  "ACCEPTED_EXCEPTION",
+                  "FALSE_POSITIVE"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "resolution",
+              "resolved_by",
+              "resolved_at",
+              "reason"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "OPEN",
+                  "UNDER_REVIEW"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "resolution"
+                  ]
+                },
+                {
+                  "required": [
+                    "resolved_by"
+                  ]
+                },
+                {
+                  "required": [
+                    "resolved_at"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "ACCEPTED_EXCEPTION"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "resolution": {
+                "const": "EXCEPTION_ACCEPTED"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "FALSE_POSITIVE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "resolution": {
+                "const": "NOT_MATERIAL"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "RESOLVED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "resolution": {
+                "enum": [
+                  "SOURCE_VALUE_ADOPTED",
+                  "EXISTING_VALUE_CONFIRMED",
+                  "APPLICANT_CORRECTED"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "dimensionResults": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "$ref": "#/$defs/dimensionResult"
+      },
+      "description": "One answer per dimension assessed: each dimension appears at most once. Each dimension is a separate question (section 35).",
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "dimension": {
+                "const": "DOCUMENT_INTEGRITY"
+              }
+            },
+            "required": [
+              "dimension"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "dimension": {
+                "const": "SOURCE_AUTHENTICITY"
+              }
+            },
+            "required": [
+              "dimension"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "dimension": {
+                "const": "ISSUER_AUTHORITY"
+              }
+            },
+            "required": [
+              "dimension"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "dimension": {
+                "const": "CLAIM_MATCH"
+              }
+            },
+            "required": [
+              "dimension"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "dimension": {
+                "const": "FRESHNESS"
+              }
+            },
+            "required": [
+              "dimension"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "dimension": {
+                "const": "REVOCATION_STATUS"
+              }
+            },
+            "required": [
+              "dimension"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        }
+      ]
+    },
+    "VerificationCaseCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject",
+        "purpose"
+      ],
+      "description": "Opens a DRAFT verification case. The Control Plane mints case_id and derives opened_at; claims are added to the case afterwards.",
+      "properties": {
+        "subject": {
+          "$ref": "domain.schema.json#/$defs/subjectReference"
+        },
+        "purpose": {
+          "$ref": "domain.schema.json#/$defs/verificationPurpose"
+        },
+        "application_id": {
+          "$ref": "../../admission/v1/application.schema.json#/$defs/clientApplicationId"
+        },
+        "organisation_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId"
+        },
+        "policy_profile": {
+          "$ref": "domain.schema.json#/$defs/compliancePolicyRef"
+        },
+        "policy_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "supersedes": {
+          "$ref": "domain.schema.json#/$defs/verificationCaseId"
+        }
+      },
+      "dependentRequired": {
+        "policy_version": [
+          "policy_profile"
+        ]
+      }
+    },
+    "VerificationCaseTransitionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "description": "One lifecycle.yaml verification_case command a reviewer may issue, other than the conclusions (see VerificationCaseConclusionRequest). The case must be at the version If-Match names; commands only the platform performs (expire, supersede) are never accepted.",
+      "properties": {
+        "command": {
+          "type": "string",
+          "enum": [
+            "start_collection",
+            "submit",
+            "begin_verification",
+            "request_information",
+            "respond",
+            "conflict",
+            "resume",
+            "cancel"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "VerificationCasePage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VerificationCase"
+          }
+        },
+        "next_page_token": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    },
+    "VerificationCheckRecordRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "method",
+        "source_id",
+        "outcome",
+        "dimensions",
+        "reason_codes",
+        "evidence_ids"
+      ],
+      "description": "Records a check the caller performed on one claim of the case. The Control Plane mints check_id and records the caller as performed_by and the time as performed_at; the caller is never the claim's asserter (section 169).",
+      "properties": {
+        "claim_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceClaimId"
+        },
+        "method": {
+          "$ref": "domain.schema.json#/$defs/verificationMethod"
+        },
+        "source_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceSourceId"
+        },
+        "provider": {
+          "$ref": "domain.schema.json#/$defs/verificationProviderKey"
+        },
+        "source_observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_record_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "outcome": {
+          "$ref": "domain.schema.json#/$defs/verificationOutcome"
+        },
+        "dimensions": {
+          "$ref": "#/$defs/dimensionResults"
+        },
+        "reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 20,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/reasonCode"
+          }
+        },
+        "freshness_until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 50,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/evidenceRecordId"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "MATCHED",
+                  "VERIFIED",
+                  "PARTIALLY_VERIFIED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "properties": {
+                  "evidence_ids": {
+                    "minItems": 1
+                  }
+                }
+              },
+              {
+                "required": [
+                  "source_record_reference"
+                ]
+              }
+            ],
+            "properties": {
+              "dimensions": {
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "dimension": {
+                      "const": "CLAIM_MATCH"
+                    },
+                    "outcome": {
+                      "const": "PASSED"
+                    }
+                  },
+                  "required": [
+                    "dimension",
+                    "outcome"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": {
+              "not": {
+                "enum": [
+                  "NOT_RUN",
+                  "PENDING"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "VerificationResultRecordRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "outcome",
+        "check_ids",
+        "dimensions",
+        "freshness",
+        "reason_codes"
+      ],
+      "description": "Records a claim's result from checks already recorded in the case; the claim's status becomes the outcome, so only outcomes that are claim standings are accepted (an inconclusive check leaves the claim under verification, with no result). The Control Plane mints result_id, records the caller as decided_by, and refuses a result the checks do not support: VERIFIED needs a positive check from a source trusted for the claim type in the claim's jurisdiction.",
+      "properties": {
+        "claim_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceClaimId"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "VERIFIED",
+            "PARTIALLY_VERIFIED",
+            "NOT_VERIFIED",
+            "CONFLICTED"
+          ]
+        },
+        "check_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/verificationCheckId"
+          }
+        },
+        "dimensions": {
+          "$ref": "#/$defs/dimensionResults"
+        },
+        "freshness": {
+          "$ref": "domain.schema.json#/$defs/freshnessState"
+        },
+        "freshness_until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "discrepancy_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 20,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/evidenceDiscrepancyId"
+          }
+        },
+        "reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 20,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/reasonCode"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "VERIFIED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "dimensions": {
+                "allOf": [
+                  {
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": {
+                          "const": "CLAIM_MATCH"
+                        },
+                        "outcome": {
+                          "const": "PASSED"
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "outcome"
+                      ]
+                    }
+                  },
+                  {
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": {
+                          "const": "ISSUER_AUTHORITY"
+                        },
+                        "outcome": {
+                          "const": "PASSED"
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "outcome"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "CONFLICTED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "discrepancy_ids"
+            ],
+            "properties": {
+              "discrepancy_ids": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "EvidenceDiscrepancyRecordRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject",
+        "claim_type",
+        "conflicting_values",
+        "severity"
+      ],
+      "description": "Records a disagreement between sources, OPEN, in this case. The Control Plane mints discrepancy_id and detected_at.",
+      "properties": {
+        "subject": {
+          "$ref": "domain.schema.json#/$defs/subjectReference"
+        },
+        "claim_type": {
+          "$ref": "domain.schema.json#/$defs/claimType"
+        },
+        "conflicting_values": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/sourceValue"
+          }
+        },
+        "severity": {
+          "$ref": "domain.schema.json#/$defs/discrepancySeverity"
+        }
+      }
+    },
+    "EvidenceDiscrepancyTransitionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "description": "One lifecycle.yaml evidence_discrepancy command a reviewer may issue other than closing it (see EvidenceDiscrepancyResolutionRequest).",
+      "properties": {
+        "command": {
+          "type": "string",
+          "enum": [
+            "begin_review"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "VerificationCheckList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VerificationCheck"
+          }
+        },
+        "next_page_token": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    },
+    "VerificationResultList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VerificationResult"
+          }
+        },
+        "next_page_token": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    },
+    "EvidenceDiscrepancyList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceDiscrepancy"
+          }
+        },
+        "next_page_token": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    },
+    "VerificationCaseConclusionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "reason"
+      ],
+      "description": "Concludes a VERIFYING case: complete_verified requires every claim of the case to be VERIFIED; complete_not_verified closes a case whose evidence was insufficient (section 33). Served by a separate operation that requires verification:decide.",
+      "properties": {
+        "command": {
+          "type": "string",
+          "enum": [
+            "complete_verified",
+            "complete_not_verified"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "EvidenceDiscrepancyResolutionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "resolution",
+        "reason"
+      ],
+      "description": "Closes a discrepancy under review; the caller is recorded as resolved_by. Served by a separate operation that requires verification:decide. Nothing resolves a discrepancy silently (section 76).",
+      "properties": {
+        "command": {
+          "type": "string",
+          "enum": [
+            "resolve",
+            "accept_exception",
+            "dismiss"
+          ]
+        },
+        "resolution": {
+          "$ref": "domain.schema.json#/$defs/discrepancyResolution"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "command": {
+                "const": "resolve"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "resolution": {
+                "enum": [
+                  "SOURCE_VALUE_ADOPTED",
+                  "EXISTING_VALUE_CONFIRMED",
+                  "APPLICANT_CORRECTED"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "command": {
+                "const": "accept_exception"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "resolution": {
+                "const": "EXCEPTION_ACCEPTED"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "command": {
+                "const": "dismiss"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "resolution": {
+                "const": "NOT_MATERIAL"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

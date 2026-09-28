@@ -1,0 +1,51 @@
+# ADR-BCP-023 sections 19-22: the evidence sources the Control Plane
+# recognises, and exactly which claim types in which jurisdictions each is
+# authoritative for. Every entry is an EvidenceSource
+# (evidence.schema.json). A source not listed here cannot be named by
+# evidence or a check.
+#
+# Registering a source here configures its authority only. How a source is
+# consulted (an official API, extract, certified report or a manual
+# registry review, never screen scraping, section 24) is the verification
+# method recorded on each check; direct integrations are gates OEV-05 and
+# OEV-06.
+#
+# Adding a source, or a claim type to one, is additive. Narrowing a source's
+# authority or removing a source is breaking: past checks still cite it.
+registry_version: 1
+sources:
+  - source_id: esrc_ursb
+    source_class: AUTHORITATIVE_GOVERNMENT_REGISTRY
+    name: Uganda Registration Services Bureau company register
+    jurisdiction: UG
+    authority_reference: Companies Act 2012 (Uganda)
+    trusted_for:
+      - {claim_type: LEGAL_EXISTENCE, jurisdiction: UG}
+      - {claim_type: REGISTRATION_IDENTIFIER, jurisdiction: UG}
+      - {claim_type: LEGAL_NAME, jurisdiction: UG}
+      - {claim_type: ENTITY_STATUS, jurisdiction: UG}
+    access_classification: INTERNAL
+    effective_from: "2026-01-01T00:00:00Z"
+    status: ACTIVE
+  - source_id: esrc_cipc
+    source_class: AUTHORITATIVE_GOVERNMENT_REGISTRY
+    name: Companies and Intellectual Property Commission company register
+    jurisdiction: ZA
+    authority_reference: Companies Act 71 of 2008 (South Africa)
+    trusted_for:
+      - {claim_type: LEGAL_EXISTENCE, jurisdiction: ZA}
+      - {claim_type: REGISTRATION_IDENTIFIER, jurisdiction: ZA}
+      - {claim_type: LEGAL_NAME, jurisdiction: ZA}
+      - {claim_type: ENTITY_STATUS, jurisdiction: ZA}
+    access_classification: INTERNAL
+    effective_from: "2026-01-01T00:00:00Z"
+    status: ACTIVE
+  # Material an applicant or a reviewer uploads on the applicant's behalf.
+  # It corroborates; it is never an authority (sections 9, 180).
+  - source_id: esrc_applicant
+    source_class: APPLICANT_SUPPLIED
+    name: Applicant submission
+    trusted_for: []
+    access_classification: CONFIDENTIAL
+    effective_from: "2026-01-01T00:00:00Z"
+    status: ACTIVE
