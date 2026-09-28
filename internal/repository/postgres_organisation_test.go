@@ -186,6 +186,82 @@ func TestPostgresVerifiedRequiresEvidenceAtTheDatabase(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "platform_relationship_affiliate_has_basis") {
 		t.Fatalf("affiliate without basis must be rejected, got %v", err)
 	}
+	_, err = f.admin.Exec(f.ctx, `UPDATE registry.organisation_profile SET verification_state='VERIFIED',
+		evidence_references='["evd_x"]'::jsonb WHERE canonical_entity_id=$1::uuid`, a)
+	if err == nil || !strings.Contains(err.Error(), "organisation_profile_verified_has_evidence") {
+		t.Fatalf("VERIFIED organisation without verifier and time must be rejected, got %v", err)
+	}
+}
+
+// TestPostgresOrganisationProvenanceBackfill replays migration 000072 over a
+// VERIFIED profile that predates it: provenance comes from the audit record
+// of the verification, never invented. Everything is rolled back.
+func TestPostgresOrganisationProvenanceBackfill(t *testing.T) {
+	f := newOrgFixture(t)
+	org := f.organisation(t, "Legacy Verified")
+	migrations, err := postgres.LoadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var backfill string
+	for _, m := range migrations {
+		if m.Name == "000072_organisation_verification_provenance.sql" {
+			backfill = m.SQL
+		}
+	}
+	if backfill == "" {
+		t.Fatal("migration 000072 not found")
+	}
+	tx, err := f.admin.Begin(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(f.ctx) }()
+	verifiedAt := f.at.Add(time.Hour)
+	for _, stmt := range []string{
+		`ALTER TABLE registry.organisation_profile DROP CONSTRAINT organisation_profile_verified_has_evidence`,
+		`UPDATE registry.organisation_profile SET verification_state='VERIFIED', evidence_references='["evd_x"]'::jsonb,
+			verified_by=NULL, verified_at=NULL WHERE canonical_entity_id='` + org + `'::uuid`,
+	} {
+		if _, err := tx.Exec(f.ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := tx.Exec(f.ctx, `INSERT INTO audit_events (actor_id, actor_type, action, target, result, payload, occurred_at)
+		VALUES ('principal:legacy-reviewer', 'human', 'organisation.verified', $1, 'accepted', '{}'::jsonb, $2)`,
+		"organisation/"+org, verifiedAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(f.ctx, backfill); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	var by string
+	var at time.Time
+	if err := tx.QueryRow(f.ctx, `SELECT verified_by, verified_at FROM registry.organisation_profile WHERE canonical_entity_id=$1::uuid`, org).Scan(&by, &at); err != nil {
+		t.Fatal(err)
+	}
+	if by != "principal:legacy-reviewer" || !at.Equal(verifiedAt) {
+		t.Fatalf("backfilled %q at %v; want the audited verifier and time", by, at)
+	}
+}
+
+// TestPostgresVerifyOrganisationRecordsProvenance: verification records
+// who verified the organisation and when (ADR-BCP-023 OEV-03).
+func TestPostgresVerifyOrganisationRecordsProvenance(t *testing.T) {
+	f := newOrgFixture(t)
+	org := f.organisation(t, "Verified Org")
+	if err := f.repo.VerifyOrganisation(f.ctx, org, f.evidence(), f.actor()); err != nil {
+		t.Fatal(err)
+	}
+	var by string
+	var at time.Time
+	if err := f.admin.QueryRow(f.ctx, `SELECT verified_by, verified_at FROM registry.organisation_profile
+		WHERE canonical_entity_id=$1::uuid`, org).Scan(&by, &at); err != nil {
+		t.Fatal(err)
+	}
+	if by != f.actor().ActorID || !at.Equal(f.at) {
+		t.Fatalf("provenance = %q at %v; want %q at %v", by, at, f.actor().ActorID, f.at)
+	}
 }
 
 // TestPostgresEnsureNeverCreatesVerified: even with complete evidence, no
