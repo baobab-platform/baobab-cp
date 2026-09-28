@@ -723,6 +723,20 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- The market registry routes (ADR-BCP-004 section 18; Shared `control-plane/v1/market.schema.json` and `market-lifecycle.yaml`, `openapi.yaml` 1.13.0). The Control Plane now serves every operation its pinned OpenAPI describes.
+  - `POST /v1/markets` registers a market:
+    - the Control Plane mints `mkt_` ids, derives `created_by`, and replays by Idempotency-Key;
+    - an unknown owner tenant is refused, and so is a duplicate `canonical_key`.
+  - `GET /v1/markets/{id}`: administrators read every market; workloads holding `market:read` read ACTIVE markets only.
+  - `PATCH /v1/markets/{id}` is a JSON merge patch at `If-Match`. It is allowed on DRAFT and VALIDATED markets; an ACTIVE market is refused (`MARKET_NOT_EDITABLE`).
+  - `POST /v1/markets/{id}/activate`: VALIDATED to ACTIVE at `If-Match`, under `market:approve`.
+    - The activator is the caller, and never the market's creator or last editor (`MARKET_SELF_ACTIVATION`). The database also refuses a creator as activator.
+  - `internal/market` evaluates the lifecycle's ten validation rules, loaded from the embedded Shared file. Every write re-evaluates them in its transaction, so status and `validation_findings` always agree.
+  - Migration 000070 adds `market.registry`.
+    - The configuration is kept as the validated Shared document, beside the derived columns.
+    - `market.market`, the country-keyed market provisioning plans against, is unchanged; linking the two is a follow-up.
+  - The routes are mapped to `market.request`, `market.view` and `market.activate` for shadow evaluation.
+  - The OpenAPI unimplemented list, and the Console client's list, are now empty.
 - Generic changesets (ADR-BCP-021 CCM-02 and CCM-03; Shared `control-plane/v1/changeset.schema.json`). The first change kinds are tenant suspension and reinstatement.
   - `internal/changeset`:
     - drafts derive their type, scope, source, requester and base revision from the change and the verified caller;

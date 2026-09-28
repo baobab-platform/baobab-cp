@@ -120,6 +120,9 @@ type Dependencies struct {
 	// Changesets backs the /v1/admin/changesets routes (ADR-BCP-021).
 	// Nil disables them.
 	Changesets repository.ChangesetRepository
+	// Markets backs the /v1/markets routes, the market registry
+	// (ADR-BCP-004 section 18). Nil disables them.
+	Markets repository.MarketRegistryRepository
 	// ProviderMigrations backs the /v1/provider-migrations routes
 	// (ADR-BCP-006 Gate 8). Nil disables them.
 	ProviderMigrations repository.ProviderMigrationRepository
@@ -277,6 +280,18 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(write...).Post("/v1/admin/changesets/{changesetID}/apply", changesets.apply)
 		r.With(write...).Post("/v1/admin/changesets/{changesetID}/cancel", changesets.cancel)
 		r.With(read...).Get("/v1/admin/changesets/{changesetID}/outcome", changesets.outcome)
+	}
+	if dependencies.Markets != nil {
+		// The market registry: administrators register and edit markets;
+		// activation is a separate scope and maker-checker; workloads read
+		// active markets. Whoever updates or activates a market can read the
+		// revision to name.
+		markets := marketHandler{repo: dependencies.Markets, identities: a.identities}
+		write := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "market:write"), a.requireAdminRole(nil, true)}
+		r.With(write...).Post("/v1/markets", markets.create)
+		r.With(a.adminOrWorkload("market:write|market:approve", "market:read")).Get("/v1/markets/{marketID}", markets.get)
+		r.With(write...).Patch("/v1/markets/{marketID}", markets.update)
+		r.With(a.authorize(a.adminVerifier, "human", "market:approve"), a.requireAdminRole(nil, true)).Post("/v1/markets/{marketID}/activate", markets.activate)
 	}
 	if dependencies.ProviderMigrations != nil {
 		// ADR-BCP-006 Gate 8: planning a provider migration binds nothing;

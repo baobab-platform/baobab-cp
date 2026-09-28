@@ -1,0 +1,44 @@
+# Market lifecycle (market.schema.json status; ADR-BCP-004 section 18).
+#
+# Every permitted transition, what performs it and whether the Control
+# Plane serves it yet. Anything not listed is refused. Implementations test
+# their transition table and validation against this file.
+#
+# Actors:
+#   PLATFORM  the Control Plane, re-evaluating validation_rules after every
+#             create and update: a DRAFT market that satisfies them all is
+#             VALIDATED, and a VALIDATED one an update breaks returns to DRAFT
+#   APPROVER  a principal holding market:approve who is neither the
+#             market's creator nor its last editor (maker-checker)
+version: 1
+initial: DRAFT
+terminal: [RETIRED]
+editable: [DRAFT, VALIDATED]
+transitions:
+  - {command: validate,    from: DRAFT,     to: VALIDATED, actor: PLATFORM, served: true}
+  - {command: invalidate,  from: VALIDATED, to: DRAFT,     actor: PLATFORM, served: true}
+  - {command: activate,    from: VALIDATED, to: ACTIVE,    actor: APPROVER, served: true, operation_id: activateMarket}
+  # Changes to an ACTIVE market are consequential: they are governed
+  # changes (ADR-BCP-021) and are not served by these routes yet.
+  - {command: suspend,     from: ACTIVE,     to: SUSPENDED,  actor: APPROVER, served: false}
+  - {command: reinstate,   from: SUSPENDED,  to: ACTIVE,     actor: APPROVER, served: false}
+  - {command: deprecate,   from: ACTIVE,     to: DEPRECATED, actor: APPROVER, served: false}
+  - {command: migrate,     from: DEPRECATED, to: MIGRATING,  actor: APPROVER, served: false}
+  - {command: retire,      from: MIGRATING,  to: RETIRED,    actor: APPROVER, served: false}
+  - {command: retire,      from: DEPRECATED, to: RETIRED,    actor: APPROVER, served: false}
+  - {command: retire,      from: DRAFT,      to: RETIRED,    actor: APPROVER, served: false}
+  - {command: retire,      from: VALIDATED,  to: RETIRED,    actor: APPROVER, served: false}
+# What VALIDATED requires. Each rule's code is registered under
+# market_validation in authorization/v1/reason-code-registry.yaml and is
+# reported in validation_findings while the rule does not hold.
+validation_rules:
+  - {code: MARKET_COUNTRY_REQUIRED,        field: default_country,    rule: "default_country is set, or countries lists at least one country"}
+  - {code: MARKET_COUNTRY_NOT_LISTED,      field: default_country,    rule: "when default_country is set and countries is supplied (even empty), countries includes default_country"}
+  - {code: MARKET_CURRENCY_REQUIRED,       field: default_currency,   rule: "default_currency is set"}
+  - {code: MARKET_CURRENCY_NOT_ALLOWED,    field: default_currency,   rule: "when allowed_currencies is supplied (even empty), it includes default_currency"}
+  - {code: MARKET_LOCALE_REQUIRED,         field: default_locale,     rule: "default_locale is set"}
+  - {code: MARKET_LOCALE_NOT_SUPPORTED,    field: default_locale,     rule: "when supported_locales is supplied (even empty), it includes default_locale"}
+  - {code: MARKET_TIMEZONE_REQUIRED,       field: timezone,           rule: "timezone is set"}
+  - {code: MARKET_EFFECTIVE_FROM_REQUIRED, field: effective_from,     rule: "effective_from is set"}
+  - {code: MARKET_EFFECTIVE_WINDOW_INVALID, field: effective_to,      rule: "when effective_to is set, it is a later instant than effective_from"}
+  - {code: MARKET_PARENT_UNKNOWN,          field: parent_market_id,   rule: "when parent_market_id is set, it names another existing market"}
