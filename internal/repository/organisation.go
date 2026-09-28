@@ -30,7 +30,8 @@ type Evidence struct {
 // Ensure* operations are idempotent on the record's natural key: a retry
 // returns the existing live row unchanged instead of inserting a duplicate
 // or overwriting it. Verify* operations are the only way a record becomes
-// VERIFIED, and they require evidence.
+// VERIFIED, and they require evidence: Ensure* refuses to create a record
+// VERIFIED (ErrVerifiedAtCreation).
 //
 // Every mutation takes the authenticated AuditActor. A mutation that
 // changes state writes an audit_events row and, for ADR-BCP-018 section

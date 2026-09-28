@@ -188,6 +188,50 @@ func TestPostgresVerifiedRequiresEvidenceAtTheDatabase(t *testing.T) {
 	}
 }
 
+// TestPostgresEnsureNeverCreatesVerified: even with complete evidence, no
+// Ensure* creates a record VERIFIED, and a refused call writes nothing.
+func TestPostgresEnsureNeverCreatesVerified(t *testing.T) {
+	f := newOrgFixture(t)
+	a, b := f.organisation(t, "A"), f.organisation(t, "B")
+	ev := f.evidence()
+	var id string
+	if err := f.admin.QueryRow(f.ctx, `INSERT INTO registry.canonical_entity (entity_type, status) VALUES ('ORGANISATION','active') RETURNING canonical_entity_id::text`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.EnsureOrganisation(f.ctx, domain.Organisation{CanonicalEntityID: id, DisplayName: "V Ltd",
+		VerificationState: domain.VerificationVerified, SourceAuthority: "test", Status: "ACTIVE", EffectiveFrom: f.at,
+		EvidenceReferences: ev.References}, f.actor()); !errors.Is(err, ErrVerifiedAtCreation) {
+		t.Fatalf("organisation created VERIFIED: %v", err)
+	}
+	if got, err := f.repo.GetOrganisation(f.ctx, id); err != nil || got != nil {
+		t.Fatalf("a refused organisation was written: %+v %v", got, err)
+	}
+	le := uniqueLE()
+	if _, err := f.repo.EnsureLegalEntityProfile(f.ctx, domain.LegalEntityProfile{LegalEntityID: le, OrganisationID: a, LegalName: "A Ltd",
+		LegalStatus: domain.LegalStatusUnknown, SourceAuthority: "test", VerificationState: domain.VerificationVerified, EffectiveFrom: f.at,
+		EvidenceReferences: ev.References, VerifiedAt: &ev.VerifiedAt}, f.actor()); !errors.Is(err, ErrVerifiedAtCreation) {
+		t.Fatalf("legal entity profile created VERIFIED: %v", err)
+	}
+	if _, err := f.repo.EnsureCorporateRelationship(f.ctx, domain.CorporateRelationship{SourceOrganisationID: a, TargetOrganisationID: b,
+		RelationshipType: domain.CorpRelOwns, DirectOrDerived: domain.CorporateFactDirect, VerificationState: domain.VerificationVerified,
+		Status: domain.RelationshipStatusActive, EffectiveFrom: f.at, SourceAuthority: "test", EvidenceReferences: ev.References,
+		VerifiedBy: "principal:reviewer", VerifiedAt: &ev.VerifiedAt}, f.actor()); !errors.Is(err, ErrVerifiedAtCreation) {
+		t.Fatalf("corporate relationship created VERIFIED: %v", err)
+	}
+	if _, err := f.repo.EnsurePlatformRelationship(f.ctx, domain.PlatformRelationship{PlatformID: "baobab-platform", OrganisationID: a,
+		RelationshipType: domain.PlatformRelExternalClient, VerificationState: domain.VerificationVerified, Status: domain.RelationshipStatusActive,
+		EffectiveFrom: f.at, SourceAuthority: "test", EvidenceReferences: ev.References, VerifiedBy: "principal:reviewer",
+		VerifiedAt: &ev.VerifiedAt}, f.actor()); !errors.Is(err, ErrVerifiedAtCreation) {
+		t.Fatalf("platform relationship created VERIFIED: %v", err)
+	}
+	var written int
+	if err := f.admin.QueryRow(f.ctx, `SELECT (SELECT count(*) FROM registry.legal_entity_profile WHERE legal_entity_id = $1)
+		+ (SELECT count(*) FROM registry.corporate_relationship WHERE source_organisation_id = $2::uuid)
+		+ (SELECT count(*) FROM registry.platform_relationship WHERE organisation_id = $2::uuid)`, le, a).Scan(&written); err != nil || written != 0 {
+		t.Fatalf("refused records were written: %d %v", written, err)
+	}
+}
+
 func TestPostgresEnsureCorporateRelationshipConvergesAndVerifies(t *testing.T) {
 	f := newOrgFixture(t)
 	a, b := f.organisation(t, "A"), f.organisation(t, "B")
