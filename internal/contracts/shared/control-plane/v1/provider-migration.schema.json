@@ -285,7 +285,7 @@
         "VALIDATE_COHORT",
         "RETIRE_SOURCE_BINDING"
       ],
-      "description": "Canonical, Baobab-native migration operations. Provider-specific work is a resolved resource of a step, never its type. A STATEFUL_CUTOVER cohort always runs FREEZE_COHORT_WRITES, MIGRATE_COHORT_DATA, RECONCILE_COHORT_DATA, SHIFT_COHORT, UNFREEZE_COHORT_WRITES in that order, so authority never has two holders."
+      "description": "Canonical, Baobab-native migration operations. Provider-specific work is a resolved resource of a step, never its type. A STATEFUL_CUTOVER cohort always runs FREEZE_COHORT_WRITES, MIGRATE_COHORT_DATA, RECONCILE_COHORT_DATA, SHIFT_COHORT, UNFREEZE_COHORT_WRITES in that order, so authority never has two holders. CREATE_MIGRATION_BINDING is one step per capability and target instance, naming exactly the source bindings that move to that instance."
     },
     "migrationStepResources": {
       "type": "object",
@@ -312,6 +312,16 @@
         "binding_count": {
           "type": "integer",
           "minimum": 0
+        },
+        "binding_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityBindingId"
+          },
+          "description": "The source bindings the step acts on. A CREATE_MIGRATION_BINDING step names them with the one target engine_instance_id they move to, so the approved plan fixes every binding's target instance and nothing is re-resolved after approval."
         }
       }
     },
@@ -319,6 +329,27 @@
       "allOf": [
         {
           "$ref": "change-plan.schema.json#/$defs/planStep"
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "CREATE_MIGRATION_BINDING"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "resources": {
+                "required": [
+                  "capability_key",
+                  "engine_instance_id",
+                  "binding_ids",
+                  "binding_count"
+                ]
+              }
+            }
+          }
         }
       ],
       "properties": {

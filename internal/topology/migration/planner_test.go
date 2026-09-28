@@ -60,8 +60,8 @@ func healthy(capabilities ...string) map[string]health.Levels {
 func world() (*fakeFacts, Request) {
 	facts := &fakeFacts{
 		bindings: []SourceBinding{
-			{BindingID: "b2", CapabilityKey: "finance.invoice.read", ContractVersion: 1, TenantID: "tn_beta", Markets: []string{"ZA"}, Region: "af-south-1", Environment: "production"},
-			{BindingID: "b1", CapabilityKey: "finance.invoice.read", ContractVersion: 1, TenantID: "tn_alpha", EstateID: "alpha_web", Markets: []string{"KE"}, Region: "af-south-1", Environment: "production"},
+			{BindingID: "bind_beta0001", CapabilityKey: "finance.invoice.read", ContractVersion: 1, TenantID: "tn_beta", Markets: []string{"ZA"}, Region: "af-south-1", Environment: "production"},
+			{BindingID: "bind_alpha001", CapabilityKey: "finance.invoice.read", ContractVersion: 1, TenantID: "tn_alpha", EstateID: "alpha_web", Markets: []string{"KE"}, Region: "af-south-1", Environment: "production"},
 		},
 		providers: map[string]Provider{"baobab-erp.nextledger": {Status: "ACTIVE", Support: map[string][]int{"finance.invoice.read": {1, 2}}}},
 		instances: map[string][]Instance{"baobab-erp.nextledger": {{EngineInstanceID: "ei_target1", Region: "af-south-1", Environment: "production",
@@ -122,7 +122,7 @@ func TestPlanDiscoversAndAssignsEveryContext(t *testing.T) {
 	if got := p.Discovery.Cohorts; got[0].BindingCount != 1 || got[0].TenantCount != 1 || got[1].BindingCount != 1 {
 		t.Fatalf("cohorts: %+v", got)
 	}
-	want := []string{"verify-target:VERIFY_TARGET_READINESS", "bind-finance-invoice-read:CREATE_MIGRATION_BINDING",
+	want := []string{"verify-target:VERIFY_TARGET_READINESS", "bind-finance-invoice-read-ei-target1:CREATE_MIGRATION_BINDING",
 		"canary-shift-cohort:SHIFT_COHORT", "canary-validate-cohort:VALIDATE_COHORT",
 		"rest-shift-cohort:SHIFT_COHORT", "rest-validate-cohort:VALIDATE_COHORT",
 		"retire-finance-invoice-read:RETIRE_SOURCE_BINDING"}
@@ -134,8 +134,52 @@ func TestPlanDiscoversAndAssignsEveryContext(t *testing.T) {
 			t.Fatalf("step %s depends on %v", s.StepID, s.DependsOn)
 		}
 	}
-	if p.Steps[1].Resources.EngineInstanceID != "ei_target1" || p.RiskClass != "HIGH" {
+	if r := p.Steps[1].Resources; r.EngineInstanceID != "ei_target1" || !slices.Equal(r.BindingIDs, []string{"bind_alpha001", "bind_beta0001"}) || p.RiskClass != "HIGH" {
 		t.Fatalf("bind step %+v, risk %s", p.Steps[1].Resources, p.RiskClass)
+	}
+}
+
+// TestPlanFixesEachBindingsTargetInstance: bindings that need different
+// target instances each get a step naming exactly them and their instance,
+// so nothing is re-resolved after approval.
+func TestPlanFixesEachBindingsTargetInstance(t *testing.T) {
+	facts, request := world()
+	facts.bindings[0].Region = "eu-west-1" // bind_beta0001
+	facts.instances["baobab-erp.nextledger"] = append(facts.instances["baobab-erp.nextledger"], Instance{EngineInstanceID: "ei_target2",
+		Region: "eu-west-1", Environment: "production", Status: "ACTIVE", Health: healthy("finance.invoice.read")})
+	p := plan(t, facts, request)
+	var got []string
+	for _, s := range p.Steps {
+		if s.Operation == OpCreateMigrationBinding {
+			got = append(got, s.Resources.EngineInstanceID+"="+strings.Join(s.Resources.BindingIDs, ","))
+		}
+	}
+	if want := []string{"ei_target1=bind_alpha001", "ei_target2=bind_beta0001"}; !slices.Equal(got, want) || len(p.Blockers) != 0 {
+		t.Fatalf("binding assignments %v, want %v; blockers %v", got, want, p.Blockers)
+	}
+}
+
+// TestPlanChecksEveryBindingsContractVersion: the versions discovered
+// bindings actually require decide compatibility, not only the version
+// the request names.
+func TestPlanChecksEveryBindingsContractVersion(t *testing.T) {
+	facts, request := world()
+	facts.bindings[0].ContractVersion = 2
+	if got := codes(plan(t, facts, request).Blockers); !slices.Equal(got, []string{BlockTargetContractIncompatible}) {
+		t.Fatalf("a v2 binding under a v1 request: %v", got)
+	}
+	facts.providers["baobab-erp.nextledger"] = Provider{Status: "ACTIVE", Support: map[string][]int{"finance.invoice.read": {1}}}
+	p := plan(t, facts, request)
+	messages := []string{}
+	for _, b := range p.Blockers {
+		messages = append(messages, b.Message)
+	}
+	if !strings.Contains(strings.Join(messages, " "), "does not support finance.invoice.read contract version 2") {
+		t.Fatalf("a v1-only target for a v2 binding: %v", messages)
+	}
+	facts.bindings[0].ContractVersion = 0
+	if got := codes(plan(t, facts, request).Blockers); !slices.Contains(got, BlockTargetContractIncompatible) {
+		t.Fatalf("an unreadable binding version: %v", got)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,7 +112,7 @@ func TestProviderMigrationStore(t *testing.T) {
 	if err != nil || len(bindings) != 1 {
 		t.Fatalf("source bindings: %+v %v", bindings, err)
 	}
-	if b := bindings[0]; b.TenantID != tenant || b.ContractVersion != 1 || !slices.Equal(b.Markets, []string{"KE"}) ||
+	if b := bindings[0]; b.BindingID != "bind_"+strings.ReplaceAll(binding, "-", "") || b.TenantID != tenant || b.ContractVersion != 1 || !slices.Equal(b.Markets, []string{"KE"}) ||
 		b.Region != "af-south-1" || b.Environment != "production" {
 		t.Fatalf("source binding context: %+v", b)
 	}
@@ -199,5 +200,15 @@ func TestProviderMigrationStore(t *testing.T) {
 		VALUES ($1, $2, $2, $3, '{}', 'PLAN', 'plan_x', 1, $4, $5, 'h', 'prn_x')`,
 		domain.NewResourceID("pmg"), sourceKey, []string{capabilityKey}, created.PlanDigest, "self-"+key); err == nil {
 		t.Fatal("a migration from a provider to itself was recorded")
+	}
+}
+
+// TestContractMajor: a binding's stored contract version is read as its
+// major version, whatever form it was stored in.
+func TestContractMajor(t *testing.T) {
+	for stored, want := range map[string]int{"v1": 1, "1": 1, "1.0.0": 1, "V2": 2, " 3.1 ": 3, "": 0, "vx": 0, "0": 0, "-1": 0} {
+		if got := contractMajor(stored); got != want {
+			t.Errorf("contractMajor(%q) = %d, want %d", stored, got, want)
+		}
 	}
 }

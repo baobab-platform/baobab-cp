@@ -110,12 +110,13 @@ type Request struct {
 }
 
 type StepResources struct {
-	CohortKey        string `json:"cohort_key,omitempty"`
-	CapabilityKey    string `json:"capability_key,omitempty"`
-	ProviderKey      string `json:"provider_key,omitempty"`
-	BindingMode      string `json:"binding_mode,omitempty"`
-	EngineInstanceID string `json:"engine_instance_id,omitempty"`
-	BindingCount     *int   `json:"binding_count,omitempty"`
+	CohortKey        string   `json:"cohort_key,omitempty"`
+	CapabilityKey    string   `json:"capability_key,omitempty"`
+	ProviderKey      string   `json:"provider_key,omitempty"`
+	BindingMode      string   `json:"binding_mode,omitempty"`
+	EngineInstanceID string   `json:"engine_instance_id,omitempty"`
+	BindingIDs       []string `json:"binding_ids,omitempty"`
+	BindingCount     *int     `json:"binding_count,omitempty"`
 }
 
 type Step struct {

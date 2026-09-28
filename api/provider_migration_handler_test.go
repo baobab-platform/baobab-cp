@@ -43,7 +43,7 @@ func (s *migrationStore) SourceBindings(_ context.Context, provider string, _ []
 	if provider != "baobab-erp.idempiere" {
 		return nil, nil
 	}
-	return []migration.SourceBinding{{BindingID: "b1", CapabilityKey: "finance.invoice.read", ContractVersion: 1, TenantID: "tn_alpha",
+	return []migration.SourceBinding{{BindingID: "bind_alpha001", CapabilityKey: "finance.invoice.read", ContractVersion: 1, TenantID: "tn_alpha",
 		Markets: []string{"KE"}, Region: "af-south-1", Environment: "production"}}, nil
 }
 

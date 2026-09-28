@@ -157,6 +157,17 @@ func (p Planner) Plan(ctx context.Context, in Input) (Plan, error) {
 		}
 	}
 
+	for _, c := range r.Capabilities {
+		for _, b := range byCapability[c.CapabilityKey] {
+			switch {
+			case b.ContractVersion < 1:
+				plan.block(BlockTargetContractIncompatible, fmt.Sprintf("Binding %s of %s has no recognisable contract major version.", b.BindingID, c.CapabilityKey))
+			case b.ContractVersion != c.ContractVersion:
+				plan.block(BlockTargetContractIncompatible, fmt.Sprintf("Binding %s requires %s contract version %d, not the %d the request names.", b.BindingID, c.CapabilityKey, b.ContractVersion, c.ContractVersion))
+			}
+		}
+	}
+
 	open, err := p.Facts.OpenMigrations(ctx, r.SourceProviderKey, keys)
 	if err != nil {
 		return Plan{}, fmt.Errorf("read open migrations: %w", err)
@@ -184,8 +195,14 @@ func (p Planner) Plan(ctx context.Context, in Input) (Plan, error) {
 			switch {
 			case !supported:
 				plan.block(BlockTargetNotSupported, fmt.Sprintf("%s does not declare support for %s.", r.TargetProviderKey, c.CapabilityKey))
-			case !slices.Contains(versions, c.ContractVersion):
-				plan.block(BlockTargetContractIncompatible, fmt.Sprintf("%s does not support %s contract version %d.", r.TargetProviderKey, c.CapabilityKey, c.ContractVersion))
+			default:
+				// Every version a migrated binding actually requires, not
+				// only the one the request names, must be supported.
+				for _, v := range requiredVersions(c, byCapability[c.CapabilityKey]) {
+					if !slices.Contains(versions, v) {
+						plan.block(BlockTargetContractIncompatible, fmt.Sprintf("%s does not support %s contract version %d.", r.TargetProviderKey, c.CapabilityKey, v))
+					}
+				}
 			}
 		}
 		instances, err := p.Facts.ProviderInstances(ctx, r.TargetProviderKey, keys)
@@ -347,13 +364,22 @@ func (plan *Plan) steps(r Request, byCapability map[string][]SourceBinding, memb
 	}
 	count := func(n int) *int { return &n }
 	add("verify-target", OpVerifyTargetReadiness, StepResources{ProviderKey: r.TargetProviderKey}, false)
+	// One MIGRATION binding step per capability and target instance,
+	// naming exactly the source bindings that move there, so the approved
+	// plan fixes every binding's destination.
 	for _, c := range r.Capabilities {
-		res := StepResources{CapabilityKey: c.CapabilityKey, ProviderKey: r.TargetProviderKey, BindingMode: "MIGRATION",
-			BindingCount: count(len(byCapability[c.CapabilityKey]))}
-		if instance := single(byCapability[c.CapabilityKey], chosen); instance != "" {
-			res.EngineInstanceID = instance
+		byInstance := map[string][]string{}
+		for _, b := range byCapability[c.CapabilityKey] {
+			if instance := chosen[b.BindingID]; instance != "" {
+				byInstance[instance] = append(byInstance[instance], b.BindingID)
+			}
 		}
-		add(stepID("bind", c.CapabilityKey), OpCreateMigrationBinding, res, false)
+		for _, instance := range sortedKeys(setOf(byInstance)) {
+			ids := byInstance[instance]
+			add(stepID("bind", c.CapabilityKey+"-"+instance), OpCreateMigrationBinding, StepResources{CapabilityKey: c.CapabilityKey,
+				ProviderKey: r.TargetProviderKey, BindingMode: "MIGRATION", EngineInstanceID: instance, BindingIDs: ids,
+				BindingCount: count(len(ids))}, false)
+		}
 	}
 	if r.Shadow {
 		add("start-shadow", OpStartShadow, StepResources{ProviderKey: r.TargetProviderKey}, false)
@@ -376,20 +402,25 @@ func (plan *Plan) steps(r Request, byCapability map[string][]SourceBinding, memb
 	}
 }
 
-// single is the one target instance every binding moves to, if there is one.
-func single(bindings []SourceBinding, chosen map[string]string) string {
-	instance := ""
+// requiredVersions is the contract version the request names and every
+// version a discovered binding requires, ascending and once each.
+func requiredVersions(c Capability, bindings []SourceBinding) []int {
+	versions := []int{c.ContractVersion}
 	for _, b := range bindings {
-		switch c := chosen[b.BindingID]; {
-		case c == "":
-			return ""
-		case instance == "":
-			instance = c
-		case instance != c:
-			return ""
+		if b.ContractVersion >= 1 && !slices.Contains(versions, b.ContractVersion) {
+			versions = append(versions, b.ContractVersion)
 		}
 	}
-	return instance
+	slices.Sort(versions)
+	return versions
+}
+
+func setOf[V any](m map[string]V) map[string]bool {
+	out := make(map[string]bool, len(m))
+	for k := range m {
+		out[k] = true
+	}
+	return out
 }
 
 // risk is derived, never chosen (ADR-BCP-021 sections 43-46): moving

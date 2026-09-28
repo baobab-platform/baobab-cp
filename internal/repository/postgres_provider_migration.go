@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/health"
 	"github.com/baobab-platform/baobab-cp/internal/topology/migration"
 )
@@ -69,11 +70,15 @@ func (r *PostgresRepository) SourceBindings(ctx context.Context, providerKey str
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (migration.SourceBinding, error) {
 		var b migration.SourceBinding
 		var contract, market, jurisdiction string
-		if err := row.Scan(&b.BindingID, &b.CapabilityKey, &contract, &b.TenantID, &b.LegalEntityID, &b.EstateID,
-			&market, &jurisdiction, &b.Region, &b.Environment); err != nil {
+		err := row.Scan(&b.BindingID, &b.CapabilityKey, &contract, &b.TenantID, &b.LegalEntityID, &b.EstateID,
+			&market, &jurisdiction, &b.Region, &b.Environment)
+		if err != nil {
 			return b, err
 		}
-		b.ContractVersion, _ = strconv.Atoi(strings.TrimPrefix(strings.ToLower(contract), "v"))
+		b.ContractVersion = contractMajor(contract)
+		if b.BindingID, err = domain.FormatResourceID("bind", b.BindingID); err != nil {
+			return b, err
+		}
 		for _, m := range []string{market, jurisdiction} {
 			if len(m) == 2 && m == strings.ToUpper(m) && !containsString(b.Markets, m) {
 				b.Markets = append(b.Markets, m)
@@ -317,6 +322,17 @@ func (r *PostgresRepository) CurrentProviderMigrationPlan(ctx context.Context, i
 		return migration.Plan{}, fmt.Errorf("provider migration %s plan: %w", id, err)
 	}
 	return plan, nil
+}
+
+// contractMajor reads a binding's stored contract version, "v1", "1" or
+// "1.0.0", as its major version; 0 when it has none.
+func contractMajor(stored string) int {
+	major, _, _ := strings.Cut(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(stored)), "v"), ".")
+	n, err := strconv.Atoi(major)
+	if err != nil || n < 1 {
+		return 0
+	}
+	return n
 }
 
 func containsString(values []string, v string) bool {
