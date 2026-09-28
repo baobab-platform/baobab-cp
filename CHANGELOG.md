@@ -852,6 +852,9 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Security
 
+- An organisation profile records who verified it and when, and cannot be VERIFIED without evidence, a verifier and a time (ADR-BCP-023 OEV-03; migration `000072_organisation_verification_provenance.sql`). The legal-entity, corporate-relationship and platform-relationship tables already had these guarantees.
+  - `VerifyOrganisation` and first-party governance write `verified_by` and `verified_at`.
+  - The migration backfills existing VERIFIED profiles from the audit record of the transition that verified them. It never invents provenance: a VERIFIED profile without evidence or without that audit record fails the new constraint, and the migration stops for review.
 - No organisation record can be created VERIFIED (ADR-BCP-023; OEV-00 inventory, "Verification writers"). `EnsureOrganisation`, `EnsureLegalEntityProfile`, `EnsureCorporateRelationship` and `EnsurePlatformRelationship` refuse `VERIFIED` with `ErrVerifiedAtCreation`, so verification is only ever a transition: `Verify*`, a verification-case outcome, or first-party governance. No production caller created VERIFIED records, so this closes a latent bypass without changing behaviour.
 - Upgraded `golang.org/x/text` to `v0.39.0` to remediate
   `CVE-2026-56852`; the dependency upgrade also advances

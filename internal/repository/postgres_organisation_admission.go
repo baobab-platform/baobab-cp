@@ -178,8 +178,9 @@ func (r *PostgresRepository) VerifyOrganisation(ctx context.Context, organisatio
 		case domain.VerificationRejected, domain.VerificationExpired:
 			return fmt.Errorf("organisation %s is %s; verification cannot overturn it", organisationID, state)
 		}
-		if _, err := tx.Exec(ctx, `UPDATE registry.organisation_profile SET verification_state='VERIFIED', evidence_references=$2::jsonb, updated_at=now()
-			WHERE canonical_entity_id=$1::uuid`, organisationID, evidence); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE registry.organisation_profile SET verification_state='VERIFIED', evidence_references=$2::jsonb,
+				verified_by=$3, verified_at=$4, updated_at=now()
+			WHERE canonical_entity_id=$1::uuid`, organisationID, evidence, actor.ActorID, ev.VerifiedAt); err != nil {
 			return err
 		}
 		return r.recordOrganisationChange(ctx, tx, actor, events.OrganisationChange{

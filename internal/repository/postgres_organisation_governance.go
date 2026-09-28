@@ -159,9 +159,9 @@ func (r *PostgresRepository) seedFirstParty(ctx context.Context, tx pgx.Tx, g Fi
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO registry.organisation_profile (
 			canonical_entity_id, display_name, official_name, verification_state, source_authority,
-			status, effective_from, evidence_references
-		) VALUES ($1::uuid, $2, $2, 'VERIFIED', $3, 'ACTIVE', $4, $5::jsonb)`,
-		out.OrganisationID, g.LegalName, firstPartySourceAuthority, g.At, evidenceJSON); err != nil {
+			status, effective_from, evidence_references, verified_by, verified_at
+		) VALUES ($1::uuid, $2, $2, 'VERIFIED', $3, 'ACTIVE', $4, $5::jsonb, $6, $4)`,
+		out.OrganisationID, g.LegalName, firstPartySourceAuthority, g.At, evidenceJSON, actor.ActorID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
@@ -198,9 +198,9 @@ func (r *PostgresRepository) reconcileFirstPartyOrganisation(ctx context.Context
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO registry.organisation_profile (
 				canonical_entity_id, display_name, official_name, verification_state, source_authority,
-				status, effective_from, evidence_references
-			) VALUES ($1::uuid, $2, $2, 'VERIFIED', $3, 'ACTIVE', $4, $5::jsonb)`,
-			out.OrganisationID, g.LegalName, firstPartySourceAuthority, g.At, evidenceJSON); err != nil {
+				status, effective_from, evidence_references, verified_by, verified_at
+			) VALUES ($1::uuid, $2, $2, 'VERIFIED', $3, 'ACTIVE', $4, $5::jsonb, $6, $4)`,
+			out.OrganisationID, g.LegalName, firstPartySourceAuthority, g.At, evidenceJSON, actor.ActorID); err != nil {
 			return err
 		}
 		out.Changes = append(out.Changes, "organisation profile created from Shared governance")
@@ -237,8 +237,9 @@ func (r *PostgresRepository) reconcileFirstPartyOrganisation(ctx context.Context
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE registry.organisation_profile
-		SET verification_state='VERIFIED', source_authority=$2, evidence_references=$3::jsonb, updated_at=now()
-		WHERE canonical_entity_id=$1::uuid`, out.OrganisationID, firstPartySourceAuthority, evidenceJSON); err != nil {
+		SET verification_state='VERIFIED', source_authority=$2, evidence_references=$3::jsonb,
+			verified_by=$4, verified_at=$5, updated_at=now()
+		WHERE canonical_entity_id=$1::uuid`, out.OrganisationID, firstPartySourceAuthority, evidenceJSON, actor.ActorID, g.At); err != nil {
 		return err
 	}
 	out.Changes = append(out.Changes, "organisation_profile verified from "+state)
