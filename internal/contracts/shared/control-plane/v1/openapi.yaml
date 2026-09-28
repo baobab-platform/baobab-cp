@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.17.0
+  version: 1.18.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -4125,6 +4125,255 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /provider-migrations/{provider_migration_id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/ProviderMigrationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: decideProviderMigrationPlan
+      summary: Approve, reject or request changes to the migration's current plan
+      description: >-
+        Records an ApprovalDecision (subject PROVIDER_MIGRATION) bound to the
+        plan id, version and digest the approver reviewed (ADR-SHARED-016
+        section 1). Valid in PLAN, on a plan without blockers. The approver
+        is the verified caller and never the migration's creator
+        (PROVIDER_MIGRATION_SELF_APPROVAL, 403). One APPROVED decision
+        authorises the plan's whole sequence; a replan needs a new decision.
+        A decision naming another plan or digest is PLAN_DIGEST_MISMATCH
+        (409); a stale or blocked plan is PLAN_STALE or
+        PROVIDER_MIGRATION_BLOCKED (409). The migration's revision is
+        required in If-Match.
+      security:
+        - adminOidc: [provider-migration:approve]
+      parameters:
+        - $ref: "#/components/parameters/ProviderMigrationIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./approval-decision.schema.json#/$defs/ApprovalDecisionRequest
+      responses:
+        "200":
+          description: The recorded decision
+          content:
+            application/json:
+              schema:
+                $ref: ./approval-decision.schema.json#/$defs/ApprovalDecision
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /provider-migrations/{provider_migration_id}/advance:
+    parameters:
+      - $ref: "#/components/parameters/ProviderMigrationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: advanceProviderMigration
+      summary: Run one lifecycle transition of an approved migration
+      description: >-
+        Starts one transition of provider-migration-lifecycle.yaml as a
+        PROVIDER_MIGRATION_ADVANCE operation (ADR-SHARED-016 section 2). The
+        transition runs exactly the approved plan's operations its
+        stage_steps name; the request never names steps. A forward
+        transition needs an APPROVED decision on the current plan
+        (PLAN_NOT_APPROVED), a plan that is not blocked, expired or stale
+        (PROVIDER_MIGRATION_BLOCKED, PLAN_STALE; expiry applies up to prepare,
+        and staleness ignores the migration's own effects), no other running operation
+        of the migration (PROVIDER_MIGRATION_OPERATION_RUNNING) and, for
+        canary and shift, an open cutover window where one is named
+        (MIGRATION_CUTOVER_WINDOW_CLOSED);
+        each is 409, as is a transition the lifecycle does not allow from the
+        current stage (PROVIDER_MIGRATION_STAGE_CONFLICT). cancel (only
+        before any cohort's authority moved) and roll_back need no approval,
+        but a reason. FORWARD_FIX_ONLY refuses roll_back once a cohort moved
+        (MIGRATION_NOT_REVERSIBLE, 409). Engine steps become engine migration
+        tasks; 202 does not mean the stage is complete. Replaying the same
+        Idempotency-Key returns the same operation.
+      security:
+        - adminOidc: [provider-migration:execute]
+      parameters:
+        - $ref: "#/components/parameters/ProviderMigrationIfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./provider-migration.schema.json#/$defs/ProviderMigrationAdvanceRequest
+      responses:
+        "202":
+          $ref: "#/components/responses/ExecutionOperationAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /engine-migration-tasks:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Topology]
+      operationId: listEngineMigrationTasks
+      summary: The caller's open engine migration tasks
+      description: >-
+        The PENDING and CLAIMED tasks assigned to the engine instances whose
+        Control Plane registration names the calling workload client as
+        their attested workload (ADR-SHARED-016 section 4), oldest first. The
+        instance is never taken from the request; a workload attested for no
+        instance gets an empty page.
+      security:
+        - workloadOidc: [provider-migration:task]
+      parameters:
+        - name: page_token
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+      responses:
+        "200":
+          description: The caller's open tasks
+          content:
+            application/json:
+              schema:
+                $ref: ./engine-migration-task.schema.json#/$defs/EngineMigrationTaskPage
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /engine-migration-tasks/{task_id}/claim:
+    parameters:
+      - $ref: "#/components/parameters/EngineMigrationTaskId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: claimEngineMigrationTask
+      summary: Claim a task and take its lease
+      description: >-
+        Takes no body. A PENDING task assigned to an instance the caller is
+        attested for moves to CLAIMED with a lease of task_lease_seconds
+        (provider-migration-lifecycle.yaml). Another instance's task does not
+        exist for the caller (404). A task already claimed under a live lease
+        is ENGINE_MIGRATION_TASK_CLAIMED (409); a final task is
+        ENGINE_MIGRATION_TASK_FINAL (409). The claimant renews its lease by
+        claiming again. The task's revision is required in If-Match.
+      security:
+        - workloadOidc: [provider-migration:task]
+      parameters:
+        - $ref: "#/components/parameters/EngineMigrationTaskIfMatch"
+      responses:
+        "200":
+          description: The claimed task
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ./engine-migration-task.schema.json#/$defs/EngineMigrationTask
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /engine-migration-tasks/{task_id}/report:
+    parameters:
+      - $ref: "#/components/parameters/EngineMigrationTaskId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: reportEngineMigrationTask
+      summary: Report a claimed task's final outcome
+      description: >-
+        Only the claimant reports, while its lease holds
+        (ENGINE_MIGRATION_TASK_LEASE_EXPIRED, 409). A report is final; the
+        same report replayed returns the task (200), a different one is
+        ENGINE_MIGRATION_TASK_FINAL (409). A FAILED report carries a
+        provider_migration_task_failure reason code. The Control Plane then
+        advances the step: a RECONCILE_COHORT_DATA step succeeds only when
+        its SOURCE and TARGET reports match, and otherwise fails with
+        MIGRATION_RECONCILIATION_MISMATCH, leaving the cohort frozen. A
+        report never carries business data.
+      security:
+        - workloadOidc: [provider-migration:task]
+      parameters:
+        - $ref: "#/components/parameters/EngineMigrationTaskIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./engine-migration-task.schema.json#/$defs/EngineMigrationTaskReport
+      responses:
+        "200":
+          description: The reported task
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ./engine-migration-task.schema.json#/$defs/EngineMigrationTask
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /admin/effective-authority:
     parameters:
       - $ref: "#/components/parameters/CorrelationId"
@@ -4770,6 +5019,36 @@ components:
       required: true
       schema:
         $ref: ./domain.schema.json#/$defs/providerMigrationId
+    ProviderMigrationIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: >-
+        The migration's current revision as a strong entity tag, e.g. "3"
+        (the ETag of its last read). Missing is refused with
+        IF_MATCH_REQUIRED (428); malformed with INVALID_IF_MATCH (400); stale
+        with PROVIDER_MIGRATION_REVISION_MISMATCH (412).
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    EngineMigrationTaskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        $ref: ./engine-migration-task.schema.json#/$defs/engineMigrationTaskId
+    EngineMigrationTaskIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: >-
+        The task's current revision as a strong entity tag, e.g. "2" (the
+        ETag of its last read). Missing is refused with IF_MATCH_REQUIRED
+        (428); malformed with INVALID_IF_MATCH (400); stale with
+        ENGINE_MIGRATION_TASK_REVISION_MISMATCH (412).
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
     OperationId:
       name: operation_id
       in: path

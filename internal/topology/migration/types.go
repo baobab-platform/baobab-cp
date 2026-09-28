@@ -41,6 +41,9 @@ const (
 	OpUnfreezeCohortWrites   = "UNFREEZE_COHORT_WRITES"
 	OpValidateCohort         = "VALIDATE_COHORT"
 	OpRetireSourceBinding    = "RETIRE_SOURCE_BINDING"
+	// OpRemoveMigrationBinding is compensation only (cancel, roll_back):
+	// never in a plan.
+	OpRemoveMigrationBinding = "REMOVE_MIGRATION_BINDING"
 )
 
 // statefulSequence keeps exactly one authoritative writer per cohort
@@ -185,21 +188,26 @@ type Plan struct {
 
 // Migration is the ProviderMigration aggregate.
 type Migration struct {
-	ProviderMigrationID string     `json:"provider_migration_id"`
-	Request             Request    `json:"request"`
-	Stage               string     `json:"stage"`
-	CurrentCohortKey    string     `json:"current_cohort_key,omitempty"`
-	PlanID              string     `json:"plan_id"`
-	PlanVersion         int        `json:"plan_version"`
-	PlanDigest          string     `json:"plan_digest"`
-	Blocked             bool       `json:"blocked"`
-	FailureReason       string     `json:"failure_reason,omitempty"`
-	CreatedBy           string     `json:"created_by"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
-	StartedAt           *time.Time `json:"started_at,omitempty"`
-	CompletedAt         *time.Time `json:"completed_at,omitempty"`
-	Revision            int64      `json:"revision"`
+	ProviderMigrationID string  `json:"provider_migration_id"`
+	Request             Request `json:"request"`
+	Stage               string  `json:"stage"`
+	CurrentCohortKey    string  `json:"current_cohort_key,omitempty"`
+	PlanID              string  `json:"plan_id"`
+	PlanVersion         int     `json:"plan_version"`
+	PlanDigest          string  `json:"plan_digest"`
+	Blocked             bool    `json:"blocked"`
+	FailureReason       string  `json:"failure_reason,omitempty"`
+	// ApprovalID is the APPROVED decision on the current plan's digest
+	// (ADR-SHARED-016 section 1); OperationID the latest advance.
+	ApprovalID        string     `json:"approval_id,omitempty"`
+	OperationID       string     `json:"operation_id,omitempty"`
+	ShiftedCohortKeys []string   `json:"shifted_cohort_keys,omitempty"`
+	CreatedBy         string     `json:"created_by"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	StartedAt         *time.Time `json:"started_at,omitempty"`
+	CompletedAt       *time.Time `json:"completed_at,omitempty"`
+	Revision          int64      `json:"revision"`
 }
 
 // Normalize gives the request's optional lists their contract default, so

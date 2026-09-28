@@ -52,7 +52,27 @@ func (r *PostgresRepository) SourceBindings(ctx context.Context, providerKey str
 	if r == nil || r.pool == nil {
 		return nil, errors.New("repository is not initialized")
 	}
-	rows, err := r.pool.Query(ctx, `
+	return migrationFacts{q: r.pool}.SourceBindings(ctx, providerKey, capabilityKeys)
+}
+
+// migrationQuerier is a pool or a transaction.
+type migrationQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// migrationFacts implements migration.Facts over a pool or a transaction.
+// With a migration id it reads authoritative state as that migration's own
+// execution left it untouched (ADR-SHARED-016 section 2): the source
+// bindings its ledger records count as the live bindings they were, so a
+// plan is stale only when something outside the migration changed.
+type migrationFacts struct {
+	q           migrationQuerier
+	migrationID string
+}
+
+func (f migrationFacts) SourceBindings(ctx context.Context, providerKey string, capabilityKeys []string) ([]migration.SourceBinding, error) {
+	rows, err := f.q.Query(ctx, `
 		SELECT cb.id::text, cap.code, cb.contract_version, s.tenant_id, COALESCE(s.legal_entity_id, ''),
 			COALESCE(s.digital_estate_id, ''), COALESCE(s.market_id, ''), COALESCE(s.jurisdiction, ''),
 			COALESCE(s.deployment_region, ''), COALESCE(s.environment, '')
@@ -61,9 +81,9 @@ func (r *PostgresRepository) SourceBindings(ctx context.Context, providerKey str
 		JOIN capability.capability_provider p ON p.provider_id = cb.provider_id
 		JOIN capability.capability_scope s ON s.scope_id = cb.scope_id
 		WHERE p.provider_key = $1 AND cap.code = ANY($2)
-			AND UPPER(cb.status) = 'ACTIVE' AND cb.binding_mode IN ('PRIMARY', 'FALLBACK')
-			AND cb.valid_period @> now()
-		ORDER BY cb.id`, providerKey, capabilityKeys)
+			AND ((UPPER(cb.status) = 'ACTIVE' AND cb.binding_mode IN ('PRIMARY', 'FALLBACK') AND cb.valid_period @> now())
+				OR cb.id IN (SELECT source_binding_id FROM topology.provider_migration_binding WHERE provider_migration_id = $3))
+		ORDER BY cb.id`, providerKey, capabilityKeys, f.migrationID)
 	if err != nil {
 		return nil, fmt.Errorf("load source bindings: %w", err)
 	}
@@ -93,15 +113,19 @@ func (r *PostgresRepository) Provider(ctx context.Context, providerKey string) (
 	if r == nil || r.pool == nil {
 		return migration.Provider{}, false, errors.New("repository is not initialized")
 	}
+	return migrationFacts{q: r.pool}.Provider(ctx, providerKey)
+}
+
+func (f migrationFacts) Provider(ctx context.Context, providerKey string) (migration.Provider, bool, error) {
 	var p migration.Provider
-	err := r.pool.QueryRow(ctx, `SELECT status FROM capability.capability_provider WHERE provider_key = $1`, providerKey).Scan(&p.Status)
+	err := f.q.QueryRow(ctx, `SELECT status FROM capability.capability_provider WHERE provider_key = $1`, providerKey).Scan(&p.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return migration.Provider{}, false, nil
 	}
 	if err != nil {
 		return migration.Provider{}, false, fmt.Errorf("load provider %s: %w", providerKey, err)
 	}
-	rows, err := r.pool.Query(ctx, `
+	rows, err := f.q.Query(ctx, `
 		SELECT cap.code, s.contract_versions
 		FROM capability.provider_capability_support s
 		JOIN capability.capability_provider p ON p.provider_id = s.provider_id
@@ -132,7 +156,11 @@ func (r *PostgresRepository) ProviderInstances(ctx context.Context, providerKey 
 	if r == nil || r.pool == nil {
 		return nil, errors.New("repository is not initialized")
 	}
-	rows, err := r.pool.Query(ctx, `
+	return migrationFacts{q: r.pool}.ProviderInstances(ctx, providerKey, capabilityKeys)
+}
+
+func (f migrationFacts) ProviderInstances(ctx context.Context, providerKey string, capabilityKeys []string) ([]migration.Instance, error) {
+	rows, err := f.q.Query(ctx, `
 		SELECT ei.engine_instance_id::text, ei.engine_instance_key, ei.region, ei.environment, UPPER(ei.status), p.provider_id::text
 		FROM capability.capability_provider p
 		JOIN topology.engine_instance ei ON ei.engine_id = p.engine_id
@@ -157,7 +185,7 @@ func (r *PostgresRepository) ProviderInstances(ctx context.Context, providerKey 
 	for _, x := range found {
 		x.instance.Health = make(map[string]health.Levels, len(capabilityKeys))
 		for _, key := range capabilityKeys {
-			levels, err := r.HealthLevels(ctx, x.rowID, x.providerID, key)
+			levels, err := healthLevelsOn(ctx, f.q, x.rowID, x.providerID, key)
 			if err != nil {
 				return nil, err
 			}
@@ -173,7 +201,11 @@ func (r *PostgresRepository) OpenMigrations(ctx context.Context, sourceProviderK
 	if r == nil || r.pool == nil {
 		return nil, errors.New("repository is not initialized")
 	}
-	rows, err := r.pool.Query(ctx, `
+	return migrationFacts{q: r.pool}.OpenMigrations(ctx, sourceProviderKey, capabilityKeys)
+}
+
+func (f migrationFacts) OpenMigrations(ctx context.Context, sourceProviderKey string, capabilityKeys []string) ([]string, error) {
+	rows, err := f.q.Query(ctx, `
 		SELECT provider_migration_id FROM topology.provider_migration
 		WHERE source_provider_key = $1 AND capability_keys && $2
 			AND stage NOT IN ('COMPLETE', 'CANCELLED', 'ROLLED_BACK')
@@ -256,13 +288,15 @@ func (r *PostgresRepository) CreateProviderMigration(ctx context.Context, source
 }
 
 const providerMigrationColumns = `provider_migration_id, request, stage, COALESCE(current_cohort_key, ''), plan_id, plan_version,
-	plan_digest, blocked, COALESCE(failure_reason, ''), created_by, created_at, updated_at, started_at, completed_at, revision`
+	plan_digest, blocked, COALESCE(failure_reason, ''), created_by, created_at, updated_at, started_at, completed_at, revision,
+	COALESCE(approval_id, ''), COALESCE(operation_id, ''), shifted_cohort_keys`
 
 func scanProviderMigration(row pgx.Row, extra ...any) (migration.Migration, error) {
 	var m migration.Migration
 	var request []byte
 	dest := append([]any{&m.ProviderMigrationID, &request, &m.Stage, &m.CurrentCohortKey, &m.PlanID, &m.PlanVersion,
-		&m.PlanDigest, &m.Blocked, &m.FailureReason, &m.CreatedBy, &m.CreatedAt, &m.UpdatedAt, &m.StartedAt, &m.CompletedAt, &m.Revision}, extra...)
+		&m.PlanDigest, &m.Blocked, &m.FailureReason, &m.CreatedBy, &m.CreatedAt, &m.UpdatedAt, &m.StartedAt, &m.CompletedAt, &m.Revision,
+		&m.ApprovalID, &m.OperationID, &m.ShiftedCohortKeys}, extra...)
 	if err := row.Scan(dest...); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return m, ErrProviderMigrationNotFound

@@ -723,6 +723,38 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Provider migration execution in both modes, with engine migration tasks (ADR-SHARED-016; Shared control-plane OpenAPI 1.18.0).
+  - **Approval.** `POST /v1/provider-migrations/{id}/approve` (`provider-migration:approve`, If-Match) records one decision on the current plan's digest.
+    - The creator never approves.
+    - Approving needs a plan that is unblocked, unexpired and not stale; staleness is re-planned inside the transaction.
+    - One approval authorises the plan's whole sequence.
+  - **Advancing.** `POST /v1/provider-migrations/{id}/advance` (`provider-migration:execute`, If-Match, Idempotency-Key) runs one lifecycle transition as a `PROVIDER_MIGRATION_ADVANCE` operation.
+    - It runs exactly the approved plan's steps named by the Shared `stage_steps`.
+    - Staleness ignores the migration's own effects: the ledger's source bindings count as they were.
+    - `canary` and `shift` run only inside the cutover window.
+  - **Local steps.**
+    - `prepare` binds each source binding's scope to the target instance the plan fixed, in MIGRATION mode, which resolution ranks lowest.
+    - `SHIFT_COHORT` steps the source down to MIGRATION before the target takes the source's mode, so each scope holds at most one authoritative binding.
+    - `VALIDATE_COHORT` checks the modes and the target's health.
+    - `RETIRE_SOURCE_BINDING` retires the source.
+    - Cohort steps now name their `binding_ids`, so execution never re-derives membership.
+  - **Engine migration tasks.** STATEFUL_CUTOVER cohorts issue FREEZE (source), MIGRATE (target, with the source as counterpart), RECONCILE (both sides) and UNFREEZE (target), each after the previous step's reports.
+    - The advance waits RUNNING, and each report resumes it.
+    - Reconciliation needs equal total counts on both sides, and equal digests when each side runs one instance.
+    - The workload routes `GET /v1/engine-migration-tasks`, `POST .../{taskID}/claim` and `POST .../{taskID}/report` (`provider-migration:task`) serve only the attested workload of a task's instance (`topology.engine_instance.workload_client_id`).
+    - Claims hold a lease, and a lapsed lease starts a new attempt. Reports are final and replayable.
+    - An overdue task fails with `MIGRATION_TASK_TIMEOUT`, leaving its cohort frozen.
+  - **Rollback and cancel.**
+    - `roll_back` releases a cohort a failed advance left frozen, then returns each shifted cohort by its strategy, using reverse tasks for stateful cohorts, then removes the target bindings.
+    - `FORWARD_FIX_ONLY` refuses once a cohort has shifted.
+    - `cancel` removes the target bindings before any shift.
+    - An advance cancelled through `/admin/operations/{id}/cancel` ends CANCELLED when next settled.
+  - **Migration `000075_provider_migration_execution.sql`:**
+    - migration execution columns, and the approval, binding-ledger and run tables;
+    - `topology.engine_migration_task`;
+    - the attested workload column on engine instances;
+    - the new operation type and subject.
+
 - Market and mapping activation as Changesets (ADR-BCP-021 adoption; Shared control-plane OpenAPI 1.17.0).
   - The change kinds `MARKET_ACTIVATION` and `MAPPING_ACTIVATION` are MODIFY changesets at PLATFORM scope, from VALIDATED to ACTIVE.
   - This is an optional governed path. `POST /v1/markets/{marketID}/activate` and `POST /v1/mappings/{mappingID}/activate` stay as they are.

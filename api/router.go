@@ -129,6 +129,9 @@ type Dependencies struct {
 	// ProviderMigrations backs the /v1/provider-migrations routes
 	// (ADR-BCP-006 Gate 8). Nil disables them.
 	ProviderMigrations repository.ProviderMigrationRepository
+	// EngineMigrationTasks backs the workload /v1/engine-migration-tasks
+	// routes (ADR-SHARED-016 section 4). Nil disables them.
+	EngineMigrationTasks repository.EngineMigrationTaskRepository
 	// AdministrativeGrants backs GET /v1/admin/effective-authority
 	// (ADR-BCP-020): the caller's own administrative grants.
 	AdministrativeGrants repository.AdministrativeGrantReader
@@ -337,6 +340,13 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(read...).Get("/v1/admin/evidence/{evidenceID}", v.getEvidence)
 		r.With(read...).Get("/v1/admin/evidence-sources", v.listSources)
 	}
+	if dependencies.EngineMigrationTasks != nil {
+		tasks := engineMigrationTaskHandler{repo: dependencies.EngineMigrationTasks, policy: health.MustDefaultPolicy()}
+		workload := a.authorize(a.workloadVerifier, "workload", "provider-migration:task")
+		r.With(workload).Get("/v1/engine-migration-tasks", tasks.list)
+		r.With(workload).Post("/v1/engine-migration-tasks/{taskID}/claim", tasks.claim)
+		r.With(workload).Post("/v1/engine-migration-tasks/{taskID}/report", tasks.report)
+	}
 	if dependencies.ProviderMigrations != nil {
 		// ADR-BCP-006 Gate 8: planning a provider migration binds nothing;
 		// platform administrators only.
@@ -345,6 +355,8 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "topology:write"), a.requireAdminRole(nil, true)).Post("/v1/provider-migrations", migrations.create)
 		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/provider-migrations/{providerMigrationID}", migrations.get)
 		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/provider-migrations/{providerMigrationID}/plan", migrations.plan)
+		r.With(a.authorize(a.adminVerifier, "human", "provider-migration:approve"), a.requireAdminRole(nil, true)).Post("/v1/provider-migrations/{providerMigrationID}/approve", migrations.approve)
+		r.With(a.authorize(a.adminVerifier, "human", "provider-migration:execute"), a.requireAdminRole(nil, true)).Post("/v1/provider-migrations/{providerMigrationID}/advance", migrations.advance)
 	}
 	if dependencies.PlatformAccounts != nil {
 		// ADR-BCP-018 ORG-07: the account lifecycle is canonical registry

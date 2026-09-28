@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/baobab-platform/baobab-cp/internal/changeset"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/health"
@@ -209,4 +210,134 @@ func decodeRaw(w http.ResponseWriter, r *http.Request, schema *contracts.Schema,
 		return false
 	}
 	return true
+}
+
+var (
+	providerMigrationDecisionSchema = contracts.MustSchema("control-plane/v1/approval-decision.schema.json#/$defs/ApprovalDecisionRequest")
+	providerMigrationAdvanceSchema  = contracts.MustSchema("control-plane/v1/provider-migration.schema.json#/$defs/ProviderMigrationAdvanceRequest")
+)
+
+// execution is the repository's execution half (ADR-SHARED-016), or false
+// when the configured store does not execute migrations.
+func (h providerMigrationHandler) execution(w http.ResponseWriter, r *http.Request) (repository.ProviderMigrationExecution, bool) {
+	exec, ok := h.repo.(repository.ProviderMigrationExecution)
+	if !ok {
+		problem(w, r, http.StatusServiceUnavailable, "PROVIDER_MIGRATION_UNAVAILABLE", "migration execution is not available", true)
+	}
+	return exec, ok
+}
+
+// fail maps execution errors to the contract's problems.
+func (h providerMigrationHandler) fail(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, repository.ErrProviderMigrationNotFound):
+		problem(w, r, http.StatusNotFound, "PROVIDER_MIGRATION_NOT_FOUND", "no provider migration has that id", false)
+	case errors.Is(err, repository.ErrProviderMigrationRevisionMismatch):
+		problem(w, r, http.StatusPreconditionFailed, "PROVIDER_MIGRATION_REVISION_MISMATCH", "the migration changed since it was read", false)
+	case errors.Is(err, repository.ErrProviderMigrationSelfApproval):
+		problem(w, r, http.StatusForbidden, "PROVIDER_MIGRATION_SELF_APPROVAL", "a provider migration is never approved by its creator", false)
+	case errors.Is(err, repository.ErrProviderMigrationPlanMismatch):
+		problem(w, r, http.StatusConflict, "PLAN_DIGEST_MISMATCH", "the decision names another plan or digest than the current one", false)
+	case errors.Is(err, repository.ErrProviderMigrationPlanStale):
+		problem(w, r, http.StatusConflict, "PLAN_STALE", "the plan no longer matches authoritative state", false)
+	case errors.Is(err, repository.ErrProviderMigrationBlocked):
+		problem(w, r, http.StatusConflict, "PROVIDER_MIGRATION_BLOCKED", "the migration's plan has blockers", false)
+	case errors.Is(err, repository.ErrProviderMigrationPlanDecided):
+		problem(w, r, http.StatusConflict, "PLAN_ALREADY_DECIDED", "the plan already has a decision", false)
+	case errors.Is(err, repository.ErrProviderMigrationNotApproved):
+		problem(w, r, http.StatusConflict, "PLAN_NOT_APPROVED", "the migration's current plan has no approval", false)
+	case errors.Is(err, repository.ErrProviderMigrationOperationRunning):
+		problem(w, r, http.StatusConflict, "PROVIDER_MIGRATION_OPERATION_RUNNING", "another operation of the migration is running", true)
+	case errors.Is(err, repository.ErrProviderMigrationWindowClosed):
+		problem(w, r, http.StatusConflict, "MIGRATION_CUTOVER_WINDOW_CLOSED", "the migration's cutover window is not open", false)
+	case errors.Is(err, repository.ErrProviderMigrationNotReversible):
+		problem(w, r, http.StatusConflict, "MIGRATION_NOT_REVERSIBLE", "a shifted cohort cannot return to the source under FORWARD_FIX_ONLY", false)
+	case errors.Is(err, repository.ErrProviderMigrationStageConflict), errors.Is(err, repository.ErrProviderMigrationNotExecutable):
+		problem(w, r, http.StatusConflict, "PROVIDER_MIGRATION_STAGE_CONFLICT", err.Error(), false)
+	case errors.Is(err, repository.ErrOperationKeyReused):
+		problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "the idempotency key was used for a different request", false)
+	default:
+		problem(w, r, http.StatusServiceUnavailable, "PROVIDER_MIGRATION_UNAVAILABLE", "the migration could not be processed", true)
+	}
+}
+
+// approve records a decision on the migration's current plan
+// (ADR-SHARED-016 section 1).
+func (h providerMigrationHandler) approve(w http.ResponseWriter, r *http.Request) {
+	exec, ok := h.execution(w, r)
+	if !ok {
+		return
+	}
+	id, ok := h.id(w, r)
+	if !ok {
+		return
+	}
+	revision, ok := ifMatchRevision(w, r, "migration")
+	if !ok {
+		return
+	}
+	principalID, actor, ok := resolveActor(w, r, h.identities, false)
+	if !ok {
+		return
+	}
+	raw, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	var req changeset.DecisionRequest
+	if !decodeRaw(w, r, providerMigrationDecisionSchema, raw, &req) {
+		return
+	}
+	a, err := exec.DecideProviderMigration(r.Context(), id, revision, req, domain.NewResourceID("apd"), principalID, h.planner(), h.clock(), actor)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
+}
+
+// advance runs one lifecycle transition as a durable operation
+// (ADR-SHARED-016 section 2).
+func (h providerMigrationHandler) advance(w http.ResponseWriter, r *http.Request) {
+	exec, ok := h.execution(w, r)
+	if !ok {
+		return
+	}
+	key, ok := provisioningIdempotencyKey(w, r)
+	if !ok {
+		return
+	}
+	id, ok := h.id(w, r)
+	if !ok {
+		return
+	}
+	revision, ok := ifMatchRevision(w, r, "migration")
+	if !ok {
+		return
+	}
+	principalID, actor, ok := resolveActor(w, r, h.identities, false)
+	if !ok {
+		return
+	}
+	raw, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Transition string `json:"transition"`
+		Reason     string `json:"reason"`
+	}
+	if !decodeRaw(w, r, providerMigrationAdvanceSchema, raw, &req) {
+		return
+	}
+	op, err := exec.AdvanceProviderMigration(r.Context(), repository.MigrationAdvance{ProviderMigrationID: id, ExpectedRevision: revision,
+		Transition: req.Transition, Reason: req.Reason, OperationID: domain.NewResourceID("op"), IdempotencyKey: key,
+		RequestHash: sha256Hex(append([]byte(id+"\n"), raw...)), RequestedBy: principalID, Planner: h.planner(), Now: h.clock(), Actor: actor})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Location", "/v1/admin/operations/"+op.ID)
+	w.Header().Set("ETag", entityTag(op.Revision))
+	writeJSON(w, http.StatusAccepted, newOperationResponse(op))
 }

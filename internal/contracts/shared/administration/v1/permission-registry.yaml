@@ -329,7 +329,21 @@ permissions:
     scope_levels: [PLATFORM]
     delegable: false
     read_only: false
-    description: "Create a provider migration and its plan (ADR-BCP-006 sections 44-58). Planning binds nothing; advancing a migration is a changeset, approved separately (ADR-BCP-021)."
+    description: "Create a provider migration and its plan (ADR-BCP-006 sections 44-58). Planning binds nothing: the plan is approved under provider-migration.approve and advanced under provider-migration.execute (ADR-SHARED-016)."
+  - key: provider-migration.approve
+    domain: OPERATIONS
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Approve one exact provider migration plan by its digest; one approval authorises that plan's sequence (ADR-SHARED-016 section 1). Never the migration's creator."
+  - key: provider-migration.execute
+    domain: OPERATIONS
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Advance an approved provider migration one transition at a time, and cancel or roll it back (ADR-SHARED-016 sections 2 and 5)."
   - key: audit.view
     domain: AUDIT
     risk_class: MODERATE
