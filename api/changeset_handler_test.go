@@ -200,6 +200,7 @@ func TestChangesetRoutes(t *testing.T) {
 		"a malformed id":               {http.MethodGet, "/v1/admin/changesets/not-an-id", nil, nil, http.StatusNotFound},
 		"an unknown changeset":         {http.MethodGet, "/v1/admin/changesets/cs_missing0", nil, nil, http.StatusNotFound},
 		"a bad state filter":           {http.MethodGet, "/v1/admin/changesets?state=done!", nil, nil, http.StatusBadRequest},
+		"an unknown state filter":      {http.MethodGet, "/v1/admin/changesets?state=NOT_A_STATE", nil, nil, http.StatusBadRequest},
 	} {
 		if w := call(tc.method, tc.path, "requester", tc.headers, tc.body); w.Code != tc.want {
 			t.Errorf("%s: %d, want %d: %s", name, w.Code, tc.want, w.Body.String())

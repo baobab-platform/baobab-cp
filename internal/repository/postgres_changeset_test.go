@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/changeset"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/operations"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 )
 
@@ -182,9 +184,43 @@ func TestChangesetLifecycle(t *testing.T) {
 	c, _ = repo.GetChangeset(ctx, c.ChangesetID)
 
 	// Apply: the tenant is suspended, verified, and the outcome recorded.
-	op, replayed, err := repo.ApplyChangeset(ctx, c.ChangesetID, c.Revision, domain.NewResourceID("op"), "apply-"+suffix, "h-apply", requester, now, actor)
-	if err != nil || replayed || op.Status != "SUCCEEDED" || op.Type != "CHANGESET_APPLY" || op.SubjectID != c.ChangesetID {
-		t.Fatalf("apply: %+v %v %v", op, replayed, err)
+	// Concurrent retries with the same key are the first request's
+	// replays, never a stale revision.
+	type applied struct {
+		op       operations.Operation
+		replayed bool
+		err      error
+	}
+	results := make([]applied, 4)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			o, replayed, err := repo.ApplyChangeset(ctx, c.ChangesetID, c.Revision, domain.NewResourceID("op"), "apply-"+suffix, "h-apply", requester, now, actor)
+			results[i] = applied{o, replayed, err}
+		}()
+	}
+	wg.Wait()
+	var op operations.Operation
+	for _, res := range results {
+		if res.err != nil {
+			t.Fatalf("a concurrent apply: %v", res.err)
+		}
+		if !res.replayed {
+			if op.ID != "" {
+				t.Fatalf("two applies created operations: %s and %s", op.ID, res.op.ID)
+			}
+			op = res.op
+		}
+	}
+	for _, res := range results {
+		if res.op.ID != op.ID {
+			t.Fatalf("a concurrent apply returned %s, not %s", res.op.ID, op.ID)
+		}
+	}
+	if op.Status != "SUCCEEDED" || op.Type != "CHANGESET_APPLY" || op.SubjectID != c.ChangesetID {
+		t.Fatalf("apply: %+v", op)
 	}
 	var desired, observed string
 	if err := admin.QueryRow(ctx, `SELECT desired_state, observed_state FROM tenants WHERE tenant_id = $1`, tenant).Scan(&desired, &observed); err != nil || desired != "suspended" || observed != "suspended" {

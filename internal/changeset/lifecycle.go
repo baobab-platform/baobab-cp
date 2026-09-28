@@ -76,6 +76,13 @@ func Kinds() map[string]Kind { return mustLoad().ChangeKinds }
 // Terminal reports whether a state ends the changeset.
 func Terminal(state string) bool { return slices.Contains(mustLoad().TerminalStates, state) }
 
+// Known reports whether state is a lifecycle state.
+func Known(state string) bool {
+	doc := mustLoad()
+	_, open := doc.States[state]
+	return open || slices.Contains(doc.TerminalStates, state)
+}
+
 // ErrTransition is a transition the lifecycle does not allow from a state.
 var ErrTransition = errors.New("changeset transition not allowed")
 

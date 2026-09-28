@@ -28,7 +28,6 @@ var (
 	changesetCancelSchema   = contracts.MustSchema("control-plane/v1/changeset.schema.json#/$defs/ChangesetCancelRequest")
 	changesetDecisionSchema = contracts.MustSchema("control-plane/v1/approval-decision.schema.json#/$defs/ApprovalDecisionRequest")
 	changesetIDPattern      = regexp.MustCompile(`^cs_[a-z0-9]+$`)
-	changesetStatePattern   = regexp.MustCompile(`^[A-Z_]{4,32}$`)
 )
 
 type changesetHandler struct {
@@ -158,7 +157,7 @@ func (h changesetHandler) replay(w http.ResponseWriter, r *http.Request, existin
 func (h changesetHandler) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := repository.ChangesetFilter{State: q.Get("state"), TenantID: q.Get("tenant_id"), PageToken: q.Get("page_token")}
-	if f.State != "" && !changesetStatePattern.MatchString(f.State) {
+	if f.State != "" && !changeset.Known(f.State) {
 		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "state is not a changeset state", false)
 		return
 	}

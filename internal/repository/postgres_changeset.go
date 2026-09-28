@@ -467,25 +467,37 @@ func (r *PostgresRepository) DecideChangeset(ctx context.Context, id string, exp
 	return a, tx.Commit(ctx)
 }
 
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// priorApply finds the CHANGESET_APPLY operation an earlier request with
+// the same idempotency key created, refusing a key reused for another
+// request.
+func (r *PostgresRepository) priorApply(ctx context.Context, q rowQuerier, requester, key, requestHash string) (operations.Operation, bool, error) {
+	var id, hash string
+	err := q.QueryRow(ctx, `SELECT operation_id, request_hash FROM operations.execution_operation
+		WHERE requested_by = $1 AND operation_type = 'CHANGESET_APPLY' AND idempotency_key = $2`, requester, key).Scan(&id, &hash)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return operations.Operation{}, false, nil
+	case err != nil:
+		return operations.Operation{}, false, err
+	case hash != requestHash:
+		return operations.Operation{}, false, ErrOperationKeyReused
+	}
+	op, err := scanOperation(q.QueryRow(ctx, `SELECT `+operationColumns+` FROM operations.execution_operation WHERE operation_id = $1`, id))
+	return op, err == nil, err
+}
+
 // ApplyChangeset executes exactly the approved plan (section 72) as one
 // local transaction (section 81): it re-validates against the tenant under
 // a row lock, changes the tenant, verifies it by reading it back, and
 // records the CHANGESET_APPLY operation, the COMPLETED changeset and its
 // outcome together. A replay of the same key returns the same operation.
 func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expectedRevision int64, operationID, key, requestHash, requester string, now time.Time, actor AuditActor) (operations.Operation, bool, error) {
-	var priorHash string
-	var prior operations.Operation
-	err := r.pool.QueryRow(ctx, `SELECT operation_id, request_hash FROM operations.execution_operation
-		WHERE requested_by = $1 AND operation_type = 'CHANGESET_APPLY' AND idempotency_key = $2`, requester, key).Scan(&prior.ID, &priorHash)
-	if err == nil {
-		if priorHash != requestHash {
-			return operations.Operation{}, false, ErrOperationKeyReused
-		}
-		op, err := r.GetOperation(ctx, prior.ID)
-		return op, true, err
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return operations.Operation{}, false, err
+	if op, found, err := r.priorApply(ctx, r.pool, requester, key, requestHash); found || err != nil {
+		return op, found, err
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -493,9 +505,18 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 		return operations.Operation{}, false, err
 	}
 	defer tx.Rollback(ctx)
-	c, err := lockChangeset(ctx, tx, id, expectedRevision)
+	c, err := scanChangeset(tx.QueryRow(ctx, `SELECT `+changesetColumns+changesetFrom+` WHERE c.changeset_id = $1 FOR UPDATE OF c`, id))
 	if err != nil {
 		return operations.Operation{}, false, err
+	}
+	// A concurrent request with the same key may have applied while this
+	// one waited for the lock: it is that request's replay, not a stale
+	// revision.
+	if op, found, err := r.priorApply(ctx, tx, requester, key, requestHash); found || err != nil {
+		return op, found, err
+	}
+	if c.Revision != expectedRevision {
+		return operations.Operation{}, false, ErrChangesetRevisionMismatch
 	}
 	if !changeset.Allows(c.State, "apply") {
 		return operations.Operation{}, false, fmt.Errorf("%w: a %s changeset cannot be applied", ErrChangesetStateConflict, c.State)
