@@ -3506,9 +3506,12 @@ paths:
       operationId: cancelChangeset
       summary: Cancel a changeset that has not started applying
       description: >-
-        Valid before apply starts (section 103); an applying changeset is
-        cancelled through its operation (section 104), otherwise
-        CHANGESET_STATE_CONFLICT (409). Records the reason. The changeset's
+        Valid before apply starts (section 103), otherwise
+        CHANGESET_STATE_CONFLICT (409). An applying changeset is cancelled
+        through its operation (/admin/operations/{operation_id}/cancel,
+        section 104): the changeset then becomes CANCELLED if no step took
+        effect, PARTIALLY_APPLIED if one did, or COMPENSATED once compensated
+        (changeset-lifecycle.yaml). Records the reason. The changeset's
         revision is required in If-Match.
       security:
         - adminOidc: [changeset:write]

@@ -69,10 +69,18 @@ states:
       start: APPLYING
       cancel: CANCELLED
   APPLYING:
+    # The changeset follows its operation (execution-operation.schema.json):
+    # SUCCEEDED -> applied; FAILED with no step effective -> fail;
+    # FAILED or CANCELLED after a step took effect -> partially_apply;
+    # CANCELLED before any step took effect -> operation_cancelled;
+    # COMPENSATED -> compensate. Cancelling an applying changeset is always
+    # a cancel of its operation (section 104), never of the changeset.
     transitions:
       applied: VERIFYING
       fail: FAILED
       partially_apply: PARTIALLY_APPLIED
+      operation_cancelled: CANCELLED
+      compensate: COMPENSATED
   VERIFYING:
     transitions:
       complete: COMPLETED
@@ -114,6 +122,7 @@ triggers:
     - applied
     - fail
     - partially_apply
+    - operation_cancelled
     - complete
     - fail_verification
     - reverify
