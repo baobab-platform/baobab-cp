@@ -1005,7 +1005,8 @@ paths:
       summary: Conclude a verification case
       description: >-
         Concludes a VERIFYING case at the version If-Match names.
-        complete_verified requires every claim of the case to be VERIFIED;
+        complete_verified requires at least one claim, and every claim of the
+        case that still stands (not WITHDRAWN or SUPERSEDED) to be VERIFIED;
         complete_not_verified records that the evidence was insufficient, never
         that a claim is false (ADR-BCP-023 section 33).
       security:
@@ -1814,9 +1815,15 @@ paths:
           - origin APPLICANT and status SELF_ASSERTED.
         A claim never verifies itself: only a reviewer's verification result
         changes its standing, and only VERIFIED claims are promoted at
-        admission (section 192). A closed case takes no claims (409).
+        admission (section 192). A closed case takes no claims (409). A
+        withdrawn claim no longer stands: it neither blocks nor counts towards
+        concluding the case VERIFIED. A replay with the same Idempotency-Key and
+        body returns the original claim with 200; a different body under the
+        same key is refused (409).
       security:
         - adminOidc: [application:write]
+      parameters:
+        - $ref: "#/components/parameters/OptionalIdempotencyKey"
       requestBody:
         required: true
         content:
@@ -1826,6 +1833,12 @@ paths:
       responses:
         "201":
           description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceClaim
+        "200":
+          description: A replay of the same Idempotency-Key and body; the original claim
           content:
             application/json:
               schema:

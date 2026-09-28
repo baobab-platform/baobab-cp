@@ -327,13 +327,20 @@ func (r *PostgresRepository) TransitionVerificationCase(ctx context.Context, id 
 		if err != nil {
 			return c, err
 		}
-		if len(claims) == 0 {
-			return c, fmt.Errorf("%w: a case without claims verifies nothing", ErrVerificationState)
-		}
+		// A withdrawn or superseded claim no longer stands: it neither blocks
+		// nor counts towards the conclusion.
+		standing := 0
 		for _, cl := range claims {
+			if cl.Status == verification.ClaimWithdrawn || cl.Status == verification.ClaimSuperseded {
+				continue
+			}
+			standing++
 			if cl.Status != verification.ClaimVerified {
 				return c, fmt.Errorf("%w: claim %s is %s, not VERIFIED", ErrVerificationState, cl.ClaimID, cl.Status)
 			}
+		}
+		if standing == 0 {
+			return c, fmt.Errorf("%w: a case without standing claims verifies nothing", ErrVerificationState)
 		}
 	}
 	before := c.Status

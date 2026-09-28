@@ -33,6 +33,8 @@ const (
 	CaseVerified    = "VERIFIED"
 	ClaimUnderCheck = "UNDER_VERIFICATION"
 	ClaimVerified   = "VERIFIED"
+	ClaimWithdrawn  = "WITHDRAWN"
+	ClaimSuperseded = "SUPERSEDED"
 	EvidenceAvail   = "AVAILABLE"
 )
 

@@ -11,6 +11,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"regexp"
 	"time"
@@ -58,16 +59,40 @@ func (h applicantClaimHandler) ownApplication(w http.ResponseWriter, r *http.Req
 }
 
 func (h applicantClaimHandler) create(w http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get("Idempotency-Key")
+	if key != "" {
+		var ok bool
+		if key, ok = provisioningIdempotencyKey(w, r); !ok {
+			return
+		}
+	}
 	actor, app, ok := h.ownApplication(w, r)
 	if !ok {
 		return
 	}
-	if !app.Status.EditableByApplicant() {
-		problem(w, r, http.StatusConflict, "APPLICATION_NOT_EDITABLE", "claims can be added only while the application is DRAFT or INFORMATION_REQUIRED", false)
-		return
-	}
 	raw, ok := readBody(w, r)
 	if !ok {
+		return
+	}
+	// The hash binds the key to this application and body.
+	hash := sha256Hex(append([]byte(app.ID+"\n"), raw...))
+	if key != "" {
+		existing, prior, err := h.claims.ApplicantClaimByIdempotencyKey(r.Context(), actor.PrincipalID, key)
+		switch {
+		case err == nil && prior == hash:
+			w.Header().Set("ETag", entityTag(existing.Version))
+			writeJSON(w, http.StatusOK, existing)
+			return
+		case err == nil:
+			problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "the idempotency key was used for a different request", false)
+			return
+		case !errors.Is(err, repository.ErrVerificationNotFound):
+			verificationHandler{}.fail(w, r, err)
+			return
+		}
+	}
+	if !app.Status.EditableByApplicant() {
+		problem(w, r, http.StatusConflict, "APPLICATION_NOT_EDITABLE", "claims can be added only while the application is DRAFT or INFORMATION_REQUIRED", false)
 		return
 	}
 	var claim verification.ApplicantClaim
@@ -75,7 +100,11 @@ func (h applicantClaimHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cl, err := h.claims.AddApplicantClaim(r.Context(), app.ID, claim, domain.NewResourceID("ecl"), domain.NewResourceID("vcase"),
-		actor.PrincipalID, h.clock(), actor.Audit)
+		actor.PrincipalID, key, hash, h.clock(), actor.Audit)
+	if errors.Is(err, repository.ErrVerificationIdempotency) {
+		problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "a concurrent request used the same idempotency key; retry to read its result", true)
+		return
+	}
 	if err != nil {
 		verificationHandler{}.fail(w, r, err)
 		return

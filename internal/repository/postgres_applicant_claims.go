@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/baobab-platform/baobab-cp/internal/verification"
 )
@@ -22,7 +23,13 @@ type ApplicantClaims interface {
 	// AddApplicantClaim records the claim in the application's case,
 	// opening that case (with newCaseID) on the first claim. A concluded
 	// case takes no claims.
-	AddApplicantClaim(ctx context.Context, applicationID string, claim verification.ApplicantClaim, claimID, newCaseID, asserter string, now time.Time, actor AuditActor) (verification.Claim, error)
+	// key, when set, makes it replayable: requestHash is compared on replay
+	// by the caller; a concurrent create with the same key is
+	// ErrVerificationIdempotency.
+	AddApplicantClaim(ctx context.Context, applicationID string, claim verification.ApplicantClaim, claimID, newCaseID, asserter, key, requestHash string, now time.Time, actor AuditActor) (verification.Claim, error)
+	// ApplicantClaimByIdempotencyKey is the claim asserter created with key,
+	// and its request hash, or ErrVerificationNotFound.
+	ApplicantClaimByIdempotencyKey(ctx context.Context, asserter, key string) (verification.Claim, string, error)
 	// ListApplicationClaims lists the claims of the application's cases,
 	// oldest first.
 	ListApplicationClaims(ctx context.Context, applicationID string) ([]verification.Claim, error)
@@ -37,7 +44,7 @@ const (
 	admissionPurpose   = "ORGANISATION_ADMISSION"
 )
 
-func (r *PostgresRepository) AddApplicantClaim(ctx context.Context, applicationID string, claim verification.ApplicantClaim, claimID, newCaseID, asserter string, now time.Time, actor AuditActor) (verification.Claim, error) {
+func (r *PostgresRepository) AddApplicantClaim(ctx context.Context, applicationID string, claim verification.ApplicantClaim, claimID, newCaseID, asserter, key, requestHash string, now time.Time, actor AuditActor) (verification.Claim, error) {
 	if err := validateActor(actor); err != nil {
 		return verification.Claim{}, err
 	}
@@ -86,7 +93,29 @@ func (r *PostgresRepository) AddApplicantClaim(ctx context.Context, applicationI
 	if err := insertClaim(ctx, tx, c, cl, now, actor); err != nil {
 		return cl, err
 	}
+	if key != "" {
+		_, err := tx.Exec(ctx, `UPDATE evidence.claim SET create_idempotency_key = $2, create_request_hash = $3 WHERE claim_id = $1`,
+			cl.ClaimID, key, requestHash)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return cl, ErrVerificationIdempotency
+		}
+		if err != nil {
+			return cl, err
+		}
+	}
 	return cl, tx.Commit(ctx)
+}
+
+func (r *PostgresRepository) ApplicantClaimByIdempotencyKey(ctx context.Context, asserter, key string) (verification.Claim, string, error) {
+	var doc []byte
+	var hash string
+	if err := r.pool.QueryRow(ctx, `SELECT document, create_request_hash FROM evidence.claim
+		WHERE asserted_by = $1 AND create_idempotency_key = $2`, asserter, key).Scan(&doc, &hash); err != nil {
+		return verification.Claim{}, "", notFound(err)
+	}
+	cl, err := decodeDocument[verification.Claim](doc)
+	return cl, hash, err
 }
 
 func (r *PostgresRepository) ListApplicationClaims(ctx context.Context, applicationID string) ([]verification.Claim, error) {

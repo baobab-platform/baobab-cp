@@ -80,7 +80,7 @@ func TestApplicantClaimRoutes(t *testing.T) {
 	mustNoError(t, repo.LinkExternalIdentity(ctx, domain.ExternalIdentity{ID: domain.NewExternalIdentityID(),
 		PrincipalID: reviewerID.ID, Issuer: testRealm, Subject: "reviewer" + suffix, Status: "ACTIVE"}))
 	reviewer := auth.Principal{Subject: "reviewer" + suffix, Issuer: testRealm, ActorType: "human", TokenID: "t-reviewer",
-		Scopes: map[string]struct{}{"verification:read": {}, "verification:write": {}},
+		Scopes: map[string]struct{}{"verification:read": {}, "verification:write": {}, "verification:decide": {}},
 		Roles:  map[string]struct{}{RolePlatformAdmin: {}}}
 	handler := New(Dependencies{Store: &fakeStore{}, Identities: repo, Verification: repo,
 		Applications:  &application.Service{Repo: repo},
@@ -113,8 +113,12 @@ func TestApplicantClaimRoutes(t *testing.T) {
 	t.Cleanup(func() {
 		ids := `(SELECT case_id FROM evidence.verification_case WHERE subject_id = $1)`
 		for _, stmt := range []string{
+			`UPDATE evidence.claim SET current_result_id = NULL WHERE case_id IN ` + ids,
+			`DELETE FROM evidence.result WHERE case_id IN ` + ids,
+			`DELETE FROM evidence.check WHERE case_id IN ` + ids,
 			`DELETE FROM evidence.claim WHERE case_id IN ` + ids,
 			`DELETE FROM evidence.verification_case WHERE subject_id = $1`,
+			`DELETE FROM evidence.record WHERE document->'subject'->>'subject_id' = $1`,
 		} {
 			admin.Exec(ctx, stmt, app.ID)
 		}
@@ -160,6 +164,18 @@ func TestApplicantClaimRoutes(t *testing.T) {
 		t.Fatalf("claims: %+v", list)
 	}
 
+	// Creating a claim is replayable (Idempotency-Key).
+	keyed := map[string]string{"Idempotency-Key": "applicant-claim-" + suffix}
+	status := `{"claim_type": "ENTITY_STATUS", "jurisdiction": "UG", "claimed_value": {"value": "active"}}`
+	var entity, replayed claimView
+	conforms("keyed claim", "EvidenceClaim", call(http.MethodPost, claims, "alice", keyed, status), http.StatusCreated, &entity)
+	conforms("replayed claim", "EvidenceClaim", call(http.MethodPost, claims, "alice", keyed, status), http.StatusOK, &replayed)
+	if replayed.ClaimID != entity.ClaimID {
+		t.Fatalf("a replay minted a second claim: %s and %s", entity.ClaimID, replayed.ClaimID)
+	}
+	refused("a key reused for another claim", call(http.MethodPost, claims, "alice", keyed,
+		`{"claim_type": "ENTITY_STATUS", "claimed_value": {"value": "dissolved"}}`), http.StatusConflict, "IDEMPOTENCY_KEY_REUSED")
+
 	// A reviewer takes the registration claim under verification.
 	var cases2 struct {
 		Items []struct {
@@ -189,6 +205,53 @@ func TestApplicantClaimRoutes(t *testing.T) {
 		t.Fatalf("withdrawn claim: %+v", name)
 	}
 	refused("withdrawing twice", call(http.MethodPost, withdraw, "alice", ifMatch(name.Version), ""), http.StatusConflict, "VERIFICATION_CASE_STATE_CONFLICT")
+
+	// Withdrawn claims no longer stand: the case concludes VERIFIED on the
+	// one claim the registry verified (sections 191-192).
+	conforms("withdraw entity status", "EvidenceClaim", call(http.MethodPost, claims+"/"+entity.ClaimID+"/withdraw", "alice",
+		ifMatch(entity.Version), ""), http.StatusOK, &entity)
+	base := "/v1/admin/verification-cases/" + cases2.Items[0].CaseID
+	caseVersion := func() int64 {
+		t.Helper()
+		var c struct {
+			Version int64 `json:"version"`
+		}
+		mustNoError(t, json.Unmarshal(call(http.MethodGet, base, "reviewer", nil, "").Body.Bytes(), &c))
+		return c.Version
+	}
+	for _, command := range []string{"start_collection", "submit", "begin_verification"} {
+		if moved := call(http.MethodPost, base+"/transitions", "reviewer", ifMatch(caseVersion()), `{"command": "`+command+`"}`); moved.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", command, moved.Code, moved.Body.String())
+		}
+	}
+	subject := `{"subject_type": "APPLICATION", "subject_id": "` + app.ID + `"}`
+	registered := call(http.MethodPost, "/v1/admin/evidence", "reviewer", map[string]string{"Idempotency-Key": "application-evidence-" + suffix},
+		`{"evidence_type": "REGISTRY_EXTRACT", "subject": `+subject+`, "purpose": "ORGANISATION_ADMISSION", "source_id": "esrc_ursb",
+		"source_record_reference": "URSB-8002`+suffix+`", "observed_at": "2026-10-02T10:00:00Z", "classification": "INTERNAL",
+		"retention_policy": "organisation-admission/v1"}`)
+	var extract struct {
+		EvidenceID string `json:"evidence_id"`
+	}
+	mustNoError(t, json.Unmarshal(registered.Body.Bytes(), &extract))
+	checked := call(http.MethodPost, base+"/checks", "reviewer", nil, `{"claim_id": "`+regno.ClaimID+`", "method": "MANUAL_REGISTRY_LOOKUP",
+		"source_id": "esrc_ursb", "source_record_reference": "URSB-8002`+suffix+`", "outcome": "VERIFIED", "reason_codes": [],
+		"evidence_ids": ["`+extract.EvidenceID+`"], "dimensions": [{"dimension": "SOURCE_AUTHENTICITY", "outcome": "PASSED"},
+		{"dimension": "ISSUER_AUTHORITY", "outcome": "PASSED"}, {"dimension": "CLAIM_MATCH", "outcome": "PASSED"}]}`)
+	var check struct {
+		CheckID string `json:"check_id"`
+	}
+	mustNoError(t, json.Unmarshal(checked.Body.Bytes(), &check))
+	if result := call(http.MethodPost, base+"/results", "reviewer", nil, `{"claim_id": "`+regno.ClaimID+`", "outcome": "VERIFIED",
+		"check_ids": ["`+check.CheckID+`"], "freshness": "CURRENT", "reason_codes": [],
+		"dimensions": [{"dimension": "ISSUER_AUTHORITY", "outcome": "PASSED"}, {"dimension": "CLAIM_MATCH", "outcome": "PASSED"}]}`); result.Code != http.StatusCreated {
+		t.Fatalf("check %d %s; result %d %s", checked.Code, checked.Body.String(), result.Code, result.Body.String())
+	}
+	if concluded := call(http.MethodPost, base+"/conclusion", "reviewer", ifMatch(caseVersion()),
+		`{"command": "complete_verified", "reason": "The registry verified the registration number."}`); concluded.Code != http.StatusOK {
+		t.Fatalf("withdrawn claims must not block the conclusion: %d %s", concluded.Code, concluded.Body.String())
+	}
+	refused("a claim on a concluded case", call(http.MethodPost, claims, "alice", nil,
+		`{"claim_type": "LEGAL_NAME", "claimed_value": {"value": "Kilima"}}`), http.StatusConflict, "VERIFICATION_CASE_STATE_CONFLICT")
 
 	// A submitted application takes no new claims.
 	if submitted := call(http.MethodPost, "/v1/client-applications/"+app.ID+"/submit", "alice", nil, ""); submitted.Code != http.StatusOK {

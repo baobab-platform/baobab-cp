@@ -728,6 +728,8 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
     - an applicant asserts a claim type, jurisdiction and value on their own application, only while it is DRAFT or INFORMATION_REQUIRED;
     - the claim is SELF_ASSERTED and about the application, in the application's one `ORGANISATION_ADMISSION` VerificationCase, which the first claim opens (serialised per application);
     - an applicant never names a subject or case, and never reaches another applicant's application or claim.
+    - creating a claim is replayable: an `Idempotency-Key` replay answers 200 with the original claim (migration `000073_applicant_claim_idempotency.sql`).
+  - Concluding a case VERIFIED now requires at least one claim, and every claim that still stands to be VERIFIED. Withdrawn and superseded claims neither block nor count.
   - `POST /v1/admin/verification-cases/{caseID}/claims/{claimID}/open-verification` (`verification:write`, If-Match; permission `verification.review`) takes a claim under verification. It changes no standing.
   - Organisation admission now also accepts the admitted application's own case (subject `APPLICATION`, matching the request's `application_id`). That is the usual path, since the case is worked before approval, and only its VERIFIED claims are promoted.
 - The verification workflow (ADR-BCP-023 gate OEV-03; Shared `evidence/v1` and the control-plane `openapi.yaml` 1.14.0 Verification operations). Eighteen `/v1/admin` routes serve:

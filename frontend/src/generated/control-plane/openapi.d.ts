@@ -558,7 +558,7 @@ export interface paths {
         put?: never;
         /**
          * Conclude a verification case
-         * @description Concludes a VERIFYING case at the version If-Match names. complete_verified requires every claim of the case to be VERIFIED; complete_not_verified records that the evidence was insufficient, never that a claim is false (ADR-BCP-023 section 33).
+         * @description Concludes a VERIFYING case at the version If-Match names. complete_verified requires at least one claim, and every claim of the case that still stands (not WITHDRAWN or SUPERSEDED) to be VERIFIED; complete_not_verified records that the evidence was insufficient, never that a claim is false (ADR-BCP-023 section 33).
          */
         post: operations["concludeVerificationCase"];
         delete?: never;
@@ -1074,7 +1074,7 @@ export interface paths {
          *         subject APPLICATION, opened on the first claim;
          *       - asserted_by, which is the caller;
          *       - origin APPLICANT and status SELF_ASSERTED.
-         *     A claim never verifies itself: only a reviewer's verification result changes its standing, and only VERIFIED claims are promoted at admission (section 192). A closed case takes no claims (409).
+         *     A claim never verifies itself: only a reviewer's verification result changes its standing, and only VERIFIED claims are promoted at admission (section 192). A closed case takes no claims (409). A withdrawn claim no longer stands: it neither blocks nor counts towards concluding the case VERIFIED. A replay with the same Idempotency-Key and body returns the original claim with 200; a different body under the same key is refused (409).
          */
         post: operations["createApplicantClaim"];
         delete?: never;
@@ -5219,7 +5219,7 @@ export interface components {
             supersedes?: components["schemas"]["verificationCaseId"];
             version: number;
         } & (unknown & unknown & unknown);
-        /** @description Concludes a VERIFYING case: complete_verified requires every claim of the case to be VERIFIED; complete_not_verified closes a case whose evidence was insufficient (section 33). Served by a separate operation that requires verification:decide. */
+        /** @description Concludes a VERIFYING case: complete_verified requires at least one claim and every claim of the case that still stands (not WITHDRAWN or SUPERSEDED) to be VERIFIED; complete_not_verified closes a case whose evidence was insufficient (section 33). Served by a separate operation that requires verification:decide. */
         VerificationCaseConclusionRequest: {
             /** @enum {string} */
             command: "complete_verified" | "complete_not_verified";
@@ -7456,6 +7456,8 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                /** @description Makes the command replayable; a replay with a different body is refused with IDEMPOTENCY_KEY_REUSED (409). */
+                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
                 /** @description A caller-supplied business correlation UUID. The service mints one when absent and returns it in problem details and emitted consequences. */
                 "X-Correlation-ID"?: components["parameters"]["CorrelationId"];
             };
@@ -7470,6 +7472,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description A replay of the same Idempotency-Key and body; the original claim */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceClaim"];
+                };
+            };
             /** @description Recorded */
             201: {
                 headers: {
