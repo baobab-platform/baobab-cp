@@ -123,6 +123,9 @@ type Dependencies struct {
 	// Markets backs the /v1/markets routes, the market registry
 	// (ADR-BCP-004 section 18). Nil disables them.
 	Markets repository.MarketRegistryRepository
+	// Verification backs the /v1/admin verification-case, evidence and
+	// evidence-source routes (ADR-BCP-023 gate OEV-03). Nil disables them.
+	Verification repository.VerificationRepository
 	// ProviderMigrations backs the /v1/provider-migrations routes
 	// (ADR-BCP-006 Gate 8). Nil disables them.
 	ProviderMigrations repository.ProviderMigrationRepository
@@ -164,12 +167,15 @@ type API struct {
 	// markets resolves the owner tenant a market route acts on, for shadow
 	// evaluation.
 	markets repository.MarketRegistryRepository
+	// verification resolves the organisation a verification route acts
+	// on, for shadow evaluation.
+	verification repository.VerificationRepository
 }
 
 func New(dependencies Dependencies) http.Handler {
 	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships,
 		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration,
-		grants: dependencies.AdministrativeGrants, environment: dependencies.Environment, platformAccounts: dependencies.PlatformAccounts, markets: dependencies.Markets}
+		grants: dependencies.AdministrativeGrants, environment: dependencies.Environment, platformAccounts: dependencies.PlatformAccounts, markets: dependencies.Markets, verification: dependencies.Verification}
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
@@ -295,6 +301,33 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.adminOrWorkload("market:write|market:approve", "market:read")).Get("/v1/markets/{marketID}", markets.get)
 		r.With(write...).Patch("/v1/markets/{marketID}", markets.update)
 		r.With(a.authorize(a.adminVerifier, "human", "market:approve"), a.requireAdminRole(nil, true)).Post("/v1/markets/{marketID}/activate", markets.activate)
+	}
+	if dependencies.Verification != nil {
+		// ADR-BCP-023 OEV-03: platform administrators work verification
+		// cases. Recording results and concluding need verification:decide;
+		// nobody checks or decides a claim they asserted.
+		v := verificationHandler{repo: dependencies.Verification, identities: a.identities}
+		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "verification:read"), a.requireAdminRole(nil, true)}
+		write := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "verification:write"), a.requireAdminRole(nil, true)}
+		decide := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "verification:decide"), a.requireAdminRole(nil, true)}
+		r.With(write...).Post("/v1/admin/verification-cases", v.createCase)
+		r.With(read...).Get("/v1/admin/verification-cases", v.listCases)
+		r.With(read...).Get("/v1/admin/verification-cases/{caseID}", v.getCase)
+		r.With(write...).Post("/v1/admin/verification-cases/{caseID}/transitions", v.transitionCase)
+		r.With(decide...).Post("/v1/admin/verification-cases/{caseID}/conclusion", v.concludeCase)
+		r.With(write...).Post("/v1/admin/verification-cases/{caseID}/claims", v.addClaim)
+		r.With(read...).Get("/v1/admin/verification-cases/{caseID}/claims", v.listClaims)
+		r.With(write...).Post("/v1/admin/verification-cases/{caseID}/checks", v.recordCheck)
+		r.With(read...).Get("/v1/admin/verification-cases/{caseID}/checks", v.listChecks)
+		r.With(decide...).Post("/v1/admin/verification-cases/{caseID}/results", v.recordResult)
+		r.With(read...).Get("/v1/admin/verification-cases/{caseID}/results", v.listResults)
+		r.With(write...).Post("/v1/admin/verification-cases/{caseID}/discrepancies", v.recordDiscrepancy)
+		r.With(read...).Get("/v1/admin/verification-cases/{caseID}/discrepancies", v.listDiscrepancies)
+		r.With(write...).Post("/v1/admin/evidence-discrepancies/{discrepancyID}/transitions", v.transitionDiscrepancy)
+		r.With(decide...).Post("/v1/admin/evidence-discrepancies/{discrepancyID}/resolution", v.resolveDiscrepancy)
+		r.With(write...).Post("/v1/admin/evidence", v.registerEvidence)
+		r.With(read...).Get("/v1/admin/evidence/{evidenceID}", v.getEvidence)
+		r.With(read...).Get("/v1/admin/evidence-sources", v.listSources)
 	}
 	if dependencies.ProviderMigrations != nil {
 		// ADR-BCP-006 Gate 8: planning a provider migration binds nothing;

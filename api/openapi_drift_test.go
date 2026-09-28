@@ -67,6 +67,9 @@ func fullRouter(t *testing.T) chi.Routes {
 		Markets: struct {
 			repository.MarketRegistryRepository
 		}{},
+		Verification: struct {
+			repository.VerificationRepository
+		}{},
 		Onboarding:      &onboarding.Service{},
 		Applications:    &application.Service{},
 		Classifications: &subscription.Classifier{},

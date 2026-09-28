@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.13.0
+  version: 1.14.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -45,6 +45,8 @@ tags:
     description: Provider migration - discovery, planning and the migration aggregate (ADR-BCP-006 sections 44-58, 119-122).
   - name: Markets
     description: The market registry - register, read, update and activate commercial markets (ADR-BCP-004 section 18).
+  - name: Verification
+    description: Verification cases, claims, checks, results and discrepancies; evidence metadata and sources (ADR-BCP-023 gate OEV-03).
   - name: Changesets
     description: The governed unit of change - draft, submit, plan, approve, apply, cancel and outcome (ADR-BCP-021, ADR-BCP-022 section 44).
   - name: Operations
@@ -816,6 +818,731 @@ paths:
           $ref: "#/components/responses/PreconditionFailed"
         "428":
           $ref: "#/components/responses/PreconditionRequired"
+  # ---------------------------------------------------------------------------
+  # Verification (ADR-BCP-023 gate OEV-03): verification cases, their claims,
+  # checks, results and discrepancies, evidence metadata and the evidence
+  # source registry. Evidence content is never served here.
+  # ---------------------------------------------------------------------------
+  /admin/verification-cases:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: createVerificationCase
+      summary: Open a verification case
+      description: >-
+        Opens a DRAFT case for one subject and purpose. The Control Plane mints
+        case_id; claims are added afterwards. Replaying the same Idempotency-Key
+        returns the same case.
+      security:
+        - adminOidc: [verification:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCaseCreateRequest
+      responses:
+        "201":
+          description: Opened
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCase
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    get:
+      tags: [Verification]
+      operationId: listVerificationCases
+      summary: List verification cases, newest first
+      security:
+        - adminOidc: [verification:read]
+      parameters:
+        - $ref: "#/components/parameters/PageLimit"
+        - name: page_token
+          in: query
+          required: false
+          schema: { type: string, maxLength: 512 }
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: ../../evidence/v1/domain.schema.json#/$defs/verificationCaseStatus
+        - name: subject_id
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        "200":
+          description: A page of cases
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCasePage
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/verification-cases/{case_id}:
+    parameters:
+      - $ref: "#/components/parameters/VerificationCaseId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Verification]
+      operationId: getVerificationCase
+      summary: Read a verification case
+      security:
+        - adminOidc: [verification:read]
+      responses:
+        "200":
+          description: The case
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCase
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/verification-cases/{case_id}/transitions:
+    parameters:
+      - $ref: "#/components/parameters/VerificationCaseId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: transitionVerificationCase
+      summary: Move a verification case through its lifecycle
+      description: >-
+        Performs one reviewer command of evidence/v1 lifecycle.yaml
+        verification_case, other than concluding it, at the version If-Match
+        names. A command the lifecycle does not allow from the case's status is
+        refused with VERIFICATION_CASE_STATE_CONFLICT (409). Concluding a case
+        is concludeVerificationCase, under verification:decide.
+      security:
+        - adminOidc: [verification:write]
+      parameters:
+        - $ref: "#/components/parameters/VersionIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCaseTransitionRequest
+      responses:
+        "200":
+          description: Transitioned
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCase
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/verification-cases/{case_id}/conclusion:
+    parameters:
+      - $ref: "#/components/parameters/VerificationCaseId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: concludeVerificationCase
+      summary: Conclude a verification case
+      description: >-
+        Concludes a VERIFYING case at the version If-Match names.
+        complete_verified requires every claim of the case to be VERIFIED;
+        complete_not_verified records that the evidence was insufficient, never
+        that a claim is false (ADR-BCP-023 section 33).
+      security:
+        - adminOidc: [verification:decide]
+      parameters:
+        - $ref: "#/components/parameters/VersionIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCaseConclusionRequest
+      responses:
+        "200":
+          description: Concluded
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCase
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/verification-cases/{case_id}/claims:
+    parameters:
+      - $ref: "#/components/parameters/VerificationCaseId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: addVerificationClaim
+      summary: Add a claim to a verification case
+      description: >-
+        Records a reviewer's claim, UNDER_VERIFICATION, and adds it to the case.
+        The caller is recorded as asserted_by and can never check or decide it
+        (section 169). The case must not have ended.
+      security:
+        - adminOidc: [verification:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceClaimSubmission
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceClaim
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    get:
+      tags: [Verification]
+      operationId: listVerificationClaims
+      summary: List a verification case's claims
+      security:
+        - adminOidc: [verification:read]
+      responses:
+        "200":
+          description: The case's claims
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceClaimList
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/verification-cases/{case_id}/checks:
+    parameters:
+      - $ref: "#/components/parameters/VerificationCaseId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: recordVerificationCheck
+      summary: Record a verification check
+      description: >-
+        Records a check the caller performed on one claim of the case, against a
+        registered source. The caller is performed_by and is never the claim's
+        asserter (VERIFICATION_SELF_CHECK, 403). A positive check cites only
+        evidence reviewers may open. The case must be VERIFYING.
+      security:
+        - adminOidc: [verification:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCheckRecordRequest
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCheck
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    get:
+      tags: [Verification]
+      operationId: listVerificationChecks
+      summary: List a verification case's checks
+      security:
+        - adminOidc: [verification:read]
+      responses:
+        "200":
+          description: The case's checks
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationCheckList
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/verification-cases/{case_id}/results:
+    parameters:
+      - $ref: "#/components/parameters/VerificationCaseId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: recordVerificationResult
+      summary: Record a claim's verification result
+      description: >-
+        Records a claim's result from checks already recorded on it in this case;
+        the claim's status becomes the outcome and the newer result supersedes
+        any earlier one. The caller is decided_by and never the claim's asserter.
+        VERIFIED needs a positive check from a source trusted for the claim type in
+        the claim's jurisdiction (VERIFICATION_UNSUPPORTED, 422). A CONFLICTED
+        result moves a VERIFYING case to CONFLICTED.
+      security:
+        - adminOidc: [verification:decide]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationResultRecordRequest
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationResult
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    get:
+      tags: [Verification]
+      operationId: listVerificationResults
+      summary: List a verification case's results
+      security:
+        - adminOidc: [verification:read]
+      responses:
+        "200":
+          description: The case's results
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/VerificationResultList
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/verification-cases/{case_id}/discrepancies:
+    parameters:
+      - $ref: "#/components/parameters/VerificationCaseId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: recordEvidenceDiscrepancy
+      summary: Record a discrepancy between sources
+      description: >-
+        Records a material disagreement between registered sources about one claim
+        type of the case's subject, OPEN. Nothing resolves it silently.
+      security:
+        - adminOidc: [verification:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/verification.schema.json#/$defs/EvidenceDiscrepancyRecordRequest
+      responses:
+        "201":
+          description: Recorded
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/EvidenceDiscrepancy
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+    get:
+      tags: [Verification]
+      operationId: listEvidenceDiscrepancies
+      summary: List a verification case's discrepancies
+      security:
+        - adminOidc: [verification:read]
+      responses:
+        "200":
+          description: The case's discrepancies
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/EvidenceDiscrepancyList
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/evidence-discrepancies/{discrepancy_id}/transitions:
+    parameters:
+      - $ref: "#/components/parameters/EvidenceDiscrepancyId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: transitionEvidenceDiscrepancy
+      summary: Review or resolve a discrepancy
+      description: >-
+        Performs one reviewer command of evidence/v1 lifecycle.yaml
+        evidence_discrepancy other than closing it (begin_review) at the
+        version If-Match names. Closing a discrepancy is
+        resolveEvidenceDiscrepancy, under verification:decide.
+      security:
+        - adminOidc: [verification:write]
+      parameters:
+        - $ref: "#/components/parameters/VersionIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/verification.schema.json#/$defs/EvidenceDiscrepancyTransitionRequest
+      responses:
+        "200":
+          description: Transitioned
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/EvidenceDiscrepancy
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/evidence-discrepancies/{discrepancy_id}/resolution:
+    parameters:
+      - $ref: "#/components/parameters/EvidenceDiscrepancyId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: resolveEvidenceDiscrepancy
+      summary: Close a discrepancy
+      description: >-
+        Closes a discrepancy under review at the version If-Match names, with a
+        resolution consistent with the command and a reason; the caller is
+        recorded as resolved_by (ADR-BCP-023 sections 74-76).
+      security:
+        - adminOidc: [verification:decide]
+      parameters:
+        - $ref: "#/components/parameters/VersionIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/verification.schema.json#/$defs/EvidenceDiscrepancyResolutionRequest
+      responses:
+        "200":
+          description: Concluded
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/verification.schema.json#/$defs/EvidenceDiscrepancy
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/evidence:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: registerEvidence
+      summary: Register evidence obtained from a source
+      description: >-
+        Registers evidence observed at a registered source: a registry record or a
+        credential. The caller is recorded as obtained_by and the record is
+        AVAILABLE. Uploaded documents never arrive here (gate OEV-02). Replaying
+        the same Idempotency-Key returns the same record.
+      security:
+        - adminOidc: [verification:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceRegistrationRequest
+      responses:
+        "201":
+          description: Registered
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceRecord
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /admin/evidence/{evidence_id}:
+    parameters:
+      - $ref: "#/components/parameters/EvidenceId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Verification]
+      operationId: getEvidenceReference
+      summary: Read an evidence record's metadata
+      description: >-
+        Metadata only. Artifact content always needs a separate, authorised
+        action (ADR-BCP-023 section 270).
+      security:
+        - adminOidc: [verification:read]
+      responses:
+        "200":
+          description: The record's metadata
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceReference
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/evidence-sources:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Verification]
+      operationId: listEvidenceSources
+      summary: List the registered evidence sources
+      description: >-
+        The sources of evidence/v1 source-registry.yaml and what each is
+        authoritative for.
+      security:
+        - adminOidc: [verification:read]
+      responses:
+        "200":
+          description: The sources
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceSourceList
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   # ---------------------------------------------------------------------------
   # Applications (ADR-BCP-017): the applicant's own ClientApplications.
   # Another applicant's application is reported as not found.
@@ -3789,6 +4516,36 @@ components:
       required: true
       schema:
         $ref: ./domain.schema.json#/$defs/changesetId
+    VerificationCaseId:
+      name: case_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../evidence/v1/domain.schema.json#/$defs/verificationCaseId
+    EvidenceDiscrepancyId:
+      name: discrepancy_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../evidence/v1/domain.schema.json#/$defs/evidenceDiscrepancyId
+    EvidenceId:
+      name: evidence_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../evidence/v1/domain.schema.json#/$defs/evidenceRecordId
+    VersionIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: >-
+        The resource's current version as a strong entity tag, e.g. "3" (the
+        ETag of its last read). Missing is refused with IF_MATCH_REQUIRED
+        (428); malformed with INVALID_IF_MATCH (400); stale with
+        VERSION_MISMATCH (412).
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
     MarketId:
       name: market_id
       in: path
