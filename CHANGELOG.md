@@ -852,6 +852,15 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Security
 
+- **Breaking: admission verifies legal identity only through a VerificationCase (ADR-BCP-023 §191-193; Shared control-plane OpenAPI 1.15.0).**
+  - `POST /v1/tenants/{tenantID}/organisation-admission` no longer accepts `legal_verification`, the reviewer's one-call evidence and reason.
+  - It takes `verification_case_id` instead. The case must:
+    - be VERIFIED, with purpose `ORGANISATION_ADMISSION`;
+    - be about the admitted organisation or its legal entity;
+    - have VERIFIED REGISTRATION_IDENTIFIER and LEGAL_NAME claims whose values match the applicant's submission (whitespace and case normalised).
+  - The case is checked before anything is written. An unknown case answers 404 `VERIFICATION_NOT_FOUND`; any other unusable case answers 409 `VERIFICATION_CASE_STATE_CONFLICT`.
+  - The legal entity and organisation are verified citing `verification-case:` and `verification-result:` references.
+  - Their `legal-entity.verified` and `organisation.verified` events carry the case, results, evidence ids and reason codes by opaque identifier (§143).
 - An organisation profile records who verified it and when, and cannot be VERIFIED without evidence, a verifier and a time (ADR-BCP-023 OEV-03; migration `000072_organisation_verification_provenance.sql`). The legal-entity, corporate-relationship and platform-relationship tables already had these guarantees.
   - `VerifyOrganisation` and first-party governance write `verified_by` and `verified_at`.
   - The migration backfills existing VERIFIED profiles from the audit record of the transition that verified them. It never invents provenance: a VERIFIED profile without evidence or without that audit record fails the new constraint, and the migration stops for review.

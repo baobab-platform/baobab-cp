@@ -258,7 +258,11 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/iam-organisations", iam.resolve)
 	}
 	if dependencies.OrganisationAdmission != nil {
-		admission := organisationAdmissionHandler{onboarder: &svcorg.AdmissionOnboarder{Orgs: dependencies.OrganisationAdmission}}
+		onboarder := &svcorg.AdmissionOnboarder{Orgs: dependencies.OrganisationAdmission}
+		if dependencies.Verification != nil {
+			onboarder.Cases = dependencies.Verification
+		}
+		admission := organisationAdmissionHandler{onboarder: onboarder}
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/organisation-admission", admission.onboard)
 	}
 	if dependencies.Counterparties != nil {

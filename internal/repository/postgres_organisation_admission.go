@@ -186,8 +186,8 @@ func (r *PostgresRepository) VerifyOrganisation(ctx context.Context, organisatio
 		return r.recordOrganisationChange(ctx, tx, actor, events.OrganisationChange{
 			AuditAction: "organisation.verified", Target: "organisation/" + organisationID,
 			AggregateType: "organisation", AggregateID: organisationID, EventType: events.OrganisationVerified,
-			Data: map[string]any{"organisation_id": organisationID, "verified_at": events.Timestamp(ev.VerifiedAt),
-				"evidence_reference_count": len(ev.References)},
+			Data: verifiedEventData(map[string]any{"organisation_id": organisationID, "verified_at": events.Timestamp(ev.VerifiedAt),
+				"evidence_reference_count": len(ev.References)}, ev),
 			AuditPayload: map[string]any{"evidence_references": ev.References, "reason": ev.Reason, "previous_state": state},
 		})
 	})

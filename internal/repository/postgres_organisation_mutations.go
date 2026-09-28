@@ -218,8 +218,8 @@ func (r *PostgresRepository) VerifyLegalEntityProfile(ctx context.Context, legal
 		return r.recordOrganisationChange(ctx, tx, actor, events.OrganisationChange{
 			AuditAction: "legal_entity_profile.verified", Target: "legal-entity/" + legalEntityID,
 			AggregateType: "legal_entity", AggregateID: organisationID, EventType: events.LegalEntityVerified,
-			Data: map[string]any{"legal_entity_id": legalEntityID, "organisation_id": organisationID,
-				"verified_at": events.Timestamp(ev.VerifiedAt), "evidence_reference_count": len(ev.References)},
+			Data: verifiedEventData(map[string]any{"legal_entity_id": legalEntityID, "organisation_id": organisationID,
+				"verified_at": events.Timestamp(ev.VerifiedAt), "evidence_reference_count": len(ev.References)}, ev),
 			AuditPayload: map[string]any{"evidence_references": ev.References, "reason": ev.Reason},
 		})
 	})
