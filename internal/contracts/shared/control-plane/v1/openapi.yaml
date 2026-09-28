@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.14.0
+  version: 1.15.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -2861,6 +2861,13 @@ paths:
         outcome and its candidates, having written nothing; a first-party
         organisation is refused with FIRST_PARTY_ORGANISATION and a
         conflicting one with ORGANISATION_CONFLICT (both 409 problems).
+        Legal identity is verified only by naming a VERIFIED
+        ORGANISATION_ADMISSION VerificationCase about the admitted
+        organisation (ADR-BCP-023 sections 191-193); a case that is missing,
+        still open, not VERIFIED, about another subject or without verified
+        registration and legal-name claims is refused with
+        VERIFICATION_CASE_STATE_CONFLICT (409), and one that does not exist
+        with VERIFICATION_NOT_FOUND (404).
       security:
         - adminOidc: [tenant:write]
       requestBody:
@@ -2878,12 +2885,14 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
         "422":
           $ref: "#/components/responses/Unprocessable"
         "409":
-          description: The identity was quarantined (the outcome, nothing written), or the organisation is first-party or conflicts (a problem)
+          description: The identity was quarantined (the outcome, nothing written), or the organisation is first-party or conflicts, or the verification case cannot verify it (a problem)
           content:
             application/json:
               schema:

@@ -60,22 +60,24 @@ func (e *env) recordedUnder(t *testing.T, a repository.AuditActor) (audits int, 
 
 // TestOrganisationAdmissionOnboardsNewOrganisation is ADR-BCP-018's external
 // customer flow (sections 68, 108) for an organisation Baobab has not seen:
-// applicant data becomes claims, the reviewer's evidence verifies legal
+// applicant data becomes claims, a VERIFIED verification case verifies legal
 // identity, declared ownership is recorded for review only, the platform
 // relationship is EXTERNAL_CLIENT, the organisation joins a new account, and
 // replaying the decision changes nothing.
 func TestOrganisationAdmissionOnboardsNewOrganisation(t *testing.T) {
 	e := newEnv(t)
-	onboarder := &AdmissionOnboarder{Orgs: e.repo, Now: func() time.Time { return e.at.Add(time.Hour) }}
+	onboarder := &AdmissionOnboarder{Orgs: e.repo, Cases: e.repo, Now: func() time.Time { return e.at.Add(time.Hour) }}
 	tenantID, org, le := e.registeredTenant(t)
 	parentID := registration("PARENT-" + token())
 	parent, _ := e.verifiedOrganisation(t, parentID)
 	decision := "adm_" + token()
+	regno := "BETA-" + token()
+	caseID, _ := e.verifiedCase(t, legalEntitySubject(le), "Beta Logistics Limited", regno, true)
 	req := AdmissionRequest{
 		AdmissionDecisionID: decision,
 		Applicant: ApplicantOrganisation{LegalName: "Beta Logistics Limited", Jurisdiction: "KE",
-			RegistrationIdentifiers: []domain.OrganisationIdentifier{{Type: "COMPANY_REGISTRATION", Value: "BETA-" + token(), IssuingJurisdiction: "KE", Verified: true}}},
-		LegalVerification: &LegalVerification{EvidenceReferences: []string{"evd_certificate"}, Reason: "registry extract checked"},
+			RegistrationIdentifiers: []domain.OrganisationIdentifier{{Type: "COMPANY_REGISTRATION", Value: regno, IssuingJurisdiction: "KE", Verified: true}}},
+		VerificationCaseID: caseID,
 		CorporateClaims: []CorporateClaim{
 			{RelationshipType: domain.CorpRelOwns, ApplicantRole: "TARGET", CounterpartyOrganisationID: parent, OwnershipPercentage: ptr(100.0)},
 			{RelationshipType: domain.CorpRelControls, ApplicantRole: "TARGET", CounterpartyIdentifiers: []domain.OrganisationIdentifier{parentID}},
@@ -279,7 +281,7 @@ func TestAdmissionRequestValidation(t *testing.T) {
 		"resolution without reason": func(r *AdmissionRequest) {
 			r.IdentityResolution = &IdentityResolution{Decision: ConfirmNewOrganisation}
 		},
-		"verification without proof": func(r *AdmissionRequest) { r.LegalVerification = &LegalVerification{Reason: "x"} },
+		"verification case named by a free string": func(r *AdmissionRequest) { r.VerificationCaseID = "case-1" },
 		"claim with two counterparties": func(r *AdmissionRequest) {
 			r.CorporateClaims = []CorporateClaim{{RelationshipType: domain.CorpRelOwns, ApplicantRole: "SOURCE", CounterpartyOrganisationID: "o",
 				CounterpartyIdentifiers: []domain.OrganisationIdentifier{registration("2")}}}
@@ -307,18 +309,19 @@ func TestOrganisationAdmissionConformsToSharedContract(t *testing.T) {
 		t.Skip("pinned baobab-platform/shared revision has no contracts/organisation/v1/admission.schema.json yet")
 	}
 	e := newEnv(t)
-	onboarder := &AdmissionOnboarder{Orgs: e.repo, Now: func() time.Time { return e.at.Add(time.Hour) }}
+	onboarder := &AdmissionOnboarder{Orgs: e.repo, Cases: e.repo, Now: func() time.Time { return e.at.Add(time.Hour) }}
 	requestSchema := contracttest.CompileSchema(t, dir, "organisation/v1/admission.schema.json#/$defs/OrganisationAdmissionRequest")
 	outcomeSchema := contracttest.CompileSchema(t, dir, "organisation/v1/admission.schema.json#/$defs/OrganisationAdmissionOutcome")
 
 	value := "DELTA-" + token()
 	parent, _ := e.verifiedOrganisation(t, registration("PARENT-"+token()))
-	tenantID, _, _ := e.registeredTenant(t)
+	tenantID, _, le := e.registeredTenant(t)
+	caseID, _ := e.verifiedCase(t, legalEntitySubject(le), "Delta Ltd", value, true)
 	req := AdmissionRequest{AdmissionDecisionID: "adm_" + token(), ApplicationID: "app_" + token(),
-		Applicant:         ApplicantOrganisation{LegalName: "Delta Ltd", Jurisdiction: "KE", RegistrationIdentifiers: []domain.OrganisationIdentifier{registration(value)}},
-		LegalVerification: &LegalVerification{EvidenceReferences: []string{"evd_certificate"}, Reason: "checked"},
-		CorporateClaims:   []CorporateClaim{{RelationshipType: domain.CorpRelOwns, ApplicantRole: "TARGET", CounterpartyOrganisationID: parent, OwnershipPercentage: ptr(60)}},
-		PlatformAccount:   AccountAssignment{Mode: AccountNew, DisplayName: "Delta"},
+		Applicant:          ApplicantOrganisation{LegalName: "Delta Ltd", Jurisdiction: "KE", RegistrationIdentifiers: []domain.OrganisationIdentifier{registration(value)}},
+		VerificationCaseID: caseID,
+		CorporateClaims:    []CorporateClaim{{RelationshipType: domain.CorpRelOwns, ApplicantRole: "TARGET", CounterpartyOrganisationID: parent, OwnershipPercentage: ptr(60)}},
+		PlatformAccount:    AccountAssignment{Mode: AccountNew, DisplayName: "Delta"},
 	}
 	contracttest.ValidateJSON(t, requestSchema, req)
 	out, err := onboarder.Onboard(e.ctx, tenantID, req, actor())
@@ -329,7 +332,7 @@ func TestOrganisationAdmissionConformsToSharedContract(t *testing.T) {
 
 	duplicateTenant, _, _ := e.registeredTenant(t)
 	dup := req
-	dup.AdmissionDecisionID, dup.CorporateClaims, dup.LegalVerification = "adm_"+token(), nil, nil
+	dup.AdmissionDecisionID, dup.CorporateClaims, dup.VerificationCaseID = "adm_"+token(), nil, ""
 	dup.PlatformAccount = AccountAssignment{Mode: AccountNone}
 	quarantined, err := onboarder.Onboard(e.ctx, duplicateTenant, dup, actor())
 	if err != nil || quarantined.IdentityResolution != IdentityQuarantined {

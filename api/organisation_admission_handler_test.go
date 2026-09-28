@@ -24,6 +24,10 @@ func TestOrganisationAdmissionRouteRejectsApplicantShapedInput(t *testing.T) {
 		"applicant claiming verification":       `{"admission_decision_id":"adm_1","applicant_organisation":{"legal_name":"Beta","verification_state":"VERIFIED","registration_identifiers":[{"type":"LEI","value":"X"}]},"platform_account":{"mode":"NONE"}}`,
 		"no admission decision":                 `{` + applicant + `,"platform_account":{"mode":"NONE"}}`,
 		"no governed identifiers":               `{"admission_decision_id":"adm_1","applicant_organisation":{"legal_name":"Beta","registration_identifiers":[]},"platform_account":{"mode":"NONE"}}`,
+		// ADR-BCP-023 sections 191-193: legal identity is verified only by a
+		// VerificationCase, never by one-call evidence.
+		"one-call legal verification":   `{"admission_decision_id":"adm_1",` + applicant + `,"platform_account":{"mode":"NONE"},"legal_verification":{"evidence_references":["evd_1"],"reason":"checked"}}`,
+		"free-string verification case": `{"admission_decision_id":"adm_1",` + applicant + `,"platform_account":{"mode":"NONE"},"verification_case_id":"case-1"}`,
 	} {
 		if response := adminRequest(t, handler, http.MethodPost, path, body); response.Code != http.StatusBadRequest {
 			t.Errorf("%s: %d %s", name, response.Code, response.Body.String())

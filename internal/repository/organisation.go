@@ -23,6 +23,31 @@ type Evidence struct {
 	VerifiedAt time.Time
 	// Reason is recorded in the audit trail.
 	Reason string
+	// Provenance names the ADR-BCP-023 verification behind the transition,
+	// when a VerificationCase decided it. It is published on the verified
+	// event by opaque identifier only (section 143).
+	Provenance *VerificationProvenance
+}
+
+// VerificationProvenance is the case, results, evidence and reason codes a
+// verification rests on. Every field is an opaque identifier or code.
+type VerificationProvenance struct {
+	CaseID      string
+	ResultIDs   []string
+	EvidenceIDs []string
+	ReasonCodes []string
+}
+
+// verifiedEventData adds ev's provenance, when it has one, to the data of a
+// verified event: all four fields together (organisation/v1 events).
+func verifiedEventData(data map[string]any, ev Evidence) map[string]any {
+	if p := ev.Provenance; p != nil {
+		data["verification_case_id"] = p.CaseID
+		data["verification_result_ids"] = p.ResultIDs
+		data["evidence_ids"] = nonNilStrings(p.EvidenceIDs)
+		data["reason_codes"] = nonNilStrings(p.ReasonCodes)
+	}
+	return data
 }
 
 // OrganisationRepository persists ADR-BCP-018 organisation-domain records.

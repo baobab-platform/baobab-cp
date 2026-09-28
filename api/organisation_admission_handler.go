@@ -21,8 +21,9 @@ type organisationAdmissionHandler struct {
 // approved decision, never the applicant (ADR-BCP-017 section 39). The body
 // is decoded strictly, so a request carrying a platform relationship or a
 // verification flag the contract does not define is rejected (ADR-BCP-018
-// sections 69-70). A quarantined identity answers 409 with the outcome and
-// its candidates; nothing was written.
+// sections 69-70). Legal identity is verified only by a VERIFIED
+// VerificationCase (ADR-BCP-023 sections 191-193). A quarantined identity
+// answers 409 with the outcome and its candidates; nothing was written.
 func (h organisationAdmissionHandler) onboard(w http.ResponseWriter, r *http.Request) {
 	actor, ok := iamAuditActor(r)
 	if !ok {
@@ -46,6 +47,10 @@ func (h organisationAdmissionHandler) onboard(w http.ResponseWriter, r *http.Req
 		problem(w, r, http.StatusConflict, "FIRST_PARTY_ORGANISATION", err.Error(), false)
 	case errors.Is(err, repository.ErrOrganisationConflict):
 		problem(w, r, http.StatusConflict, "ORGANISATION_CONFLICT", err.Error(), false)
+	case errors.Is(err, repository.ErrVerificationNotFound):
+		problem(w, r, http.StatusNotFound, "VERIFICATION_NOT_FOUND", "verification case "+req.VerificationCaseID+" does not exist", false)
+	case errors.Is(err, svcorg.ErrVerificationCaseUnusable):
+		problem(w, r, http.StatusConflict, "VERIFICATION_CASE_STATE_CONFLICT", err.Error(), false)
 	case err != nil:
 		problem(w, r, http.StatusUnprocessableEntity, "ADMISSION_ONBOARDING_FAILED", err.Error(), false)
 	case outcome.IdentityResolution == svcorg.IdentityQuarantined:

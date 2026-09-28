@@ -16,6 +16,7 @@ import (
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/verification"
 )
 
 // Identity resolution outcomes.
@@ -47,12 +48,31 @@ const (
 	AccountNone     = "NONE"
 )
 
-var admissionDecisionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$`)
+var (
+	admissionDecisionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$`)
+	verificationCaseIDPattern  = regexp.MustCompile(`^vcase_[a-z0-9]+$`)
+)
 
 // ErrFirstPartyOrganisation: external admission cannot onboard an
 // organisation that already holds a first-party platform relationship;
 // first-party identities are governed through Shared reconciliation.
 var ErrFirstPartyOrganisation = errors.New("organisation holds a first-party platform relationship")
+
+// ErrVerificationCaseUnusable: the named VerificationCase cannot verify this
+// admission's legal identity (ADR-BCP-023 sections 191-193). It must be
+// VERIFIED, for ORGANISATION_ADMISSION, about the admitted organisation or
+// its legal entity, with VERIFIED REGISTRATION_IDENTIFIER and LEGAL_NAME
+// claims matching what the applicant submitted.
+var ErrVerificationCaseUnusable = errors.New("verification case cannot verify this admission")
+
+// VerificationCases reads the ADR-BCP-023 verification record admission
+// rests on.
+type VerificationCases interface {
+	GetVerificationCase(ctx context.Context, id string) (verification.Case, error)
+	ListVerificationClaims(ctx context.Context, caseID string) ([]verification.Claim, error)
+	ListVerificationChecks(ctx context.Context, caseID string) ([]verification.Check, error)
+	ListVerificationResults(ctx context.Context, caseID string) ([]verification.Result, error)
+}
 
 // AdmissionRequest is the contract's OrganisationAdmissionRequest.
 type AdmissionRequest struct {
@@ -60,7 +80,7 @@ type AdmissionRequest struct {
 	ApplicationID       string                `json:"application_id,omitempty"`
 	Applicant           ApplicantOrganisation `json:"applicant_organisation"`
 	IdentityResolution  *IdentityResolution   `json:"identity_resolution,omitempty"`
-	LegalVerification   *LegalVerification    `json:"legal_verification,omitempty"`
+	VerificationCaseID  string                `json:"verification_case_id,omitempty"`
 	CorporateClaims     []CorporateClaim      `json:"corporate_relationship_claims,omitempty"`
 	PlatformAccount     AccountAssignment     `json:"platform_account"`
 	EffectiveFrom       *time.Time            `json:"effective_from,omitempty"`
@@ -79,12 +99,6 @@ type IdentityResolution struct {
 	Decision       string `json:"decision"`
 	OrganisationID string `json:"organisation_id,omitempty"`
 	Reason         string `json:"reason"`
-}
-
-// LegalVerification is the reviewer's verification of legal identity.
-type LegalVerification struct {
-	EvidenceReferences []string `json:"evidence_references"`
-	Reason             string   `json:"reason"`
 }
 
 // CorporateClaim is a relationship the applicant declared.
@@ -152,8 +166,8 @@ func (req AdmissionRequest) Validate() error {
 			errs = append(errs, fmt.Errorf("identity_resolution: unknown decision %q", r.Decision))
 		}
 	}
-	if v := req.LegalVerification; v != nil && (len(v.EvidenceReferences) == 0 || strings.TrimSpace(v.Reason) == "") {
-		errs = append(errs, errors.New("legal_verification needs evidence_references and a reason"))
+	if req.VerificationCaseID != "" && !verificationCaseIDPattern.MatchString(req.VerificationCaseID) {
+		errs = append(errs, errors.New("verification_case_id must be an opaque vcase_ identifier"))
 	}
 	for i, c := range req.CorporateClaims {
 		if (c.CounterpartyOrganisationID == "") == (len(c.CounterpartyIdentifiers) == 0) {
@@ -188,7 +202,9 @@ func (req AdmissionRequest) Validate() error {
 // replaying the same admission decision converges and changes nothing; a
 // failure part-way is recovered by replaying the request.
 type AdmissionOnboarder struct {
-	Orgs       repository.OrganisationAdmissionRepository
+	Orgs repository.OrganisationAdmissionRepository
+	// Cases is the verification record legal identity is verified from.
+	Cases      VerificationCases
 	PlatformID string
 	Now        func() time.Time
 }
@@ -245,15 +261,25 @@ func (o *AdmissionOnboarder) Onboard(ctx context.Context, tenantID string, req A
 	out.OrganisationID, out.LegalEntityID = orgID, legalEntityID
 
 	// 2. Legal verification. Applicant data is recorded as unverified
-	// claims; only the reviewer's evidence verifies it.
+	// claims; only a VERIFIED VerificationCase about this organisation
+	// verifies it (ADR-BCP-023 sections 191-193). The case is checked before
+	// anything is written.
+	var verified *repository.Evidence
+	if req.VerificationCaseID != "" {
+		ev, err := o.caseEvidence(ctx, req, orgID, legalEntityID, now)
+		if err != nil {
+			return out, err
+		}
+		verified = &ev
+	}
 	if _, err := o.Orgs.RecordLegalEntityClaims(ctx, legalEntityID, repository.LegalEntityClaims{
 		LegalName: req.Applicant.LegalName, Jurisdiction: req.Applicant.Jurisdiction,
 		Identifiers: req.Applicant.RegistrationIdentifiers,
 	}, actor); err != nil {
 		return out, fmt.Errorf("record legal entity claims: %w", err)
 	}
-	if v := req.LegalVerification; v != nil {
-		ev := repository.Evidence{References: v.EvidenceReferences, VerifiedAt: now, Reason: v.Reason}
+	if verified != nil {
+		ev := *verified
 		profile, err := o.Orgs.GetLegalEntityProfile(ctx, legalEntityID)
 		if err != nil {
 			return out, err
@@ -334,6 +360,117 @@ func (o *AdmissionOnboarder) registration(ctx context.Context, tenantID string, 
 	}
 	return org, le, nil
 }
+
+// Verification vocabulary of evidence/v1 that admission depends on.
+const (
+	caseStatusVerified    = "VERIFIED"
+	claimStatusVerified   = "VERIFIED"
+	admissionPurpose      = "ORGANISATION_ADMISSION"
+	claimRegistrationID   = "REGISTRATION_IDENTIFIER"
+	claimLegalName        = "LEGAL_NAME"
+	subjectOrganisation   = "ORGANISATION"
+	subjectLegalEntity    = "LEGAL_ENTITY"
+	caseReferencePrefix   = "verification-case:"
+	resultReferencePrefix = "verification-result:"
+)
+
+// caseEvidence turns the named VerificationCase into the evidence that
+// verifies this admission's legal identity, or refuses it. The case must be
+// VERIFIED, for ORGANISATION_ADMISSION, about the organisation or its legal
+// entity, with VERIFIED REGISTRATION_IDENTIFIER and LEGAL_NAME claims about
+// them whose values are what the applicant submitted: a case never verifies
+// a name or identifier it did not check. A missing case is
+// repository.ErrVerificationNotFound.
+func (o *AdmissionOnboarder) caseEvidence(ctx context.Context, req AdmissionRequest, orgID, legalEntityID string, now time.Time) (repository.Evidence, error) {
+	if o.Cases == nil {
+		return repository.Evidence{}, errors.New("verification cases are not available to admission")
+	}
+	unusable := func(format string, args ...any) error {
+		return fmt.Errorf("%w: "+format, append([]any{ErrVerificationCaseUnusable}, args...)...)
+	}
+	c, err := o.Cases.GetVerificationCase(ctx, req.VerificationCaseID)
+	if err != nil {
+		return repository.Evidence{}, err
+	}
+	about := func(s verification.Subject) bool {
+		return (s.SubjectType == subjectOrganisation && s.SubjectID == orgID) ||
+			(s.SubjectType == subjectLegalEntity && s.SubjectID == legalEntityID)
+	}
+	switch {
+	case c.Status != caseStatusVerified:
+		return repository.Evidence{}, unusable("case %s is %s, not VERIFIED", c.CaseID, c.Status)
+	case c.Purpose != admissionPurpose:
+		return repository.Evidence{}, unusable("case %s is for %s, not %s", c.CaseID, c.Purpose, admissionPurpose)
+	case !about(c.Subject):
+		return repository.Evidence{}, unusable("case %s is about %s %s, not organisation %s or legal entity %s",
+			c.CaseID, c.Subject.SubjectType, c.Subject.SubjectID, orgID, legalEntityID)
+	}
+	claims, err := o.Cases.ListVerificationClaims(ctx, c.CaseID)
+	if err != nil {
+		return repository.Evidence{}, err
+	}
+	identifiers := map[string]bool{}
+	for _, id := range req.Applicant.RegistrationIdentifiers {
+		identifiers[normalise(id.Value)] = true
+	}
+	matches := map[string]func(string) bool{
+		claimRegistrationID: func(v string) bool { return identifiers[normalise(v)] },
+		claimLegalName:      func(v string) bool { return normalise(v) == normalise(req.Applicant.LegalName) },
+	}
+	resultOf := map[string]string{}
+	for _, cl := range claims {
+		match, needed := matches[cl.ClaimType]
+		if !needed || cl.Status != claimStatusVerified || !about(cl.Subject) || cl.CurrentResultID == "" || !match(cl.ClaimedValue.Value) {
+			continue
+		}
+		resultOf[cl.ClaimType] = cl.CurrentResultID
+	}
+	for _, claimType := range []string{claimRegistrationID, claimLegalName} {
+		if resultOf[claimType] == "" {
+			return repository.Evidence{}, unusable("case %s has no VERIFIED %s claim matching the applicant's submission", c.CaseID, claimType)
+		}
+	}
+	results, err := o.Cases.ListVerificationResults(ctx, c.CaseID)
+	if err != nil {
+		return repository.Evidence{}, err
+	}
+	checks, err := o.Cases.ListVerificationChecks(ctx, c.CaseID)
+	if err != nil {
+		return repository.Evidence{}, err
+	}
+	evidenceOf := map[string][]string{}
+	for _, ch := range checks {
+		evidenceOf[ch.CheckID] = ch.EvidenceIDs
+	}
+	cited := map[string]bool{resultOf[claimRegistrationID]: true, resultOf[claimLegalName]: true}
+	p := &repository.VerificationProvenance{CaseID: c.CaseID}
+	var evidenceIDs, reasons []string
+	for _, r := range results {
+		if !cited[r.ResultID] {
+			continue
+		}
+		p.ResultIDs = append(p.ResultIDs, r.ResultID)
+		reasons = append(reasons, r.ReasonCodes...)
+		for _, checkID := range r.CheckIDs {
+			evidenceIDs = append(evidenceIDs, evidenceOf[checkID]...)
+		}
+	}
+	if len(p.ResultIDs) != len(cited) {
+		return repository.Evidence{}, unusable("case %s is missing the results its verified claims cite", c.CaseID)
+	}
+	slices.Sort(p.ResultIDs)
+	slices.Sort(evidenceIDs)
+	slices.Sort(reasons)
+	p.EvidenceIDs, p.ReasonCodes = slices.Compact(evidenceIDs), slices.Compact(reasons)
+	references := []string{caseReferencePrefix + c.CaseID}
+	for _, id := range p.ResultIDs {
+		references = append(references, resultReferencePrefix+id)
+	}
+	return repository.Evidence{References: references, VerifiedAt: now, Provenance: p,
+		Reason: "verification case " + c.CaseID + " concluded VERIFIED"}, nil
+}
+
+func normalise(v string) string { return strings.ToLower(strings.Join(strings.Fields(v), " ")) }
 
 // existingOrganisation checks a reviewer-named organisation and finds its
 // single legal entity.

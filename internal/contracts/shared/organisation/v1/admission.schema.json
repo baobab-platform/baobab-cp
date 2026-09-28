@@ -71,25 +71,6 @@
         }
       }
     },
-    "legalVerification": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "The admission reviewer's verification of the applicant's legal identity. Verification is attributed to the authenticated reviewer, never to a client-supplied name.",
-      "required": ["evidence_references", "reason"],
-      "properties": {
-        "evidence_references": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "domain.schema.json#/$defs/evidenceReference"
-          }
-        },
-        "reason": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
     "corporateRelationshipClaim": {
       "type": "object",
       "additionalProperties": false,
@@ -186,8 +167,9 @@
         "identity_resolution": {
           "$ref": "#/$defs/identityResolution"
         },
-        "legal_verification": {
-          "$ref": "#/$defs/legalVerification"
+        "verification_case_id": {
+          "$ref": "../../evidence/v1/domain.schema.json#/$defs/verificationCaseId",
+          "description": "The ADR-BCP-023 VerificationCase that verified the applicant's legal identity (sections 191-193). It must be VERIFIED, for purpose ORGANISATION_ADMISSION, about the admitted organisation or one of its legal entities, with VERIFIED REGISTRATION_IDENTIFIER and LEGAL_NAME claims. Without it the legal entity stays unverified; there is no other way to verify legal identity at admission."
         },
         "corporate_relationship_claims": {
           "type": "array",
