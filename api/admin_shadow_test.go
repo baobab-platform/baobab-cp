@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/administration"
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/market"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
@@ -225,4 +227,64 @@ func (f bindingsFake) EndTenantPlatformAccountBinding(context.Context, string, s
 
 func (f bindingsFake) ListTenantPlatformAccountBindings(context.Context, string) ([]domain.TenantPlatformAccountBinding, error) {
 	return f, nil
+}
+
+// TestShadowAnchorsMarkets: market routes name the market and its owner
+// tenant (from the registry, or the body when registering), so MARKET- and
+// TENANT-scoped grants are judged rather than unanchored.
+func TestShadowAnchorsMarkets(t *testing.T) {
+	body := `{"canonical_key":"za.b2b","owner_tenant_id":"tn_owner"}`
+	create := routed(http.MethodPost, "/v1/markets", "/v1/markets", body, nil)
+	a := &API{markets: marketsFake{"mkt_1": "tn_owner"}}
+	res, err := a.shadowResource(context.Background(), create)
+	mustNoError(t, err)
+	if res.TenantID != "tn_owner" || res.MarketID != "" {
+		t.Fatalf("create resource: %+v", res)
+	}
+	if rest, _ := io.ReadAll(create.Body); string(rest) != body {
+		t.Fatalf("the handler would read %q", rest)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPatch} {
+		read := routed(method, "/v1/markets/{marketID}", "/v1/markets/mkt_1", "", map[string]string{"marketID": "mkt_1"})
+		res, err = a.shadowResource(context.Background(), read)
+		mustNoError(t, err)
+		if res.MarketID != "mkt_1" || res.TenantID != "tn_owner" || !res.Anchors(administration.LevelMarket) {
+			t.Fatalf("%s resource: %+v", method, res)
+		}
+	}
+	activate := routed(http.MethodPost, "/v1/markets/{marketID}/activate", "/v1/markets/mkt_1/activate", "", map[string]string{"marketID": "mkt_1"})
+	if res, err = a.shadowResource(context.Background(), activate); err != nil || res.TenantID != "tn_owner" {
+		t.Fatalf("activate resource: %+v %v", res, err)
+	}
+	unknown := routed(http.MethodGet, "/v1/markets/{marketID}", "/v1/markets/mkt_none", "", map[string]string{"marketID": "mkt_none"})
+	if res, err = a.shadowResource(context.Background(), unknown); err != nil || res.TenantID != "" || res.MarketID != "mkt_none" {
+		t.Fatalf("unknown market resource: %+v %v", res, err)
+	}
+}
+
+// marketsFake maps market ids to owner tenants.
+type marketsFake map[string]string
+
+func (f marketsFake) GetRegistryMarket(_ context.Context, id string) (market.Market, error) {
+	owner, ok := f[id]
+	if !ok {
+		return market.Market{}, repository.ErrRegistryMarketNotFound
+	}
+	return market.Market{MarketID: id, Config: map[string]json.RawMessage{"owner_tenant_id": json.RawMessage(`"` + owner + `"`)}}, nil
+}
+
+func (f marketsFake) CreateRegistryMarket(context.Context, market.Market, string, string, repository.AuditActor) (market.Market, error) {
+	return market.Market{}, errors.New("read only")
+}
+
+func (f marketsFake) GetRegistryMarketByIdempotencyKey(context.Context, string, string) (market.Market, string, error) {
+	return market.Market{}, "", errors.New("read only")
+}
+
+func (f marketsFake) UpdateRegistryMarket(context.Context, string, int64, []byte, string, time.Time, repository.AuditActor) (market.Market, error) {
+	return market.Market{}, errors.New("read only")
+}
+
+func (f marketsFake) ActivateRegistryMarket(context.Context, string, int64, string, string, time.Time, repository.AuditActor) (market.Market, error) {
+	return market.Market{}, errors.New("read only")
 }

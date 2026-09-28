@@ -161,12 +161,15 @@ type API struct {
 	// platformAccounts resolves the account a binding route acts on for
 	// shadow evaluation.
 	platformAccounts repository.PlatformAccountRepository
+	// markets resolves the owner tenant a market route acts on, for shadow
+	// evaluation.
+	markets repository.MarketRegistryRepository
 }
 
 func New(dependencies Dependencies) http.Handler {
 	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships,
 		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration,
-		grants: dependencies.AdministrativeGrants, environment: dependencies.Environment, platformAccounts: dependencies.PlatformAccounts}
+		grants: dependencies.AdministrativeGrants, environment: dependencies.Environment, platformAccounts: dependencies.PlatformAccounts, markets: dependencies.Markets}
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.

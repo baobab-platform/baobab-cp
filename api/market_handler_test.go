@@ -90,6 +90,10 @@ func TestMarketRoutes(t *testing.T) {
 		WorkloadVerifier: tokenVerifier{
 			"estate": {Subject: "svc-estate", Issuer: testRealm, ActorType: "workload", ClientID: "estate-client", TokenID: "t-estate",
 				Scopes: map[string]struct{}{"market:read": {}}},
+			"estate-owner": {Subject: "svc-owner", Issuer: testRealm, ActorType: "workload", ClientID: "owner-client", TokenID: "t-owner",
+				TenantID: tenant, Scopes: map[string]struct{}{"market:read": {}}},
+			"estate-other": {Subject: "svc-other", Issuer: testRealm, ActorType: "workload", ClientID: "other-client", TokenID: "t-other",
+				TenantID: "tn_someoneelse", Scopes: map[string]struct{}{"market:read": {}}},
 		}})
 	call := func(method, path, who string, headers map[string]string, body any) *httptest.ResponseRecorder {
 		var raw []byte
@@ -233,6 +237,9 @@ func TestMarketRoutes(t *testing.T) {
 	if v := read(call(http.MethodGet, path, "estate", nil, nil), http.StatusOK, "a workload reading an active market"); v.Status != "ACTIVE" {
 		t.Fatalf("workload read: %+v", v)
 	}
+	// A workload of another tenant never sees the market; its own does.
+	expectProblem(call(http.MethodGet, path, "estate-other", nil, nil), http.StatusNotFound, "MARKET_NOT_FOUND", "another tenant's workload")
+	read(call(http.MethodGet, path, "estate-owner", nil, nil), http.StatusOK, "the owner's workload")
 	expectProblem(call(http.MethodPatch, path, "checker", map[string]string{"If-Match": `"4"`}, map[string]any{"name": "Renamed"}),
 		http.StatusConflict, "MARKET_NOT_EDITABLE", "editing an active market")
 	expectProblem(call(http.MethodPost, path+"/activate", "checker", map[string]string{"If-Match": `"4"`}, nil),

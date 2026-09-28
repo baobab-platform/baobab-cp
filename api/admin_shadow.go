@@ -219,7 +219,23 @@ func (a *API) shadowResource(ctx context.Context, r *http.Request) (administrati
 		res.OrganisationID = chi.URLParam(r, "entityID")
 	}
 	res.PlatformAccountID = chi.URLParam(r, "accountID")
+	res.MarketID = chi.URLParam(r, "marketID")
 	switch r.Method + " " + chi.RouteContext(r.Context()).RoutePattern() {
+	case "POST /v1/markets":
+		res.TenantID = peekBodyField(r, "owner_tenant_id")
+	case "GET /v1/markets/{marketID}", "PATCH /v1/markets/{marketID}", "POST /v1/markets/{marketID}/activate":
+		// A market is anchored by its id and its owner tenant.
+		if a.markets == nil {
+			break
+		}
+		m, err := a.markets.GetRegistryMarket(ctx, res.MarketID)
+		if errors.Is(err, repository.ErrRegistryMarketNotFound) {
+			break
+		}
+		if err != nil {
+			return res, err
+		}
+		res.TenantID = m.String("owner_tenant_id")
 	case "POST /v1/tenants/{tenantID}/platform-account-binding":
 		res.PlatformAccountID = peekPlatformAccountID(r)
 	case "POST /v1/tenants/{tenantID}/platform-account-binding/end":
@@ -241,9 +257,13 @@ func (a *API) shadowResource(ctx context.Context, r *http.Request) (administrati
 }
 
 // peekPlatformAccountID reads platform_account_id from a binding request
-// body and restores the body unchanged for the handler, which validates it.
-// An unreadable or malformed body leaves the account unanchored.
-func peekPlatformAccountID(r *http.Request) string {
+// body; see peekBodyField.
+func peekPlatformAccountID(r *http.Request) string { return peekBodyField(r, "platform_account_id") }
+
+// peekBodyField reads one top-level string field from a JSON request body
+// and restores the body unchanged for the handler, which validates it. An
+// unreadable or malformed body leaves the field unanchored.
+func peekBodyField(r *http.Request, field string) string {
 	if r.Body == nil {
 		return ""
 	}
@@ -255,13 +275,15 @@ func peekPlatformAccountID(r *http.Request) string {
 	if err != nil {
 		return ""
 	}
-	var body struct {
-		PlatformAccountID string `json:"platform_account_id"`
-	}
+	var body map[string]json.RawMessage
 	if json.Unmarshal(raw, &body) != nil {
 		return ""
 	}
-	return body.PlatformAccountID
+	var value string
+	if json.Unmarshal(body[field], &value) != nil {
+		return ""
+	}
+	return value
 }
 
 // recordShadow counts one comparison. agreement is computed from legacy

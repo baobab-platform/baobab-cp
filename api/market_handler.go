@@ -139,8 +139,9 @@ func (h marketHandler) replay(w http.ResponseWriter, r *http.Request, existing m
 	h.write(w, http.StatusCreated, existing)
 }
 
-// get serves administrators every market and workloads only ACTIVE ones:
-// a workload consumes operating configuration, not drafts.
+// get serves administrators every market, and workloads only the ACTIVE
+// markets of their own tenant: a workload consumes operating
+// configuration, not drafts or another tenant's markets.
 func (h marketHandler) get(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.id(w, r)
 	if !ok {
@@ -151,7 +152,10 @@ func (h marketHandler) get(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if principal, _ := auth.PrincipalFromContext(r.Context()); principal.ActorType != "human" && m.Status != market.StatusActive {
+	// A workload sees only active markets of its own tenant; any other
+	// reads as absent.
+	if principal, _ := auth.PrincipalFromContext(r.Context()); principal.ActorType != "human" &&
+		(m.Status != market.StatusActive || !visibleToWorkload(r, m.String("owner_tenant_id"))) {
 		problem(w, r, http.StatusNotFound, "MARKET_NOT_FOUND", "no market has that id", false)
 		return
 	}
