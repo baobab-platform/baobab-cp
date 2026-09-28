@@ -22,9 +22,8 @@ import (
 )
 
 // TestEveryGuardedRouteIsMapped: every route behind requireAdminRole names
-// the permission it performs (or is explicitly marked unregistered), every
-// named permission is registered in Shared, and the table names no route
-// the router lacks.
+// the permission it performs, every named permission is registered in
+// Shared, and the table names no route the router lacks.
 func TestEveryGuardedRouteIsMapped(t *testing.T) {
 	catalogue := administration.MustDefaultCatalogue()
 	routes := map[string]bool{}
@@ -53,7 +52,9 @@ func TestEveryGuardedRouteIsMapped(t *testing.T) {
 		if !routes[key] {
 			t.Errorf("%s is mapped but no such route exists", key)
 		}
-		if _, ok := catalogue.Permission(permission); permission != "" && !ok {
+		if permission == "" {
+			t.Errorf("%s names no permission; every administrative route maps to a registered one", key)
+		} else if _, ok := catalogue.Permission(permission); !ok {
 			t.Errorf("%s maps to unregistered permission %q", key, permission)
 		}
 	}

@@ -861,6 +861,7 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Security
 
+- Every role-guarded administrative route now maps to a registered AdministrativePermission (ADR-BCP-020 §143; Shared `administration/v1` with `mapping.view`, `mapping.manage` and `mapping.approve`). The external-reference and canonical-mapping routes were the last blank entries in the grant shadow. `TestEveryGuardedRouteIsMapped` now refuses a blank one. Legacy roles still decide; this only completes the comparison ahead of the grant cutover.
 - **Breaking: admission verifies legal identity only through a VerificationCase (ADR-BCP-023 §191-193; Shared control-plane OpenAPI 1.15.0).**
   - `POST /v1/tenants/{tenantID}/organisation-admission` no longer accepts `legal_verification`, the reviewer's one-call evidence and reason.
   - It takes `verification_case_id` instead. The case must:
