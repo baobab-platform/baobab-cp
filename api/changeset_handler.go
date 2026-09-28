@@ -343,18 +343,24 @@ func (h changesetHandler) outcome(w http.ResponseWriter, r *http.Request) {
 
 // changesetRevision reads the changeset's revision from If-Match.
 func changesetRevision(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	return ifMatchRevision(w, r, "changeset")
+}
+
+// ifMatchRevision reads a resource's revision from If-Match as a strong
+// entity tag, naming the resource in the problem.
+func ifMatchRevision(w http.ResponseWriter, r *http.Request, resource string) (int64, bool) {
 	value := strings.TrimSpace(r.Header.Get("If-Match"))
 	if value == "" {
-		problem(w, r, http.StatusPreconditionRequired, "IF_MATCH_REQUIRED", "If-Match with the changeset's current revision is required", false)
+		problem(w, r, http.StatusPreconditionRequired, "IF_MATCH_REQUIRED", "If-Match with the "+resource+"'s current revision is required", false)
 		return 0, false
 	}
 	if !strongRevisionTag.MatchString(value) {
-		problem(w, r, http.StatusBadRequest, "INVALID_IF_MATCH", "If-Match must be the changeset's revision as a strong entity tag, e.g. \"3\"", false)
+		problem(w, r, http.StatusBadRequest, "INVALID_IF_MATCH", "If-Match must be the "+resource+"'s revision as a strong entity tag, e.g. \"3\"", false)
 		return 0, false
 	}
 	revision, err := strconv.ParseInt(value[1:len(value)-1], 10, 64)
 	if err != nil {
-		problem(w, r, http.StatusBadRequest, "INVALID_IF_MATCH", "If-Match must be the changeset's revision, e.g. \"3\"", false)
+		problem(w, r, http.StatusBadRequest, "INVALID_IF_MATCH", "If-Match must be the "+resource+"'s revision, e.g. \"3\"", false)
 		return 0, false
 	}
 	return revision, true

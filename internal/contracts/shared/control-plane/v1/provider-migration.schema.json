@@ -283,9 +283,10 @@
         "SHIFT_COHORT",
         "UNFREEZE_COHORT_WRITES",
         "VALIDATE_COHORT",
-        "RETIRE_SOURCE_BINDING"
+        "RETIRE_SOURCE_BINDING",
+        "REMOVE_MIGRATION_BINDING"
       ],
-      "description": "Canonical, Baobab-native migration operations. Provider-specific work is a resolved resource of a step, never its type. A STATEFUL_CUTOVER cohort always runs FREEZE_COHORT_WRITES, MIGRATE_COHORT_DATA, RECONCILE_COHORT_DATA, SHIFT_COHORT, UNFREEZE_COHORT_WRITES in that order, so authority never has two holders. CREATE_MIGRATION_BINDING is one step per capability and target instance, naming exactly the source bindings that move to that instance."
+      "description": "Canonical, Baobab-native migration operations. Provider-specific work is a resolved resource of a step, never its type. A STATEFUL_CUTOVER cohort always runs FREEZE_COHORT_WRITES, MIGRATE_COHORT_DATA, RECONCILE_COHORT_DATA, SHIFT_COHORT, UNFREEZE_COHORT_WRITES in that order, so authority never has two holders. CREATE_MIGRATION_BINDING is one step per capability and target instance, naming exactly the source bindings that move to that instance. REMOVE_MIGRATION_BINDING is compensation only (cancel and roll_back, provider-migration-lifecycle.yaml compensation and rollback_steps) and never appears in a plan."
     },
     "migrationStepResources": {
       "type": "object",
@@ -474,6 +475,58 @@
       },
       "unevaluatedProperties": false
     },
+    "migrationTransition": {
+      "type": "string",
+      "enum": [
+        "prepare",
+        "shadow",
+        "canary",
+        "validate",
+        "shift",
+        "retire_old",
+        "complete",
+        "cancel",
+        "roll_back"
+      ],
+      "description": "A command transition of provider-migration-lifecycle.yaml. Which plan operations each runs is its stage_steps (ADR-SHARED-016 section 2)."
+    },
+    "ProviderMigrationAdvanceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transition"
+      ],
+      "description": "Advance the migration by one transition. Forward transitions need an APPROVED decision on the current, unblocked, unexpired, non-stale plan, no running operation of the migration, and, for canary and shift, an open cutover window where one is named; cancel and roll_back need no approval. The Control Plane derives the steps from the approved plan; a request never names them.",
+      "properties": {
+        "transition": {
+          "$ref": "#/$defs/migrationTransition"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "transition": {
+                "enum": [
+                  "cancel",
+                  "roll_back"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ]
+          }
+        }
+      ]
+    },
     "ProviderMigration": {
       "type": "object",
       "additionalProperties": false,
@@ -489,7 +542,7 @@
         "updated_at",
         "revision"
       ],
-      "description": "The migration aggregate (section 119). Created in PLAN with its first plan. Advancing past PLAN is a controlled mutation (ADR-BCP-021): an approval binds to the plan digest, and stages execute as durable operations (ADR-BCP-022).",
+      "description": "The migration aggregate (section 119). Created in PLAN with its first plan. Advancing past PLAN is a controlled mutation (ADR-BCP-021): an approval binds to the plan digest, and stages execute as durable operations (ADR-BCP-022). Execution: one approval binds the plan, and each stage is an explicit advance (ADR-SHARED-016).",
       "properties": {
         "provider_migration_id": {
           "$ref": "domain.schema.json#/$defs/providerMigrationId"
@@ -524,6 +577,24 @@
         "failure_reason": {
           "type": "string",
           "maxLength": 1000
+        },
+        "approval_id": {
+          "$ref": "domain.schema.json#/$defs/approvalDecisionId",
+          "description": "The APPROVED decision on the current plan's digest, once approved (ADR-SHARED-016 section 1). Absent before approval and after a replan."
+        },
+        "operation_id": {
+          "$ref": "domain.schema.json#/$defs/operationId",
+          "description": "The latest PROVIDER_MIGRATION_ADVANCE operation. A migration runs one operation at a time."
+        },
+        "shifted_cohort_keys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "maxLength": 64
+          },
+          "description": "Cohorts whose authority has moved to the target, in order. Rollback returns them most recent first (ADR-SHARED-016 section 5)."
         },
         "created_by": {
           "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId"

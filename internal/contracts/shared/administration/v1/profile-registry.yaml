@@ -44,6 +44,8 @@ profiles:
       - operation.control
       - topology.view
       - provider-migration.plan
+      - provider-migration.approve
+      - provider-migration.execute
       - audit.view
       - changeset.submit
       - changeset.review

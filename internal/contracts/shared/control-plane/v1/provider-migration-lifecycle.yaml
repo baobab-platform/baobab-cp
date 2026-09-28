@@ -81,3 +81,71 @@ blocking_codes:
 warning_codes:
   - MIGRATION_NOT_REVERSIBLE
   - MIGRATION_COHORT_EMPTY
+# ADR-SHARED-016 section 2: the approved plan's operations each command
+# transition runs, in plan order. `scope` says which of the plan's steps:
+# MIGRATION-wide steps, the first cohort's, the next cohort's, or the
+# current cohort's. A transition runs only the listed operations the plan
+# actually contains: a STATELESS_REBIND cohort has SHIFT_COHORT only, and
+# STOP_SHADOW is planned only when shadowing was requested.
+stage_steps:
+  prepare:
+    scope: MIGRATION
+    operations: [VERIFY_TARGET_READINESS, CREATE_MIGRATION_BINDING]
+  shadow:
+    scope: MIGRATION
+    operations: [START_SHADOW]
+  canary:
+    scope: FIRST_COHORT
+    operations: [STOP_SHADOW, FREEZE_COHORT_WRITES, MIGRATE_COHORT_DATA, RECONCILE_COHORT_DATA, SHIFT_COHORT, UNFREEZE_COHORT_WRITES]
+  validate:
+    scope: CURRENT_COHORT
+    operations: [VALIDATE_COHORT]
+  shift:
+    scope: NEXT_COHORT
+    operations: [FREEZE_COHORT_WRITES, MIGRATE_COHORT_DATA, RECONCILE_COHORT_DATA, SHIFT_COHORT, UNFREEZE_COHORT_WRITES]
+  retire_old:
+    scope: MIGRATION
+    operations: [RETIRE_SOURCE_BINDING]
+  complete:
+    scope: MIGRATION
+    operations: []
+# ADR-SHARED-016 sections 3-4: the operations engines perform as engine
+# migration tasks (engine-migration-task.schema.json), and the role of the
+# instance each is assigned to, going forward and in rollback. Every other
+# operation the Control Plane runs on its own state and never calls a
+# provider. At every moment at most one side accepts a cohort's writes.
+engine_steps:
+  FREEZE_COHORT_WRITES:
+    forward: [SOURCE]
+    reverse: [TARGET]
+  MIGRATE_COHORT_DATA:
+    forward: [TARGET]
+    reverse: [SOURCE]
+  RECONCILE_COHORT_DATA:
+    forward: [SOURCE, TARGET]
+    reverse: [SOURCE, TARGET]
+  UNFREEZE_COHORT_WRITES:
+    forward: [TARGET]
+    reverse: [SOURCE]
+# ADR-SHARED-016 section 5: what roll_back runs first, whatever the
+# strategy, for a cohort a failed advance left frozen but never shifted:
+# the freeze is reversed on the source, which is still authoritative, so
+# its writes never stay unavailable.
+rollback_release: [UNFREEZE_COHORT_WRITES]
+# Then, for each cohort whose authority moved, most recent first, what
+# roll_back runs by the request's rollback_strategy, followed by
+# REMOVE_MIGRATION_BINDING. A STATELESS_REBIND migration runs only the
+# operations that are not engine_steps. FORWARD_FIX_ONLY refuses roll_back
+# once any cohort's authority moved (MIGRATION_NOT_REVERSIBLE); before
+# that, roll_back runs only rollback_release and the removal.
+rollback_steps:
+  REBIND_SOURCE: [FREEZE_COHORT_WRITES, SHIFT_COHORT, UNFREEZE_COHORT_WRITES]
+  RESTORE_AND_REBIND_SOURCE: [FREEZE_COHORT_WRITES, MIGRATE_COHORT_DATA, RECONCILE_COHORT_DATA, SHIFT_COHORT, UNFREEZE_COHORT_WRITES]
+  FORWARD_FIX_ONLY: []
+# What cancel runs: it is valid only before any cohort's authority moved.
+compensation:
+  cancel: [STOP_SHADOW, REMOVE_MIGRATION_BINDING]
+# ADR-SHARED-016 section 4: an engine migration task's lease and default
+# deadline.
+task_lease_seconds: 300
+task_default_deadline_hours: 24

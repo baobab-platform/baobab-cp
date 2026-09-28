@@ -31,7 +31,7 @@
         "approval_id": { "$ref": "domain.schema.json#/$defs/approvalDecisionId" },
         "subject_type": {
           "type": "string",
-          "enum": ["TENANT_PROVISIONING", "CHANGESET"],
+          "enum": ["TENANT_PROVISIONING", "CHANGESET", "PROVIDER_MIGRATION"],
           "description": "What the plan belongs to."
         },
         "subject_id": { "type": "string", "pattern": "^[a-z][a-z0-9]*_[a-z0-9]+$", "maxLength": 63 },

@@ -11,7 +11,7 @@
     },
     "operationType": {
       "type": "string",
-      "enum": ["TENANT_PROVISIONING_APPLY", "TENANT_PROVISIONING_REMEDIATE", "CHANGESET_APPLY"],
+      "enum": ["TENANT_PROVISIONING_APPLY", "TENANT_PROVISIONING_REMEDIATE", "CHANGESET_APPLY", "PROVIDER_MIGRATION_ADVANCE"],
       "description": "The class of work. Extended additively as other long-running commands adopt operations."
     },
     "ExecutionOperation": {
@@ -37,7 +37,7 @@
           "additionalProperties": false,
           "required": ["type", "id"],
           "properties": {
-            "type": { "type": "string", "enum": ["TENANT_PROVISIONING", "CHANGESET"] },
+            "type": { "type": "string", "enum": ["TENANT_PROVISIONING", "CHANGESET", "PROVIDER_MIGRATION"] },
             "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*_[a-z0-9]+$", "maxLength": 63 },
             "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" }
           }
@@ -73,7 +73,7 @@
           "required": ["resource_type", "resource_id", "resource_state"],
           "description": "The resulting resource and its state, rather than a copy of it (ADR-BCP-022 SS63). Required once the operation SUCCEEDED: the operation's success is not the subject's, so resource_state says where the subject is (for example READY rather than ACTIVE).",
           "properties": {
-            "resource_type": { "type": "string", "enum": ["TENANT_PROVISIONING", "CHANGESET"] },
+            "resource_type": { "type": "string", "enum": ["TENANT_PROVISIONING", "CHANGESET", "PROVIDER_MIGRATION"] },
             "resource_id": { "type": "string", "maxLength": 63 },
             "resource_state": { "type": "string", "maxLength": 64 },
             "summary": { "type": "string", "maxLength": 1000 }

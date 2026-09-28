@@ -387,7 +387,11 @@ func (plan *Plan) steps(r Request, byCapability map[string][]SourceBinding, memb
 	}
 	irreversible := r.RollbackStrategy == RollbackForwardFixOnly
 	for i, c := range r.Cohorts {
-		res := StepResources{CohortKey: c.CohortKey, ProviderKey: r.TargetProviderKey, BindingCount: count(len(members[i]))}
+		// Each cohort step names the cohort's source bindings, so the
+		// approved plan fixes which bindings every cohort moves and
+		// execution never re-derives membership (ADR-SHARED-016).
+		res := StepResources{CohortKey: c.CohortKey, ProviderKey: r.TargetProviderKey, BindingCount: count(len(members[i])),
+			BindingIDs: cohortBindingIDs(members[i])}
 		ops := []string{OpShiftCohort}
 		if r.MigrationMode == ModeStatefulCutover {
 			ops = statefulSequence
@@ -400,6 +404,20 @@ func (plan *Plan) steps(r Request, byCapability map[string][]SourceBinding, memb
 		add(stepID("retire", c.CapabilityKey), OpRetireSourceBinding, StepResources{CapabilityKey: c.CapabilityKey,
 			ProviderKey: r.SourceProviderKey, BindingCount: count(len(byCapability[c.CapabilityKey]))}, false)
 	}
+}
+
+// cohortBindingIDs is the cohort's source binding ids, sorted, or nil for
+// an empty cohort (binding_ids is omitted rather than empty).
+func cohortBindingIDs(members []SourceBinding) []string {
+	if len(members) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(members))
+	for _, b := range members {
+		ids = append(ids, b.BindingID)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // requiredVersions is the contract version the request names and every

@@ -93,7 +93,12 @@ func (r *PostgresRepository) HealthLevels(ctx context.Context, engineInstanceID,
 	if r == nil || r.pool == nil {
 		return health.Levels{}, errors.New("repository is not initialized")
 	}
-	rows, err := r.pool.Query(ctx, `
+	return healthLevelsOn(ctx, r.pool, engineInstanceID, providerID, capabilityKey)
+}
+
+// healthLevelsOn reads the health levels through a pool or a transaction.
+func healthLevelsOn(ctx context.Context, q migrationQuerier, engineInstanceID, providerID, capabilityKey string) (health.Levels, error) {
+	rows, err := q.Query(ctx, `
 		SELECT COALESCE(h.engine_instance_id::text, ''), COALESCE(h.provider_id::text, ''), COALESCE(c.code, ''),
 			h.status, h.observed_at, h.expires_at, h.source, h.reasons
 		FROM topology.health_observation h

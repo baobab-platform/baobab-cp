@@ -1,0 +1,415 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/engine-migration-task.schema.json",
+  "title": "Engine migration task",
+  "description": "A canonical unit of STATEFUL_CUTOVER migration work the Control Plane assigns to exactly one engine instance, which claims it and reports its outcome under its workload identity (ADR-SHARED-016 sections 3-4; ADR-BCP-006 sections 53-56, 128-132). The Control Plane never carries business data: a task names contexts by opaque identifiers only, and never carries credentials, endpoints or customer records. A definition library; validate against #/$defs/EngineMigrationTask, #/$defs/EngineMigrationTaskPage or #/$defs/EngineMigrationTaskReport.",
+  "$defs": {
+    "engineMigrationTaskId": {
+      "type": "string",
+      "pattern": "^emt_[a-z0-9]+$",
+      "minLength": 7,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of an engine migration task."
+    },
+    "taskOperation": {
+      "type": "string",
+      "enum": [
+        "FREEZE_COHORT_WRITES",
+        "MIGRATE_COHORT_DATA",
+        "RECONCILE_COHORT_DATA",
+        "UNFREEZE_COHORT_WRITES"
+      ],
+      "description": "The migration operations engines perform (provider-migration-lifecycle.yaml engine_steps); every other migration operation the Control Plane runs on its own state."
+    },
+    "taskRole": {
+      "type": "string",
+      "enum": [
+        "SOURCE",
+        "TARGET"
+      ],
+      "description": "Which side of the migration the assigned instance is."
+    },
+    "taskDirection": {
+      "type": "string",
+      "enum": [
+        "FORWARD",
+        "REVERSE"
+      ],
+      "description": "FORWARD moves the cohort to the target; REVERSE is rollback (ADR-SHARED-016 section 5)."
+    },
+    "taskStatus": {
+      "type": "string",
+      "enum": [
+        "PENDING",
+        "CLAIMED",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "description": "PENDING until an attested instance claims it; CLAIMED while its lease holds (an expired lease returns it to PENDING with the next attempt); SUCCEEDED, FAILED and CANCELLED are final."
+    },
+    "counterpart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider_key",
+        "engine_instance_ids"
+      ],
+      "description": "The other side a MIGRATE_COHORT_DATA task moves state from, by topology identifiers only. The assigned engine's migration adapter reaches it through its own configuration; no endpoint or credential is ever carried.",
+      "properties": {
+        "provider_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey"
+        },
+        "engine_instance_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/engineInstanceId"
+          }
+        }
+      }
+    },
+    "cohortContexts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_ids"
+      ],
+      "description": "The cohort's affected contexts, by opaque identifiers only, as the approved plan's discovery fixed them.",
+      "properties": {
+        "tenant_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/tenantId"
+          }
+        },
+        "estate_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 10000,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/estateId"
+          }
+        }
+      }
+    },
+    "taskResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the engine reports. record_count and content_digest are required for RECONCILE_COHORT_DATA (both sides must match) and reported by MIGRATE_COHORT_DATA where known. Never business data.",
+      "properties": {
+        "record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "content_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Digest of the cohort's canonical projection in the migrated capabilities, computed identically by source and target."
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "maxLength": 64,
+          "description": "On FAILED: a provider_migration_task_failure code (authorization/v1 reason-code-registry.yaml)."
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Operator-facing note. Never business data, personal data or card data."
+        }
+      }
+    },
+    "EngineMigrationTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "provider_migration_id",
+        "operation_id",
+        "step_id",
+        "operation",
+        "role",
+        "direction",
+        "engine_instance_id",
+        "provider_key",
+        "cohort_key",
+        "capabilities",
+        "contexts",
+        "status",
+        "attempt",
+        "deadline_at",
+        "created_at",
+        "updated_at",
+        "revision"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "MIGRATE_COHORT_DATA"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "counterpart"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "CLAIMED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "lease_expires_at",
+              "claimed_by"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "SUCCEEDED",
+                  "FAILED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "result",
+              "reported_at"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "FAILED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "required": [
+                  "reason_code"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "SUCCEEDED"
+              },
+              "operation": {
+                "const": "RECONCILE_COHORT_DATA"
+              }
+            },
+            "required": [
+              "status",
+              "operation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "required": [
+                  "record_count",
+                  "content_digest"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "task_id": {
+          "$ref": "#/$defs/engineMigrationTaskId"
+        },
+        "provider_migration_id": {
+          "$ref": "domain.schema.json#/$defs/providerMigrationId"
+        },
+        "operation_id": {
+          "$ref": "domain.schema.json#/$defs/operationId",
+          "description": "The PROVIDER_MIGRATION_ADVANCE operation the task belongs to."
+        },
+        "step_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "maxLength": 64,
+          "description": "The approved plan step it executes, or for rollback the compensation step."
+        },
+        "operation": {
+          "$ref": "#/$defs/taskOperation"
+        },
+        "role": {
+          "$ref": "#/$defs/taskRole"
+        },
+        "direction": {
+          "$ref": "#/$defs/taskDirection"
+        },
+        "engine_instance_id": {
+          "$ref": "domain.schema.json#/$defs/engineInstanceId",
+          "description": "The one instance that may claim the task."
+        },
+        "provider_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey",
+          "description": "The provider the assigned instance serves in this migration."
+        },
+        "cohort_key": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "maxLength": 64
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey"
+          }
+        },
+        "contexts": {
+          "$ref": "#/$defs/cohortContexts"
+        },
+        "counterpart": {
+          "$ref": "#/$defs/counterpart"
+        },
+        "status": {
+          "$ref": "#/$defs/taskStatus"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "claimed_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The workload client holding the lease."
+        },
+        "lease_expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "deadline_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When an unreported task fails with MIGRATION_TASK_TIMEOUT: the cutover window's end, or 24 hours after creation."
+        },
+        "result": {
+          "$ref": "#/$defs/taskResult"
+        },
+        "reported_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "EngineMigrationTaskPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/EngineMigrationTask"
+          }
+        },
+        "next_page_token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "EngineMigrationTaskReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ],
+      "description": "The claimant's final report. The Control Plane derives the task, instance and time; a report never names them.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "FAILED"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason_code"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "SUCCEEDED",
+            "FAILED"
+          ]
+        },
+        "record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "content_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "maxLength": 64
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    }
+  }
+}
