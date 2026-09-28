@@ -57,6 +57,27 @@ permissions:
     delegable: false
     read_only: false
     description: "Manage corporate relationships, which can change effective administrative scope (sections 17, 113)."
+  - key: mapping.view
+    domain: ORGANISATION
+    risk_class: LOW
+    scope_levels: [PLATFORM]
+    delegable: true
+    read_only: true
+    description: "View external references and canonical mappings, and resolve an external reference (ADR-SHARED-013; Canonical Mapping Model)."
+  - key: mapping.manage
+    domain: ORGANISATION
+    risk_class: MODERATE
+    scope_levels: [PLATFORM]
+    delegable: true
+    read_only: false
+    description: "Register external references and draft, change, validate and retire canonical mappings (ADR-SHARED-013). Never activation."
+  - key: mapping.approve
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Activate a validated canonical mapping, which changes how engines resolve identity; never a mapping the approver authored (ADR-SHARED-013 four-eyes; Canonical Mapping Model sections 48-49)."
   - key: evidence.view
     domain: EVIDENCE
     risk_class: LOW

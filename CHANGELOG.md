@@ -723,6 +723,13 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Applicant claims on client applications (ADR-BCP-023 §7, §9, §191-192; Shared control-plane OpenAPI 1.16.0).
+  - `POST`/`GET /v1/client-applications/{applicationID}/claims` and `POST .../claims/{claimID}/withdraw` (If-Match):
+    - an applicant asserts a claim type, jurisdiction and value on their own application, only while it is DRAFT or INFORMATION_REQUIRED;
+    - the claim is SELF_ASSERTED and about the application, in the application's one `ORGANISATION_ADMISSION` VerificationCase, which the first claim opens (serialised per application);
+    - an applicant never names a subject or case, and never reaches another applicant's application or claim.
+  - `POST /v1/admin/verification-cases/{caseID}/claims/{claimID}/open-verification` (`verification:write`, If-Match; permission `verification.review`) takes a claim under verification. It changes no standing.
+  - Organisation admission now also accepts the admitted application's own case (subject `APPLICATION`, matching the request's `application_id`). That is the usual path, since the case is worked before approval, and only its VERIFIED claims are promoted.
 - The verification workflow (ADR-BCP-023 gate OEV-03; Shared `evidence/v1` and the control-plane `openapi.yaml` 1.14.0 Verification operations). Eighteen `/v1/admin` routes serve:
   - verification cases: open, list, read, transition and conclude;
   - a case's claims, checks, results and discrepancies;

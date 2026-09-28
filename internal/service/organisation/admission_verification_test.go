@@ -188,6 +188,25 @@ func TestOrganisationAdmissionVerifiesThroughItsCase(t *testing.T) {
 		}
 	}
 
+	// The usual case is the admitted application's own, worked before
+	// approval (sections 191-192): it verifies only the application the
+	// request names.
+	appTenant, _, appLE := e.registeredTenant(t)
+	applicationID, appRegno := "capp_"+token(), "80021"+token()
+	appCase, _ := e.verifiedCase(t, verification.Subject{SubjectType: subjectApplication, SubjectID: applicationID}, "Omega Traders Limited", appRegno, true)
+	byApplication := request(appRegno)
+	byApplication.VerificationCaseID = appCase
+	refused("an application's case without the application", appTenant, byApplication, ErrVerificationCaseUnusable)
+	byApplication.ApplicationID = "capp_" + token()
+	refused("an application's case for another application", appTenant, byApplication, ErrVerificationCaseUnusable)
+	byApplication.ApplicationID = applicationID
+	if out, err := onboarder.Onboard(e.ctx, appTenant, byApplication, actor()); err != nil || out.LegalEntityVerificationState != string(domain.VerificationVerified) {
+		t.Fatalf("admission through the application's case: %+v %v", out, err)
+	}
+	if p, err := e.repo.GetLegalEntityProfile(e.ctx, appLE); err != nil || !slices.Contains(p.EvidenceReferences, caseReferencePrefix+appCase) {
+		t.Fatalf("legal entity verified from the application's case: %+v %v", p, err)
+	}
+
 	// Replaying the decision converges and records nothing.
 	replay := actor()
 	if _, err := onboarder.Onboard(e.ctx, tenantID, req, replay); err != nil {

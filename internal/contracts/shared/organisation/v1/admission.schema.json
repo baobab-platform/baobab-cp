@@ -169,7 +169,7 @@
         },
         "verification_case_id": {
           "$ref": "../../evidence/v1/domain.schema.json#/$defs/verificationCaseId",
-          "description": "The ADR-BCP-023 VerificationCase that verified the applicant's legal identity (sections 191-193). It must be VERIFIED, for purpose ORGANISATION_ADMISSION, about the admitted organisation or one of its legal entities, with VERIFIED REGISTRATION_IDENTIFIER and LEGAL_NAME claims. Without it the legal entity stays unverified; there is no other way to verify legal identity at admission."
+          "description": "The ADR-BCP-023 VerificationCase that verified the applicant's legal identity (sections 191-193). It must be VERIFIED and for purpose ORGANISATION_ADMISSION. Its subject is either the client application being admitted (subject APPLICATION, whose id must equal application_id; the usual case, since the case is worked before approval) or the admitted organisation or one of its legal entities. It needs VERIFIED REGISTRATION_IDENTIFIER and LEGAL_NAME claims about that subject. Only those accepted claims are promoted (section 192). Without it the legal entity stays unverified; there is no other way to verify legal identity at admission."
         },
         "corporate_relationship_claims": {
           "type": "array",

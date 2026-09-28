@@ -77,6 +77,15 @@ type ClaimSubmission struct {
 	EvidenceIDs  []string     `json:"evidence_ids,omitempty"`
 }
 
+// ApplicantClaim is ApplicantClaimSubmission: what an applicant asserts
+// about their own application. Its subject, purpose, asserter, origin and
+// status are derived, never supplied (sections 9, 191).
+type ApplicantClaim struct {
+	ClaimType    string       `json:"claim_type"`
+	Jurisdiction string       `json:"jurisdiction,omitempty"`
+	ClaimedValue ClaimedValue `json:"claimed_value"`
+}
+
 // Dimension is dimensionResult.
 type Dimension struct {
 	Dimension string `json:"dimension"`

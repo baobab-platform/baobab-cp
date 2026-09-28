@@ -323,6 +323,27 @@
         }
       }
     },
+    "ApplicantClaimSubmission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_type",
+        "claimed_value"
+      ],
+      "description": "What an applicant asserts about their own client application (ADR-BCP-023 sections 7, 9, 191). The Control Plane derives everything else: the subject is the application, the purpose ORGANISATION_ADMISSION, the asserter the authenticated applicant, the origin APPLICANT and the status SELF_ASSERTED. It carries no subject, purpose, status, verification flag or evidence the applicant could use to vouch for themselves.",
+      "properties": {
+        "claim_type": {
+          "$ref": "domain.schema.json#/$defs/claimType"
+        },
+        "jurisdiction": {
+          "$ref": "domain.schema.json#/$defs/jurisdiction",
+          "description": "The jurisdiction the claim is made under, where it has one (section 22)."
+        },
+        "claimed_value": {
+          "$ref": "#/$defs/claimedValue"
+        }
+      }
+    },
     "EvidenceClaim": {
       "type": "object",
       "additionalProperties": false,
