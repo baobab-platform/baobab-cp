@@ -128,3 +128,55 @@ func TestPlanConformsAndDetectsStaleness(t *testing.T) {
 		t.Fatal("an expired plan is not stale")
 	}
 }
+
+// TestActivationKinds: market and mapping activation derive a MODIFY
+// changeset at PLATFORM scope, name only their own target, and plan the
+// kind's two operations with the reviewed revision bound to the change
+// step. The kinds' approval scopes come from the Shared lifecycle.
+func TestActivationKinds(t *testing.T) {
+	for _, tc := range []struct {
+		kind, scope string
+		desired     DesiredChange
+		ops         []string
+	}{
+		{KindMarketActivation, "market:approve", DesiredChange{Kind: KindMarketActivation, MarketID: "mkt_01k9za7b2b"}, []string{OpActivateMarket, OpVerifyMarketState}},
+		{KindMappingActivation, "mapping:approve", DesiredChange{Kind: KindMappingActivation, MappingID: "map_01k9za7b2c"}, []string{OpActivateMapping, OpVerifyMapping}},
+	} {
+		if got := Kinds()[tc.kind].ApprovalScope; got != tc.scope {
+			t.Fatalf("%s approval scope: %q", tc.kind, got)
+		}
+		c, err := Draft(CreateRequest{Title: "Activate", Reason: "Reviewed.", DesiredChange: tc.desired}, "cs_0199a1b2c3d47e90", "prn_requester1", "API", "", 3, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.ChangesetType != "MODIFY" || c.TargetScope.Level != "PLATFORM" || c.TargetScope.TenantID != "" {
+			t.Fatalf("%s draft: %+v", tc.kind, c)
+		}
+		if err := contracts.ValidateValue(recordSchema, c); err != nil {
+			t.Fatalf("%s draft does not conform: %v", tc.kind, err)
+		}
+		crossed := tc.desired
+		crossed.TenantID = tenant
+		if _, err := Draft(CreateRequest{Title: "x", Reason: "y", DesiredChange: crossed}, "cs_x1", "prn_r", "API", "", 1, now); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("%s naming a tenant too: %v", tc.kind, err)
+		}
+		p, err := Generate(PlanInput{Changeset: c, Target: Target{Found: true, Status: "VALIDATED", Revision: 3}, PlanID: "plan_0199a1b2c3d47ea1", PlanVersion: 1, Now: now})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(p.Blockers) != 0 || len(p.Steps) != 2 || p.Steps[0].Operation != tc.ops[0] || p.Steps[1].Operation != tc.ops[1] ||
+			p.Steps[0].Resources.TargetRevision != 3 || p.Steps[0].Resources.FromStatus != "VALIDATED" || p.Steps[1].Resources.TargetRevision != 0 {
+			t.Fatalf("%s plan: %+v", tc.kind, p)
+		}
+		if err := contracts.ValidateValue(planSchema, p); err != nil {
+			t.Fatalf("%s plan does not conform: %v", tc.kind, err)
+		}
+		moved, _ := Generate(PlanInput{Changeset: c, Target: Target{Found: true, Status: "VALIDATED", Revision: 4}, PlanID: p.PlanID, PlanVersion: 1, Now: now})
+		if !Stale(p, moved, now) {
+			t.Fatalf("%s: a moved revision does not make the plan stale", tc.kind)
+		}
+		if active := Validate(c, Target{Found: true, Status: "ACTIVE", Revision: 4}); len(active.Blockers) != 1 || active.Blockers[0].Code != BlockTargetStateConflict {
+			t.Fatalf("%s from ACTIVE: %+v", tc.kind, active)
+		}
+	}
+}

@@ -127,20 +127,44 @@ triggers:
     - fail_verification
     - reverify
     - compensate
-# The change kinds this version supports: the changeset type each derives,
-# the tenant lifecycle status it requires and produces, and the canonical
-# operations its plan runs, in order.
+# The change kinds this version supports: the target resource each acts on,
+# the changeset type it derives, the target status it requires and produces
+# (in that resource's own lifecycle vocabulary), and the canonical operations
+# its plan runs, in order. approval_scope, where set, is the scope the
+# approver must also hold, so a changeset never grants authority the
+# resource's direct route would refuse (ADR-BCP-020, ADR-BCP-021 section 24).
 change_kinds:
   TENANT_SUSPENSION:
+    target: TENANT
     changeset_type: SUSPEND
     from_status: [active]
     to_status: suspended
     operations: [SUSPEND_TENANT, VERIFY_TENANT_STATE]
   TENANT_REINSTATEMENT:
+    target: TENANT
     changeset_type: REINSTATE
     from_status: [suspended]
     to_status: active
     operations: [REINSTATE_TENANT, VERIFY_TENANT_STATE]
+  # The governed path to market-lifecycle.yaml activate. activateMarket
+  # stays served; both require an approver who is neither the market's
+  # creator nor its last editor.
+  MARKET_ACTIVATION:
+    target: MARKET
+    changeset_type: MODIFY
+    from_status: [VALIDATED]
+    to_status: ACTIVE
+    approval_scope: "market:approve"
+    operations: [ACTIVATE_MARKET, VERIFY_MARKET_STATE]
+  # The governed path to mapping activation (ADR-SHARED-013). activateMapping
+  # stays served; both require an approver who is not the mapping's creator.
+  MAPPING_ACTIVATION:
+    target: MAPPING
+    changeset_type: MODIFY
+    from_status: [VALIDATED]
+    to_status: ACTIVE
+    approval_scope: "mapping:approve"
+    operations: [ACTIVATE_MAPPING, VERIFY_MAPPING_STATE]
 # Codes a changeset carries as blocking_reasons, or its plan as blockers;
 # each is registered in authorization/v1/reason-code-registry.yaml under
 # changeset_blocker.

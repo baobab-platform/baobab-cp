@@ -146,15 +146,15 @@ func TestChangesetLifecycle(t *testing.T) {
 	if _, _, err := repo.ApplyChangeset(ctx, c.ChangesetID, c.Revision, domain.NewResourceID("op"), "apply-early-"+suffix, "h", requester, now, actor); !errors.Is(err, ErrChangesetStateConflict) {
 		t.Fatalf("apply before approval: %v", err)
 	}
-	if _, err := repo.DecideChangeset(ctx, c.ChangesetID, c.Revision, decision, domain.NewResourceID("apd"), requester, now, actor); !errors.Is(err, ErrChangesetSelfApproval) {
+	if _, err := repo.DecideChangeset(ctx, c.ChangesetID, c.Revision, decision, domain.NewResourceID("apd"), requester, "", now, actor); !errors.Is(err, ErrChangesetSelfApproval) {
 		t.Fatalf("self-approval: %v", err)
 	}
 	wrong := decision
 	wrong.PlanDigest = "sha256:" + strings.Repeat("0", 64)
-	if _, err := repo.DecideChangeset(ctx, c.ChangesetID, c.Revision, wrong, domain.NewResourceID("apd"), approver, now, actor); !errors.Is(err, ErrChangesetPlanMismatch) {
+	if _, err := repo.DecideChangeset(ctx, c.ChangesetID, c.Revision, wrong, domain.NewResourceID("apd"), approver, "", now, actor); !errors.Is(err, ErrChangesetPlanMismatch) {
 		t.Fatalf("another digest: %v", err)
 	}
-	approval, err := repo.DecideChangeset(ctx, c.ChangesetID, c.Revision, decision, domain.NewResourceID("apd"), approver, now, actor)
+	approval, err := repo.DecideChangeset(ctx, c.ChangesetID, c.Revision, decision, domain.NewResourceID("apd"), approver, "", now, actor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestChangesetLifecycle(t *testing.T) {
 	}
 	plan, _ = repo.CurrentChangesetPlan(ctx, c.ChangesetID)
 	decision = changeset.DecisionRequest{PlanID: plan.PlanID, PlanVersion: plan.PlanVersion, PlanDigest: plan.PlanDigest, Decision: changeset.DecisionApproved}
-	if _, err := repo.DecideChangeset(ctx, c.ChangesetID, c.Revision, decision, domain.NewResourceID("apd"), approver, now, actor); err != nil {
+	if _, err := repo.DecideChangeset(ctx, c.ChangesetID, c.Revision, decision, domain.NewResourceID("apd"), approver, "", now, actor); err != nil {
 		t.Fatal(err)
 	}
 	c, _ = repo.GetChangeset(ctx, c.ChangesetID)

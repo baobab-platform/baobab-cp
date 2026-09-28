@@ -13,10 +13,13 @@ import (
 
 const lifecyclePath = "control-plane/v1/changeset-lifecycle.yaml"
 
-// Kind is one change kind of changeset-lifecycle.yaml: the changeset type
-// it derives, the tenant statuses it starts from and produces, and its
-// canonical operations in order.
+// Kind is one change kind of changeset-lifecycle.yaml: the resource it
+// targets, the changeset type it derives, the target statuses it starts
+// from and produces, its canonical operations in order, and the scope an
+// approver must additionally hold, if any.
 type Kind struct {
+	Target        string   `yaml:"target"`
+	ApprovalScope string   `yaml:"approval_scope"`
 	ChangesetType string   `yaml:"changeset_type"`
 	FromStatus    []string `yaml:"from_status"`
 	ToStatus      string   `yaml:"to_status"`

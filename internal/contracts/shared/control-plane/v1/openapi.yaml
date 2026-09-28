@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.16.0
+  version: 1.17.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -4353,7 +4353,14 @@ paths:
         version and digest the approver reviewed (ADR-BCP-021 sections 24,
         49-52). Valid only in AWAITING_APPROVAL. The approver is the verified
         caller, holds administrative authority to approve at the target's
-        scope, and is never the requester (CHANGESET_SELF_APPROVAL, 403). A
+        scope, and is never the requester (CHANGESET_SELF_APPROVAL, 403).
+        When the change kind names an approval_scope
+        (changeset-lifecycle.yaml change_kinds), the approver also holds that
+        scope (403) and meets the target's own maker-checker rule, exactly as
+        on the kind's direct route: a MARKET_ACTIVATION approver is neither
+        the market's creator nor its last editor (MARKET_SELF_ACTIVATION,
+        403) and a MAPPING_ACTIVATION approver is not the mapping's creator
+        (MAPPING_SELF_APPROVAL, 403). A
         decision naming another plan or digest is PLAN_DIGEST_MISMATCH (409);
         a stale plan is PLAN_STALE (409). The changeset's revision is
         required in If-Match.

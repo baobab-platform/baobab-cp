@@ -10,14 +10,17 @@ import (
 	"time"
 )
 
-// Target is the authoritative state of the tenant a changeset names, read
-// when it is planned.
+// Target is the authoritative state of the resource a changeset names
+// (a tenant, market or mapping), read when it is planned.
 type Target struct {
 	Found    bool
 	Status   string
 	Revision int64
+	// TenantID is the tenant that owns the target, when it has one; it is
+	// recorded on the audit and the operation.
+	TenantID string
 	// LockedBy names the other changesets that have not ended and have
-	// been submitted against the same tenant (section 66).
+	// been submitted against the same target (section 66).
 	LockedBy []string
 }
 
@@ -48,17 +51,17 @@ func Validate(c Changeset, t Target) Validation {
 	case !ok:
 		v.Invalid = append(v.Invalid, Finding{Code: BlockTargetStateConflict, Message: fmt.Sprintf("Change kind %s is not supported.", c.DesiredChange.Kind)})
 	case !t.Found:
-		v.Invalid = append(v.Invalid, Finding{Code: BlockTargetNotFound, Message: fmt.Sprintf("Tenant %s does not exist.", c.DesiredChange.TenantID)})
+		v.Invalid = append(v.Invalid, Finding{Code: BlockTargetNotFound, Message: fmt.Sprintf("%s does not exist.", c.DesiredChange.label())})
 	default:
 		if !slices.Contains(kind.FromStatus, t.Status) {
 			v.Blockers = append(v.Blockers, Finding{Code: BlockTargetStateConflict,
-				Message: fmt.Sprintf("Tenant %s is %s; %s starts from %s.", c.DesiredChange.TenantID, orUnknown(t.Status),
-					strings.ToLower(kind.ChangesetType), strings.Join(kind.FromStatus, " or "))})
+				Message: fmt.Sprintf("%s is %s; %s starts from %s.", c.DesiredChange.label(), orUnknown(t.Status),
+					strings.ToLower(strings.ReplaceAll(c.DesiredChange.Kind, "_", " ")), strings.Join(kind.FromStatus, " or "))})
 		}
 		for _, other := range t.LockedBy {
 			if other != c.ChangesetID {
 				v.Blockers = append(v.Blockers, Finding{Code: BlockTargetLocked,
-					Message: fmt.Sprintf("Changeset %s already changes tenant %s.", other, c.DesiredChange.TenantID)})
+					Message: fmt.Sprintf("Changeset %s already changes %s.", other, strings.ToLower(c.DesiredChange.label()[:1])+c.DesiredChange.label()[1:])})
 			}
 		}
 	}
@@ -86,10 +89,22 @@ func Generate(in PlanInput) (Plan, error) {
 	p.Blockers = append(append(p.Blockers, v.Invalid...), v.Blockers...)
 
 	previous := ""
-	for _, op := range kind.Operations {
-		res := StepResources{TenantID: c.DesiredChange.TenantID, ToStatus: kind.ToStatus}
-		if op != OpVerifyTenantState {
+	for i, op := range kind.Operations {
+		res := StepResources{ToStatus: kind.ToStatus}
+		switch kind.Target {
+		case TargetMarket:
+			res.MarketID = c.DesiredChange.MarketID
+		case TargetMapping:
+			res.MappingID = c.DesiredChange.MappingID
+		default:
+			res.TenantID = c.DesiredChange.TenantID
+		}
+		// The first operation changes the target; the last verifies it.
+		if i == 0 {
 			res.FromStatus = in.Target.Status
+			if kind.Target != TargetTenant {
+				res.TargetRevision = in.Target.Revision
+			}
 		}
 		deps := []string{}
 		if previous != "" {
@@ -99,8 +114,18 @@ func Generate(in PlanInput) (Plan, error) {
 		p.Steps = append(p.Steps, Step{StepID: id, Operation: op, DependsOn: deps, Resources: res})
 		previous = id
 	}
-	switch kind.ChangesetType {
-	case "SUSPEND":
+	switch {
+	case kind.Target == TargetMarket:
+		p.RiskClass = "MEDIUM"
+		p.ImpactAnalysis = ImpactAnalysis{Summary: fmt.Sprintf("Activates market %s at revision %d: it becomes eligible for tenant placement.", c.DesiredChange.MarketID, in.Target.Revision),
+			ResourcesChanged: 1, AvailabilityImpact: "None until a tenant is placed in the market."}
+		p.CompensationStrategy = "Nothing irreversible is planned; a market leaves ACTIVE only through its own lifecycle."
+	case kind.Target == TargetMapping:
+		p.RiskClass = "MEDIUM"
+		p.ImpactAnalysis = ImpactAnalysis{Summary: fmt.Sprintf("Activates mapping %s at revision %d: resolution follows it for its subject and scope.", c.DesiredChange.MappingID, in.Target.Revision),
+			ResourcesChanged: 1, AvailabilityImpact: "Resolution for the mapping's subject and scope starts returning its target."}
+		p.CompensationStrategy = "Retire the mapping through its own lifecycle; nothing irreversible is planned."
+	case kind.ChangesetType == "SUSPEND":
 		p.RiskClass = "HIGH"
 		p.ImpactAnalysis = ImpactAnalysis{Summary: fmt.Sprintf("Suspends tenant %s: capability resolution for the tenant is refused until it is reinstated.", c.DesiredChange.TenantID),
 			ResourcesChanged: 1, AvailabilityImpact: "Every digital estate of the tenant stops resolving capabilities."}
@@ -112,6 +137,9 @@ func Generate(in PlanInput) (Plan, error) {
 		p.CompensationStrategy = "Suspend the tenant again with a SUSPEND changeset; nothing irreversible is planned."
 	}
 	p.VerificationStrategy = fmt.Sprintf("Read the tenant back and require desired and observed status %s.", kind.ToStatus)
+	if kind.Target != TargetTenant {
+		p.VerificationStrategy = fmt.Sprintf("Read the %s back and require status %s.", strings.ToLower(kind.Target), kind.ToStatus)
+	}
 	p.PlanDigest = PlanDigest(p)
 	return p, nil
 }

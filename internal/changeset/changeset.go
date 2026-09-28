@@ -43,6 +43,15 @@ const (
 const (
 	KindTenantSuspension    = "TENANT_SUSPENSION"
 	KindTenantReinstatement = "TENANT_REINSTATEMENT"
+	KindMarketActivation    = "MARKET_ACTIVATION"
+	KindMappingActivation   = "MAPPING_ACTIVATION"
+)
+
+// Change kind targets.
+const (
+	TargetTenant  = "TENANT"
+	TargetMarket  = "MARKET"
+	TargetMapping = "MAPPING"
 )
 
 // Blocking codes (changeset_blocker).
@@ -57,12 +66,45 @@ const (
 	OpSuspendTenant     = "SUSPEND_TENANT"
 	OpReinstateTenant   = "REINSTATE_TENANT"
 	OpVerifyTenantState = "VERIFY_TENANT_STATE"
+	OpActivateMarket    = "ACTIVATE_MARKET"
+	OpVerifyMarketState = "VERIFY_MARKET_STATE"
+	OpActivateMapping   = "ACTIVATE_MAPPING"
+	OpVerifyMapping     = "VERIFY_MAPPING_STATE"
 )
 
-// DesiredChange is one of the desiredChange kinds.
+// DesiredChange is one of the desiredChange kinds. Exactly one of the
+// target identifiers is set, as the kind's schema branch requires.
 type DesiredChange struct {
-	Kind     string `json:"kind"`
-	TenantID string `json:"tenant_id"`
+	Kind      string `json:"kind"`
+	TenantID  string `json:"tenant_id,omitempty"`
+	MarketID  string `json:"market_id,omitempty"`
+	MappingID string `json:"mapping_id,omitempty"`
+}
+
+// TargetID is the identifier of the resource the change names.
+func (d DesiredChange) TargetID() string {
+	switch Kinds()[d.Kind].Target {
+	case TargetMarket:
+		return d.MarketID
+	case TargetMapping:
+		return d.MappingID
+	}
+	return d.TenantID
+}
+
+// TargetType is the resource type the change names (TENANT, MARKET or
+// MAPPING), or "" for an unsupported kind.
+func (d DesiredChange) TargetType() string { return Kinds()[d.Kind].Target }
+
+// label names the target in findings and summaries.
+func (d DesiredChange) label() string {
+	switch d.TargetType() {
+	case TargetMarket:
+		return "Market " + d.MarketID
+	case TargetMapping:
+		return "Mapping " + d.MappingID
+	}
+	return "Tenant " + d.TenantID
 }
 
 // CreateRequest is ChangesetCreateRequest.
@@ -116,9 +158,12 @@ type Changeset struct {
 
 // StepResources is changesetStepResources.
 type StepResources struct {
-	TenantID   string `json:"tenant_id,omitempty"`
-	FromStatus string `json:"from_status,omitempty"`
-	ToStatus   string `json:"to_status,omitempty"`
+	TenantID       string `json:"tenant_id,omitempty"`
+	MarketID       string `json:"market_id,omitempty"`
+	MappingID      string `json:"mapping_id,omitempty"`
+	FromStatus     string `json:"from_status,omitempty"`
+	ToStatus       string `json:"to_status,omitempty"`
+	TargetRevision int64  `json:"target_revision,omitempty"`
 }
 
 // Step is changesetStep.
@@ -221,15 +266,30 @@ func Draft(req CreateRequest, id, requester, source, correlationID string, baseR
 	if !ok {
 		return Changeset{}, fmt.Errorf("%w: change kind %q is not supported", ErrInvalid, req.DesiredChange.Kind)
 	}
-	if !domain.ValidTenantID(req.DesiredChange.TenantID) {
-		return Changeset{}, fmt.Errorf("%w: tenant_id is not a Control Plane tenant identifier", ErrInvalid)
+	scope := administration.Scope{Level: administration.LevelPlatform}
+	switch d := req.DesiredChange; kind.Target {
+	case TargetTenant:
+		if !domain.ValidTenantID(d.TenantID) || d.MarketID != "" || d.MappingID != "" {
+			return Changeset{}, fmt.Errorf("%w: tenant_id is not a Control Plane tenant identifier", ErrInvalid)
+		}
+		scope = administration.Scope{Level: administration.LevelTenant, TenantID: d.TenantID}
+	case TargetMarket:
+		if d.MarketID == "" || d.TenantID != "" || d.MappingID != "" {
+			return Changeset{}, fmt.Errorf("%w: a market activation names exactly its market_id", ErrInvalid)
+		}
+	case TargetMapping:
+		if !domain.ValidMappingID(d.MappingID) || d.TenantID != "" || d.MarketID != "" {
+			return Changeset{}, fmt.Errorf("%w: mapping_id is not a Control Plane mapping identifier", ErrInvalid)
+		}
+	default:
+		return Changeset{}, fmt.Errorf("%w: change kind %q names no supported target", ErrInvalid, req.DesiredChange.Kind)
 	}
 	if baseRevision < 1 {
 		baseRevision = 1
 	}
 	return Changeset{ChangesetID: id, ChangesetType: kind.ChangesetType, Title: req.Title, Description: req.Description,
 		Reason: req.Reason, BusinessJustification: req.BusinessJustification, Source: source, RequestedBy: requester,
-		RequestedAt: now, TargetScope: administration.Scope{Level: administration.LevelTenant, TenantID: req.DesiredChange.TenantID},
+		RequestedAt: now, TargetScope: scope,
 		BaseRevision: baseRevision, DesiredChange: req.DesiredChange, State: StateDraft, CorrelationID: correlationID,
 		CreatedAt: now, UpdatedAt: now, Revision: 1}, nil
 }

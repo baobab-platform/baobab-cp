@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/changeset"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
@@ -69,6 +70,14 @@ func (h changesetHandler) fail(w http.ResponseWriter, r *http.Request, err error
 		problem(w, r, http.StatusConflict, "PLAN_ALREADY_DECIDED", "the plan already has a decision", false)
 	case errors.Is(err, repository.ErrOperationKeyReused):
 		problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "the idempotency key was used for a different request", false)
+	case errors.Is(err, repository.ErrRegistryMarketSelfActivation):
+		problem(w, r, http.StatusForbidden, "MARKET_SELF_ACTIVATION", "a market is never activated by its creator or last editor", false)
+	case errors.Is(err, repository.ErrMappingSelfApproval):
+		problem(w, r, http.StatusForbidden, "MAPPING_SELF_APPROVAL", "a mapping is never activated by its creator", false)
+	case errors.Is(err, repository.ErrRegistryMarketNotValidated), errors.Is(err, repository.ErrMappingLifecycleConflict):
+		problem(w, r, http.StatusConflict, "CHANGESET_TARGET_STATE_CONFLICT", err.Error(), false)
+	case errors.Is(err, repository.ErrMappingOverlap):
+		problem(w, r, http.StatusConflict, "MAPPING_OVERLAP", "an ACTIVE mapping already covers this subject and scope", false)
 	case errors.Is(err, repository.ErrChangeOutcomeNotFound):
 		problem(w, r, http.StatusNotFound, "CHANGE_OUTCOME_NOT_FOUND", "the changeset has not ended", false)
 	default:
@@ -116,7 +125,7 @@ func (h changesetHandler) create(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	base, _, err := h.repo.TenantRevision(ctx, req.DesiredChange.TenantID)
+	base, _, err := h.repo.TargetRevision(ctx, req.DesiredChange)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -256,7 +265,19 @@ func (h changesetHandler) approve(w http.ResponseWriter, r *http.Request) {
 	if !decodeRaw(w, r, changesetDecisionSchema, raw, &req) {
 		return
 	}
-	a, err := h.repo.DecideChangeset(r.Context(), id, revision, req, domain.NewResourceID("apd"), principalID, h.clock(), actor)
+	// A kind that names an approval_scope needs it as well as
+	// changeset:approve: the same authority its direct route requires.
+	principal, _ := auth.PrincipalFromContext(r.Context())
+	c, err := h.repo.GetChangeset(r.Context(), id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if scope := changeset.Kinds()[c.DesiredChange.Kind].ApprovalScope; scope != "" && !hasAnyScope(principal, scope) {
+		problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "approving this change kind requires "+scope, false)
+		return
+	}
+	a, err := h.repo.DecideChangeset(r.Context(), id, revision, req, domain.NewResourceID("apd"), principalID, principal.Subject, h.clock(), actor)
 	if err != nil {
 		h.fail(w, r, err)
 		return
