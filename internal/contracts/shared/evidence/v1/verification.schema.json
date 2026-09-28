@@ -1276,7 +1276,7 @@
         "command",
         "reason"
       ],
-      "description": "Concludes a VERIFYING case: complete_verified requires every claim of the case to be VERIFIED; complete_not_verified closes a case whose evidence was insufficient (section 33). Served by a separate operation that requires verification:decide.",
+      "description": "Concludes a VERIFYING case: complete_verified requires at least one claim and every claim of the case that still stands (not WITHDRAWN or SUPERSEDED) to be VERIFIED; complete_not_verified closes a case whose evidence was insufficient (section 33). Served by a separate operation that requires verification:decide.",
       "properties": {
         "command": {
           "type": "string",

@@ -65,6 +65,12 @@ var ErrFirstPartyOrganisation = errors.New("organisation holds a first-party pla
 // claims matching what the applicant submitted.
 var ErrVerificationCaseUnusable = errors.New("verification case cannot verify this admission")
 
+// AdmissionDecisions finds the ADR-BCP-017 decision an admission names.
+type AdmissionDecisions interface {
+	// GetAdmissionDecisionByID returns the decision, or nil when there is none.
+	GetAdmissionDecisionByID(ctx context.Context, admissionDecisionID string) (*domain.AdmissionDecision, error)
+}
+
 // VerificationCases reads the ADR-BCP-023 verification record admission
 // rests on.
 type VerificationCases interface {
@@ -204,7 +210,10 @@ func (req AdmissionRequest) Validate() error {
 type AdmissionOnboarder struct {
 	Orgs repository.OrganisationAdmissionRepository
 	// Cases is the verification record legal identity is verified from.
-	Cases      VerificationCases
+	Cases VerificationCases
+	// Decisions binds an application's own case to the admission decision
+	// being onboarded.
+	Decisions  AdmissionDecisions
 	PlatformID string
 	Now        func() time.Time
 }
@@ -370,16 +379,18 @@ const (
 	claimLegalName        = "LEGAL_NAME"
 	subjectOrganisation   = "ORGANISATION"
 	subjectLegalEntity    = "LEGAL_ENTITY"
+	subjectApplication    = "APPLICATION"
 	caseReferencePrefix   = "verification-case:"
 	resultReferencePrefix = "verification-result:"
 )
 
 // caseEvidence turns the named VerificationCase into the evidence that
 // verifies this admission's legal identity, or refuses it. The case must be
-// VERIFIED, for ORGANISATION_ADMISSION, about the organisation or its legal
-// entity, with VERIFIED REGISTRATION_IDENTIFIER and LEGAL_NAME claims about
-// them whose values are what the applicant submitted: a case never verifies
-// a name or identifier it did not check. A missing case is
+// VERIFIED, for ORGANISATION_ADMISSION, about the admitted application, the
+// organisation or its legal entity, with VERIFIED REGISTRATION_IDENTIFIER
+// and LEGAL_NAME claims about that subject whose values are what the
+// applicant submitted: a case never verifies a name or identifier it did
+// not check, and only those accepted claims are promoted (section 192). A missing case is
 // repository.ErrVerificationNotFound.
 func (o *AdmissionOnboarder) caseEvidence(ctx context.Context, req AdmissionRequest, orgID, legalEntityID string, now time.Time) (repository.Evidence, error) {
 	if o.Cases == nil {
@@ -392,9 +403,13 @@ func (o *AdmissionOnboarder) caseEvidence(ctx context.Context, req AdmissionRequ
 	if err != nil {
 		return repository.Evidence{}, err
 	}
+	// The usual case is the admitted application's own, worked before
+	// approval (sections 191-192); a case about the organisation or its
+	// legal entity (for example a re-verification) is accepted too.
 	about := func(s verification.Subject) bool {
 		return (s.SubjectType == subjectOrganisation && s.SubjectID == orgID) ||
-			(s.SubjectType == subjectLegalEntity && s.SubjectID == legalEntityID)
+			(s.SubjectType == subjectLegalEntity && s.SubjectID == legalEntityID) ||
+			(s.SubjectType == subjectApplication && req.ApplicationID != "" && s.SubjectID == req.ApplicationID)
 	}
 	switch {
 	case c.Status != caseStatusVerified:
@@ -402,8 +417,24 @@ func (o *AdmissionOnboarder) caseEvidence(ctx context.Context, req AdmissionRequ
 	case c.Purpose != admissionPurpose:
 		return repository.Evidence{}, unusable("case %s is for %s, not %s", c.CaseID, c.Purpose, admissionPurpose)
 	case !about(c.Subject):
-		return repository.Evidence{}, unusable("case %s is about %s %s, not organisation %s or legal entity %s",
-			c.CaseID, c.Subject.SubjectType, c.Subject.SubjectID, orgID, legalEntityID)
+		return repository.Evidence{}, unusable("case %s is about %s %s, not application %q, organisation %s or legal entity %s",
+			c.CaseID, c.Subject.SubjectType, c.Subject.SubjectID, req.ApplicationID, orgID, legalEntityID)
+	}
+	// An application's case speaks for this admission only when the
+	// approved decision being onboarded is that application's: the request's
+	// application_id alone is the caller's word.
+	if c.Subject.SubjectType == subjectApplication {
+		if o.Decisions == nil {
+			return repository.Evidence{}, errors.New("admission decisions are not available to admission")
+		}
+		d, err := o.Decisions.GetAdmissionDecisionByID(ctx, req.AdmissionDecisionID)
+		if err != nil {
+			return repository.Evidence{}, err
+		}
+		if d == nil || d.Decision != domain.DecisionApproved || d.ClientApplicationID != c.Subject.SubjectID {
+			return repository.Evidence{}, unusable("case %s is about application %s, which is not the approved application of decision %s",
+				c.CaseID, c.Subject.SubjectID, req.AdmissionDecisionID)
+		}
 	}
 	claims, err := o.Cases.ListVerificationClaims(ctx, c.CaseID)
 	if err != nil {

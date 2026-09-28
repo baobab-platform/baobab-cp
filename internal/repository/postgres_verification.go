@@ -39,6 +39,10 @@ type VerificationRepository interface {
 	TransitionEvidenceDiscrepancy(ctx context.Context, id string, expectedVersion int64, t verification.Transition, resolver string, now time.Time, actor AuditActor) (verification.Discrepancy, error)
 	// DiscrepancyCase is the case a discrepancy belongs to.
 	DiscrepancyCase(ctx context.Context, discrepancyID string) (string, error)
+	// OpenClaimVerification takes a SELF_ASSERTED claim of the case under
+	// verification (evidence/v1 lifecycle.yaml open_verification).
+	OpenClaimVerification(ctx context.Context, caseID, claimID string, expectedVersion int64, now time.Time, actor AuditActor) (verification.Claim, error)
+	ApplicantClaims
 }
 
 // VerificationCaseFilter narrows ListVerificationCases.
@@ -323,13 +327,20 @@ func (r *PostgresRepository) TransitionVerificationCase(ctx context.Context, id 
 		if err != nil {
 			return c, err
 		}
-		if len(claims) == 0 {
-			return c, fmt.Errorf("%w: a case without claims verifies nothing", ErrVerificationState)
-		}
+		// A withdrawn or superseded claim no longer stands: it neither blocks
+		// nor counts towards the conclusion.
+		standing := 0
 		for _, cl := range claims {
+			if cl.Status == verification.ClaimWithdrawn || cl.Status == verification.ClaimSuperseded {
+				continue
+			}
+			standing++
 			if cl.Status != verification.ClaimVerified {
 				return c, fmt.Errorf("%w: claim %s is %s, not VERIFIED", ErrVerificationState, cl.ClaimID, cl.Status)
 			}
+		}
+		if standing == 0 {
+			return c, fmt.Errorf("%w: a case without standing claims verifies nothing", ErrVerificationState)
 		}
 	}
 	before := c.Status
@@ -452,28 +463,40 @@ func (r *PostgresRepository) AddVerificationClaim(ctx context.Context, caseID st
 		evidenceIDs = []string{}
 	}
 	cl := verification.Claim{ClaimID: claimID, Subject: sub.Subject, ClaimType: sub.ClaimType, Jurisdiction: sub.Jurisdiction,
-		ClaimedValue: sub.ClaimedValue, AssertedBy: asserter, AssertedVia: "REVIEWER", AssertedAt: now, Purpose: sub.Purpose,
-		Status: verification.InitialClaimStatus("REVIEWER"), EvidenceIDs: evidenceIDs, SourceAppID: c.ApplicationID, Version: 1}
+		ClaimedValue: sub.ClaimedValue, AssertedBy: asserter, AssertedVia: originReviewer, AssertedAt: now, Purpose: sub.Purpose,
+		Status: verification.InitialClaimStatus(originReviewer), EvidenceIDs: evidenceIDs, SourceAppID: c.ApplicationID, Version: 1}
+	if err := insertClaim(ctx, tx, c, cl, now, actor); err != nil {
+		return cl, err
+	}
+	return cl, tx.Commit(ctx)
+}
+
+// Claim origins of evidence/v1 lifecycle.yaml initial_by_origin.
+const (
+	originReviewer  = "REVIEWER"
+	originApplicant = "APPLICANT"
+)
+
+// insertClaim adds cl to the locked case c, with its evidence links, and
+// audits it.
+func insertClaim(ctx context.Context, tx pgx.Tx, c verification.Case, cl verification.Claim, now time.Time, actor AuditActor) error {
 	doc, _ := json.Marshal(cl)
 	if _, err := tx.Exec(ctx, `INSERT INTO evidence.claim (claim_id, case_id, asserted_by, status, document, version, created_at)
-		VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6)`, cl.ClaimID, caseID, asserter, cl.Status, doc, now); err != nil {
-		return cl, fmt.Errorf("add claim: %w", err)
+		VALUES ($1, $2, $3, $4, $5::jsonb, 1, $6)`, cl.ClaimID, c.CaseID, cl.AssertedBy, cl.Status, doc, now); err != nil {
+		return fmt.Errorf("add claim: %w", err)
 	}
-	for _, id := range evidenceIDs {
+	for _, id := range cl.EvidenceIDs {
 		if _, err := tx.Exec(ctx, `INSERT INTO evidence.claim_evidence (claim_id, evidence_id) VALUES ($1, $2)`, cl.ClaimID, id); err != nil {
-			return cl, err
+			return err
 		}
 	}
 	c.ClaimIDs = append(c.ClaimIDs, cl.ClaimID)
 	c.Version++
 	if err := saveCase(ctx, tx, c); err != nil {
-		return cl, err
+		return err
 	}
-	if err := insertProvisioningAudit(ctx, tx, actor, "", "verification_claim.added", "verification-case/"+caseID, map[string]any{
-		"case_id": caseID, "claim_id": cl.ClaimID, "claim_type": cl.ClaimType}); err != nil {
-		return cl, err
-	}
-	return cl, tx.Commit(ctx)
+	return insertProvisioningAudit(ctx, tx, actor, "", "verification_claim.added", "verification-case/"+c.CaseID, map[string]any{
+		"case_id": c.CaseID, "claim_id": cl.ClaimID, "claim_type": cl.ClaimType, "origin": cl.AssertedVia})
 }
 
 func (r *PostgresRepository) ListVerificationClaims(ctx context.Context, caseID string) ([]verification.Claim, error) {

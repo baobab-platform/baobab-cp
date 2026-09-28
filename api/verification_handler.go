@@ -269,6 +269,35 @@ func (h verificationHandler) addClaim(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, cl)
 }
 
+// openClaimVerification takes a SELF_ASSERTED claim, typically an
+// applicant's, under verification so it can be checked and decided. It
+// changes no standing.
+func (h verificationHandler) openClaimVerification(w http.ResponseWriter, r *http.Request) {
+	caseID, ok := pathID(w, r, "caseID", verificationCaseIDPattern)
+	if !ok {
+		return
+	}
+	claimID, ok := pathID(w, r, "claimID", claimIDPattern)
+	if !ok {
+		return
+	}
+	version, ok := versionIfMatch(w, r)
+	if !ok {
+		return
+	}
+	_, actor, ok := resolveActor(w, r, h.identities, false)
+	if !ok {
+		return
+	}
+	cl, err := h.repo.OpenClaimVerification(r.Context(), caseID, claimID, version, h.clock(), actor)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("ETag", entityTag(cl.Version))
+	writeJSON(w, http.StatusOK, cl)
+}
+
 func (h verificationHandler) listClaims(w http.ResponseWriter, r *http.Request) {
 	listFor(h, w, r, h.repo.ListVerificationClaims)
 }

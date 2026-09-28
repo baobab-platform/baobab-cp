@@ -262,6 +262,9 @@ func New(dependencies Dependencies) http.Handler {
 		if dependencies.Verification != nil {
 			onboarder.Cases = dependencies.Verification
 		}
+		if decisions, ok := dependencies.OrganisationAdmission.(svcorg.AdmissionDecisions); ok {
+			onboarder.Decisions = decisions
+		}
 		admission := organisationAdmissionHandler{onboarder: onboarder}
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/organisation-admission", admission.onboard)
 	}
@@ -321,6 +324,7 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(decide...).Post("/v1/admin/verification-cases/{caseID}/conclusion", v.concludeCase)
 		r.With(write...).Post("/v1/admin/verification-cases/{caseID}/claims", v.addClaim)
 		r.With(read...).Get("/v1/admin/verification-cases/{caseID}/claims", v.listClaims)
+		r.With(write...).Post("/v1/admin/verification-cases/{caseID}/claims/{claimID}/open-verification", v.openClaimVerification)
 		r.With(write...).Post("/v1/admin/verification-cases/{caseID}/checks", v.recordCheck)
 		r.With(read...).Get("/v1/admin/verification-cases/{caseID}/checks", v.listChecks)
 		r.With(decide...).Post("/v1/admin/verification-cases/{caseID}/results", v.recordResult)
@@ -370,6 +374,14 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(applicantWrite).Post("/v1/client-applications/{applicationID}/submit", apps.submit())
 		r.With(applicantWrite).Post("/v1/client-applications/{applicationID}/response", apps.respondToRequest())
 		r.With(applicantWrite).Post("/v1/client-applications/{applicationID}/withdraw", apps.withdraw())
+		if dependencies.Verification != nil {
+			// ADR-BCP-023 sections 191-192: applicants assert claims on their
+			// own application; reviewers verify them in its case.
+			claims := applicantClaimHandler{apps: apps, claims: dependencies.Verification}
+			r.With(applicantWrite).Post("/v1/client-applications/{applicationID}/claims", claims.create)
+			r.With(applicantRead).Get("/v1/client-applications/{applicationID}/claims", claims.list)
+			r.With(applicantWrite).Post("/v1/client-applications/{applicationID}/claims/{claimID}/withdraw", claims.withdraw)
+		}
 
 		review := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)}
 		r.With(review...).Get("/v1/admission/applications", apps.queue)

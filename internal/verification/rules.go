@@ -21,8 +21,9 @@ const (
 
 // Actors of lifecycle.yaml.
 const (
-	ActorReviewer = "REVIEWER"
-	ActorPlatform = "PLATFORM"
+	ActorReviewer  = "REVIEWER"
+	ActorPlatform  = "PLATFORM"
+	ActorApplicant = "APPLICANT"
 )
 
 // Case statuses and claim statuses this package moves between.
@@ -32,6 +33,8 @@ const (
 	CaseVerified    = "VERIFIED"
 	ClaimUnderCheck = "UNDER_VERIFICATION"
 	ClaimVerified   = "VERIFIED"
+	ClaimWithdrawn  = "WITHDRAWN"
+	ClaimSuperseded = "SUPERSEDED"
 	EvidenceAvail   = "AVAILABLE"
 )
 

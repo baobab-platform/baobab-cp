@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.15.0
+  version: 1.16.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -1005,7 +1005,8 @@ paths:
       summary: Conclude a verification case
       description: >-
         Concludes a VERIFYING case at the version If-Match names.
-        complete_verified requires every claim of the case to be VERIFIED;
+        complete_verified requires at least one claim, and every claim of the
+        case that still stands (not WITHDRAWN or SUPERSEDED) to be VERIFIED;
         complete_not_verified records that the evidence was insufficient, never
         that a claim is false (ADR-BCP-023 section 33).
       security:
@@ -1113,6 +1114,49 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/verification-cases/{case_id}/claims/{claim_id}/open-verification:
+    parameters:
+      - $ref: "#/components/parameters/VerificationCaseId"
+      - $ref: "#/components/parameters/EvidenceClaimId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Verification]
+      operationId: openClaimVerification
+      summary: Take an applicant's claim under verification
+      description: >-
+        Moves a SELF_ASSERTED claim of the case to UNDER_VERIFICATION
+        (evidence/v1 lifecycle.yaml evidence_claim open_verification) at the
+        version If-Match names, so checks and a result can be recorded. The
+        case must be open. It changes no standing: only a result does.
+      security:
+        - adminOidc: [verification:write]
+      parameters:
+        - $ref: "#/components/parameters/VersionIfMatch"
+      responses:
+        "200":
+          description: Under verification
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceClaim
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
         "500":
           $ref: "#/components/responses/InternalError"
         "503":
@@ -1750,6 +1794,128 @@ paths:
           $ref: "#/components/responses/Conflict"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /client-applications/{application_id}/claims:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Applications]
+      operationId: createApplicantClaim
+      summary: Assert a claim about my own application
+      description: >-
+        Records what the applicant asserts, such as a legal name or
+        registration number, as an ADR-BCP-023 claim (sections 7, 9, 191).
+        Only the applicant's own application, and only while it is DRAFT or
+        INFORMATION_REQUIRED. The Control Plane derives the rest:
+          - the application's ORGANISATION_ADMISSION VerificationCase, with
+            subject APPLICATION, opened on the first claim;
+          - asserted_by, which is the caller;
+          - origin APPLICANT and status SELF_ASSERTED.
+        A claim never verifies itself: only a reviewer's verification result
+        changes its standing, and only VERIFIED claims are promoted at
+        admission (section 192). A closed case takes no claims (409). A
+        withdrawn claim no longer stands: it neither blocks nor counts towards
+        concluding the case VERIFIED. A replay with the same Idempotency-Key and
+        body returns the original claim with 200; a different body under the
+        same key is refused (409).
+      security:
+        - adminOidc: [application:write]
+      parameters:
+        - $ref: "#/components/parameters/OptionalIdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../evidence/v1/evidence.schema.json#/$defs/ApplicantClaimSubmission
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceClaim
+        "200":
+          description: A replay of the same Idempotency-Key and body; the original claim
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceClaim
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    get:
+      tags: [Applications]
+      operationId: listApplicantClaims
+      summary: List the claims made on my own application
+      security:
+        - adminOidc: [application:read]
+      responses:
+        "200":
+          description: The application's claims, oldest first
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceClaimList
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /client-applications/{application_id}/claims/{claim_id}/withdraw:
+    parameters:
+      - $ref: "#/components/parameters/ApplicationId"
+      - $ref: "#/components/parameters/EvidenceClaimId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Applications]
+      operationId: withdrawApplicantClaim
+      summary: Withdraw a claim I asserted
+      description: >-
+        The applicant command of evidence/v1 lifecycle.yaml evidence_claim, for a
+        claim the caller asserted on their own application while it is still
+        SELF_ASSERTED or UNDER_VERIFICATION, at the version If-Match names.
+      security:
+        - adminOidc: [application:write]
+      parameters:
+        - $ref: "#/components/parameters/VersionIfMatch"
+      responses:
+        "200":
+          description: Withdrawn
+          content:
+            application/json:
+              schema:
+                $ref: ../../evidence/v1/evidence.schema.json#/$defs/EvidenceClaim
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
   # ---------------------------------------------------------------------------
@@ -4531,6 +4697,12 @@ components:
       required: true
       schema:
         $ref: ../../evidence/v1/domain.schema.json#/$defs/verificationCaseId
+    EvidenceClaimId:
+      name: claim_id
+      in: path
+      required: true
+      schema:
+        $ref: ../../evidence/v1/domain.schema.json#/$defs/evidenceClaimId
     EvidenceDiscrepancyId:
       name: discrepancy_id
       in: path
