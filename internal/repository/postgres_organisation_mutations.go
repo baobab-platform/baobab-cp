@@ -49,9 +49,24 @@ func activated(state domain.VerificationState, status string) bool {
 	return state == domain.VerificationVerified && status == domain.RelationshipStatusActive
 }
 
+// ErrVerifiedAtCreation: a record is never created VERIFIED. Verification is
+// a transition (Verify*, a verification-case outcome, or first-party
+// governance), never a property a creator asserts (ADR-BCP-023 OEV-00).
+var ErrVerifiedAtCreation = errors.New("a record is never created VERIFIED; verify it through its verification path")
+
+func refuseVerifiedAtCreation(s domain.VerificationState) error {
+	if s == domain.VerificationVerified {
+		return ErrVerifiedAtCreation
+	}
+	return nil
+}
+
 // --- Organisation --------------------------------------------------------
 
 func (r *PostgresRepository) EnsureOrganisation(ctx context.Context, org domain.Organisation, actor AuditActor) (bool, error) {
+	if err := refuseVerifiedAtCreation(org.VerificationState); err != nil {
+		return false, err
+	}
 	if err := org.Validate(); err != nil {
 		return false, err
 	}
@@ -118,6 +133,9 @@ func organisationCreatedChange(org domain.Organisation) events.OrganisationChang
 // --- LegalEntityProfile --------------------------------------------------
 
 func (r *PostgresRepository) EnsureLegalEntityProfile(ctx context.Context, lep domain.LegalEntityProfile, actor AuditActor) (bool, error) {
+	if err := refuseVerifiedAtCreation(lep.VerificationState); err != nil {
+		return false, err
+	}
 	if err := lep.Validate(); err != nil {
 		return false, err
 	}
@@ -224,6 +242,9 @@ func corporateRelationshipActivatedChange(rowID, id string, rel domain.Corporate
 func (r *PostgresRepository) EnsureCorporateRelationship(ctx context.Context, rel domain.CorporateRelationship, actor AuditActor) (string, error) {
 	if rel.ID == "" {
 		rel.ID = domain.NewResourceID(domain.CorporateRelationshipIDPrefix)
+	}
+	if err := refuseVerifiedAtCreation(rel.VerificationState); err != nil {
+		return "", err
 	}
 	if err := rel.Validate(); err != nil {
 		return "", err
@@ -432,6 +453,9 @@ func platformRelationshipActivatedChange(rowID, id string, rel domain.PlatformRe
 func (r *PostgresRepository) EnsurePlatformRelationship(ctx context.Context, rel domain.PlatformRelationship, actor AuditActor) (string, error) {
 	if rel.ID == "" {
 		rel.ID = domain.NewResourceID(domain.PlatformRelationshipIDPrefix)
+	}
+	if err := refuseVerifiedAtCreation(rel.VerificationState); err != nil {
+		return "", err
 	}
 	if err := rel.Validate(); err != nil {
 		return "", err

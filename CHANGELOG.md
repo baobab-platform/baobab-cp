@@ -834,6 +834,7 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Security
 
+- No organisation record can be created VERIFIED (ADR-BCP-023; OEV-00 inventory, "Verification writers"). `EnsureOrganisation`, `EnsureLegalEntityProfile`, `EnsureCorporateRelationship` and `EnsurePlatformRelationship` refuse `VERIFIED` with `ErrVerifiedAtCreation`, so verification is only ever a transition: `Verify*`, a verification-case outcome, or first-party governance. No production caller created VERIFIED records, so this closes a latent bypass without changing behaviour.
 - Upgraded `golang.org/x/text` to `v0.39.0` to remediate
   `CVE-2026-56852`; the dependency upgrade also advances
   `golang.org/x/sync` to `v0.21.0`.
