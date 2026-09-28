@@ -262,6 +262,9 @@ func New(dependencies Dependencies) http.Handler {
 		if dependencies.Verification != nil {
 			onboarder.Cases = dependencies.Verification
 		}
+		if decisions, ok := dependencies.OrganisationAdmission.(svcorg.AdmissionDecisions); ok {
+			onboarder.Decisions = decisions
+		}
 		admission := organisationAdmissionHandler{onboarder: onboarder}
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/organisation-admission", admission.onboard)
 	}

@@ -65,6 +65,12 @@ var ErrFirstPartyOrganisation = errors.New("organisation holds a first-party pla
 // claims matching what the applicant submitted.
 var ErrVerificationCaseUnusable = errors.New("verification case cannot verify this admission")
 
+// AdmissionDecisions finds the ADR-BCP-017 decision an admission names.
+type AdmissionDecisions interface {
+	// GetAdmissionDecisionByID returns the decision, or nil when there is none.
+	GetAdmissionDecisionByID(ctx context.Context, admissionDecisionID string) (*domain.AdmissionDecision, error)
+}
+
 // VerificationCases reads the ADR-BCP-023 verification record admission
 // rests on.
 type VerificationCases interface {
@@ -204,7 +210,10 @@ func (req AdmissionRequest) Validate() error {
 type AdmissionOnboarder struct {
 	Orgs repository.OrganisationAdmissionRepository
 	// Cases is the verification record legal identity is verified from.
-	Cases      VerificationCases
+	Cases VerificationCases
+	// Decisions binds an application's own case to the admission decision
+	// being onboarded.
+	Decisions  AdmissionDecisions
 	PlatformID string
 	Now        func() time.Time
 }
@@ -410,6 +419,22 @@ func (o *AdmissionOnboarder) caseEvidence(ctx context.Context, req AdmissionRequ
 	case !about(c.Subject):
 		return repository.Evidence{}, unusable("case %s is about %s %s, not application %q, organisation %s or legal entity %s",
 			c.CaseID, c.Subject.SubjectType, c.Subject.SubjectID, req.ApplicationID, orgID, legalEntityID)
+	}
+	// An application's case speaks for this admission only when the
+	// approved decision being onboarded is that application's: the request's
+	// application_id alone is the caller's word.
+	if c.Subject.SubjectType == subjectApplication {
+		if o.Decisions == nil {
+			return repository.Evidence{}, errors.New("admission decisions are not available to admission")
+		}
+		d, err := o.Decisions.GetAdmissionDecisionByID(ctx, req.AdmissionDecisionID)
+		if err != nil {
+			return repository.Evidence{}, err
+		}
+		if d == nil || d.Decision != domain.DecisionApproved || d.ClientApplicationID != c.Subject.SubjectID {
+			return repository.Evidence{}, unusable("case %s is about application %s, which is not the approved application of decision %s",
+				c.CaseID, c.Subject.SubjectID, req.AdmissionDecisionID)
+		}
 	}
 	claims, err := o.Cases.ListVerificationClaims(ctx, c.CaseID)
 	if err != nil {

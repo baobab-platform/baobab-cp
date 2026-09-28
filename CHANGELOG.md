@@ -731,7 +731,8 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
     - creating a claim is replayable: an `Idempotency-Key` replay answers 200 with the original claim (migration `000073_applicant_claim_idempotency.sql`).
   - Concluding a case VERIFIED now requires at least one claim, and every claim that still stands to be VERIFIED. Withdrawn and superseded claims neither block nor count.
   - `POST /v1/admin/verification-cases/{caseID}/claims/{claimID}/open-verification` (`verification:write`, If-Match; permission `verification.review`) takes a claim under verification. It changes no standing.
-  - Organisation admission now also accepts the admitted application's own case (subject `APPLICATION`, matching the request's `application_id`). That is the usual path, since the case is worked before approval, and only its VERIFIED claims are promoted.
+  - Organisation admission now also accepts the admitted application's own case (subject `APPLICATION`). That is the usual path, since the case is worked before approval, and only its VERIFIED claims are promoted. The case counts only when the admission's decision is APPROVED and is that application's decision; the request's `application_id` alone is never trusted.
+  - A claim is added only while the application is editable, rechecked under the application's row lock in the claim's own transaction, so it can never race a submission.
 - The verification workflow (ADR-BCP-023 gate OEV-03; Shared `evidence/v1` and the control-plane `openapi.yaml` 1.14.0 Verification operations). Eighteen `/v1/admin` routes serve:
   - verification cases: open, list, read, transition and conclude;
   - a case's claims, checks, results and discrepancies;

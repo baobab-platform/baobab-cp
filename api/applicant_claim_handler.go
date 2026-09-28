@@ -101,6 +101,14 @@ func (h applicantClaimHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	cl, err := h.claims.AddApplicantClaim(r.Context(), app.ID, claim, domain.NewResourceID("ecl"), domain.NewResourceID("vcase"),
 		actor.PrincipalID, key, hash, h.clock(), actor.Audit)
+	if errors.Is(err, repository.ErrApplicationNotEditable) {
+		problem(w, r, http.StatusConflict, "APPLICATION_NOT_EDITABLE", "claims can be added only while the application is DRAFT or INFORMATION_REQUIRED", false)
+		return
+	}
+	if errors.Is(err, repository.ErrClientApplicationNotFound) {
+		problem(w, r, http.StatusNotFound, "CLIENT_APPLICATION_NOT_FOUND", "no such client application", false)
+		return
+	}
 	if errors.Is(err, repository.ErrVerificationIdempotency) {
 		problem(w, r, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED", "a concurrent request used the same idempotency key; retry to read its result", true)
 		return

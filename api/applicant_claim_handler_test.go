@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/service/application"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
+	"github.com/baobab-platform/baobab-cp/internal/verification"
 )
 
 // TestApplicantClaimRoutes is ADR-BCP-023 sections 7, 9 and 191-192 over
@@ -259,4 +262,12 @@ func TestApplicantClaimRoutes(t *testing.T) {
 	}
 	refused("a claim on a submitted application", call(http.MethodPost, claims, "alice", nil,
 		`{"claim_type": "ENTITY_STATUS", "claimed_value": {"value": "active"}}`), http.StatusConflict, "APPLICATION_NOT_EDITABLE")
+	// The repository rechecks editability under the application's row lock,
+	// so a claim racing a submission is refused even past the handler check.
+	if _, err := repo.AddApplicantClaim(ctx, app.ID, verification.ApplicantClaim{ClaimType: "ENTITY_STATUS",
+		ClaimedValue: verification.ClaimedValue{Value: "active"}}, domain.NewResourceID("ecl"), domain.NewResourceID("vcase"),
+		"principal:any", "", "", time.Now().UTC(), repository.AuditActor{ActorID: "principal:any", ActorType: "human",
+			CorrelationID: domain.NewUUIDv7()}); !errors.Is(err, repository.ErrApplicationNotEditable) {
+		t.Fatalf("a claim on a submitted application past the handler: %v", err)
+	}
 }

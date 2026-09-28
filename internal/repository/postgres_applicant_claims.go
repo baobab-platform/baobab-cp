@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/verification"
 )
 
@@ -39,6 +40,10 @@ type ApplicantClaims interface {
 	WithdrawApplicantClaim(ctx context.Context, applicationID, claimID string, expectedVersion int64, asserter string, now time.Time, actor AuditActor) (verification.Claim, error)
 }
 
+// ErrApplicationNotEditable: claims are added only while the application is
+// DRAFT or INFORMATION_REQUIRED.
+var ErrApplicationNotEditable = errors.New("client application is not editable")
+
 const (
 	subjectApplication = "APPLICATION"
 	admissionPurpose   = "ORGANISATION_ADMISSION"
@@ -53,6 +58,23 @@ func (r *PostgresRepository) AddApplicantClaim(ctx context.Context, applicationI
 		return verification.Claim{}, err
 	}
 	defer tx.Rollback(ctx)
+	// The application must still be editable when the claim commits: its row
+	// is locked, so a concurrent submission either commits first (and the
+	// claim is refused) or waits for it.
+	row, err := domain.ParseResourceID(domain.ClientApplicationIDPrefix, applicationID)
+	if err != nil {
+		return verification.Claim{}, ErrClientApplicationNotFound
+	}
+	var status string
+	if err := tx.QueryRow(ctx, `SELECT status FROM admission.client_application WHERE client_application_id = $1::uuid FOR UPDATE`, row).Scan(&status); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return verification.Claim{}, ErrClientApplicationNotFound
+		}
+		return verification.Claim{}, err
+	}
+	if !domain.ApplicationStatus(status).EditableByApplicant() {
+		return verification.Claim{}, fmt.Errorf("%w: the application is %s", ErrApplicationNotEditable, status)
+	}
 	// One application has one open admission case: concurrent first claims
 	// serialise here instead of opening two.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('application-case:' || $1, 0))`, applicationID); err != nil {

@@ -1,6 +1,7 @@
 package organisation
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -105,7 +106,8 @@ func legalEntitySubject(le string) verification.Subject {
 func TestOrganisationAdmissionVerifiesThroughItsCase(t *testing.T) {
 	e := newEnv(t)
 	dir := contracttest.SharedDir(t)
-	onboarder := &AdmissionOnboarder{Orgs: e.repo, Cases: e.repo}
+	decisions := decisionsByID{}
+	onboarder := &AdmissionOnboarder{Orgs: e.repo, Cases: e.repo, Decisions: decisions}
 	request := func(regno string) AdmissionRequest {
 		return AdmissionRequest{AdmissionDecisionID: "adm_" + token(),
 			Applicant: ApplicantOrganisation{LegalName: "Omega Traders Limited", Jurisdiction: "UG",
@@ -200,6 +202,15 @@ func TestOrganisationAdmissionVerifiesThroughItsCase(t *testing.T) {
 	byApplication.ApplicationID = "capp_" + token()
 	refused("an application's case for another application", appTenant, byApplication, ErrVerificationCaseUnusable)
 	byApplication.ApplicationID = applicationID
+	refused("an application's case with no admission decision", appTenant, byApplication, ErrVerificationCaseUnusable)
+	decisions[byApplication.AdmissionDecisionID] = &domain.AdmissionDecision{ID: byApplication.AdmissionDecisionID,
+		ClientApplicationID: "capp_" + token(), Decision: domain.DecisionApproved}
+	refused("an application's case named against another application's decision", appTenant, byApplication, ErrVerificationCaseUnusable)
+	decisions[byApplication.AdmissionDecisionID] = &domain.AdmissionDecision{ID: byApplication.AdmissionDecisionID,
+		ClientApplicationID: applicationID, Decision: domain.DecisionRejected}
+	refused("an application's case behind a rejected decision", appTenant, byApplication, ErrVerificationCaseUnusable)
+	decisions[byApplication.AdmissionDecisionID] = &domain.AdmissionDecision{ID: byApplication.AdmissionDecisionID,
+		ClientApplicationID: applicationID, Decision: domain.DecisionApproved}
 	if out, err := onboarder.Onboard(e.ctx, appTenant, byApplication, actor()); err != nil || out.LegalEntityVerificationState != string(domain.VerificationVerified) {
 		t.Fatalf("admission through the application's case: %+v %v", out, err)
 	}
@@ -215,4 +226,11 @@ func TestOrganisationAdmissionVerifiesThroughItsCase(t *testing.T) {
 	if audits, events := e.recordedUnder(t, replay); audits != 0 || len(events) != 0 {
 		t.Fatalf("replay recorded audits=%d events=%v", audits, events)
 	}
+}
+
+// decisionsByID is admission decisions by id; an unknown id has none.
+type decisionsByID map[string]*domain.AdmissionDecision
+
+func (d decisionsByID) GetAdmissionDecisionByID(_ context.Context, id string) (*domain.AdmissionDecision, error) {
+	return d[id], nil
 }
