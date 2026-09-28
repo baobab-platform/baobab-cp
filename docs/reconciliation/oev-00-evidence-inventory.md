@@ -34,13 +34,15 @@ Each item is classified KEEP, REMODEL, ADD or DEPRECATE. Nothing is migrated by 
      - applicant `verified` flags are cleared;
      - VERIFIED requires evidence, enforced in the database;
      - every VERIFIED row must have an audit event (integrity check);
-     - events publish only a count of evidence references, never the references.
+     - events never publish raw evidence (today only a count; §143 wants opaque identifiers and reason codes, see below).
 3. **No source, freshness, discrepancy (beyond one CONFLICTED path), compliance, screening, retention or assurance model exists.** OEV-04 and OEV-09 through OEV-14 are wholly `ADD`.
 4. **Nothing contradicts the ADR in a way that must be undone first.**
    - The REMODEL items need an additive first step (a real EvidenceRecord behind the opaque reference); none needs a destructive migration.
-   - Two gaps are flagged below:
+   - Four gaps are flagged below:
      - `organisation_profile` records no `verified_by`;
-     - applicant corporate-relationship claims have no production review path.
+     - applicant corporate-relationship claims have no production review path;
+     - the `Ensure*` operations can create a record already VERIFIED (latent; no production caller does);
+     - verification events do not yet carry the identifiers and reason codes §143 requires.
 
 ## ADR §289 audit list
 
@@ -57,13 +59,13 @@ Each item is classified KEEP, REMODEL, ADD or DEPRECATE. Nothing is migrated by 
 | **Current evidence references** | Everywhere above | `REMODEL` | Opaque strings the CP cannot resolve. OEV-01 defines `EvidenceReference` as a typed reference to an EvidenceRecord, and OEV-02 makes the CP able to resolve it. Existing strings stay readable as legacy references (no blind migration). |
 | **Uploaded documents** | None | `ADD` | There is no upload route, storage key, hash, quarantine, malware scan or retrieval link. Evidence is never in PostgreSQL, which holds, trivially. |
 | **Onboarding review** | Admission review lifecycle (ADR-BCP-017) and the organisation-admission route (`POST /v1/tenants/{id}/organisation-admission`) | `KEEP` (lifecycle), `REMODEL` (legal verification) | `LegalVerification{evidence_references, reason}` is supplied by a platform administrator on the admission call, and it verifies the legal-entity and organisation profiles directly. §191–193 want that decision to rest on VerificationResults. OEV-03 turns it into completing a VerificationCase, and it later falls under CCM-00's `CHANGESET_REQUIRED` for post-admission changes (OEV-16). |
-| **Shared schemas** | `organisation/v1/domain.schema.json` (`evidenceReference`, `verificationState`, identifier and address `verified`); `admission/v1/{application,decision}`; `organisation/v1/events.schema.json` (evidence count only); `supplier-onboarding/v1` (`supplier-kyb-evidence-recorded`, `supplier-kyb-decision-recorded`) | `KEEP` + `ADD` | The events already satisfy §143 and §231: counts, never references. The supplier-onboarding KYB contracts are owned by the hosting estate and do not amend organisation truth (their `system-of-record.yaml` says so), so they stay outside CP evidence. The evidence contracts OEV-01 needs do not exist. |
+| **Shared schemas** | `organisation/v1/domain.schema.json` (`evidenceReference`, `verificationState`, identifier and address `verified`); `admission/v1/{application,decision}`; `organisation/v1/events.schema.json`; `supplier-onboarding/v1` (`supplier-kyb-evidence-recorded`, `supplier-kyb-decision-recorded`) | `KEEP` (domain, admission), `REMODEL` (verification events), `ADD` (evidence contracts) | The verification events (`organisation.verified`, `legal-entity.verified`) publish only the subject id, a timestamp and `evidence_reference_count`; the reason and references stay in `audit_events` (`VerifyOrganisation`, `postgres_organisation_admission.go:185-190`). §143 requires evidence identifiers, verification state and reason codes, and §231 requires status and reason, so the events do **not** meet ADR-BCP-023 yet. The omission is deliberate today: ADR-BCP-018 §125 forbids publishing the current free-string references, which may embed detail. Once references are opaque `evr_` identifiers (OEV-01), the events can carry them safely, together with the verification state and reason codes; that is a Shared event-contract change plus a writer change, in OEV-03. The supplier-onboarding KYB contracts are owned by the hosting estate and do not amend organisation truth (their `system-of-record.yaml` says so), so they stay outside CP evidence. The evidence contracts OEV-01 needs do not exist. |
 | **IAM applicant identity** | `identity.principal`; one realm for applicants and staff (`internal/auth/applicant_staff_realm_test.go`) | `KEEP` | The applicant is a principal and never a verifier (§44, §169). Representative authority (§43–47) does not exist: an applicant's principal is not linked to any authority evidence. That is OEV-07. |
 | **Object-storage capability** | None in CP. No storage client or presigned URLs in `internal/`. | `ADD` | OEV-02 needs an approved infrastructure/object-storage boundary (ADR header: "Evidence Binary Storage Authority"). **It needs an owner decision:** which store, which region per market (§154), and workload identity only, with no static keys (standing rule). |
 
 ## Verification writers
 
-Every path that sets `verification_state = 'VERIFIED'`:
+Every path that can write `verification_state = 'VERIFIED'`, whether by transition or at creation:
 
 | Writer | Caller | Evidence | Class |
 |---|---|---|---|
@@ -72,6 +74,12 @@ Every path that sets `verification_state = 'VERIFIED'`:
 | `VerifyCorporateRelationship` (`postgres_organisation_mutations.go:310`) | **None in production (tests only)** | References, verifier and time | `REMODEL` in OEV-08, which adds the caller |
 | `VerifyPlatformRelationship` (`postgres_organisation_mutations.go:514`) | Admission orchestrator | `admission-decision:<id>` | `KEEP` |
 | `ApplyFirstPartyGovernance` (`postgres_organisation_governance.go:89,240`) | First-party reconciler | A legal-entity registry revision | `KEEP` |
+| `EnsureOrganisation` (`postgres_organisation_mutations.go:54`) | The organisation provisioner, always with `UNVERIFIED` (`internal/service/organisation/provision.go:90`) | **None required:** `Organisation.Validate` accepts VERIFIED with no evidence, and the table has no evidence CHECK | `REMODEL`: refuse VERIFIED at creation |
+| `EnsureLegalEntityProfile` (`postgres_organisation_mutations.go:120`) | The provisioner, always with `UNVERIFIED` (`provision.go:106`) | References and `verified_at`, if VERIFIED is passed | `REMODEL`: refuse VERIFIED at creation |
+| `EnsureCorporateRelationship` (`postgres_organisation_mutations.go:224`) | The admission orchestrator, always with `PENDING_REVIEW` (`admission.go:385`) | References, verifier and time, if VERIFIED is passed | `REMODEL`: refuse VERIFIED at creation |
+| `EnsurePlatformRelationship` (`postgres_organisation_mutations.go:432`) | The provisioner, the admission orchestrator and the corporate-change reviewer, always with `PENDING_REVIEW` (`provision.go:136`, `admission.go:407`, `corporate_change.go:127`) | References, verifier and time, if VERIFIED is passed | `REMODEL`: refuse VERIFIED at creation |
+
+**Creation-time verification is possible, though no production caller uses it.** The four `Ensure*` operations insert whatever `VerificationState` the caller passes, and their validators permit VERIFIED. That contradicts the repository's own contract, which says `Verify*` is "the only way a record becomes VERIFIED" (`internal/repository/organisation.go:32`). No route reaches it with VERIFIED today: every production caller passes `UNVERIFIED` or `PENDING_REVIEW`. The bypass is latent, not exploited, but OEV-03 must close it with the writers above. `Ensure*` should refuse VERIFIED, so that a verification-case outcome (or, for first-party facts, `ApplyFirstPartyGovernance`) is the only writer.
 
 Invariants already enforced that later gates must preserve:
 
@@ -79,7 +87,7 @@ Invariants already enforced that later gates must preserve:
 - **VERIFIED needs evidence,** enforced by a database CHECK on three of the four tables.
 - **Every VERIFIED row has a matching audit event** (`postgres_organisation_integrity.go:86–101`).
 - **REJECTED and EXPIRED cannot be overturned by a plain verify** (`postgres_organisation_admission.go:177`).
-- **Events never carry evidence** (`internal/events/organisation.go:7`).
+- **Events never carry raw evidence** (`internal/events/organisation.go:7`). OEV-03 keeps this rule while adding opaque evidence identifiers and reason codes (§143, §231).
 
 ## ADR concepts absent today
 
