@@ -61,6 +61,9 @@ func fullRouter(t *testing.T) chi.Routes {
 		ProviderMigrations: struct {
 			repository.ProviderMigrationRepository
 		}{},
+		Changesets: struct {
+			repository.ChangesetRepository
+		}{},
 		Onboarding:      &onboarding.Service{},
 		Applications:    &application.Service{},
 		Classifications: &subscription.Classifier{},

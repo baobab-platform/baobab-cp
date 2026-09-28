@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/changeset.schema.json",
+  "title": "Changeset",
+  "description": "The canonical governed unit of one coherent proposed change to Control Plane-owned desired state (ADR-BCP-021 sections 5-15, 21-29, 59-62, 113-114; gate CCM-01). A changeset states intent as a typed desired change; the Control Plane validates it, plans it side-effect free as a ChangePlan (change-plan.schema.json) whose digest an ApprovalDecision (approval-decision.schema.json, subject CHANGESET) binds, applies exactly that plan as an ExecutionOperation (execution-operation.schema.json), and records a ChangeOutcome. States are in changeset-lifecycle.yaml; the change kinds this version supports, with their type and operations, are in its change_kinds. A definition library; validate against #/$defs/ChangesetCreateRequest, #/$defs/Changeset, #/$defs/ChangesetPlan or #/$defs/ChangeOutcome.",
+  "$defs": {
+    "changesetState": {
+      "type": "string",
+      "enum": ["DRAFT", "VALIDATING", "INVALID", "PLANNING", "BLOCKED", "PLANNED", "AWAITING_APPROVAL", "REJECTED", "CHANGES_REQUESTED", "APPROVED", "SCHEDULED", "APPLYING", "FAILED", "PARTIALLY_APPLIED", "VERIFYING", "VERIFICATION_FAILED", "COMPLETED", "CANCELLED", "SUPERSEDED", "EXPIRED", "COMPENSATED"],
+      "description": "ADR-BCP-021 section 15. Transitions, commands and terminal states are in changeset-lifecycle.yaml. Distinct from the ExecutionOperation status, which is the operation's, never the changeset's."
+    },
+    "changesetType": {
+      "type": "string",
+      "enum": ["ONBOARD", "MODIFY", "EXPAND", "REDUCE", "SUSPEND", "REINSTATE", "MIGRATE", "DECOMMISSION", "SECURITY_REMEDIATION", "EMERGENCY", "RECONCILIATION_REPAIR"],
+      "description": "Section 13. Derived by the Control Plane from the desired change's kind (changeset-lifecycle.yaml change_kinds), never supplied by the caller."
+    },
+    "changeSource": {
+      "type": "string",
+      "enum": ["HUMAN_CONSOLE", "API", "AUTOMATION", "MIGRATION", "RECONCILIATION", "SECURITY_RESPONSE"],
+      "description": "Section 11. Recorded by the Control Plane from the verified caller; machine-initiated changes never bypass governance (section 12)."
+    },
+    "TenantSuspension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "tenant_id"],
+      "description": "Suspend an ACTIVE tenant: its desired and observed lifecycle status become suspended. A SUSPEND changeset.",
+      "properties": {
+        "kind": { "const": "TENANT_SUSPENSION" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" }
+      }
+    },
+    "TenantReinstatement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "tenant_id"],
+      "description": "Reinstate a suspended tenant to active. A REINSTATE changeset.",
+      "properties": {
+        "kind": { "const": "TENANT_REINSTATEMENT" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" }
+      }
+    },
+    "desiredChange": {
+      "description": "What outcome is wanted, in canonical platform concepts, never provider commands (section 6). One kind per changeset; kinds are added additively.",
+      "oneOf": [
+        { "$ref": "#/$defs/TenantSuspension" },
+        { "$ref": "#/$defs/TenantReinstatement" }
+      ]
+    },
+    "ChangesetCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "reason", "desired_change"],
+      "description": "A draft changeset. The caller states intent and why; type, scope, source, requester and risk are derived by the Control Plane.",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 4000 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "business_justification": { "type": "string", "maxLength": 2000 },
+        "desired_change": { "$ref": "#/$defs/desiredChange" }
+      }
+    },
+    "ChangesetCancelRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "planReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id", "plan_version", "plan_digest"],
+      "properties": {
+        "plan_id": { "$ref": "domain.schema.json#/$defs/provisioningPlanId" },
+        "plan_version": { "type": "integer", "minimum": 1 },
+        "plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" }
+      }
+    },
+    "Changeset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changeset_id", "changeset_type", "title", "reason", "source", "requested_by", "requested_at", "target_scope", "base_revision", "desired_change", "state", "created_at", "updated_at", "revision"],
+      "description": "The changeset aggregate (section 7). Mutable only as a DRAFT; from submission, controlled versioning applies (section 210). revision is its optimistic-concurrency version, sent back in If-Match; base_revision is the revision of the target the plan was generated against (section 31).",
+      "properties": {
+        "changeset_id": { "$ref": "domain.schema.json#/$defs/changesetId" },
+        "changeset_type": { "$ref": "#/$defs/changesetType" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 4000 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "business_justification": { "type": "string", "maxLength": 2000 },
+        "source": { "$ref": "#/$defs/changeSource" },
+        "requested_by": { "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId" },
+        "requested_at": { "type": "string", "format": "date-time" },
+        "target_scope": { "$ref": "../../administration/v1/scope.schema.json#/$defs/AdministrativeScope" },
+        "base_revision": { "type": "integer", "minimum": 1 },
+        "desired_change": { "$ref": "#/$defs/desiredChange" },
+        "risk_class": { "$ref": "change-plan.schema.json#/$defs/riskClass" },
+        "state": { "$ref": "#/$defs/changesetState" },
+        "current_plan": { "$ref": "#/$defs/planReference" },
+        "approval_id": { "$ref": "domain.schema.json#/$defs/approvalDecisionId" },
+        "operation_id": { "$ref": "domain.schema.json#/$defs/operationId" },
+        "blocking_reasons": {
+          "type": "array",
+          "items": { "$ref": "change-plan.schema.json#/$defs/planFinding" },
+          "description": "Why the changeset is INVALID or BLOCKED; codes are registered under changeset_blocker."
+        },
+        "correlation_id": { "$ref": "domain.schema.json#/$defs/uuid" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "revision": { "type": "integer", "minimum": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "enum": ["INVALID", "BLOCKED"] } } },
+          "then": { "required": ["blocking_reasons"], "properties": { "blocking_reasons": { "minItems": 1 } } }
+        },
+        {
+          "if": { "properties": { "state": { "enum": ["PLANNED", "AWAITING_APPROVAL", "APPROVED", "SCHEDULED", "APPLYING", "VERIFYING", "COMPLETED", "FAILED", "PARTIALLY_APPLIED", "VERIFICATION_FAILED", "REJECTED", "CHANGES_REQUESTED"] } } },
+          "then": { "required": ["current_plan", "risk_class"] }
+        },
+        {
+          "if": { "properties": { "state": { "enum": ["APPROVED", "SCHEDULED", "APPLYING", "VERIFYING", "COMPLETED", "FAILED", "PARTIALLY_APPLIED", "VERIFICATION_FAILED"] } } },
+          "then": { "required": ["approval_id"] }
+        },
+        {
+          "if": { "properties": { "state": { "enum": ["APPLYING", "VERIFYING", "COMPLETED", "FAILED", "PARTIALLY_APPLIED", "VERIFICATION_FAILED"] } } },
+          "then": { "required": ["operation_id"] }
+        }
+      ]
+    },
+    "ChangesetPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": { "type": "array", "items": { "$ref": "#/$defs/Changeset" } },
+        "next_page_token": { "type": "string", "maxLength": 512 }
+      }
+    },
+    "changesetOperation": {
+      "type": "string",
+      "enum": ["SUSPEND_TENANT", "REINSTATE_TENANT", "VERIFY_TENANT_STATE"],
+      "description": "Canonical changeset step operations. Extended additively as change kinds are added; each kind's operations are in changeset-lifecycle.yaml change_kinds."
+    },
+    "changesetStepResources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "from_status": { "$ref": "tenant.schema.json#/$defs/lifecycleStatus" },
+        "to_status": { "$ref": "tenant.schema.json#/$defs/lifecycleStatus" }
+      }
+    },
+    "changesetStep": {
+      "allOf": [{ "$ref": "change-plan.schema.json#/$defs/planStep" }],
+      "properties": {
+        "operation": { "$ref": "#/$defs/changesetOperation" },
+        "resources": { "$ref": "#/$defs/changesetStepResources" }
+      },
+      "required": ["resources"]
+    },
+    "ChangesetPlan": {
+      "allOf": [{ "$ref": "change-plan.schema.json#/$defs/ChangePlan" }],
+      "required": ["changeset_id", "changeset_type", "desired_change"],
+      "description": "A changeset's immutable plan: a ChangePlan whose steps are canonical changeset operations. It embeds the desired change it executes, so an approval bound to its digest covers the whole intent (sections 22-24).",
+      "properties": {
+        "changeset_id": { "$ref": "domain.schema.json#/$defs/changesetId" },
+        "changeset_type": { "$ref": "#/$defs/changesetType" },
+        "desired_change": { "$ref": "#/$defs/desiredChange" },
+        "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/changesetStep" } }
+      },
+      "unevaluatedProperties": false
+    },
+    "affectedResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_type", "resource_id"],
+      "properties": {
+        "resource_type": { "type": "string", "enum": ["TENANT"] },
+        "resource_id": { "type": "string", "maxLength": 63 },
+        "before": { "type": "string", "maxLength": 64 },
+        "after": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "verificationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checks"],
+      "properties": {
+        "status": { "type": "string", "enum": ["PASSED", "FAILED", "NOT_REQUIRED"] },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check", "passed"],
+            "properties": {
+              "check": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 64 },
+              "passed": { "type": "boolean" },
+              "detail": { "type": "string", "maxLength": 500 }
+            }
+          }
+        }
+      }
+    },
+    "ChangeOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changeset_id", "final_state", "affected_resources", "residual_risks", "recorded_at"],
+      "description": "The outcome record of a changeset that reached a terminal state (section 114). Immutable once recorded (section 209). applied_plan_digest, operation_id, started_at, completed_at and verification_result are present when a plan was applied.",
+      "properties": {
+        "changeset_id": { "$ref": "domain.schema.json#/$defs/changesetId" },
+        "operation_id": { "$ref": "domain.schema.json#/$defs/operationId" },
+        "final_state": { "type": "string", "enum": ["COMPLETED", "CANCELLED", "SUPERSEDED", "EXPIRED", "COMPENSATED", "INVALID", "REJECTED"] },
+        "applied_plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "affected_resources": { "type": "array", "items": { "$ref": "#/$defs/affectedResource" } },
+        "verification_result": { "$ref": "#/$defs/verificationResult" },
+        "compensation_summary": { "type": "string", "maxLength": 2000 },
+        "residual_risks": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+        "correlation_id": { "$ref": "domain.schema.json#/$defs/uuid" },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "final_state": { "enum": ["COMPLETED", "COMPENSATED"] } } },
+          "then": { "required": ["operation_id", "applied_plan_digest", "started_at", "completed_at", "verification_result"] }
+        }
+      ]
+    }
+  }
+}

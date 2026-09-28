@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.11.0
+  version: 1.12.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -43,6 +43,8 @@ tags:
     description: Tenant provisioning as desired-state convergence - plan, approve, apply, readiness and drift (ADR-SHARED-015).
   - name: Topology
     description: Provider migration - discovery, planning and the migration aggregate (ADR-BCP-006 sections 44-58, 119-122).
+  - name: Changesets
+    description: The governed unit of change - draft, submit, plan, approve, apply, cancel and outcome (ADR-BCP-021, ADR-BCP-022 section 44).
   - name: Operations
     description: Durable long-running operations and their retry and cancellation (ADR-BCP-022 sections 54-67).
   - name: Administration
@@ -3224,6 +3226,347 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
+  /admin/changesets:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Changesets]
+      operationId: createChangeset
+      summary: Draft a changeset
+      description: >-
+        Records a DRAFT changeset stating a typed desired change and why. The
+        Control Plane derives its type, target scope, source, requester and
+        base revision; nothing is validated, planned or changed until it is
+        submitted. Replaying the same Idempotency-Key returns the same
+        changeset.
+      security:
+        - adminOidc: [changeset:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./changeset.schema.json#/$defs/ChangesetCreateRequest
+      responses:
+        "201":
+          description: Drafted
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ./changeset.schema.json#/$defs/Changeset
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    get:
+      tags: [Changesets]
+      operationId: listChangesets
+      summary: List changesets, newest first
+      security:
+        - adminOidc: [changeset:read]
+      parameters:
+        - $ref: "#/components/parameters/PageLimit"
+        - name: page_token
+          in: query
+          required: false
+          schema: { type: string, maxLength: 512 }
+        - name: state
+          in: query
+          required: false
+          schema:
+            $ref: ./changeset.schema.json#/$defs/changesetState
+        - name: tenant_id
+          in: query
+          required: false
+          schema:
+            $ref: ./domain.schema.json#/$defs/tenantId
+      responses:
+        "200":
+          description: A page of changesets
+          content:
+            application/json:
+              schema:
+                $ref: ./changeset.schema.json#/$defs/ChangesetPage
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/changesets/{changeset_id}:
+    parameters:
+      - $ref: "#/components/parameters/ChangesetId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Changesets]
+      operationId: getChangeset
+      summary: Read a changeset
+      security:
+        - adminOidc: [changeset:read]
+      responses:
+        "200":
+          $ref: "#/components/responses/Changeset"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/changesets/{changeset_id}/submit:
+    parameters:
+      - $ref: "#/components/parameters/ChangesetId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Changesets]
+      operationId: submitChangeset
+      summary: Validate and plan the changeset
+      description: >-
+        Valid from DRAFT, BLOCKED, CHANGES_REQUESTED and APPROVED (a stale
+        approved plan), otherwise CHANGESET_STATE_CONFLICT (409). Validates
+        the desired change against authoritative state and generates a new,
+        side-effect-free plan version. The changeset returns INVALID or
+        BLOCKED with its blocking reasons, or AWAITING_APPROVAL with its
+        current plan. A decision on an earlier plan version lapses. The
+        changeset's revision is required in If-Match.
+      security:
+        - adminOidc: [changeset:write]
+      parameters:
+        - $ref: "#/components/parameters/ChangesetIfMatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/Changeset"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/changesets/{changeset_id}/plan:
+    parameters:
+      - $ref: "#/components/parameters/ChangesetId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Changesets]
+      operationId: getChangesetPlan
+      summary: Read the changeset's current immutable plan and its impact
+      description: >-
+        The plan a reviewer approves: its steps, impact analysis, risk class,
+        blockers and digest. The ETag is the plan digest.
+      security:
+        - adminOidc: [changeset:read]
+      responses:
+        "200":
+          description: The current plan
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ./changeset.schema.json#/$defs/ChangesetPlan
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/changesets/{changeset_id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/ChangesetId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Changesets]
+      operationId: decideChangesetPlan
+      summary: Approve, reject or request changes to the exact current plan
+      description: >-
+        Records an ApprovalDecision (subject CHANGESET) bound to the plan id,
+        version and digest the approver reviewed (ADR-BCP-021 sections 24,
+        49-52). Valid only in AWAITING_APPROVAL. The approver is the verified
+        caller, holds administrative authority to approve at the target's
+        scope, and is never the requester (CHANGESET_SELF_APPROVAL, 403). A
+        decision naming another plan or digest is PLAN_DIGEST_MISMATCH (409);
+        a stale plan is PLAN_STALE (409). The changeset's revision is
+        required in If-Match.
+      security:
+        - adminOidc: [changeset:approve]
+      parameters:
+        - $ref: "#/components/parameters/ChangesetIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./approval-decision.schema.json#/$defs/ApprovalDecisionRequest
+      responses:
+        "200":
+          description: The recorded decision
+          content:
+            application/json:
+              schema:
+                $ref: ./approval-decision.schema.json#/$defs/ApprovalDecision
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/changesets/{changeset_id}/apply:
+    parameters:
+      - $ref: "#/components/parameters/ChangesetId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Changesets]
+      operationId: applyChangeset
+      summary: Start asynchronous execution of the approved plan
+      description: >-
+        Takes no body. Executes exactly the approved plan (section 72): the
+        changeset must be APPROVED, its plan not stale and the approval's
+        digest equal to the current plan's (PLAN_NOT_APPROVED, PLAN_STALE,
+        PLAN_DIGEST_MISMATCH; 409). Returns 202 with a CHANGESET_APPLY
+        operation; 202 does not mean the change is complete (ADR-BCP-022
+        section 57). Replaying the same Idempotency-Key returns the same
+        operation.
+      security:
+        - adminOidc: [changeset:write]
+      parameters:
+        - $ref: "#/components/parameters/ChangesetIfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          $ref: "#/components/responses/ExecutionOperationAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /admin/changesets/{changeset_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ChangesetId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Changesets]
+      operationId: cancelChangeset
+      summary: Cancel a changeset that has not started applying
+      description: >-
+        Valid before apply starts (section 103); an applying changeset is
+        cancelled through its operation (section 104), otherwise
+        CHANGESET_STATE_CONFLICT (409). Records the reason. The changeset's
+        revision is required in If-Match.
+      security:
+        - adminOidc: [changeset:write]
+      parameters:
+        - $ref: "#/components/parameters/ChangesetIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./changeset.schema.json#/$defs/ChangesetCancelRequest
+      responses:
+        "200":
+          $ref: "#/components/responses/Changeset"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/changesets/{changeset_id}/outcome:
+    parameters:
+      - $ref: "#/components/parameters/ChangesetId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Changesets]
+      operationId: getChangeOutcome
+      summary: Read the outcome record of a changeset that has ended
+      description: >-
+        Present once the changeset reached a terminal state (section 114);
+        before that CHANGE_OUTCOME_NOT_FOUND (404).
+      security:
+        - adminOidc: [changeset:read]
+      responses:
+        "200":
+          description: The outcome
+          content:
+            application/json:
+              schema:
+                $ref: ./changeset.schema.json#/$defs/ChangeOutcome
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /admin/operations/{operation_id}:
     parameters:
       - $ref: "#/components/parameters/OperationId"
@@ -3404,6 +3747,24 @@ components:
       required: true
       schema:
         $ref: ./domain.schema.json#/$defs/tenantProvisioningId
+    ChangesetId:
+      name: changeset_id
+      in: path
+      required: true
+      schema:
+        $ref: ./domain.schema.json#/$defs/changesetId
+    ChangesetIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: >-
+        The changeset's current revision as a strong entity tag, e.g. "3"
+        (the ETag of its last read). Missing is refused with
+        IF_MATCH_REQUIRED (428); malformed with INVALID_IF_MATCH (400); stale
+        with CHANGESET_REVISION_MISMATCH (412).
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
     ProviderMigrationId:
       name: provider_migration_id
       in: path
@@ -3750,6 +4111,15 @@ components:
         application/json:
           schema:
             $ref: ./execution-operation.schema.json#/$defs/ExecutionOperation
+    Changeset:
+      description: The changeset
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: ./changeset.schema.json#/$defs/Changeset
     ExecutionOperationAccepted:
       description: Accepted for asynchronous execution. Poll the operation at Location; 202 does not mean success.
       headers:

@@ -103,6 +103,7 @@ var canonicalMigrationNames = []string{
 	"000066_health_observations.sql",
 	"000067_administrative_grants.sql",
 	"000068_provider_migrations.sql",
+	"000069_changesets.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

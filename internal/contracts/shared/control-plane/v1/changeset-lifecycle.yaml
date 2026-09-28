@@ -1,0 +1,141 @@
+# The canonical Changeset lifecycle (ADR-BCP-021 sections 15-33, 49-58,
+# 103-105, 113-118). ExecutionOperation status is the operation's own
+# lifecycle (execution-operation.schema.json) and is never folded into this
+# one: an operation SUCCEEDED does not mean the changeset is COMPLETED.
+#
+# Every transition is a command, named by the operation that requests it, or
+# a system transition the Control Plane takes. No state is a dead end: a
+# changeset that cannot proceed is replanned, cancelled, or ends terminally.
+id: baobab-platform.control-plane.changeset-lifecycle.v1
+initial_state: DRAFT
+terminal_states:
+  - INVALID
+  - REJECTED
+  - COMPLETED
+  - CANCELLED
+  - SUPERSEDED
+  - EXPIRED
+  - COMPENSATED
+states:
+  DRAFT:
+    # The only mutable state (section 210).
+    transitions:
+      submit: VALIDATING
+      cancel: CANCELLED
+  VALIDATING:
+    transitions:
+      validated: PLANNING
+      invalidate: INVALID
+  PLANNING:
+    # Side-effect free (section 20).
+    transitions:
+      planned: PLANNED
+      block: BLOCKED
+  BLOCKED:
+    transitions:
+      submit: VALIDATING
+      cancel: CANCELLED
+  PLANNED:
+    transitions:
+      request_approval: AWAITING_APPROVAL
+      cancel: CANCELLED
+  AWAITING_APPROVAL:
+    # One decision on the exact current plan; the approver is never the
+    # requester (sections 24, 49-52).
+    transitions:
+      approve: APPROVED
+      reject: REJECTED
+      request_changes: CHANGES_REQUESTED
+      expire: EXPIRED
+      supersede: SUPERSEDED
+      cancel: CANCELLED
+  CHANGES_REQUESTED:
+    # Revision produces a new plan version; earlier decisions stay (section 58).
+    transitions:
+      submit: VALIDATING
+      cancel: CANCELLED
+  APPROVED:
+    # Apply-time revalidation: a stale plan cannot be applied and needs a
+    # new plan and a new approval (sections 29-30, 71).
+    transitions:
+      apply: APPLYING
+      schedule: SCHEDULED
+      submit: VALIDATING
+      expire: EXPIRED
+      cancel: CANCELLED
+  SCHEDULED:
+    # Scheduling is not approval (section 123).
+    transitions:
+      start: APPLYING
+      cancel: CANCELLED
+  APPLYING:
+    transitions:
+      applied: VERIFYING
+      fail: FAILED
+      partially_apply: PARTIALLY_APPLIED
+  VERIFYING:
+    transitions:
+      complete: COMPLETED
+      fail_verification: VERIFICATION_FAILED
+  FAILED:
+    # No hidden partial failure (section 100): a failed apply is retried as
+    # the same operation or compensated.
+    transitions:
+      retry: APPLYING
+      compensate: COMPENSATED
+  PARTIALLY_APPLIED:
+    transitions:
+      retry: APPLYING
+      compensate: COMPENSATED
+  VERIFICATION_FAILED:
+    transitions:
+      reverify: VERIFYING
+      compensate: COMPENSATED
+triggers:
+  # Commands name the Shared operationId that requests them.
+  commands:
+    submit: submitChangeset
+    cancel: cancelChangeset
+    approve: decideChangesetPlan
+    reject: decideChangesetPlan
+    request_changes: decideChangesetPlan
+    apply: applyChangeset
+    retry: retryOperation
+  system:
+    - validated
+    - invalidate
+    - planned
+    - block
+    - request_approval
+    - expire
+    - supersede
+    - schedule
+    - start
+    - applied
+    - fail
+    - partially_apply
+    - complete
+    - fail_verification
+    - reverify
+    - compensate
+# The change kinds this version supports: the changeset type each derives,
+# the tenant lifecycle status it requires and produces, and the canonical
+# operations its plan runs, in order.
+change_kinds:
+  TENANT_SUSPENSION:
+    changeset_type: SUSPEND
+    from_status: [active]
+    to_status: suspended
+    operations: [SUSPEND_TENANT, VERIFY_TENANT_STATE]
+  TENANT_REINSTATEMENT:
+    changeset_type: REINSTATE
+    from_status: [suspended]
+    to_status: active
+    operations: [REINSTATE_TENANT, VERIFY_TENANT_STATE]
+# Codes a changeset carries as blocking_reasons, or its plan as blockers;
+# each is registered in authorization/v1/reason-code-registry.yaml under
+# changeset_blocker.
+blocking_codes:
+  - CHANGESET_TARGET_NOT_FOUND
+  - CHANGESET_TARGET_STATE_CONFLICT
+  - CHANGESET_TARGET_LOCKED

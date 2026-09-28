@@ -117,6 +117,9 @@ type Dependencies struct {
 	// Operations backs the durable operation routes (ADR-BCP-022 sections
 	// 54-67). Nil disables them.
 	Operations repository.OperationRepository
+	// Changesets backs the /v1/admin/changesets routes (ADR-BCP-021).
+	// Nil disables them.
+	Changesets repository.ChangesetRepository
 	// ProviderMigrations backs the /v1/provider-migrations routes
 	// (ADR-BCP-006 Gate 8). Nil disables them.
 	ProviderMigrations repository.ProviderMigrationRepository
@@ -258,6 +261,22 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates", cp.listCandidates)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-resolution-candidates/{candidateID}", cp.getCandidate)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:write"), a.requireAdminRole(nil, true)).Post("/v1/organisation-resolution-candidates/{candidateID}/decision", cp.decide)
+	}
+	if dependencies.Changesets != nil {
+		// ADR-BCP-021: the governed unit of change. Platform administrators
+		// only for now; approval is a separate scope from write.
+		changesets := changesetHandler{repo: dependencies.Changesets, identities: a.identities}
+		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "changeset:read"), a.requireAdminRole(nil, true)}
+		write := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "changeset:write"), a.requireAdminRole(nil, true)}
+		r.With(write...).Post("/v1/admin/changesets", changesets.create)
+		r.With(read...).Get("/v1/admin/changesets", changesets.list)
+		r.With(read...).Get("/v1/admin/changesets/{changesetID}", changesets.get)
+		r.With(write...).Post("/v1/admin/changesets/{changesetID}/submit", changesets.submit)
+		r.With(read...).Get("/v1/admin/changesets/{changesetID}/plan", changesets.plan)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:approve"), a.requireAdminRole(nil, true)).Post("/v1/admin/changesets/{changesetID}/approve", changesets.approve)
+		r.With(write...).Post("/v1/admin/changesets/{changesetID}/apply", changesets.apply)
+		r.With(write...).Post("/v1/admin/changesets/{changesetID}/cancel", changesets.cancel)
+		r.With(read...).Get("/v1/admin/changesets/{changesetID}/outcome", changesets.outcome)
 	}
 	if dependencies.ProviderMigrations != nil {
 		// ADR-BCP-006 Gate 8: planning a provider migration binds nothing;
