@@ -64,6 +64,9 @@ func fullRouter(t *testing.T) chi.Routes {
 		Changesets: struct {
 			repository.ChangesetRepository
 		}{},
+		Markets: struct {
+			repository.MarketRegistryRepository
+		}{},
 		Onboarding:      &onboarding.Service{},
 		Applications:    &application.Service{},
 		Classifications: &subscription.Classifier{},
@@ -129,12 +132,8 @@ var undescribed = []string{
 }
 
 // unimplemented are described by Shared but not served (FE-00 gap G2).
-var unimplemented = []string{
-	"GET /v1/markets/{}",
-	"PATCH /v1/markets/{}",
-	"POST /v1/markets",
-	"POST /v1/markets/{}/activate",
-}
+// The list may only shrink; the market registry emptied it.
+var unimplemented = []string{}
 
 // nonconforming are served at a described path but not yet to its
 // description. Like unimplemented operations, the Console's client removes

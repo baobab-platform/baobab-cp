@@ -4,11 +4,6 @@
 // cannot call a route that does not exist or does not match its contract.
 // api.TestOpenAPIDescribesTheRouter holds this list equal to the Control
 // Plane's unimplemented and nonconforming lists; update both together.
-export const UNIMPLEMENTED_OPERATIONS = [
-  "GET /markets/{market_id}",
-  "PATCH /markets/{market_id}",
-  "POST /markets",
-  "POST /markets/{market_id}/activate",
-] as const;
+export const UNIMPLEMENTED_OPERATIONS = [] as const;
 
 export type UnimplementedOperation = (typeof UNIMPLEMENTED_OPERATIONS)[number];

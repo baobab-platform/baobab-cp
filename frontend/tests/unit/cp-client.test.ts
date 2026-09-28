@@ -127,12 +127,20 @@ describe("Control Plane client", () => {
   it("cannot name an operation the Control Plane does not serve", () => {
     const { fetch } = recorder(() => json(200, {}));
     const cp = client(fetch);
-    // Declared by Shared, not served (FE-00 G2): each is a type error.
-    // @ts-expect-error GET /markets/{market_id} is not served
-    void cp.GET("/markets/{market_id}", { params: { path: { market_id: "m" } } });
+    // Not operations the Control Plane serves: each is a type error.
     // @ts-expect-error POST /mappings is not served
     void cp.POST("/mappings", { body: {} });
     // @ts-expect-error POST /resolution/mappings is not served
     void cp.POST("/resolution/mappings", { body: {} });
+  });
+
+  it("can name the market registry operations, now that they are served", () => {
+    const { fetch } = recorder(() => json(200, {}));
+    const cp = client(fetch);
+    void cp.GET("/markets/{market_id}", { params: { path: { market_id: "mkt_1" } } });
+    void cp.POST("/markets/{market_id}/activate", {
+      params: { path: { market_id: "mkt_1" }, header: { "If-Match": '"3"' } },
+      body: {},
+    });
   });
 });

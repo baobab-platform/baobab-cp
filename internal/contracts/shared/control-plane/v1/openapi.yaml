@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.12.0
+  version: 1.13.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -43,6 +43,8 @@ tags:
     description: Tenant provisioning as desired-state convergence - plan, approve, apply, readiness and drift (ADR-SHARED-015).
   - name: Topology
     description: Provider migration - discovery, planning and the migration aggregate (ADR-BCP-006 sections 44-58, 119-122).
+  - name: Markets
+    description: The market registry - register, read, update and activate commercial markets (ADR-BCP-004 section 18).
   - name: Changesets
     description: The governed unit of change - draft, submit, plan, approve, apply, cancel and outcome (ADR-BCP-021, ADR-BCP-022 section 44).
   - name: Operations
@@ -620,8 +622,20 @@ paths:
           $ref: "#/components/responses/InternalError"
   /markets:
     post:
+      tags: [Markets]
       operationId: createMarket
-      summary: Create a new market in DRAFT state
+      summary: Register a market
+      description: >-
+        Registers a market from its creator's configuration. The Control Plane
+        mints market_id, derives created_by from the caller and sets status:
+        VALIDATED when every market-lifecycle.yaml validation rule holds,
+        otherwise DRAFT with validation_findings. A market is never created
+        ACTIVE. Replaying the same Idempotency-Key returns the same market.
+        An unknown owner tenant is refused with MARKET_OWNER_UNKNOWN (422);
+        a canonical_key already registered with MARKET_CANONICAL_KEY_TAKEN
+        (409). An unknown parent market is not refused: like every other
+        validation rule, it is reported as a MARKET_PARENT_UNKNOWN finding
+        and the market stays DRAFT.
       security:
         - adminOidc: [market:write]
       parameters:
@@ -633,10 +647,15 @@ paths:
         content:
           application/json:
             schema:
-              $ref: ./market.schema.json#/$defs/market
+              $ref: ./market.schema.json#/$defs/MarketCreateRequest
       responses:
         "201":
-          description: Market created in DRAFT state
+          description: Registered, DRAFT or VALIDATED
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -647,24 +666,36 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
   /markets/{market_id}:
+    parameters:
+      - $ref: "#/components/parameters/MarketId"
+      - $ref: "#/components/parameters/CorrelationId"
     get:
+      tags: [Markets]
       operationId: getMarket
-      summary: Retrieve market configuration by ID
+      summary: Read a market's configuration
+      description: >-
+        Workloads read markets with market:read. Administrators read them
+        with market:write or market:approve, to review a market and obtain
+        the revision an update or activation must name.
       security:
         - workloadOidc: [market:read]
-      parameters:
-        - name: market_id
-          in: path
-          required: true
-          schema:
-            $ref: ./market.schema.json#/$defs/marketId
-        - $ref: "#/components/parameters/CorrelationId"
+        - adminOidc: [market:write]
+        - adminOidc: [market:approve]
       responses:
         "200":
-          description: Market details
+          description: The market
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -675,41 +706,39 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "404":
-          description: Market not found
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/NotFound"
     patch:
+      tags: [Markets]
       operationId: updateMarket
-      summary: Update market configuration (requires If-Match revision header)
+      summary: Update a DRAFT or VALIDATED market
+      description: >-
+        Applies a JSON merge patch at the revision the caller read. The
+        Control Plane re-evaluates validation afterwards, so an update can
+        move a market between DRAFT and VALIDATED. An ACTIVE or later market
+        is refused with MARKET_NOT_EDITABLE (409): changes to an active
+        market are governed changes.
       security:
         - adminOidc: [market:write]
       parameters:
-        - name: market_id
-          in: path
-          required: true
-          schema:
-            $ref: ./market.schema.json#/$defs/marketId
-        - name: If-Match
-          in: header
-          required: false
-          description: Optimistic concurrency control (current revision number).
-          schema:
-            type: integer
-            minimum: 1
-        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/MarketIfMatch"
         - $ref: "#/components/parameters/CausationId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: ./market.schema.json#/$defs/market
+              $ref: ./market.schema.json#/$defs/MarketUpdateRequest
       responses:
         "200":
-          description: Market updated
+          description: Updated
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -720,47 +749,51 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "404":
-          description: Market not found
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/NotFound"
         "409":
-          description: Revision conflict or state transition not permitted
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
   /markets/{market_id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/MarketId"
+      - $ref: "#/components/parameters/CorrelationId"
     post:
+      tags: [Markets]
       operationId: activateMarket
-      summary: Transition a market from VALIDATED to ACTIVE state
+      summary: Activate a VALIDATED market
+      description: >-
+        Activates the market at the revision the approver reviewed. The
+        approver is the authenticated caller, never a request field, and must
+        be neither the market's creator nor its last editor
+        (MARKET_SELF_ACTIVATION, 403). A market that is not VALIDATED is
+        refused with MARKET_NOT_VALIDATED (409).
       security:
         - adminOidc: [market:approve]
       parameters:
-        - name: market_id
-          in: path
-          required: true
-          schema:
-            $ref: ./market.schema.json#/$defs/marketId
-        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/MarketIfMatch"
         - $ref: "#/components/parameters/CausationId"
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: false
-              required: [approved_by]
-              properties:
-                approved_by:
-                  type: string
-                  maxLength: 256
+              $ref: ./market.schema.json#/$defs/MarketActivationRequest
       responses:
         "200":
-          description: Market activated
+          description: Activated
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -771,18 +804,18 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "404":
-          description: Market not found
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/NotFound"
         "409":
-          description: Market not in VALIDATED state
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetails"
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
   # ---------------------------------------------------------------------------
   # Applications (ADR-BCP-017): the applicant's own ClientApplications.
   # Another applicant's application is reported as not found.
@@ -3756,6 +3789,24 @@ components:
       required: true
       schema:
         $ref: ./domain.schema.json#/$defs/changesetId
+    MarketId:
+      name: market_id
+      in: path
+      required: true
+      schema:
+        $ref: ./market.schema.json#/$defs/marketId
+    MarketIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: >-
+        The market's current revision as a strong entity tag, e.g. "3" (the
+        ETag of its last read). Missing is refused with IF_MATCH_REQUIRED
+        (428); malformed with INVALID_IF_MATCH (400); stale with
+        MARKET_REVISION_MISMATCH (412).
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
     ChangesetIfMatch:
       name: If-Match
       in: header
