@@ -40,7 +40,7 @@ An **EngineRelease** is the Control Plane's immutable record of one version of o
 | `engine_id` | The engine it is a release of. |
 | `release_version` | The engine's semantic version (`MAJOR.MINOR.PATCH`, optional pre-release). |
 | `artifacts` | One or more artifacts (§2.2). There is at least one. |
-| `contract_versions` | For each capability the release implements, the capability contract versions it supports. Same shape as `EngineRegistration.contract_versions`. |
+| `contract_versions` | For each capability the release implements, the capability contract **major** versions it supports, as integers (§2.1.1). |
 | `source_revision` | The source commit the release was built from (40-hex git SHA). |
 | `provenance` | Optional reference to a build provenance attestation (§2.3). |
 | `status` | `CANDIDATE`, `APPROVED`, `DEPRECATED` or `REVOKED` (§2.4). |
@@ -53,6 +53,17 @@ An **EngineRelease** is the Control Plane's immutable record of one version of o
 3. **One owner per digest.** An artifact digest belongs to at most one release of one engine. Recording it under another release is refused, so an observed digest always identifies a single release.
 4. **Contract versions are the release's, not the engine's.** An engine's supported contract versions are the union over its releases that are `APPROVED` and deployed. §13 compatibility is checked against the release an instance runs (§2.6), not against the registration.
 
+
+#### 2.1.1 Contract version representation
+
+Compatibility needs one representation on both sides. Today:
+- `EngineRegistration.contract_versions` and `ProviderMigrationRequest.capabilities[].contract_version` are integer **major** versions;
+- a binding's `required_contract_version` is an integer in Shared, but the Control Plane stores it as text holding values such as `v1` and `1.0.0`.
+
+This ADR fixes the representation: **a contract version is the capability contract's major version, a positive integer.** Minor and patch versions are backward-compatible by the capability contract rules, so they never decide compatibility.
+- ER-01 declares the canonical form in Shared.
+- ER-02 migrates stored binding versions to it. `v1`, `1` and `1.x.y` all normalise to `1`; a value that cannot be normalised is a data defect, reported and never guessed.
+- Compatibility is set membership: the binding's major version is in the release's `contract_versions` for the capability.
 ### 2.2 Artifact identity
 
 An **artifact** is identified by content, never by name:
@@ -91,6 +102,10 @@ CANDIDATE ──approve──▶ APPROVED ──deprecate──▶ DEPRECATED
 | `DEPRECATED` | May still run, but may no longer be newly desired. |
 | `REVOKED` | Must not run: a security or correctness withdrawal. It is terminal. |
 
+**Revocation and desired state.** Revoking a release never leaves it desired:
+- Revocation is one transaction. Every instance whose `desired_release_id` names the revoked release gets a replacement desired release named in the revocation, or has its desired release cleared. Revocation is refused unless every such instance is covered.
+- Reads of desired state also refuse to return a release that is not `APPROVED` or `DEPRECATED`. This is a second guard, so a desired pointer to a revoked release can never reach deployment tooling.
+
 An instance observed running a `REVOKED` release is critical drift (§2.7).
 
 ### 2.5 Desired release
@@ -114,6 +129,7 @@ A **DeploymentObservation** is a time-bounded report of what is actually running
 | `artifacts` | The artifact digests observed running, with `platform` where known. |
 | `environment`, `region` | Where they were observed. Checked against the instance's own; a mismatch is drift, not an update. |
 | `observed_at`, `expires_at` | As for health. Expired, missing or future-dated means **UNKNOWN**. |
+| `recorded_at`, `ingestion_sequence` | Assigned by the Control Plane on acceptance; the ordering key for equal `observed_at`. |
 | `source` | The reporting workload's canonical principal (§2.9). |
 
 The Control Plane derives the **observed release** by resolving the observed digests. It is one of:
@@ -123,7 +139,7 @@ The Control Plane derives the **observed release** by resolving the observed dig
 - **MIXED:** the digests span several releases. This is expected briefly during a rolling upgrade, and is drift if it persists beyond policy.
 - **UNKNOWN:** there is no current observation.
 
-At equal `observed_at`, the observation reported later wins. Observations are append-only; the current one is derived.
+Observations are append-only; the current one is derived. The Control Plane stamps each accepted observation with `recorded_at` and a monotonically increasing `ingestion_sequence`, both assigned by the Control Plane and never by the reporter. The current observation is the one with the latest `observed_at`; at equal `observed_at`, the higher `ingestion_sequence` wins. Any replica or rebuilt projection therefore derives the same current observation.
 
 ### 2.7 Drift
 
@@ -162,10 +178,12 @@ In phases:
 ### 2.10 Events and metrics
 
 Events are in the `com.baobab-platform` namespace, through the transactional outbox:
-- `engine-release.recorded`;
-- `engine-release.status-changed`;
-- `engine-instance.desired-release-changed`, which infrastructure tooling may consume instead of polling;
-- `engine-instance.release-drift-detected`.
+- `com.baobab-platform.control-plane.engine-release.recorded.v1`;
+- `com.baobab-platform.control-plane.engine-release.status-changed.v1`;
+- `com.baobab-platform.control-plane.engine-instance.desired-release-changed.v1`, which infrastructure tooling may consume instead of polling;
+- `com.baobab-platform.control-plane.engine-instance.release-drift-detected.v1`.
+
+Each is registered in the Shared event registry with its payload schema before it is emitted (ER-01), following the envelope's versioned reverse-DNS naming.
 
 Metrics use bounded labels only:
 - the count of instances by `release_status` and `drift_reason`;
