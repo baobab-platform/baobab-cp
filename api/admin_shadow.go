@@ -20,10 +20,10 @@ import (
 
 // adminRoutePermissions names the AdministrativePermission each role-guarded
 // route performs, by method and chi route pattern (ADR-BCP-020 section 143:
-// map each existing role to explicit permissions). "" marks a route the
-// Shared permission registry does not name yet: it is counted, never
-// guessed. TestEveryGuardedRouteIsMapped keeps this table and the router in
-// step.
+// map each existing role to explicit permissions). Every route names a
+// permission registered in Shared; a route mapped to "" would be counted as
+// unregistered, never guessed, and TestEveryGuardedRouteIsMapped refuses it.
+// That test keeps this table and the router in step.
 var adminRoutePermissions = map[string]string{
 	"POST /v1/tenants":                                                    "tenant.provision",
 	"POST /v1/tenants/bootstrap-registrations":                            "tenant.provision",
@@ -122,18 +122,18 @@ var adminRoutePermissions = map[string]string{
 	"POST /v1/provider-migrations":                           "provider-migration.plan",
 	"GET /v1/provider-migrations/{providerMigrationID}":      "topology.view",
 	"GET /v1/provider-migrations/{providerMigrationID}/plan": "topology.view",
-	// Canonical mapping administration has no Shared permission yet
-	// (mapping.view, mapping.manage and mapping.approve are to be added).
-	"POST /v1/external-references":                      "",
-	"GET /v1/external-references":                       "",
-	"GET /v1/external-references/{externalReferenceID}": "",
-	"POST /v1/resolution/external-references":           "",
-	"POST /v1/mappings":                                 "",
-	"GET /v1/mappings/{mappingID}":                      "",
-	"PATCH /v1/mappings/{mappingID}":                    "",
-	"POST /v1/mappings/{mappingID}/validate":            "",
-	"POST /v1/mappings/{mappingID}/activate":            "",
-	"POST /v1/mappings/{mappingID}/retire":              "",
+	// Canonical mapping administration (ADR-SHARED-013): activation is the
+	// four-eyes, never-delegated mapping.approve.
+	"POST /v1/external-references":                      "mapping.manage",
+	"GET /v1/external-references":                       "mapping.view",
+	"GET /v1/external-references/{externalReferenceID}": "mapping.view",
+	"POST /v1/resolution/external-references":           "mapping.view",
+	"POST /v1/mappings":                                 "mapping.manage",
+	"GET /v1/mappings/{mappingID}":                      "mapping.view",
+	"PATCH /v1/mappings/{mappingID}":                    "mapping.manage",
+	"POST /v1/mappings/{mappingID}/validate":            "mapping.manage",
+	"POST /v1/mappings/{mappingID}/activate":            "mapping.approve",
+	"POST /v1/mappings/{mappingID}/retire":              "mapping.manage",
 }
 
 // shadowBudget bounds how long shadow evaluation may add to a request. On
