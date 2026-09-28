@@ -1,0 +1,83 @@
+# The ProviderMigration lifecycle (ADR-BCP-006 sections 45-52). Stages are
+# the migration's own lifecycle; ExecutionOperation status is separate
+# (execution-operation.schema.json) and is never folded into it.
+#
+# A migration is created in PLAN with a side-effect-free plan. Every advance
+# past PLAN is a controlled mutation (ADR-BCP-021): it requires an approval
+# bound to the current plan's digest and a plan without blockers, and runs as
+# a durable operation (ADR-BCP-022). CANARY and SHIFT move one cohort at a
+# time, in the request's order; VALIDATE follows each cohort.
+id: baobab-platform.control-plane.provider-migration-lifecycle.v1
+# Section 45's DISCOVER is the side-effect-free preview
+# (POST /provider-migrations/plan), never a stage a migration is in: a
+# created migration has already been discovered and starts in PLAN.
+initial_state: PLAN
+terminal_states:
+  - COMPLETE
+  - CANCELLED
+  - ROLLED_BACK
+states:
+  PLAN:
+    transitions:
+      replan: PLAN
+      prepare: PREPARE
+      cancel: CANCELLED
+  PREPARE:
+    # The target is registered, contract-compatible, provisioned, healthy,
+    # configured and bound in MIGRATION mode before it receives authoritative
+    # traffic (section 48).
+    transitions:
+      shadow: SHADOW
+      canary: CANARY
+      cancel: CANCELLED
+  SHADOW:
+    # Comparison only; shadow never determines a result (sections 41, 49).
+    transitions:
+      canary: CANARY
+      cancel: CANCELLED
+  CANARY:
+    # The first cohort (sections 50-51).
+    transitions:
+      validate: VALIDATE
+      roll_back: ROLLED_BACK
+  SHIFT:
+    # Each later cohort in turn (section 52).
+    transitions:
+      validate: VALIDATE
+      roll_back: ROLLED_BACK
+  VALIDATE:
+    # A cohort passed validation: the next cohort shifts, or, after the last,
+    # the source bindings retire.
+    transitions:
+      shift: SHIFT
+      retire_old: RETIRE_OLD
+      roll_back: ROLLED_BACK
+  RETIRE_OLD:
+    transitions:
+      complete: COMPLETE
+# The one-and-only authoritative writer rule (sections 55-56) as a
+# constraint on every STATEFUL_CUTOVER cohort's steps, in order.
+stateful_cohort_sequence:
+  - FREEZE_COHORT_WRITES
+  - MIGRATE_COHORT_DATA
+  - RECONCILE_COHORT_DATA
+  - SHIFT_COHORT
+  - UNFREEZE_COHORT_WRITES
+# Codes a ProviderMigrationPlan may carry as blockers; each is registered in
+# authorization/v1/reason-code-registry.yaml under provider_migration_blocker.
+blocking_codes:
+  - MIGRATION_SOURCE_NOT_BOUND
+  - MIGRATION_TARGET_NOT_REGISTERED
+  - MIGRATION_TARGET_NOT_SUPPORTED
+  - MIGRATION_TARGET_CONTRACT_INCOMPATIBLE
+  - MIGRATION_TARGET_UNHEALTHY
+  - MIGRATION_TARGET_NOT_ELIGIBLE
+  - MIGRATION_CONTEXT_UNASSIGNED
+  - MIGRATION_COHORT_OVERLAP
+  - MIGRATION_SHADOW_UNSAFE
+  - MIGRATION_ALREADY_IN_PROGRESS
+# Codes a plan may carry as warnings: they never block, and are not reason
+# codes.
+warning_codes:
+  - MIGRATION_NOT_REVERSIBLE
+  - MIGRATION_COHORT_EMPTY

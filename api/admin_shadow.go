@@ -87,6 +87,10 @@ var adminRoutePermissions = map[string]string{
 	"POST /v1/tenants/{tenantID}/provisioning/{provisioningID}/remediate": "reconciliation.request",
 	"GET /v1/tenants/{tenantID}/provisioning/{provisioningID}/readiness":  "readiness.view",
 	"GET /v1/tenants/{tenantID}/provisioning/{provisioningID}/drift":      "readiness.view",
+	"POST /v1/provider-migrations/plan":                                   "topology.view",
+	"POST /v1/provider-migrations":                                        "provider-migration.plan",
+	"GET /v1/provider-migrations/{providerMigrationID}":                   "topology.view",
+	"GET /v1/provider-migrations/{providerMigrationID}/plan":              "topology.view",
 	// Canonical mapping administration has no Shared permission yet
 	// (mapping.view, mapping.manage and mapping.approve are to be added).
 	"POST /v1/external-references":                      "",

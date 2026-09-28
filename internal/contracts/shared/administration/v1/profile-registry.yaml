@@ -39,6 +39,8 @@ profiles:
       - reconciliation.request
       - operation.view
       - operation.control
+      - topology.view
+      - provider-migration.plan
       - audit.view
       - changeset.submit
       - changeset.review

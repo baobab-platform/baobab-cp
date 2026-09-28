@@ -260,6 +260,20 @@ permissions:
     delegable: true
     read_only: true
     description: "View support diagnostics. Never secrets, customer configuration mutation or business-domain authority (section 33)."
+  - key: topology.view
+    domain: OPERATIONS
+    risk_class: LOW
+    scope_levels: [PLATFORM]
+    delegable: true
+    read_only: true
+    description: "View provider topology and provider migrations, including previewing a migration plan, which is side-effect free (ADR-BCP-006 sections 119-122)."
+  - key: provider-migration.plan
+    domain: OPERATIONS
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Create a provider migration and its plan (ADR-BCP-006 sections 44-58). Planning binds nothing; advancing a migration is a changeset, approved separately (ADR-BCP-021)."
   - key: audit.view
     domain: AUDIT
     risk_class: MODERATE

@@ -723,6 +723,26 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Provider migration planning (ADR-BCP-006 Gate 8; Shared
+  `control-plane/v1/provider-migration.schema.json`).
+  - `internal/topology/migration`: a side-effect-free planner. Discovery
+    covers the source provider's live PRIMARY and FALLBACK bindings and the
+    contexts their scopes name. Each context is assigned to exactly one
+    deterministic cohort. Blockers cover every unmet section 48
+    precondition: target registration, support, contract version, region
+    and environment eligibility, and CRITICAL-level health. Shadow is refused
+    until a capability declares itself shadow-safe. Stateful cohorts freeze,
+    migrate, reconcile, shift and unfreeze, in that order.
+  - Migration 000068 adds `topology.provider_migration` and
+    `topology.provider_migration_plan`. Creates for one source provider are
+    serialised, so a competing migration is always seen and blocked.
+  - Routes (platform administrators, `topology:read` or `topology:write`):
+    - `POST /v1/provider-migrations/plan`, the preview;
+    - `POST /v1/provider-migrations`, which is idempotent;
+    - `GET /v1/provider-migrations/{id}`;
+    - `GET /v1/provider-migrations/{id}/plan`.
+  - Advancing a migration past PLAN is left to the generic changeset
+    (ADR-BCP-021).
 - Shadow evaluation of administrative authority (ADR-BCP-020 section 144).
   Every role-guarded route maps to the permission it performs. Grants are
   evaluated beside the legacy role decision and counted in

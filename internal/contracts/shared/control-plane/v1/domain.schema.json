@@ -149,6 +149,13 @@
       "maxLength": 63,
       "description": "Control Plane-minted identifier of an immutable plan (a ChangePlan, ADR-BCP-021 SS21)."
     },
+    "providerMigrationId": {
+      "type": "string",
+      "pattern": "^pmg_[a-z0-9]+$",
+      "minLength": 7,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of a ProviderMigration (ADR-BCP-006 section 119)."
+    },
     "approvalDecisionId": {
       "type": "string",
       "pattern": "^apd_[a-z0-9]+$",
