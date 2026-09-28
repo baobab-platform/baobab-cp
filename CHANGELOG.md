@@ -723,6 +723,18 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Generic changesets (ADR-BCP-021 CCM-02 and CCM-03; Shared `control-plane/v1/changeset.schema.json`). The first change kinds are tenant suspension and reinstatement.
+  - `internal/changeset`:
+    - drafts derive their type, scope, source, requester and base revision from the change and the verified caller;
+    - the lifecycle is loaded from Shared `changeset-lifecycle.yaml`, and illegal transitions are refused;
+    - validation separates INVALID (the target does not exist) from BLOCKED (a state conflict, or an earlier open changeset on the same tenant);
+    - planning is deterministic and digest-bound, and a changed tenant makes the plan stale.
+  - Migration 000069 adds `changeset.changeset`, `plan`, `approval` and `outcome`, and admits the `CHANGESET_APPLY` operation type.
+  - Each lifecycle command is one transaction at the changeset's revision:
+    - approval is refused for the requester, for another plan or digest, and for a stale plan;
+    - apply re-validates under a tenant row lock, changes the tenant, verifies it by reading it back, and records the operation, the COMPLETED changeset and its outcome atomically;
+    - a replayed apply returns the same operation.
+  - Nine `/v1/admin/changesets` routes: platform administrators only, with approval under its own scope. The routes are shadow-evaluated against the `changeset.*` permissions.
 - Provider migration planning (ADR-BCP-006 Gate 8; Shared
   `control-plane/v1/provider-migration.schema.json`).
   - `internal/topology/migration`: a side-effect-free planner. Discovery

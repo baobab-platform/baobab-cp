@@ -11,7 +11,7 @@
     },
     "operationType": {
       "type": "string",
-      "enum": ["TENANT_PROVISIONING_APPLY", "TENANT_PROVISIONING_REMEDIATE"],
+      "enum": ["TENANT_PROVISIONING_APPLY", "TENANT_PROVISIONING_REMEDIATE", "CHANGESET_APPLY"],
       "description": "The class of work. Extended additively as other long-running commands adopt operations."
     },
     "ExecutionOperation": {
