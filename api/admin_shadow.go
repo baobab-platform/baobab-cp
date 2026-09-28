@@ -87,6 +87,24 @@ var adminRoutePermissions = map[string]string{
 	"POST /v1/tenants/{tenantID}/provisioning/{provisioningID}/remediate": "reconciliation.request",
 	"GET /v1/tenants/{tenantID}/provisioning/{provisioningID}/readiness":  "readiness.view",
 	"GET /v1/tenants/{tenantID}/provisioning/{provisioningID}/drift":      "readiness.view",
+	"POST /v1/admin/verification-cases":                                   "verification.review",
+	"GET /v1/admin/verification-cases":                                    "verification.view",
+	"GET /v1/admin/verification-cases/{caseID}":                           "verification.view",
+	"POST /v1/admin/verification-cases/{caseID}/transitions":              "verification.review",
+	"POST /v1/admin/verification-cases/{caseID}/claims":                   "verification.review",
+	"GET /v1/admin/verification-cases/{caseID}/claims":                    "verification.view",
+	"POST /v1/admin/verification-cases/{caseID}/checks":                   "verification.review",
+	"GET /v1/admin/verification-cases/{caseID}/checks":                    "verification.view",
+	"POST /v1/admin/verification-cases/{caseID}/results":                  "verification.decide",
+	"GET /v1/admin/verification-cases/{caseID}/results":                   "verification.view",
+	"POST /v1/admin/verification-cases/{caseID}/discrepancies":            "verification.review",
+	"GET /v1/admin/verification-cases/{caseID}/discrepancies":             "verification.view",
+	"POST /v1/admin/evidence-discrepancies/{discrepancyID}/transitions":   "verification.review",
+	"POST /v1/admin/evidence":                                             "evidence.register",
+	"GET /v1/admin/evidence/{evidenceID}":                                 "evidence.view",
+	"GET /v1/admin/evidence-sources":                                      "evidence.view",
+	"POST /v1/admin/evidence-discrepancies/{discrepancyID}/resolution":    "verification.decide",
+	"POST /v1/admin/verification-cases/{caseID}/conclusion":               "verification.decide",
 	"POST /v1/markets":                                       "market.request",
 	"GET /v1/markets/{marketID}":                             "market.view",
 	"PATCH /v1/markets/{marketID}":                           "market.request",
@@ -220,9 +238,32 @@ func (a *API) shadowResource(ctx context.Context, r *http.Request) (administrati
 	}
 	res.PlatformAccountID = chi.URLParam(r, "accountID")
 	res.MarketID = chi.URLParam(r, "marketID")
+	if caseID := chi.URLParam(r, "caseID"); caseID != "" && a.verification != nil {
+		if err := a.anchorCase(ctx, &res, caseID); err != nil {
+			return res, err
+		}
+	}
 	switch r.Method + " " + chi.RouteContext(r.Context()).RoutePattern() {
 	case "POST /v1/markets":
 		res.TenantID = peekBodyField(r, "owner_tenant_id")
+	case "POST /v1/admin/verification-cases":
+		res.OrganisationID = peekBodyField(r, "organisation_id")
+	case "POST /v1/admin/evidence-discrepancies/{discrepancyID}/transitions",
+		"POST /v1/admin/evidence-discrepancies/{discrepancyID}/resolution":
+		// A discrepancy is anchored by its case's organisation.
+		if a.verification == nil {
+			break
+		}
+		caseID, err := a.verification.DiscrepancyCase(ctx, chi.URLParam(r, "discrepancyID"))
+		if errors.Is(err, repository.ErrVerificationNotFound) {
+			break
+		}
+		if err != nil {
+			return res, err
+		}
+		if err := a.anchorCase(ctx, &res, caseID); err != nil {
+			return res, err
+		}
 	case "GET /v1/markets/{marketID}", "PATCH /v1/markets/{marketID}", "POST /v1/markets/{marketID}/activate":
 		// A market is anchored by its id and its owner tenant.
 		if a.markets == nil {
@@ -254,6 +295,20 @@ func (a *API) shadowResource(ctx context.Context, r *http.Request) (administrati
 		}
 	}
 	return res, nil
+}
+
+// anchorCase anchors a verification case's routes by the organisation it
+// concerns, when it names one.
+func (a *API) anchorCase(ctx context.Context, res *administration.Resource, caseID string) error {
+	c, err := a.verification.GetVerificationCase(ctx, caseID)
+	if errors.Is(err, repository.ErrVerificationNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	res.OrganisationID = c.OrganisationID
+	return nil
 }
 
 // peekPlatformAccountID reads platform_account_id from a binding request

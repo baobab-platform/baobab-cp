@@ -723,6 +723,24 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- The verification workflow (ADR-BCP-023 gate OEV-03; Shared `evidence/v1` and the control-plane `openapi.yaml` 1.14.0 Verification operations). Eighteen `/v1/admin` routes serve:
+  - verification cases: open, list, read, transition and conclude;
+  - a case's claims, checks, results and discrepancies;
+  - discrepancy transitions and resolution;
+  - evidence registration and metadata;
+  - the evidence source registry.
+  - `internal/verification` loads the lifecycle and source registry from the embedded Shared files and enforces the evidence chain:
+    - nobody checks or decides a claim they asserted (section 169), also refused by a database trigger;
+    - VERIFIED rests on a positive check from a source trusted for the claim type in the claim's jurisdiction;
+    - a positive check cites only evidence reviewers may open;
+    - a result cites only its own claim's checks, and discrepancies about its own claim;
+    - a claim's standing is its current result's outcome.
+  - A CONFLICTED result stops a VERIFYING case until a reviewer resolves the discrepancy and resumes it.
+  - `complete_verified` requires every claim VERIFIED.
+  - Recording results, concluding a case and closing a discrepancy require `verification:decide`.
+  - Evidence registration accepts source records and credentials only, never uploads, and GET serves metadata only.
+  - Migration 000071 adds the `evidence` schema.
+  - Every route is mapped for shadow evaluation, anchored by the case's organisation.
 - The market registry routes (ADR-BCP-004 section 18; Shared `control-plane/v1/market.schema.json` and `market-lifecycle.yaml`, `openapi.yaml` 1.13.0). The Control Plane now serves every operation its pinned OpenAPI describes.
   - `POST /v1/markets` registers a market:
     - the Control Plane mints `mkt_` ids, derives `created_by`, and replays by Idempotency-Key;

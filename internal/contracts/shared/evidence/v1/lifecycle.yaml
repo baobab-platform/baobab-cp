@@ -1,0 +1,142 @@
+# ADR-BCP-023 evidence and verification lifecycles (gate OEV-01).
+#
+# Four state machines: every permitted transition, the command that
+# performs it and the actors who may issue it. Anything not listed is
+# refused. Implementations test their transition tables against this file.
+#
+# Actors:
+#   APPLICANT  the principal who asserted a claim or submitted evidence for
+#              an application. An applicant never verifies, concludes or
+#              resolves anything (sections 9, 169).
+#   REVIEWER   a principal authorised to review evidence for the record's
+#              scope, who is not the applicant (sections 165-169).
+#   PLATFORM   the Control Plane itself: scanning, automated checks against
+#              registered sources, expiry and retention (sections 215, 238).
+version: 1
+machines:
+  # Sections 17-18, 237-239. Uploaded content is QUARANTINED until scanning
+  # completes; a malicious artifact stays quarantined until destroyed under
+  # incident or retention policy. Material that is not an uploaded file (a
+  # source record or credential) is accepted without quarantine.
+  # Content becomes accessible only through accept, release or unrestrict.
+  # Restricted evidence stays RESTRICTED when a newer record supersedes it
+  # (the newer record's supersedes names it), so supersession never lifts
+  # a restriction.
+  evidence_record:
+    states_from: evidenceStatus
+    initial: RECEIVED
+    terminal: [DESTROYED]
+    content_accessible: [AVAILABLE, SUPERSEDED, EXPIRED]
+    transitions:
+      - {command: quarantine, from: RECEIVED,    to: QUARANTINED, actors: [PLATFORM]}
+      - {command: accept,     from: RECEIVED,    to: AVAILABLE,   actors: [PLATFORM]}
+      - {command: release,    from: QUARANTINED, to: AVAILABLE,   actors: [PLATFORM]}
+      - {command: destroy,    from: QUARANTINED, to: DESTROYED,   actors: [PLATFORM]}
+      - {command: restrict,   from: AVAILABLE,   to: RESTRICTED,  actors: [REVIEWER, PLATFORM]}
+      - {command: unrestrict, from: RESTRICTED,  to: AVAILABLE,   actors: [REVIEWER]}
+      - {command: supersede,  from: AVAILABLE,   to: SUPERSEDED,  actors: [PLATFORM]}
+      - {command: expire,     from: AVAILABLE,   to: EXPIRED,     actors: [PLATFORM]}
+      - {command: destroy,    from: SUPERSEDED,  to: DESTROYED,   actors: [PLATFORM]}
+      - {command: destroy,    from: EXPIRED,     to: DESTROYED,   actors: [PLATFORM]}
+      - {command: destroy,    from: RESTRICTED,  to: DESTROYED,   actors: [PLATFORM]}
+
+  # Sections 7, 9, 32-33, 71-72. An applicant's claim starts SELF_ASSERTED;
+  # any other origin starts UNDER_VERIFICATION. A claim's standing after
+  # verification is always the outcome of its current VerificationResult,
+  # recorded by record_result; a newer result replaces an older one and both
+  # are kept.
+  evidence_claim:
+    states_from: claimStatus
+    initial_by_origin:
+      APPLICANT: SELF_ASSERTED
+      REVIEWER: UNDER_VERIFICATION
+      SOURCE_OBSERVATION: UNDER_VERIFICATION
+      INTERNAL_GOVERNANCE: UNDER_VERIFICATION
+    terminal: [WITHDRAWN, SUPERSEDED, REVOKED]
+    transitions:
+      - {command: open_verification, from: SELF_ASSERTED, to: UNDER_VERIFICATION, actors: [PLATFORM, REVIEWER]}
+      - {command: withdraw,  from: SELF_ASSERTED,      to: WITHDRAWN, actors: [APPLICANT]}
+      - {command: withdraw,  from: UNDER_VERIFICATION, to: WITHDRAWN, actors: [APPLICANT]}
+      - {command: record_result, from: UNDER_VERIFICATION, to: VERIFIED,           actors: [REVIEWER, PLATFORM]}
+      - {command: record_result, from: UNDER_VERIFICATION, to: PARTIALLY_VERIFIED, actors: [REVIEWER, PLATFORM]}
+      - {command: record_result, from: UNDER_VERIFICATION, to: NOT_VERIFIED,       actors: [REVIEWER, PLATFORM]}
+      - {command: record_result, from: UNDER_VERIFICATION, to: CONFLICTED,         actors: [REVIEWER, PLATFORM]}
+      # Re-verification (section 72) of a claim that already has a result.
+      - {command: record_result, from: VERIFIED,           to: PARTIALLY_VERIFIED, actors: [REVIEWER, PLATFORM]}
+      - {command: record_result, from: VERIFIED,           to: NOT_VERIFIED,       actors: [REVIEWER, PLATFORM]}
+      - {command: record_result, from: VERIFIED,           to: CONFLICTED,         actors: [REVIEWER, PLATFORM]}
+      - {command: record_result, from: PARTIALLY_VERIFIED, to: VERIFIED,           actors: [REVIEWER, PLATFORM]}
+      - {command: record_result, from: NOT_VERIFIED,       to: VERIFIED,           actors: [REVIEWER, PLATFORM]}
+      - {command: record_result, from: CONFLICTED,         to: VERIFIED,           actors: [REVIEWER]}
+      - {command: record_result, from: CONFLICTED,         to: NOT_VERIFIED,       actors: [REVIEWER]}
+      - {command: record_result, from: EXPIRED,            to: VERIFIED,           actors: [REVIEWER, PLATFORM]}
+      - {command: reopen, from: PARTIALLY_VERIFIED, to: UNDER_VERIFICATION, actors: [REVIEWER, PLATFORM]}
+      - {command: reopen, from: NOT_VERIFIED,       to: UNDER_VERIFICATION, actors: [REVIEWER, PLATFORM]}
+      - {command: reopen, from: CONFLICTED,         to: UNDER_VERIFICATION, actors: [REVIEWER]}
+      - {command: reopen, from: EXPIRED,            to: UNDER_VERIFICATION, actors: [REVIEWER, PLATFORM]}
+      - {command: expire, from: VERIFIED,           to: EXPIRED, actors: [PLATFORM]}
+      - {command: expire, from: PARTIALLY_VERIFIED, to: EXPIRED, actors: [PLATFORM]}
+      - {command: revoke, from: VERIFIED,           to: REVOKED, actors: [REVIEWER, PLATFORM]}
+      - {command: revoke, from: PARTIALLY_VERIFIED, to: REVOKED, actors: [REVIEWER, PLATFORM]}
+      - {command: supersede, from: SELF_ASSERTED,      to: SUPERSEDED, actors: [PLATFORM]}
+      - {command: supersede, from: UNDER_VERIFICATION, to: SUPERSEDED, actors: [PLATFORM]}
+      - {command: supersede, from: VERIFIED,           to: SUPERSEDED, actors: [PLATFORM]}
+      - {command: supersede, from: PARTIALLY_VERIFIED, to: SUPERSEDED, actors: [PLATFORM]}
+      - {command: supersede, from: NOT_VERIFIED,       to: SUPERSEDED, actors: [PLATFORM]}
+      - {command: supersede, from: CONFLICTED,         to: SUPERSEDED, actors: [PLATFORM]}
+      - {command: supersede, from: EXPIRED,            to: SUPERSEDED, actors: [PLATFORM]}
+
+  # Section 73. VERIFIED is not terminal: a later case supersedes it, or it
+  # expires. NOT_VERIFIED closes a case whose evidence was insufficient; a
+  # new case may be opened with supersedes pointing at it.
+  verification_case:
+    states_from: verificationCaseStatus
+    initial: DRAFT
+    terminal: [NOT_VERIFIED, CANCELLED, SUPERSEDED, EXPIRED]
+    transitions:
+      - {command: start_collection,    from: DRAFT,                to: COLLECTING_EVIDENCE,  actors: [REVIEWER, PLATFORM]}
+      - {command: submit,              from: COLLECTING_EVIDENCE,  to: READY_FOR_REVIEW,     actors: [APPLICANT, REVIEWER, PLATFORM]}
+      - {command: begin_verification,  from: READY_FOR_REVIEW,     to: VERIFYING,            actors: [REVIEWER, PLATFORM]}
+      - {command: request_information, from: VERIFYING,            to: INFORMATION_REQUIRED, actors: [REVIEWER]}
+      - {command: respond,             from: INFORMATION_REQUIRED, to: VERIFYING,            actors: [APPLICANT, REVIEWER]}
+      - {command: conflict,            from: VERIFYING,            to: CONFLICTED,           actors: [REVIEWER, PLATFORM]}
+      - {command: resume,              from: CONFLICTED,           to: VERIFYING,            actors: [REVIEWER]}
+      - {command: complete_verified,   from: VERIFYING,            to: VERIFIED,             actors: [REVIEWER, PLATFORM]}
+      - {command: complete_not_verified, from: VERIFYING,          to: NOT_VERIFIED,         actors: [REVIEWER]}
+      - {command: supersede,           from: VERIFIED,             to: SUPERSEDED,           actors: [PLATFORM]}
+      - {command: expire,              from: VERIFIED,             to: EXPIRED,              actors: [PLATFORM]}
+      - {command: expire,              from: INFORMATION_REQUIRED, to: EXPIRED,              actors: [PLATFORM]}
+      - {command: cancel,              from: DRAFT,                to: CANCELLED,            actors: [REVIEWER]}
+      - {command: cancel,              from: COLLECTING_EVIDENCE,  to: CANCELLED,            actors: [REVIEWER]}
+      - {command: cancel,              from: READY_FOR_REVIEW,     to: CANCELLED,            actors: [REVIEWER]}
+      - {command: cancel,              from: VERIFYING,            to: CANCELLED,            actors: [REVIEWER]}
+      - {command: cancel,              from: INFORMATION_REQUIRED, to: CANCELLED,            actors: [REVIEWER]}
+      - {command: cancel,              from: CONFLICTED,           to: CANCELLED,            actors: [REVIEWER]}
+
+  # Sections 74-76. A discrepancy is resolved by a reviewer, with a reason;
+  # a newer observation that removes the disagreement supersedes it.
+  evidence_discrepancy:
+    states_from: discrepancyStatus
+    initial: OPEN
+    terminal: [RESOLVED, ACCEPTED_EXCEPTION, FALSE_POSITIVE, SUPERSEDED]
+    transitions:
+      - {command: begin_review,     from: OPEN,         to: UNDER_REVIEW,       actors: [REVIEWER]}
+      - {command: resolve,          from: UNDER_REVIEW, to: RESOLVED,           actors: [REVIEWER]}
+      - {command: accept_exception, from: UNDER_REVIEW, to: ACCEPTED_EXCEPTION, actors: [REVIEWER]}
+      - {command: dismiss,          from: UNDER_REVIEW, to: FALSE_POSITIVE,     actors: [REVIEWER]}
+      - {command: supersede,        from: OPEN,         to: SUPERSEDED,         actors: [PLATFORM]}
+      - {command: supersede,        from: UNDER_REVIEW, to: SUPERSEDED,         actors: [PLATFORM]}
+
+# States no APPLICANT transition may ever enter, in any machine: an
+# applicant never makes anything available to reviewers, verified,
+# concluded or resolved (sections 9, 169, 238).
+applicant_forbidden_targets:
+  - AVAILABLE
+  - VERIFIED
+  - PARTIALLY_VERIFIED
+  - NOT_VERIFIED
+  - CONFLICTED
+  - REVOKED
+  - RESOLVED
+  - ACCEPTED_EXCEPTION
+  - FALSE_POSITIVE

@@ -57,6 +57,41 @@ permissions:
     delegable: false
     read_only: false
     description: "Manage corporate relationships, which can change effective administrative scope (sections 17, 113)."
+  - key: evidence.view
+    domain: EVIDENCE
+    risk_class: LOW
+    scope_levels: [PLATFORM, ORGANISATION]
+    delegable: true
+    read_only: true
+    description: "View evidence metadata and the evidence source registry. Never artifact content (ADR-BCP-023 sections 138, 270)."
+  - key: evidence.register
+    domain: EVIDENCE
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, ORGANISATION]
+    delegable: true
+    read_only: false
+    description: "Register evidence obtained from a source: a registry record or a credential (ADR-BCP-023 section 10)."
+  - key: verification.view
+    domain: EVIDENCE
+    risk_class: LOW
+    scope_levels: [PLATFORM, ORGANISATION]
+    delegable: true
+    read_only: true
+    description: "View verification cases, their claims, checks, results and discrepancies."
+  - key: verification.review
+    domain: EVIDENCE
+    risk_class: MODERATE
+    scope_levels: [PLATFORM, ORGANISATION]
+    delegable: true
+    read_only: false
+    description: "Work a verification case: open it, record claims and checks, raise discrepancies and move it through review (ADR-BCP-023 sections 26-30, 165-166). Never on a claim the reviewer asserted (section 169)."
+  - key: verification.decide
+    domain: EVIDENCE
+    risk_class: HIGH
+    scope_levels: [PLATFORM, ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Record a claim's verification result, resolve a discrepancy and conclude a case (ADR-BCP-023 sections 32, 74-76). Never on a claim the decider asserted (section 169)."
   - key: platform-account.view
     domain: ACCOUNT
     risk_class: LOW

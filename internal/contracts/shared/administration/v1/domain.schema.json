@@ -41,66 +41,145 @@
     },
     "permissionDomain": {
       "type": "string",
-      "enum": ["ADMISSION", "ORGANISATION", "ACCOUNT", "TENANT", "MARKET", "SUBSCRIPTION", "DIGITAL_ESTATE", "ADMINISTRATION", "SECURITY", "OPERATIONS", "AUDIT", "CHANGE_CONTROL", "EMERGENCY"],
+      "enum": [
+        "ADMISSION",
+        "ORGANISATION",
+        "ACCOUNT",
+        "TENANT",
+        "MARKET",
+        "SUBSCRIPTION",
+        "DIGITAL_ESTATE",
+        "EVIDENCE",
+        "ADMINISTRATION",
+        "SECURITY",
+        "OPERATIONS",
+        "AUDIT",
+        "CHANGE_CONTROL",
+        "EMERGENCY"
+      ],
       "description": "Policy domain of an administrative permission (section 10)."
     },
     "riskClass": {
       "type": "string",
-      "enum": ["LOW", "MODERATE", "HIGH", "CRITICAL"],
+      "enum": [
+        "LOW",
+        "MODERATE",
+        "HIGH",
+        "CRITICAL"
+      ],
       "description": "Risk classification of an administrative permission (section 40)."
     },
     "scopeLevel": {
       "type": "string",
-      "enum": ["PLATFORM", "PLATFORM_ACCOUNT", "CORPORATE_GROUP", "ORGANISATION", "TENANT", "LEGAL_ENTITY", "MARKET", "DIGITAL_ESTATE", "RESOURCE"],
+      "enum": [
+        "PLATFORM",
+        "PLATFORM_ACCOUNT",
+        "CORPORATE_GROUP",
+        "ORGANISATION",
+        "TENANT",
+        "LEGAL_ENTITY",
+        "MARKET",
+        "DIGITAL_ESTATE",
+        "RESOURCE"
+      ],
       "description": "The anchor an administrative scope is expressed at (section 11). A permission names the levels it may be granted at."
     },
     "scopeMode": {
       "type": "string",
-      "enum": ["EXACT", "STATIC_MEMBERSHIP", "DYNAMIC_GROUP_DESCENDANTS"],
+      "enum": [
+        "EXACT",
+        "STATIC_MEMBERSHIP",
+        "DYNAMIC_GROUP_DESCENDANTS"
+      ],
       "description": "EXACT: the named anchor only. STATIC_MEMBERSHIP: a corporate group's organisations as listed at grant time; later members are not added (section 18). DYNAMIC_GROUP_DESCENDANTS: the group's current descendants, stated explicitly on the grant (section 19). The default is no automatic expansion (section 20)."
     },
     "grantStatus": {
       "type": "string",
-      "enum": ["PENDING", "ACTIVE", "SUSPENDED", "EXPIRED", "REVOKED"],
+      "enum": [
+        "PENDING",
+        "ACTIVE",
+        "SUSPENDED",
+        "EXPIRED",
+        "REVOKED"
+      ],
       "description": "Administrative grant lifecycle (sections 57-62, lifecycle.yaml). Only ACTIVE is eligible for evaluation."
     },
     "grantType": {
       "type": "string",
-      "enum": ["STANDING", "TIME_BOUND", "JUST_IN_TIME"],
+      "enum": [
+        "STANDING",
+        "TIME_BOUND",
+        "JUST_IN_TIME"
+      ],
       "description": "Section 54. TIME_BOUND and JUST_IN_TIME grants carry valid_until."
     },
     "grantSource": {
       "type": "string",
-      "enum": ["DIRECT", "PROFILE", "DELEGATION", "BOOTSTRAP"],
+      "enum": [
+        "DIRECT",
+        "PROFILE",
+        "DELEGATION",
+        "BOOTSTRAP"
+      ],
       "description": "How the grant came to exist. PROFILE: expanded from an administrative profile (section 22). DELEGATION: delegated from another grant, which it names (sections 42-48). BOOTSTRAP: the controlled initial platform authority of section 128, never a routine mechanism (section 129)."
     },
     "decisionOutcome": {
       "type": "string",
-      "enum": ["ALLOW", "DENY", "STEP_UP_REQUIRED", "APPROVAL_REQUIRED", "NOT_READY"],
+      "enum": [
+        "ALLOW",
+        "DENY",
+        "STEP_UP_REQUIRED",
+        "APPROVAL_REQUIRED",
+        "NOT_READY"
+      ],
       "description": "Section 97. Anything but ALLOW does not permit the action."
     },
     "administrativeMetric": {
       "type": "string",
-      "enum": ["administrative_authority_shadow_total"],
+      "enum": [
+        "administrative_authority_shadow_total"
+      ],
       "description": "Administrative authority metrics, exposed in Prometheus form. administrative_authority_shadow_total counts role-guarded administrative requests by how the legacy role decision compared with the AdministrativeGrant decision (ADR-BCP-020 section 144); it never changes a decision."
     },
     "administrativeMetricLabel": {
       "type": "string",
-      "enum": ["permission", "legacy", "grants", "agreement"],
+      "enum": [
+        "permission",
+        "legacy",
+        "grants",
+        "agreement"
+      ],
       "description": "The only label names administrative metrics may carry. permission takes a key of permission-registry.yaml or unregistered; legacy, grants and agreement take shadowLegacyOutcome, shadowGrantsOutcome and shadowAgreement values."
     },
     "shadowLegacyOutcome": {
       "type": "string",
-      "enum": ["allow", "deny"]
+      "enum": [
+        "allow",
+        "deny"
+      ]
     },
     "shadowGrantsOutcome": {
       "type": "string",
-      "enum": ["allow", "deny", "step_up", "approval_required", "not_ready", "unresolved", "unmapped", "error"],
+      "enum": [
+        "allow",
+        "deny",
+        "step_up",
+        "approval_required",
+        "not_ready",
+        "unresolved",
+        "unmapped",
+        "error"
+      ],
       "description": "One value per decisionOutcome (ALLOW allow, DENY deny, STEP_UP_REQUIRED step_up, APPROVAL_REQUIRED approval_required, NOT_READY not_ready), plus three for when no decision was made. unresolved: the caller has no ACTIVE principal. unmapped: the route names no registered permission yet. error: grants could not be read in time. Every value but allow counts as grants not allowing."
     },
     "shadowAgreement": {
       "type": "string",
-      "enum": ["agree", "grants_broader", "grants_narrower", "not_evaluated"],
+      "enum": [
+        "agree",
+        "grants_broader",
+        "grants_narrower",
+        "not_evaluated"
+      ],
       "description": "grants_broader: grants would allow what the role check denied, which must never occur before enforcement moves to grants. grants_narrower: grants would deny what the role check allowed."
     },
     "administrativeReasonCode": {
