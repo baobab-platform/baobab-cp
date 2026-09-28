@@ -1,7 +1,7 @@
 # CCM-00: Existing mutation inventory
 
 **ADR:** ADR-BCP-021 §301, gate CCM-00 ("Existing Mutation Inventory").
-**Date:** 2026-09-28. **Baseline:** `main` at `33b2e60`.
+**Date:** 2026-09-28. **Baseline:** `main` at `33b2e60`. Revised after review.
 **Scope:** every way the Control Plane changes state today: HTTP routes, background workers and operator commands. Each is classified by what it becomes under the Changeset model.
 
 ## Classifications
@@ -9,7 +9,9 @@
 | Class | Meaning (ADR-BCP-021 §10, §301) |
 |---|---|
 | `CHANGESET_REQUIRED` | A high-impact administrative mutation of CP-owned desired state. It moves behind a Changeset: plan, impact, approval bound to the plan digest, execution operation and outcome. |
-| `GOVERNED_LIFECYCLE` | Already governed by its own ADR-defined lifecycle, with maker/checker and audit (admission, onboarding, tenant provisioning). It is folded into the Changeset model by reuse, not replaced (§14). |
+| `CHANGESET_SPECIALISATION` | Already implements the Changeset mechanics: a side-effect-free plan, an approval bound to the plan digest, and an execution operation. Only tenant provisioning does today. |
+| `MAKER_CHECKER_LIFECYCLE` | Governed by its own ADR-defined lifecycle, with separated maker and checker and audit, but **without** a plan, a digest-bound approval or an execution operation: admission (ADR-BCP-017) and tenant onboarding. ADR-BCP-021 §14 requires folding these into the Changeset model; that integration is outstanding, not done. |
+| `GOVERNED_LIFECYCLE` | Operation control under ADR-BCP-022. |
 | `DIRECT_LOW_RISK` | Authorised, validated, audited and version-aware, with no human approval (§10). This includes applicant self-service. |
 | `SYSTEM_RECONCILIATION` | Convergence or derivation by the system, never an administrative decision (§75). |
 | `RUNTIME` | Records the result of a runtime resolution. Not an administrative mutation, and out of scope. |
@@ -22,7 +24,7 @@
 
 | Route | Today | Class |
 |---|---|---|
-| `POST /v1/tenants` | Registers from an AUTHORISED onboarding request | `GOVERNED_LIFECYCLE` (ADR-BCP-017) |
+| `POST /v1/tenants` | Registers from an AUTHORISED onboarding request | `MAKER_CHECKER_LIFECYCLE` (ADR-BCP-017) |
 | `POST /v1/tenants/bootstrap-registrations` | Migration-only registration, off by default | `DEPRECATED` |
 | `POST /v1/tenants/{id}/suspend` | Direct, platform administrator | `CHANGESET_REQUIRED`: `SUSPEND` |
 | `POST /v1/tenants/{id}/activate` | Direct | `CHANGESET_REQUIRED`: `REINSTATE` |
@@ -32,18 +34,18 @@
 
 | Route | Today | Class |
 |---|---|---|
-| `POST /v1/tenants/{id}/provisioning`, `…/plan` | Side-effect-free plan (ADR-SHARED-015) | `GOVERNED_LIFECYCLE`, the first Changeset specialisation (§14) |
-| `POST …/approve` | ApprovalDecision bound to the plan digest | `GOVERNED_LIFECYCLE` |
-| `POST …/apply`, `…/withdraw`, `…/remediate` | ExecutionOperation | `GOVERNED_LIFECYCLE` |
-| `POST /v1/tenant-onboarding-requests`, `…/authorisation`, `…/cancellation`, `…/fulfilment` | ADR-BCP-017 lifecycle with maker/checker | `GOVERNED_LIFECYCLE` |
+| `POST /v1/tenants/{id}/provisioning`, `…/plan` | Side-effect-free plan (ADR-SHARED-015) | `CHANGESET_SPECIALISATION` |
+| `POST …/approve` | ApprovalDecision bound to the plan digest | `CHANGESET_SPECIALISATION` |
+| `POST …/apply`, `…/withdraw`, `…/remediate` | ExecutionOperation | `CHANGESET_SPECIALISATION` |
+| `POST /v1/tenant-onboarding-requests`, `…/authorisation`, `…/cancellation`, `…/fulfilment` | ADR-BCP-017 lifecycle. Authorisation changes the request's state with a reason; no plan or digest | `MAKER_CHECKER_LIFECYCLE` |
 
 ### Admission and applicant self-service
 
 | Route | Today | Class |
 |---|---|---|
 | `POST /v1/client-applications`, `PATCH …`, `…/submit`, `…/response`, `…/withdraw` | The applicant's own application | `DIRECT_LOW_RISK` (self-service) |
-| `POST /v1/admission/applications/{id}/begin-validation`, `…/begin-review`, `…/information-request`, `…/cancel` | ADR-BCP-017 review lifecycle | `GOVERNED_LIFECYCLE` |
-| `POST /v1/admission/applications/{id}/decision` | Decision, separate from review | `GOVERNED_LIFECYCLE` |
+| `POST /v1/admission/applications/{id}/begin-validation`, `…/begin-review`, `…/information-request`, `…/cancel` | ADR-BCP-017 review lifecycle | `MAKER_CHECKER_LIFECYCLE` |
+| `POST /v1/admission/applications/{id}/decision` | Decision recorded directly, separate from review; no plan or digest | `MAKER_CHECKER_LIFECYCLE` |
 
 ### Canonical organisations and relationships
 
@@ -78,7 +80,7 @@
 | Route | Today | Class |
 |---|---|---|
 | `POST /v1/provider-migrations/plan` | Side-effect-free preview | Not a mutation |
-| `POST /v1/provider-migrations` | Records a migration in PLAN, with no effect | `DIRECT_LOW_RISK` as recorded. Advancing past PLAN is `CHANGESET_REQUIRED`: `MIGRATE` |
+| `POST /v1/provider-migrations` | Records a migration in PLAN, with no effect | `DIRECT_LOW_RISK`. No route advances a migration today; when one is added it is a `MIGRATE` changeset from the start |
 | `POST /v1/admin/operations/{id}/retry`, `…/cancel` | Operation control | `GOVERNED_LIFECYCLE` (ADR-BCP-022) |
 
 ### Runtime resolution (not administrative)
@@ -87,12 +89,17 @@
 
 ## Background workers
 
+Started by `cmd/controlplane`:
+
 | Worker | Class |
 |---|---|
-| `provisioning.ApplyWorker` | `GOVERNED_LIFECYCLE`: executes approved plans only |
-| `provisioning.ReconcileWorker`, `ReadinessWorker` | `SYSTEM_RECONCILIATION` (§75) |
+| `provisioning/apply.Executor` | `CHANGESET_SPECIALISATION`: executes approved provisioning plans only |
+| `billing.Projector` (when `BillingEngineURL` is set) | `SYSTEM_RECONCILIATION`, with **external effect**: it projects subscription state onto the billing engine (`Ensure`, `Suspend`, `Resume`, `Terminate`) and records projection state. The decisions it projects are made elsewhere and it makes none. It is the one provider-side mutation path, and it is governed by the subscription changes that drive it. |
 | `organisation.GroupDerivationWorker` | `SYSTEM_RECONCILIATION`: derived corporate groups, never an access path |
-| Outbox publisher | `SYSTEM_RECONCILIATION`: delivery only |
+
+Present in code but not started by any command: `provisioning.ReconcileWorker` and `provisioning.ReadinessWorker`.
+
+No outbox publisher exists. `messaging.outbox` is only written today; event delivery is an absent path, not an existing mutation.
 
 ## Operator commands
 
@@ -105,20 +112,21 @@
 
 ## Summary
 
-- **`CHANGESET_REQUIRED`**, 16 routes or route outcomes:
+- **`CHANGESET_REQUIRED`**, 15 existing route outcomes:
   - tenant suspend, reinstate and decommission;
   - canonical suspend and retire;
   - IAM organisation linkage;
   - organisation admission;
-  - platform account suspension and closure, and account binding;
+  - platform account suspension, closure and binding;
   - subscription reclassification;
   - mapping activation and retirement;
-  - a resolution-candidate merge;
-  - provider migration advancement.
+  - a resolution-candidate merge.
 
-  All of these are direct today. This is the gap CCM-02 onwards closes.
-- **`GOVERNED_LIFECYCLE`:** admission, onboarding and tenant provisioning already implement plan, approval bound to a digest, and execution. Provisioning is the proven specialisation the generic Changeset generalises.
-- **No direct database or provider mutation path** was found outside migrations (§144, §146).
+  All of these are direct today. Provider migration advancement is a future `MIGRATE` changeset, not an existing mutation.
+- **`CHANGESET_SPECIALISATION`:** only tenant provisioning already implements plan, digest-bound approval and execution operation.
+- **`MAKER_CHECKER_LIFECYCLE`:** admission and onboarding separate maker from checker but have no plan, digest or operation. Integrating them (§14) is outstanding CCM work.
+- **Provider-side mutation:** the billing projector is the one path. It is a projection of subscription state, not an administrative decision.
+- **No direct database mutation path** exists outside schema migrations.
 
 ## Recommended first change class (CCM-03)
 
