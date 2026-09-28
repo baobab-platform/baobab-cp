@@ -223,6 +223,16 @@ func (r *PostgresRepository) ActivateRegistryMarket(ctx context.Context, id stri
 	if err != nil {
 		return m, err
 	}
+	if m, err = activateLockedRegistryMarket(ctx, tx, m, activator, reason, now, actor); err != nil {
+		return m, err
+	}
+	return m, tx.Commit(ctx)
+}
+
+// activateLockedRegistryMarket activates a market already locked at the
+// reviewed revision, in the caller's transaction: the direct activate
+// route and a MARKET_ACTIVATION changeset run exactly these rules.
+func activateLockedRegistryMarket(ctx context.Context, tx pgx.Tx, m market.Market, activator, reason string, now time.Time, actor AuditActor) (market.Market, error) {
 	if !market.Served("activate", m.Status, market.StatusActive) {
 		return m, fmt.Errorf("%w: the market is %s", ErrRegistryMarketNotValidated, m.Status)
 	}
@@ -251,7 +261,7 @@ func (r *PostgresRepository) ActivateRegistryMarket(ctx context.Context, id stri
 		"market_id": m.MarketID, "reason": reason, "revision": m.Revision}); err != nil {
 		return m, err
 	}
-	return m, tx.Commit(ctx)
+	return m, nil
 }
 
 func nonNilFindings(f []market.Finding) []market.Finding {

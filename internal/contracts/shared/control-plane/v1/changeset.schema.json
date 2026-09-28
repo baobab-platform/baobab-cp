@@ -94,6 +94,40 @@
         }
       }
     },
+    "MarketActivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "market_id"
+      ],
+      "description": "Activate a VALIDATED market (market-lifecycle.yaml activate) through a governed change. A MODIFY changeset. The plan binds the market revision it was made on. The approver must hold market:approve and be neither the market's creator nor its last editor, as on activateMarket. activateMarket remains served; this is the governed path to the same transition.",
+      "properties": {
+        "kind": {
+          "const": "MARKET_ACTIVATION"
+        },
+        "market_id": {
+          "$ref": "market.schema.json#/$defs/marketId"
+        }
+      }
+    },
+    "MappingActivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "mapping_id"
+      ],
+      "description": "Activate a VALIDATED canonical mapping through a governed change. A MODIFY changeset. The approver must hold mapping:approve and not be the mapping's creator (four-eyes, Canonical Mapping Model section 48), as on activateMapping. activateMapping remains served; this is the governed path to the same transition.",
+      "properties": {
+        "kind": {
+          "const": "MAPPING_ACTIVATION"
+        },
+        "mapping_id": {
+          "$ref": "domain.schema.json#/$defs/mappingId"
+        }
+      }
+    },
     "desiredChange": {
       "description": "What outcome is wanted, in canonical platform concepts, never provider commands (section 6). One kind per changeset; kinds are added additively.",
       "oneOf": [
@@ -102,6 +136,12 @@
         },
         {
           "$ref": "#/$defs/TenantReinstatement"
+        },
+        {
+          "$ref": "#/$defs/MarketActivation"
+        },
+        {
+          "$ref": "#/$defs/MappingActivation"
         }
       ]
     },
@@ -403,6 +443,34 @@
                   "const": "REINSTATE"
                 }
               }
+            },
+            {
+              "properties": {
+                "desired_change": {
+                  "properties": {
+                    "kind": {
+                      "const": "MARKET_ACTIVATION"
+                    }
+                  }
+                },
+                "changeset_type": {
+                  "const": "MODIFY"
+                }
+              }
+            },
+            {
+              "properties": {
+                "desired_change": {
+                  "properties": {
+                    "kind": {
+                      "const": "MAPPING_ACTIVATION"
+                    }
+                  }
+                },
+                "changeset_type": {
+                  "const": "MODIFY"
+                }
+              }
             }
           ],
           "description": "The type is the one the change kind derives."
@@ -433,24 +501,132 @@
       "enum": [
         "SUSPEND_TENANT",
         "REINSTATE_TENANT",
-        "VERIFY_TENANT_STATE"
+        "VERIFY_TENANT_STATE",
+        "ACTIVATE_MARKET",
+        "VERIFY_MARKET_STATE",
+        "ACTIVATE_MAPPING",
+        "VERIFY_MAPPING_STATE"
       ],
       "description": "Canonical changeset step operations. Extended additively as change kinds are added; each kind's operations are in changeset-lifecycle.yaml change_kinds."
     },
     "changesetStepResources": {
       "type": "object",
       "additionalProperties": false,
+      "description": "The one resource a step acts on and the statuses it moves between, in that resource's own lifecycle vocabulary. A step naming market_id is a market step (market status), one naming mapping_id a mapping step (mappingStatus); any other step is a tenant step, exactly as before market and mapping kinds existed (tenant lifecycleStatus). A step never names two resources. The Control Plane plans every step on the desired change's own resource; a plan whose step names another resource is never generated or applied.",
       "properties": {
         "tenant_id": {
           "$ref": "domain.schema.json#/$defs/tenantId"
         },
+        "market_id": {
+          "$ref": "market.schema.json#/$defs/marketId"
+        },
+        "mapping_id": {
+          "$ref": "domain.schema.json#/$defs/mappingId"
+        },
         "from_status": {
-          "$ref": "tenant.schema.json#/$defs/lifecycleStatus"
+          "type": "string"
         },
         "to_status": {
-          "$ref": "tenant.schema.json#/$defs/lifecycleStatus"
+          "type": "string"
+        },
+        "target_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The target's revision the plan was computed against, where the target is revisioned (markets and mappings). Applying refuses a target whose revision has moved (PLAN_STALE), as the direct route's If-Match does."
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "market_id"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "mapping_id"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "from_status": {
+                "$ref": "market.schema.json#/$defs/market/properties/status"
+              },
+              "to_status": {
+                "$ref": "market.schema.json#/$defs/market/properties/status"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "mapping_id"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "market_id"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "from_status": {
+                "$ref": "domain.schema.json#/$defs/mappingStatus"
+              },
+              "to_status": {
+                "$ref": "domain.schema.json#/$defs/mappingStatus"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "market_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "mapping_id"
+                  ]
+                }
+              ]
+            }
+          },
+          "then": {
+            "properties": {
+              "from_status": {
+                "$ref": "tenant.schema.json#/$defs/lifecycleStatus"
+              },
+              "to_status": {
+                "$ref": "tenant.schema.json#/$defs/lifecycleStatus"
+              }
+            }
+          }
+        }
+      ]
     },
     "changesetStep": {
       "allOf": [
@@ -554,6 +730,106 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "desired_change": {
+                "properties": {
+                  "kind": {
+                    "const": "MARKET_ACTIVATION"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "changeset_type": {
+                "const": "MODIFY"
+              },
+              "steps": {
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "ACTIVATE_MARKET"
+                      },
+                      "resources": {
+                        "required": [
+                          "market_id"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "VERIFY_MARKET_STATE"
+                      },
+                      "resources": {
+                        "required": [
+                          "market_id"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "desired_change": {
+                "properties": {
+                  "kind": {
+                    "const": "MAPPING_ACTIVATION"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "changeset_type": {
+                "const": "MODIFY"
+              },
+              "steps": {
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "ACTIVATE_MAPPING"
+                      },
+                      "resources": {
+                        "required": [
+                          "mapping_id"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "VERIFY_MAPPING_STATE"
+                      },
+                      "resources": {
+                        "required": [
+                          "mapping_id"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
         }
       ],
       "required": [
@@ -593,7 +869,9 @@
         "resource_type": {
           "type": "string",
           "enum": [
-            "TENANT"
+            "TENANT",
+            "MARKET",
+            "MAPPING"
           ]
         },
         "resource_id": {

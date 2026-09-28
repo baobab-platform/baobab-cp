@@ -500,8 +500,7 @@ func (r *PostgresRepository) TransitionMapping(ctx context.Context, id string, e
 	if err := validateActor(actor); err != nil {
 		return domain.Mapping{}, err
 	}
-	from, ok := mappingTransitions[t.To]
-	if !ok {
+	if _, ok := mappingTransitions[t.To]; !ok {
 		return domain.Mapping{}, fmt.Errorf("%w: no command reaches %s", ErrMappingLifecycleConflict, t.To)
 	}
 	tx, err := r.pool.Begin(ctx)
@@ -513,6 +512,24 @@ func (r *PostgresRepository) TransitionMapping(ctx context.Context, id string, e
 	if err != nil {
 		return domain.Mapping{}, err
 	}
+	updated, err := r.transitionLockedMapping(ctx, tx, current, t, actor.ActorID, actor)
+	if err != nil {
+		return domain.Mapping{}, err
+	}
+	return updated, tx.Commit(ctx)
+}
+
+// transitionLockedMapping moves a mapping already locked at the reviewed
+// revision, in the caller's transaction. approver is the identity that
+// approves an activation, compared with the mapping's creator (four-eyes):
+// the caller on the direct route, the changeset's approver on a
+// MAPPING_ACTIVATION changeset.
+func (r *PostgresRepository) transitionLockedMapping(ctx context.Context, tx pgx.Tx, current domain.Mapping, t MappingTransition, approver string, actor AuditActor) (domain.Mapping, error) {
+	id := current.ID
+	from, ok := mappingTransitions[t.To]
+	if !ok {
+		return domain.Mapping{}, fmt.Errorf("%w: no command reaches %s", ErrMappingLifecycleConflict, t.To)
+	}
 	allowed := false
 	for _, status := range from {
 		allowed = allowed || current.Status == status
@@ -520,7 +537,7 @@ func (r *PostgresRepository) TransitionMapping(ctx context.Context, id string, e
 	if !allowed {
 		return domain.Mapping{}, fmt.Errorf("%w: %s cannot move from %s to %s", ErrMappingLifecycleConflict, id, current.Status, t.To)
 	}
-	if t.To == "ACTIVE" && current.CreatedBy == actor.ActorID {
+	if t.To == "ACTIVE" && current.CreatedBy == approver {
 		return domain.Mapping{}, fmt.Errorf("%w: %s", ErrMappingSelfApproval, id)
 	}
 	if t.SuccessorMappingID != "" {
@@ -550,7 +567,7 @@ func (r *PostgresRepository) TransitionMapping(ctx context.Context, id string, e
 		UPDATE mapping.mapping SET status = $2, `+statement+`, revision = revision + 1, updated_at = now(),
 			retirement_reason = COALESCE(NULLIF($4, ''), retirement_reason)
 		WHERE mapping_id = $1
-		RETURNING `+mappingColumns, id, t.To, actor.ActorID, t.Reason))
+		RETURNING `+mappingColumns, id, t.To, approver, t.Reason))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23P01" {
@@ -562,7 +579,7 @@ func (r *PostgresRepository) TransitionMapping(ctx context.Context, id string, e
 	if err := r.recordMappingChange(ctx, tx, actor, updated, action, t.Reason, t.SuccessorMappingID); err != nil {
 		return domain.Mapping{}, err
 	}
-	return updated, tx.Commit(ctx)
+	return updated, nil
 }
 
 func mappingConfidenceRank(confidence string) int {

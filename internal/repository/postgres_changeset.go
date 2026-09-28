@@ -41,14 +41,14 @@ type ChangesetFilter struct {
 // each lifecycle command as one transaction on the changeset's current
 // revision.
 type ChangesetRepository interface {
-	TenantRevision(ctx context.Context, tenantID string) (int64, bool, error)
+	TargetRevision(ctx context.Context, d changeset.DesiredChange) (int64, bool, error)
 	CreateChangeset(ctx context.Context, c changeset.Changeset, key, requestHash string, actor AuditActor) (changeset.Changeset, error)
 	GetChangeset(ctx context.Context, id string) (changeset.Changeset, error)
 	GetChangesetByIdempotencyKey(ctx context.Context, requestedBy, key string) (changeset.Changeset, string, error)
 	ListChangesets(ctx context.Context, f ChangesetFilter) ([]changeset.Changeset, string, error)
 	SubmitChangeset(ctx context.Context, id string, expectedRevision int64, planID string, now time.Time, actor AuditActor) (changeset.Changeset, error)
 	CurrentChangesetPlan(ctx context.Context, id string) (changeset.Plan, error)
-	DecideChangeset(ctx context.Context, id string, expectedRevision int64, req changeset.DecisionRequest, approvalID, approver string, now time.Time, actor AuditActor) (changeset.Approval, error)
+	DecideChangeset(ctx context.Context, id string, expectedRevision int64, req changeset.DecisionRequest, approvalID, approver, approverSubject string, now time.Time, actor AuditActor) (changeset.Approval, error)
 	ApplyChangeset(ctx context.Context, id string, expectedRevision int64, operationID, key, requestHash, requester string, now time.Time, actor AuditActor) (operations.Operation, bool, error)
 	CancelChangeset(ctx context.Context, id string, expectedRevision int64, reason string, now time.Time, actor AuditActor) (changeset.Changeset, error)
 	GetChangeOutcome(ctx context.Context, id string) (changeset.Outcome, error)
@@ -103,8 +103,29 @@ func scanChangeset(row pgx.Row, extra ...any) (changeset.Changeset, error) {
 
 // TenantRevision is the tenant's current revision: a draft's base revision.
 func (r *PostgresRepository) TenantRevision(ctx context.Context, tenantID string) (int64, bool, error) {
-	var revision int64
-	err := r.pool.QueryRow(ctx, `SELECT revision FROM tenants WHERE tenant_id = $1`, tenantID).Scan(&revision)
+	return r.TargetRevision(ctx, changeset.DesiredChange{Kind: changeset.KindTenantSuspension, TenantID: tenantID})
+}
+
+// targetQueries read a target's status, revision and owning tenant, by the
+// change kind's target type.
+var targetQueries = map[string]string{
+	changeset.TargetTenant:  `SELECT desired_state, revision, tenant_id FROM tenants WHERE tenant_id = $1`,
+	changeset.TargetMarket:  `SELECT status, revision, '' FROM market.registry WHERE market_id = $1`,
+	changeset.TargetMapping: `SELECT status, revision, tenant_id FROM mapping.mapping WHERE mapping_id = $1`,
+}
+
+// TargetRevision is the current revision of the resource a desired change
+// names: a draft's base revision.
+func (r *PostgresRepository) TargetRevision(ctx context.Context, d changeset.DesiredChange) (int64, bool, error) {
+	query, ok := targetQueries[d.TargetType()]
+	if !ok {
+		return 0, false, nil
+	}
+	var (
+		revision       int64
+		status, tenant string
+	)
+	err := r.pool.QueryRow(ctx, query, d.TargetID()).Scan(&status, &revision, &tenant)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, false, nil
 	}
@@ -127,12 +148,12 @@ func (r *PostgresRepository) CreateChangeset(ctx context.Context, c changeset.Ch
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO changeset.changeset (changeset_id, changeset_type, title, description, reason, business_justification,
 			source, requested_by, requested_at, target_scope, target_tenant_id, base_revision, desired_change, state,
-			idempotency_key, request_hash, correlation_id, created_at, updated_at, revision)
-		VALUES ($1, $2, $3, NULLIF($4, ''), $5, NULLIF($6, ''), $7, $8, $9, $10::jsonb, $11, $12, $13::jsonb, $14, $15, $16,
-			NULLIF($17, '')::uuid, $18, $18, 1)`,
+			idempotency_key, request_hash, correlation_id, created_at, updated_at, revision, target_type, target_id)
+		VALUES ($1, $2, $3, NULLIF($4, ''), $5, NULLIF($6, ''), $7, $8, $9, $10::jsonb, NULLIF($11, ''), $12, $13::jsonb, $14, $15, $16,
+			NULLIF($17, '')::uuid, $18, $18, 1, $19, $20)`,
 		c.ChangesetID, c.ChangesetType, c.Title, c.Description, c.Reason, c.BusinessJustification, c.Source, c.RequestedBy,
 		c.RequestedAt, scope, c.DesiredChange.TenantID, c.BaseRevision, desired, c.State, key, requestHash, c.CorrelationID,
-		c.CreatedAt); err != nil {
+		c.CreatedAt, c.DesiredChange.TargetType(), c.DesiredChange.TargetID()); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "idempotency") {
 			return c, ErrChangesetIdempotencyConflict
@@ -207,15 +228,19 @@ func lockChangeset(ctx context.Context, tx pgx.Tx, id string, expected int64) (c
 	return c, nil
 }
 
-// readTarget reads the tenant a changeset names, locking it when lock is
-// set, with the earlier open changesets that hold its semantic lock.
+// readTarget reads the tenant, market or mapping a changeset names,
+// locking it when lock is set, with the earlier open changesets that hold
+// its semantic lock.
 func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool) (changeset.Target, error) {
 	var t changeset.Target
-	query := `SELECT desired_state, revision FROM tenants WHERE tenant_id = $1`
+	query, ok := targetQueries[c.DesiredChange.TargetType()]
+	if !ok {
+		return t, fmt.Errorf("%w: change kind %s names no supported target", ErrChangesetStateConflict, c.DesiredChange.Kind)
+	}
 	if lock {
 		query += ` FOR UPDATE`
 	}
-	err := tx.QueryRow(ctx, query, c.DesiredChange.TenantID).Scan(&t.Status, &t.Revision)
+	err := tx.QueryRow(ctx, query, c.DesiredChange.TargetID()).Scan(&t.Status, &t.Revision, &t.TenantID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return t, nil
@@ -227,10 +252,10 @@ func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool
 	// (section 66): only changesets created before this one block it, so
 	// a later submission never makes an earlier plan stale.
 	rows, err := tx.Query(ctx, `SELECT o.changeset_id FROM changeset.changeset o, changeset.changeset me
-		WHERE me.changeset_id = $2 AND o.target_tenant_id = $1 AND o.changeset_id <> $2
+		WHERE me.changeset_id = $2 AND o.target_type = $3 AND o.target_id = $1 AND o.changeset_id <> $2
 			AND o.state IN (`+openChangesetStates+`) AND (o.created_at, o.changeset_id) < (me.created_at, me.changeset_id)
 		ORDER BY o.changeset_id`,
-		c.DesiredChange.TenantID, c.ChangesetID)
+		c.DesiredChange.TargetID(), c.ChangesetID, c.DesiredChange.TargetType())
 	if err != nil {
 		return t, err
 	}
@@ -298,7 +323,8 @@ func (r *PostgresRepository) SubmitChangeset(ctx context.Context, id string, exp
 	if err := step(&c, "submit"); err != nil {
 		return c, err
 	}
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('changeset-target:' || $1))`, c.DesiredChange.TenantID); err != nil {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('changeset-target:' || $1 || ':' || $2))`,
+		c.DesiredChange.TargetType(), c.DesiredChange.TargetID()); err != nil {
 		return c, err
 	}
 	target, err := readTarget(ctx, tx, c, false)
@@ -395,10 +421,41 @@ func freshlyStale(c changeset.Changeset, plan changeset.Plan, target changeset.T
 	return changeset.Stale(plan, fresh, now), nil
 }
 
+// checkTargetMakerChecker applies the target's own maker-checker rule to an
+// approver, exactly as the kind's direct route does: a market is never
+// activated by its creator or last editor, a mapping never by its creator.
+// approver is the principal, subject the verified token subject; either
+// matching the maker refuses the approval.
+func checkTargetMakerChecker(ctx context.Context, tx pgx.Tx, c changeset.Changeset, approver, subject string) error {
+	is := func(maker string) bool { return maker != "" && (maker == approver || maker == subject) }
+	switch c.DesiredChange.TargetType() {
+	case changeset.TargetMarket:
+		var creator, editor string
+		err := tx.QueryRow(ctx, `SELECT created_by, COALESCE(updated_by, '') FROM market.registry WHERE market_id = $1`,
+			c.DesiredChange.MarketID).Scan(&creator, &editor)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if is(creator) || is(editor) {
+			return ErrRegistryMarketSelfActivation
+		}
+	case changeset.TargetMapping:
+		var creator string
+		err := tx.QueryRow(ctx, `SELECT created_by FROM mapping.mapping WHERE mapping_id = $1`, c.DesiredChange.MappingID).Scan(&creator)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if is(creator) {
+			return fmt.Errorf("%w: %s", ErrMappingSelfApproval, c.DesiredChange.MappingID)
+		}
+	}
+	return nil
+}
+
 // DecideChangeset records one decision on the exact current plan. The
-// approver is never the requester, and an approval on a stale plan is
-// refused (sections 24, 29, 52).
-func (r *PostgresRepository) DecideChangeset(ctx context.Context, id string, expectedRevision int64, req changeset.DecisionRequest, approvalID, approver string, now time.Time, actor AuditActor) (changeset.Approval, error) {
+// approver is never the requester, meets the target's own maker-checker
+// rule, and an approval on a stale plan is refused (sections 24, 29, 52).
+func (r *PostgresRepository) DecideChangeset(ctx context.Context, id string, expectedRevision int64, req changeset.DecisionRequest, approvalID, approver, approverSubject string, now time.Time, actor AuditActor) (changeset.Approval, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return changeset.Approval{}, err
@@ -432,13 +489,18 @@ func (r *PostgresRepository) DecideChangeset(ctx context.Context, id string, exp
 			}
 			return changeset.Approval{}, err
 		}
+		if err := checkTargetMakerChecker(ctx, tx, c, approver, approverSubject); err != nil {
+			return changeset.Approval{}, err
+		}
 	}
 	a := changeset.Approval{ApprovalID: approvalID, SubjectType: "CHANGESET", SubjectID: c.ChangesetID, PlanID: plan.PlanID,
 		PlanVersion: plan.PlanVersion, PlanDigest: plan.PlanDigest, Decision: req.Decision, Reason: req.Reason, DecidedBy: approver,
 		DecidedAt: now, CorrelationID: actor.CorrelationID}
 	if _, err := tx.Exec(ctx, `INSERT INTO changeset.approval (approval_id, changeset_id, plan_id, plan_version, plan_digest,
-		decision, reason, decided_by, decided_at, correlation_id) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $9, NULLIF($10, '')::uuid)`,
-		a.ApprovalID, a.SubjectID, a.PlanID, a.PlanVersion, a.PlanDigest, a.Decision, a.Reason, a.DecidedBy, a.DecidedAt, a.CorrelationID); err != nil {
+		decision, reason, decided_by, decided_at, correlation_id, decided_by_subject)
+		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $9, NULLIF($10, '')::uuid, NULLIF($11, ''))`,
+		a.ApprovalID, a.SubjectID, a.PlanID, a.PlanVersion, a.PlanDigest, a.Decision, a.Reason, a.DecidedBy, a.DecidedAt, a.CorrelationID,
+		approverSubject); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return changeset.Approval{}, ErrPlanAlreadyDecided
@@ -525,8 +587,9 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 	if err != nil {
 		return operations.Operation{}, false, err
 	}
-	var decision, approvedDigest string
-	if err := tx.QueryRow(ctx, `SELECT decision, plan_digest FROM changeset.approval WHERE approval_id = $1`, c.ApprovalID).Scan(&decision, &approvedDigest); err != nil || decision != changeset.DecisionApproved {
+	var decision, approvedDigest, approver, approverSubject string
+	if err := tx.QueryRow(ctx, `SELECT decision, plan_digest, decided_by, COALESCE(decided_by_subject, '') FROM changeset.approval
+		WHERE approval_id = $1`, c.ApprovalID).Scan(&decision, &approvedDigest, &approver, &approverSubject); err != nil || decision != changeset.DecisionApproved {
 		return operations.Operation{}, false, ErrChangesetPlanNotApproved
 	}
 	if approvedDigest != plan.PlanDigest {
@@ -547,22 +610,13 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 	if err := step(&c, "apply"); err != nil {
 		return operations.Operation{}, false, err
 	}
-	res, err := tx.Exec(ctx, `UPDATE tenants SET desired_state = $2, observed_state = $2, revision = revision + 1, updated_at = $4
-		WHERE tenant_id = $1 AND revision = $3`, c.DesiredChange.TenantID, kind.ToStatus, plan.BaseRevision, now)
+	tenantID, check, verified, err := r.applyToTarget(ctx, tx, c, kind, plan, target, approver, approverSubject, now, actor)
 	if err != nil {
-		return operations.Operation{}, false, fmt.Errorf("apply changeset: %w", err)
-	}
-	if res.RowsAffected() != 1 {
-		return operations.Operation{}, false, ErrChangesetPlanStale
+		return operations.Operation{}, false, err
 	}
 	if err := step(&c, "applied"); err != nil {
 		return operations.Operation{}, false, err
 	}
-	var desired, observed string
-	if err := tx.QueryRow(ctx, `SELECT desired_state, observed_state FROM tenants WHERE tenant_id = $1`, c.DesiredChange.TenantID).Scan(&desired, &observed); err != nil {
-		return operations.Operation{}, false, err
-	}
-	verified := desired == kind.ToStatus && observed == kind.ToStatus
 	if !verified {
 		// Local atomicity: an unverified local change is not committed.
 		return operations.Operation{}, false, ErrChangesetVerificationMismatch
@@ -574,7 +628,7 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 
 	total := len(plan.Steps)
 	result, _ := json.Marshal(map[string]string{"resource_type": "CHANGESET", "resource_id": c.ChangesetID,
-		"resource_state": c.State, "summary": fmt.Sprintf("Tenant %s is %s.", c.DesiredChange.TenantID, kind.ToStatus)})
+		"resource_state": c.State, "summary": fmt.Sprintf("%s %s is %s.", titleCase(kind.Target), c.DesiredChange.TargetID(), kind.ToStatus)})
 	op, err := scanOperation(tx.QueryRow(ctx, `
 		INSERT INTO operations.execution_operation (operation_id, operation_type, status, subject_type, subject_id, tenant_id,
 			plan_id, plan_digest, approval_id, requested_by, idempotency_key, request_hash, current_phase, completed_steps,
@@ -582,7 +636,7 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 		VALUES ($1, 'CHANGESET_APPLY', 'SUCCEEDED', 'CHANGESET', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, false,
 			$12::jsonb, NULLIF($13, '')::uuid, $14, $14, $14, $14)
 		RETURNING `+operationColumns,
-		operationID, c.ChangesetID, c.DesiredChange.TenantID, plan.PlanID, plan.PlanDigest, c.ApprovalID, requester, key,
+		operationID, c.ChangesetID, nullable(tenantID), plan.PlanID, plan.PlanDigest, c.ApprovalID, requester, key,
 		requestHash, c.State, total, result, actor.CorrelationID, now))
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -597,19 +651,94 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 	started, completed := now, now
 	if err := recordOutcome(ctx, tx, changeset.Outcome{ChangesetID: c.ChangesetID, OperationID: operationID, FinalState: c.State,
 		AppliedPlanDigest: plan.PlanDigest, StartedAt: &started, CompletedAt: &completed,
-		AffectedResources: []changeset.AffectedResource{{ResourceType: "TENANT", ResourceID: c.DesiredChange.TenantID,
+		AffectedResources: []changeset.AffectedResource{{ResourceType: kind.Target, ResourceID: c.DesiredChange.TargetID(),
 			Before: target.Status, After: kind.ToStatus}},
 		VerificationResult: &changeset.VerificationResult{Status: "PASSED", Checks: []changeset.VerificationCheck{
-			{Check: "TENANT_STATUS_MATCHES", Passed: verified}}},
+			{Check: check, Passed: verified}}},
 		CorrelationID: c.CorrelationID, RecordedAt: now}); err != nil {
 		return operations.Operation{}, false, err
 	}
-	if err := insertProvisioningAudit(ctx, tx, actor, c.DesiredChange.TenantID, "changeset.applied", c.ChangesetID, map[string]any{
-		"operation_id": operationID, "plan_digest": plan.PlanDigest, "approval_id": c.ApprovalID,
-		"tenant_id": c.DesiredChange.TenantID, "from": target.Status, "to": kind.ToStatus}); err != nil {
+	applied := map[string]any{"operation_id": operationID, "plan_digest": plan.PlanDigest, "approval_id": c.ApprovalID,
+		"target_type": kind.Target, "target_id": c.DesiredChange.TargetID(), "from": target.Status, "to": kind.ToStatus}
+	if kind.Target == changeset.TargetTenant {
+		applied["tenant_id"] = c.DesiredChange.TenantID
+	}
+	if err := insertProvisioningAudit(ctx, tx, actor, tenantID, "changeset.applied", c.ChangesetID, applied); err != nil {
 		return operations.Operation{}, false, err
 	}
 	return op, false, tx.Commit(ctx)
+}
+
+// applyToTarget runs the plan's change on its target in the caller's
+// transaction and reads it back. It returns the tenant that owns the
+// target (for the operation and audit), the verification check it ran and
+// whether the target now has the kind's status. A target whose revision
+// moved since the plan is PLAN_STALE; a market or mapping is changed by
+// exactly the rules its direct route runs, approved by the changeset's
+// approver.
+func (r *PostgresRepository) applyToTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, kind changeset.Kind, plan changeset.Plan,
+	target changeset.Target, approver, approverSubject string, now time.Time, actor AuditActor) (string, string, bool, error) {
+	revision := plan.BaseRevision
+	if len(plan.Steps) > 0 && plan.Steps[0].Resources.TargetRevision > 0 {
+		revision = plan.Steps[0].Resources.TargetRevision
+	}
+	var status string
+	switch kind.Target {
+	case changeset.TargetMarket:
+		m, err := lockRegistryMarket(ctx, tx, c.DesiredChange.MarketID, revision)
+		if errors.Is(err, ErrRegistryMarketRevision) || errors.Is(err, ErrRegistryMarketNotFound) {
+			return "", "", false, ErrChangesetPlanStale
+		}
+		if err != nil {
+			return "", "", false, err
+		}
+		if m, err = activateLockedRegistryMarket(ctx, tx, m, approver, c.Reason, now, actor); err != nil {
+			return "", "", false, err
+		}
+		if err := tx.QueryRow(ctx, `SELECT status FROM market.registry WHERE market_id = $1`, m.MarketID).Scan(&status); err != nil {
+			return "", "", false, err
+		}
+		return m.String("owner_tenant_id"), "MARKET_STATUS_MATCHES", status == kind.ToStatus, nil
+	case changeset.TargetMapping:
+		if approverSubject == "" {
+			return "", "", false, ErrChangesetPlanNotApproved
+		}
+		current, err := lockMapping(ctx, tx, c.DesiredChange.MappingID, revision)
+		if errors.Is(err, ErrMappingRevisionMismatch) || errors.Is(err, ErrMappingNotFound) {
+			return "", "", false, ErrChangesetPlanStale
+		}
+		if err != nil {
+			return "", "", false, err
+		}
+		updated, err := r.transitionLockedMapping(ctx, tx, current, MappingTransition{To: kind.ToStatus}, approverSubject, actor)
+		if err != nil {
+			return "", "", false, err
+		}
+		if err := tx.QueryRow(ctx, `SELECT status FROM mapping.mapping WHERE mapping_id = $1`, updated.ID).Scan(&status); err != nil {
+			return "", "", false, err
+		}
+		return updated.TenantID, "MAPPING_STATUS_MATCHES", status == kind.ToStatus, nil
+	}
+	res, err := tx.Exec(ctx, `UPDATE tenants SET desired_state = $2, observed_state = $2, revision = revision + 1, updated_at = $4
+		WHERE tenant_id = $1 AND revision = $3`, c.DesiredChange.TenantID, kind.ToStatus, revision, now)
+	if err != nil {
+		return "", "", false, fmt.Errorf("apply changeset: %w", err)
+	}
+	if res.RowsAffected() != 1 {
+		return "", "", false, ErrChangesetPlanStale
+	}
+	var desired, observed string
+	if err := tx.QueryRow(ctx, `SELECT desired_state, observed_state FROM tenants WHERE tenant_id = $1`, c.DesiredChange.TenantID).Scan(&desired, &observed); err != nil {
+		return "", "", false, err
+	}
+	return c.DesiredChange.TenantID, "TENANT_STATUS_MATCHES", desired == kind.ToStatus && observed == kind.ToStatus, nil
+}
+
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	return s[:1] + strings.ToLower(s[1:])
 }
 
 // CancelChangeset cancels a changeset that has not started applying

@@ -723,6 +723,25 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Market and mapping activation as Changesets (ADR-BCP-021 adoption; Shared control-plane OpenAPI 1.17.0).
+  - The change kinds `MARKET_ACTIVATION` and `MAPPING_ACTIVATION` are MODIFY changesets at PLATFORM scope, from VALIDATED to ACTIVE.
+  - This is an optional governed path. `POST /v1/markets/{marketID}/activate` and `POST /v1/mappings/{mappingID}/activate` stay as they are.
+  - **Planning:**
+    - the plan binds the target's reviewed revision (`target_revision`);
+    - a target edited after planning makes the plan `PLAN_STALE`;
+    - an ACTIVE target blocks the plan, and an unknown target is INVALID.
+  - **Approval:**
+    - the approver needs the kind's `approval_scope` (`market:approve` or `mapping:approve`) as well as `changeset:approve`;
+    - the approver must meet the direct route's maker-checker rule: `MARKET_SELF_ACTIVATION` when they are the market's creator or last editor, `MAPPING_SELF_APPROVAL` when they are the mapping's creator.
+  - **Apply:**
+    - runs exactly the direct routes' activation rules (`activateLockedRegistryMarket`, `transitionLockedMapping`) in the changeset's transaction;
+    - records the approver as the market's activator or the mapping's approver;
+    - verifies the target by reading it back.
+  - Migration `000074_changeset_targets.sql`:
+    - changesets carry `target_type` and `target_id`, which hold the semantic lock;
+    - `target_tenant_id` is now set for tenant changesets only;
+    - approvals record the approver's verified subject.
+
 - Applicant claims on client applications (ADR-BCP-023 §7, §9, §191-192; Shared control-plane OpenAPI 1.16.0).
   - `POST`/`GET /v1/client-applications/{applicationID}/claims` and `POST .../claims/{claimID}/withdraw` (If-Match):
     - an applicant asserts a claim type, jurisdiction and value on their own application, only while it is DRAFT or INFORMATION_REQUIRED;
