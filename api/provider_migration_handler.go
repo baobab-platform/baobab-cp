@@ -236,6 +236,8 @@ func (h providerMigrationHandler) fail(w http.ResponseWriter, r *http.Request, e
 		problem(w, r, http.StatusPreconditionFailed, "PROVIDER_MIGRATION_REVISION_MISMATCH", "the migration changed since it was read", false)
 	case errors.Is(err, repository.ErrProviderMigrationSelfApproval):
 		problem(w, r, http.StatusForbidden, "PROVIDER_MIGRATION_SELF_APPROVAL", "a provider migration is never approved by its creator", false)
+	case errors.Is(err, repository.ErrProviderMigrationSelfExecution):
+		problem(w, r, http.StatusForbidden, "PROVIDER_MIGRATION_SELF_EXECUTION", "the approver of a migration's plan never advances it", false)
 	case errors.Is(err, repository.ErrProviderMigrationPlanMismatch):
 		problem(w, r, http.StatusConflict, "PLAN_DIGEST_MISMATCH", "the decision names another plan or digest than the current one", false)
 	case errors.Is(err, repository.ErrProviderMigrationPlanStale):

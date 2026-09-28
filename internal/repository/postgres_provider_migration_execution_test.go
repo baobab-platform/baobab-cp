@@ -239,6 +239,13 @@ func TestProviderMigrationExecution(t *testing.T) {
 	if _, err := decide(current(m.ProviderMigrationID), plan, approver); !errors.Is(err, ErrProviderMigrationStageConflict) {
 		t.Fatalf("a second decision: %v", err)
 	}
+	// The approver never advances the migration it approved.
+	if _, err := repo.AdvanceProviderMigration(ctx, MigrationAdvance{ProviderMigrationID: m.ProviderMigrationID,
+		ExpectedRevision: current(m.ProviderMigrationID).Revision, Transition: migration.TransitionPrepare, OperationID: domain.NewResourceID("op"),
+		IdempotencyKey: "adv-" + domain.NewUUIDv7(), RequestHash: "h", RequestedBy: approver, Planner: planner, Now: now,
+		Actor: AuditActor{ActorID: approver, ActorType: "human", CorrelationID: domain.NewUUIDv7()}}); !errors.Is(err, ErrProviderMigrationSelfExecution) {
+		t.Fatalf("the approver advancing: %v", err)
+	}
 	if _, err := repo.AdvanceProviderMigration(ctx, MigrationAdvance{ProviderMigrationID: m.ProviderMigrationID, ExpectedRevision: 1,
 		Transition: migration.TransitionPrepare, OperationID: domain.NewResourceID("op"), IdempotencyKey: "adv-" + domain.NewUUIDv7(),
 		RequestHash: "h", RequestedBy: operator, Planner: planner, Now: now, Actor: operatorActor}); !errors.Is(err, ErrProviderMigrationRevisionMismatch) {

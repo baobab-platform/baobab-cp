@@ -4198,7 +4198,9 @@ paths:
         canary and shift, an open cutover window where one is named
         (MIGRATION_CUTOVER_WINDOW_CLOSED);
         each is 409, as is a transition the lifecycle does not allow from the
-        current stage (PROVIDER_MIGRATION_STAGE_CONFLICT). cancel (only
+        current stage (PROVIDER_MIGRATION_STAGE_CONFLICT). The current plan's
+        approver never advances it forward (PROVIDER_MIGRATION_SELF_EXECUTION,
+        403). cancel (only
         before any cohort's authority moved) and roll_back need no approval,
         but a reason. FORWARD_FIX_ONLY refuses roll_back once a cohort moved
         (MIGRATION_NOT_REVERSIBLE, 409). Engine steps become engine migration

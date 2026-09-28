@@ -58,6 +58,7 @@ type LifecycleDocument struct {
 	StatefulCohortSequence []string              `yaml:"stateful_cohort_sequence"`
 	StageSteps             map[string]StageSteps `yaml:"stage_steps"`
 	EngineSteps            map[string]EngineStep `yaml:"engine_steps"`
+	RollbackRelease        []string              `yaml:"rollback_release"`
 	RollbackSteps          map[string][]string   `yaml:"rollback_steps"`
 	Compensation           map[string][]string   `yaml:"compensation"`
 	TaskLeaseSeconds       int                   `yaml:"task_lease_seconds"`

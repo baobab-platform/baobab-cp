@@ -39,6 +39,7 @@ var (
 	ErrProviderMigrationNotReversible    = errors.New("the migration cannot return a shifted cohort to the source")
 	ErrProviderMigrationPlanDecided      = errors.New("the plan already has a decision")
 	ErrProviderMigrationNotExecutable    = errors.New("the transition includes steps the Control Plane does not execute yet")
+	ErrProviderMigrationSelfExecution    = errors.New("a provider migration is never advanced by the approver of its plan")
 )
 
 // errMigrationStep is a step that failed on authoritative state: the
@@ -559,10 +560,15 @@ func (r *PostgresRepository) checkAdvanceAllowed(ctx context.Context, tx pgx.Tx,
 	if m.ApprovalID == "" {
 		return ErrProviderMigrationNotApproved
 	}
-	var decision, digest string
-	if err := tx.QueryRow(ctx, `SELECT decision, plan_digest FROM topology.provider_migration_approval WHERE approval_id = $1`,
-		m.ApprovalID).Scan(&decision, &digest); err != nil || decision != changeset.DecisionApproved || digest != plan.PlanDigest {
+	var decision, digest, approver string
+	if err := tx.QueryRow(ctx, `SELECT decision, plan_digest, decided_by FROM topology.provider_migration_approval WHERE approval_id = $1`,
+		m.ApprovalID).Scan(&decision, &digest, &approver); err != nil || decision != changeset.DecisionApproved || digest != plan.PlanDigest {
 		return ErrProviderMigrationNotApproved
+	}
+	// Approval and execution are held by different people for each
+	// migration (ADR-SHARED-016 sections 2 and 6).
+	if approver == in.RequestedBy {
+		return ErrProviderMigrationSelfExecution
 	}
 	if m.Blocked || len(plan.Blockers) > 0 {
 		return ErrProviderMigrationBlocked
@@ -631,7 +637,9 @@ func rollbackSteps(m migration.Migration, plan migration.Plan, frozen string) ([
 	}
 	var steps []migration.Step
 	if frozen != "" {
-		steps = append(steps, step(frozen, migration.OpUnfreezeCohortWrites))
+		for _, op := range migration.Lifecycle().RollbackRelease {
+			steps = append(steps, step(frozen, op))
+		}
 	}
 	for i := len(m.ShiftedCohortKeys) - 1; i >= 0; i-- {
 		cohort := m.ShiftedCohortKeys[i]

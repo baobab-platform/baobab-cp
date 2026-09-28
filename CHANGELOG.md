@@ -730,6 +730,7 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
     - One approval authorises the plan's whole sequence.
   - **Advancing.** `POST /v1/provider-migrations/{id}/advance` (`provider-migration:execute`, If-Match, Idempotency-Key) runs one lifecycle transition as a `PROVIDER_MIGRATION_ADVANCE` operation.
     - It runs exactly the approved plan's steps named by the Shared `stage_steps`.
+    - The plan's approver never advances it forward (`PROVIDER_MIGRATION_SELF_EXECUTION`, 403); `cancel` and `roll_back` stay open to any executor.
     - Staleness ignores the migration's own effects: the ledger's source bindings count as they were.
     - `canary` and `shift` run only inside the cutover window.
   - **Local steps.**
