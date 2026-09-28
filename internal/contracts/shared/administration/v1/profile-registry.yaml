@@ -17,6 +17,9 @@ profiles:
       - application.request-information
       - organisation.view
       - organisation.manage
+      - mapping.view
+      - mapping.manage
+      - mapping.approve
       - platform-account.view
       - platform-account.manage
       - tenant.view
