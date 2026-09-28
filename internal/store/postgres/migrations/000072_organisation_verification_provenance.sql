@@ -4,11 +4,14 @@
 -- platform-relationship tables already require.
 --
 -- Existing VERIFIED rows are backfilled from the audit record of the
--- transition that verified them (organisation.verified, or
--- organisation.created for first-party governance, which creates the
--- profile VERIFIED). Nothing is guessed: a VERIFIED row without evidence or
--- without that audit record fails the constraint below, and the migration
--- stops for review rather than inventing provenance.
+-- transition that verified them: organisation.verified, or - only for a
+-- profile first-party governance created VERIFIED - the organisation.created
+-- record whose payload names shared-governance as its source authority. An
+-- ordinary organisation.created record is never verification provenance:
+-- other creators start profiles unverified. Nothing is guessed: a VERIFIED
+-- row without evidence or without such an audit record fails the constraint
+-- below, and the migration stops for review rather than inventing
+-- provenance.
 
 ALTER TABLE registry.organisation_profile
     ADD COLUMN IF NOT EXISTS verified_by text,
@@ -18,8 +21,11 @@ UPDATE registry.organisation_profile op
 SET (verified_by, verified_at) = (
     SELECT a.actor_id, a.occurred_at FROM audit_events a
     WHERE a.target = 'organisation/' || op.canonical_entity_id::text
-      AND a.action IN ('organisation.verified', 'organisation.created')
       AND a.actor_id IS NOT NULL
+      AND (a.action = 'organisation.verified'
+           OR (a.action = 'organisation.created'
+               AND a.payload->>'source_authority' = 'shared-governance'
+               AND op.source_authority = 'shared-governance'))
     ORDER BY (a.action = 'organisation.verified') DESC, a.occurred_at DESC
     LIMIT 1
 )
