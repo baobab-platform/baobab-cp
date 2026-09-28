@@ -125,6 +125,21 @@ func TestRulesAgreeWithTheSharedExample(t *testing.T) {
 	if err := ValidateCheck(regno, registry.PerformedBy, quarantined, evidence); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("a positive check citing quarantined evidence: %v", err)
 	}
+	otherSource := record
+	otherSource.SourceID = "esrc_applicant"
+	if err := ValidateCheck(regno, registry.PerformedBy, otherSource, evidence); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("a check citing another source's evidence: %v", err)
+	}
+	otherSubject := regno
+	otherSubject.Subject.SubjectID = "ce_other"
+	if err := ValidateCheck(otherSubject, registry.PerformedBy, record, evidence); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("a check citing another subject's evidence: %v", err)
+	}
+	otherPurpose := regno
+	otherPurpose.Purpose = "PERIODIC_REVIEW"
+	if err := ValidateCheck(otherPurpose, registry.PerformedBy, record, evidence); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("a check citing evidence gathered for another purpose: %v", err)
+	}
 	unknown := record
 	unknown.SourceID = "esrc_nosuch"
 	if err := ValidateCheck(regno, registry.PerformedBy, unknown, evidence); !errors.Is(err, ErrUnknownSource) {

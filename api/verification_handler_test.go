@@ -179,8 +179,7 @@ func TestVerificationRoutes(t *testing.T) {
 	caseKey := map[string]string{"Idempotency-Key": "case-open-" + suffix}
 	var c caseView
 	conforms("open case", "verification.schema.json", "VerificationCase", call(http.MethodPost, "/v1/admin/verification-cases", "maker", caseKey,
-		map[string]any{"subject": map[string]string{"subject_type": "ORGANISATION", "subject_id": subject}, "purpose": "ORGANISATION_ADMISSION",
-			"organisation_id": subject}), http.StatusCreated, &c)
+		map[string]any{"subject": le, "purpose": "ORGANISATION_ADMISSION", "organisation_id": subject}), http.StatusCreated, &c)
 	base := "/v1/admin/verification-cases/" + c.CaseID
 	addClaim := func(claimType, value string) string {
 		var claim struct {
@@ -196,6 +195,11 @@ func TestVerificationRoutes(t *testing.T) {
 		return claim.ClaimID
 	}
 	regno, name := addClaim("REGISTRATION_IDENTIFIER", "80020012345"), addClaim("LEGAL_NAME", "ACME Foods Limited")
+	refused("a claim for another purpose", call(http.MethodPost, base+"/claims", "maker", nil, map[string]any{"subject": le, "claim_type": "ENTITY_STATUS",
+		"claimed_value": map[string]string{"value": "active"}, "purpose": "PERIODIC_REVIEW"}), http.StatusUnprocessableEntity, "VERIFICATION_UNSUPPORTED")
+	other := map[string]string{"subject_type": "LEGAL_ENTITY", "subject_id": "ce_other" + suffix}
+	refused("a claim about another subject", call(http.MethodPost, base+"/claims", "maker", nil, map[string]any{"subject": other, "claim_type": "ENTITY_STATUS",
+		"claimed_value": map[string]string{"value": "active"}, "purpose": "ORGANISATION_ADMISSION"}), http.StatusUnprocessableEntity, "VERIFICATION_UNSUPPORTED")
 	conforms("claims", "evidence.schema.json", "EvidenceClaimList", call(http.MethodGet, base+"/claims", "maker", nil, nil), http.StatusOK, nil)
 	conforms("case", "verification.schema.json", "VerificationCase", call(http.MethodGet, base, "maker", nil, nil), http.StatusOK, &c)
 	refused("a check before verifying", call(http.MethodPost, base+"/checks", "checker", nil, map[string]any{"claim_id": regno,
@@ -229,6 +233,8 @@ func TestVerificationRoutes(t *testing.T) {
 	docCheck := map[string]any{"claim_id": regno, "method": "OFFICIAL_DOCUMENT_REVIEW", "source_id": "esrc_applicant", "outcome": "MATCHED",
 		"reason_codes": []string{}, "evidence_ids": []string{extract.EvidenceID},
 		"dimensions": []map[string]string{{"dimension": "DOCUMENT_INTEGRITY", "outcome": "PASSED"}, {"dimension": "CLAIM_MATCH", "outcome": "PASSED"}}}
+	refused("citing another source's evidence", call(http.MethodPost, base+"/checks", "checker", nil, docCheck), http.StatusUnprocessableEntity, "VERIFICATION_UNSUPPORTED")
+	docCheck["evidence_ids"], docCheck["source_record_reference"] = []string{}, "applicant-certificate-"+suffix
 	var applicantCheck struct {
 		CheckID string `json:"check_id"`
 	}
@@ -278,8 +284,12 @@ func TestVerificationRoutes(t *testing.T) {
 
 	// The discrepancy is reviewed, then closed only under decide.
 	dpath := "/v1/admin/evidence-discrepancies/" + disc.DiscrepancyID
+	refused("resuming with the discrepancy open", call(http.MethodPost, base+"/transitions", "checker", ifMatch(c.Version),
+		map[string]any{"command": "resume"}), http.StatusConflict, "VERIFICATION_CASE_STATE_CONFLICT")
 	conforms("begin review", "verification.schema.json", "EvidenceDiscrepancy", call(http.MethodPost, dpath+"/transitions", "checker", ifMatch(disc.Version),
 		map[string]any{"command": "begin_review"}), http.StatusOK, &disc)
+	refused("resuming with the discrepancy under review", call(http.MethodPost, base+"/transitions", "checker", ifMatch(c.Version),
+		map[string]any{"command": "resume"}), http.StatusConflict, "VERIFICATION_CASE_STATE_CONFLICT")
 	resolution := map[string]any{"command": "resolve", "resolution": "SOURCE_VALUE_ADOPTED", "reason": "The registry name is authoritative."}
 	refused("closing without decide", call(http.MethodPost, dpath+"/resolution", "checker-nodecide", ifMatch(disc.Version), resolution), http.StatusForbidden, "AUTHORIZATION_DENIED")
 	conforms("resolve", "verification.schema.json", "EvidenceDiscrepancy", call(http.MethodPost, dpath+"/resolution", "checker", ifMatch(disc.Version), resolution),

@@ -306,6 +306,18 @@ func (r *PostgresRepository) TransitionVerificationCase(ctx context.Context, id 
 	if err != nil {
 		return c, fmt.Errorf("%w: %v", ErrVerificationState, err)
 	}
+	// Leaving a conflict, or concluding, needs every discrepancy of the case
+	// closed: only verification:decide closes one.
+	if t.Command == "resume" || (caseEnding(next) && t.Command != "cancel") {
+		var open int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM evidence.discrepancy WHERE case_id = $1
+			AND status IN ('OPEN', 'UNDER_REVIEW')`, c.CaseID).Scan(&open); err != nil {
+			return c, err
+		}
+		if open > 0 {
+			return c, fmt.Errorf("%w: %d discrepancies of the case are still open", ErrVerificationState, open)
+		}
+	}
 	if next == verification.CaseVerified {
 		claims, err := listClaims(ctx, tx, c.CaseID)
 		if err != nil {
@@ -369,6 +381,30 @@ func listDocuments[T any](ctx context.Context, q interface {
 	return out, rows.Err()
 }
 
+// subjectInCase refuses a subject a case does not concern: a case examines
+// its own subject and, for an organisation, that organisation's legal
+// entities (registry.legal_entity_profile).
+func subjectInCase(ctx context.Context, tx pgx.Tx, c verification.Case, s verification.Subject) error {
+	if s == c.Subject {
+		return nil
+	}
+	org := c.OrganisationID
+	if org == "" && c.Subject.SubjectType == "ORGANISATION" {
+		org = c.Subject.SubjectID
+	}
+	if s.SubjectType == "LEGAL_ENTITY" && org != "" {
+		var owned bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM registry.legal_entity_profile
+			WHERE legal_entity_id = $1 AND organisation_id::text = $2)`, s.SubjectID, org).Scan(&owned); err != nil {
+			return err
+		}
+		if owned {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s %s is not this case's subject", verification.ErrUnsupported, s.SubjectType, s.SubjectID)
+}
+
 func (r *PostgresRepository) caseExists(ctx context.Context, caseID string) error {
 	var exists bool
 	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM evidence.verification_case WHERE case_id = $1)`, caseID).Scan(&exists); err != nil {
@@ -395,6 +431,12 @@ func (r *PostgresRepository) AddVerificationClaim(ctx context.Context, caseID st
 	}
 	if !verification.CaseOpen(c.Status) {
 		return verification.Claim{}, fmt.Errorf("%w: a %s case takes no new claims", ErrVerificationState, c.Status)
+	}
+	if sub.Purpose != c.Purpose {
+		return verification.Claim{}, fmt.Errorf("%w: a %s claim does not belong to a %s case", verification.ErrUnsupported, sub.Purpose, c.Purpose)
+	}
+	if err := subjectInCase(ctx, tx, c, sub.Subject); err != nil {
+		return verification.Claim{}, err
 	}
 	evidence, err := evidenceByID(ctx, tx, sub.EvidenceIDs)
 	if err != nil {
@@ -641,6 +683,9 @@ func (r *PostgresRepository) RecordEvidenceDiscrepancy(ctx context.Context, case
 	}
 	if !verification.CaseOpen(c.Status) {
 		return verification.Discrepancy{}, fmt.Errorf("%w: a %s case takes no new discrepancies", ErrVerificationState, c.Status)
+	}
+	if err := subjectInCase(ctx, tx, c, rec.Subject); err != nil {
+		return verification.Discrepancy{}, err
 	}
 	var evidenceIDs []string
 	for _, v := range rec.ConflictingValues {

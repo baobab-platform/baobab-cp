@@ -203,6 +203,11 @@ func ValidateCheck(claim Claim, performer string, rec CheckRecord, evidence map[
 		if !ok {
 			return fmt.Errorf("%w: evidence %s does not exist", ErrUnsupported, id)
 		}
+		// Evidence supports a check only about its own subject, for its own
+		// purpose, from the source the check consulted.
+		if e.Subject != claim.Subject || e.Purpose != claim.Purpose || e.SourceID != rec.SourceID {
+			return fmt.Errorf("%w: evidence %s concerns another subject, purpose or source than this check", ErrUnsupported, id)
+		}
 		if slices.Contains(positive, rec.Outcome) && !ContentAccessible(e.Status) {
 			return fmt.Errorf("%w: evidence %s is %s and not open to reviewers", ErrUnsupported, id, e.Status)
 		}
