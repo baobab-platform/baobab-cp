@@ -95,7 +95,7 @@
       "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
       "minLength": 5,
       "maxLength": 128,
-      "description": "Provider identity in <owning-repository>.<engine> form, e.g. \"baobab-trade.medusa\", \"baobab-erp.idempiere\", \"baobab-cms.payload\", \"baobab-pulse.haystack\"."
+      "description": "Provider identity in <engine-id>.<provider-name> form, e.g. \"baobab-trade.medusa\", \"baobab-erp.idempiere\", \"baobab-payments.sandbox\", \"baobab-iam.ory\". The first segment is the engine that owns the provider (control-plane/v1 engineId, ADR-SHARED-012), never a technology family; the second names the provider within that engine and is usually its implementationKey. One engine may own several providers, e.g. baobab-iam.keycloak and baobab-iam.ory (ADR-SHARED-017 SS8-9, SS23)."
     },
     "capabilityProviderType": {
       "type": "string",
@@ -139,7 +139,42 @@
       "pattern": "^[a-z][a-z0-9-]*$",
       "minLength": 2,
       "maxLength": 63,
-      "description": "Technology family identity, e.g. \"medusa\", \"idempiere\", \"payload\", \"haystack\". An engine never defines Baobab product identity."
+      "deprecated": true,
+      "description": "TRANSITIONAL (ADR-SHARED-017 SS9). The v1 provider field whose meaning has drifted between technology family (\"medusa\", \"idempiere\") and provider label (\"sandbox-payments\", \"temporary-billing\"). Kept unchanged for v1 compatibility; the next capability contract major removes it. New contracts name the Baobab engine with control-plane/v1 engineId (e.g. \"baobab-trade\"), the provider with capabilityProviderKey and the technology family with implementationKey. An engine key never defines Baobab product identity."
+    },
+    "implementationKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 63,
+      "description": "The implementation technology or provider family beneath a CapabilityProvider, e.g. \"medusa\", \"idempiere\", \"payload\", \"haystack\", \"keycloak\", \"ory\", \"hyperswitch\", \"killbill\", \"sandbox\" (ADR-SHARED-017 SS8-9). Distinct from the engine (control-plane/v1 engineId, e.g. \"baobab-trade\") and from the provider (capabilityProviderKey, e.g. \"baobab-trade.medusa\"). Never part of a capability key."
+    },
+    "providerImplementationStatus": {
+      "type": "string",
+      "enum": ["PARTIAL", "IMPLEMENTED"],
+      "description": "How complete an engine repository says its implementation of one capability contract is (ADR-SHARED-017 SS25). PARTIAL: part of the contract is implemented; never registered as provider support. IMPLEMENTED: the declared contract majors are implemented, with implementation evidence. Deliberately not a lifecycle, certification or health value: ACTIVE belongs to the Control Plane, CERTIFIED to EA-09 and HEALTHY to HealthObservation."
+    },
+    "capabilityProposalStatus": {
+      "type": "string",
+      "enum": ["CANDIDATE", "PROPOSED", "CONTRACTING", "CONTRACTED"],
+      "description": "Architecture-workflow state of a planned capability (ADR-SHARED-017 SS16-17). CANDIDATE: found during census, not yet proposed. PROPOSED: under architecture review. CONTRACTING: the Shared contract is being written. CONTRACTED: the canonical Shared definition exists, but this provider does not implement it yet. Never a runtime lifecycle: a planned capability creates no Capability, ProviderCapabilitySupport or CapabilityBinding, satisfies no composition and never takes part in resolution."
+    },
+    "implementationEvidenceType": {
+      "type": "string",
+      "enum": ["source", "test", "contract-test", "integration-test", "simulation", "conformance-fixture"],
+      "description": "Kind of repository artefact behind an implementation claim (ADR-SHARED-017 SS47). Evidence explains why a repository claims an implementation exists; it is not certification, which EA-09 owns."
+    },
+    "architectureDecisionId": {
+      "type": "string",
+      "pattern": "^ADR-(?:[A-Z][A-Z0-9]*-)*[0-9]{3,4}$",
+      "maxLength": 40,
+      "description": "Identifier of a governing architecture decision record, e.g. \"ADR-SHARED-017\", \"ADR-BCP-006\", \"ADR-PAY-0002\", \"ADR-0020\"."
+    },
+    "platformRepository": {
+      "type": "string",
+      "pattern": "^baobab-platform/[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "maxLength": 100,
+      "description": "A repository of the baobab-platform GitHub organisation in owner/name form, e.g. \"baobab-platform/baobab-payments\"."
     },
     "capabilityResolutionId": {
       "type": "string",
