@@ -6,8 +6,17 @@
   "$defs": {
     "organisationKind": {
       "type": "string",
-      "enum": ["ORGANISATION", "BUYER_ORGANISATION", "SUPPLIER_ORGANISATION"],
+      "enum": [
+        "ORGANISATION",
+        "BUYER_ORGANISATION",
+        "SUPPLIER_ORGANISATION"
+      ],
       "description": "The organisation-kind canonical entity types (canonical-entity.schema.json canonicalEntityType) an organisation may be attested as."
+    },
+    "countryCode": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$",
+      "description": "ISO 3166-1 alpha-2 country, the key of market participation (market-lifecycle.yaml participation)."
     },
     "PlatformContextResolveRequest": {
       "type": "object",
@@ -29,25 +38,56 @@
         "expected_organisation_type": {
           "$ref": "#/$defs/organisationKind",
           "description": "Requests exact-kind attestation of the named organisation (ADR-BCP-024). Commands that grant kind-specific authority supply it."
+        },
+        "country_code": {
+          "$ref": "#/$defs/countryCode",
+          "description": "Selects the market participation the context resolves for, when the tenant participates in more than one country. It must be one of the tenant's ACTIVE participations (MARKET_CONTEXT_NOT_PARTICIPATING, 403); with several and none selected the context is MARKET_CONTEXT_AMBIGUOUS (403)."
         }
       },
-      "not": { "required": ["organisation_id", "iam_organization"] }
+      "not": {
+        "required": [
+          "organisation_id",
+          "iam_organization"
+        ]
+      }
     },
     "PlatformContext": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["context_id", "tenant_id", "resolved_at"],
+      "required": [
+        "context_id",
+        "tenant_id",
+        "resolved_at"
+      ],
       "properties": {
         "context_id": {
           "$ref": "domain.schema.json#/$defs/uuid",
           "description": "The persisted context a capability resolution redeems. It is bound to its tenant: another tenant's workload redeeming it is TENANT_CONTEXT_MISMATCH."
         },
-        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
-        "resolved_at": { "type": "string", "format": "date-time" },
+        "tenant_id": {
+          "$ref": "domain.schema.json#/$defs/tenantId"
+        },
+        "resolved_at": {
+          "type": "string",
+          "format": "date-time"
+        },
         "expires_at": {
           "type": "string",
           "format": "date-time",
           "description": "When the Control Plane bounds context lifetime (ADR-BCP-004 section 72). Absent means unbounded."
+        },
+        "country_code": {
+          "$ref": "#/$defs/countryCode",
+          "description": "The tenant's ACTIVE market participation the context resolved for. Absent when the tenant participates nowhere; capability resolution then denies, fail closed."
+        },
+        "market_id": {
+          "$ref": "market.schema.json#/$defs/marketId",
+          "description": "The country's primary registry market (market-lifecycle.yaml participation primary)."
+        },
+        "currency_code": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "The primary market's currency."
         },
         "organisation_id": {
           "$ref": "domain.schema.json#/$defs/canonicalEntityId",
@@ -57,64 +97,139 @@
           "$ref": "#/$defs/organisationKind",
           "description": "The kind the organisation was attested as, when expected_organisation_type was supplied."
         }
+      },
+      "dependentRequired": {
+        "country_code": [
+          "market_id",
+          "currency_code"
+        ],
+        "market_id": [
+          "country_code"
+        ],
+        "currency_code": [
+          "country_code"
+        ]
       }
     },
     "ComposedResolutionRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["canonical_entity_id", "capability_key"],
+      "required": [
+        "canonical_entity_id",
+        "capability_key"
+      ],
       "description": "Deprecated with POST /v1/resolve. It carries tenant_id in the body, which capability resolution never accepts; callers move to platform-context/resolve and then capability resolution by context_id.",
       "properties": {
         "tenant_id": {
           "$ref": "domain.schema.json#/$defs/tenantId",
           "description": "As in PlatformContextResolveRequest: only when the token carries no tenant_id, and equal to it when it does."
         },
-        "canonical_entity_id": { "$ref": "domain.schema.json#/$defs/canonicalEntityId" },
-        "capability_key": { "type": "string", "minLength": 1, "maxLength": 128 }
+        "canonical_entity_id": {
+          "$ref": "domain.schema.json#/$defs/canonicalEntityId"
+        },
+        "capability_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
       }
     },
     "ComposedResolution": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["tenant_id", "capability_key", "mapping", "capability", "policy", "topology"],
+      "required": [
+        "tenant_id",
+        "capability_key",
+        "mapping",
+        "capability",
+        "policy",
+        "topology"
+      ],
       "description": "Deprecated with POST /v1/resolve: the mapping, binding, policy and engine instance the composed pipeline chose. A request the pipeline cannot resolve is RESOLUTION_FAILED (400) with an opaque detail (ADR-0008 section 45).",
       "properties": {
-        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
-        "capability_key": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "tenant_id": {
+          "$ref": "domain.schema.json#/$defs/tenantId"
+        },
+        "capability_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
         "mapping": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "status"],
+          "required": [
+            "id",
+            "status"
+          ],
           "properties": {
-            "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-            "status": { "type": "string", "minLength": 1, "maxLength": 32 }
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            }
           }
         },
         "capability": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["binding_mode", "engine_instance_id"],
+          "required": [
+            "binding_mode",
+            "engine_instance_id"
+          ],
           "properties": {
-            "binding_mode": { "type": "string", "enum": ["PRIMARY", "FALLBACK", "SHADOW", "MIGRATION", "DISABLED"] },
-            "engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" }
+            "binding_mode": {
+              "type": "string",
+              "enum": [
+                "PRIMARY",
+                "FALLBACK",
+                "SHADOW",
+                "MIGRATION",
+                "DISABLED"
+              ]
+            },
+            "engine_instance_id": {
+              "$ref": "domain.schema.json#/$defs/engineInstanceId"
+            }
           }
         },
         "policy": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["allowed"],
+          "required": [
+            "allowed"
+          ],
           "properties": {
-            "allowed": { "type": "boolean" },
-            "reason": { "type": "string", "maxLength": 256 }
+            "allowed": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 256
+            }
           }
         },
         "topology": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "environment"],
+          "required": [
+            "id",
+            "environment"
+          ],
           "properties": {
-            "id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
-            "environment": { "type": "string", "minLength": 1, "maxLength": 32 }
+            "id": {
+              "$ref": "domain.schema.json#/$defs/engineInstanceId"
+            },
+            "environment": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            }
           }
         }
       }

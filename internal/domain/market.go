@@ -38,6 +38,15 @@ func (m Market) Validate() error {
 	return nil
 }
 
+// MarketParticipation is one country a tenant actively participates in,
+// with the country's primary registry market and its currency
+// (market-lifecycle.yaml participation).
+type MarketParticipation struct {
+	CountryCode      string
+	RegistryMarketID string
+	CurrencyCode     string
+}
+
 // MarketParticipationCapability is what an organisational context is
 // authorised to do in a market -- deliberately independent of the market
 // itself (ADR-BCP-011 §6: "a market SHALL NOT be assigned a permanent

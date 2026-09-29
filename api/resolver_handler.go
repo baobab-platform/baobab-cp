@@ -67,6 +67,8 @@ func (h ResolverHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 			problem(w, r, http.StatusForbidden, "IDENTITY_RESOLUTION_FAILED", "the authenticated identity could not be resolved", false)
 		case errors.Is(err, service.ErrTenantNotActive):
 			problem(w, r, http.StatusForbidden, "TENANT_NOT_ACTIVE", "the tenant is not active", false)
+		case errors.Is(err, service.ErrMarketContextAmbiguous):
+			problem(w, r, http.StatusForbidden, "MARKET_CONTEXT_AMBIGUOUS", "the tenant participates in several markets", false)
 		default:
 			problem(w, r, http.StatusForbidden, "CONTEXT_DENIED", "trusted Context could not be constructed", false)
 		}

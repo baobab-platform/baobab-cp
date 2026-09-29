@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/market"
 )
 
@@ -314,4 +315,33 @@ func findingCodes(f []market.Finding) []string {
 		codes = append(codes, x.Code)
 	}
 	return codes
+}
+
+// ActiveMarketParticipations lists the countries a tenant has an ACTIVE,
+// effective market assignment in, while an available registry market
+// covers them, each with its primary registry market and currency
+// (market-lifecycle.yaml participation).
+func (r *PostgresRepository) ActiveMarketParticipations(ctx context.Context, tenantID string, at time.Time) ([]domain.MarketParticipation, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT m.code, m.registry_market_id, m.currency
+		FROM market.market_assignment ma
+		JOIN market.market m ON m.market_id = ma.market_id
+		WHERE ma.tenant_id = $1 AND ma.status = 'ACTIVE' AND ma.effective_from <= $2
+			AND (ma.effective_to IS NULL OR ma.effective_to > $2)
+			AND m.is_active AND m.registry_market_id IS NOT NULL
+			AND EXISTS (SELECT 1 FROM market.country_coverage c WHERE c.country_code = m.code AND c.status = ANY($3))
+		ORDER BY m.code`, tenantID, at, market.AvailableStatuses())
+	if err != nil {
+		return nil, fmt.Errorf("market participations: %w", err)
+	}
+	defer rows.Close()
+	var out []domain.MarketParticipation
+	for rows.Next() {
+		var p domain.MarketParticipation
+		if err := rows.Scan(&p.CountryCode, &p.RegistryMarketID, &p.CurrencyCode); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }
