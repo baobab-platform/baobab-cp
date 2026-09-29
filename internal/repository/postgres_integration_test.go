@@ -56,6 +56,7 @@ func TestPostgresCapabilityBindingExclusionConstraintFires(t *testing.T) {
 		admin.Exec(ctx, `DELETE FROM capability.capability_binding WHERE capability_id=$1`, capabilityID)
 		admin.Exec(ctx, `DELETE FROM capability.capability_scope WHERE scope_id=$1`, scopeID)
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id=$1`, engineID)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE engine_id=$1`, engineID)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE engine_id=$1`, engineID)
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE capability_id=$1`, capabilityID)
 	}
@@ -71,6 +72,9 @@ func TestPostgresCapabilityBindingExclusionConstraintFires(t *testing.T) {
 		{`INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status) VALUES ($1,$2,'af-south-1','production','ACTIVE')`, []any{instanceA, engineID}},
 		{`INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status) VALUES ($1,$2,'af-south-1','production','ACTIVE')`, []any{instanceB, engineID}},
 		{`INSERT INTO capability.capability_scope(scope_id, tenant_id) VALUES ($1,'tenant-exclusion-test')`, []any{scopeID}},
+		{`WITH p AS (INSERT INTO capability.capability_provider(provider_key, name, provider_type, engine_id, status)
+			VALUES ('test-exclusion.engine', 'Test Provider', 'BAOBAB_ENGINE', $1, 'ACTIVE') RETURNING provider_id)
+			INSERT INTO capability.provider_capability_support(provider_id, capability_id, contract_versions) SELECT provider_id, $2, '{1}' FROM p`, []any{engineID, capabilityID}},
 	}
 	for _, f := range fixtures {
 		if _, err := admin.Exec(ctx, f.sql, f.args...); err != nil {

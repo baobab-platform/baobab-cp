@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -78,49 +79,7 @@ func TestApplyMigrationsUpgradesExistingMarketAssignmentSafely(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	parsed, err := url.Parse(baseURL)
-	if err != nil {
-		t.Fatalf("parse TEST_DATABASE_URL: %v", err)
-	}
-
-	adminURL := *parsed
-	adminURL.Path = "/postgres"
-	adminPool, err := pgxpool.New(ctx, adminURL.String())
-	if err != nil {
-		t.Fatalf("connect admin: %v", err)
-	}
-	// t.Cleanup runs LIFO, and (unlike a defer in this same function) always
-	// runs *after* every defer in this function has already fired. A
-	// `defer adminPool.Close()` here would therefore close adminPool before
-	// the DROP DATABASE cleanup below ever got to use it, and pgxpool.Exec
-	// on a closed pool fails silently, leaking the throwaway database on
-	// every run. Register every close/drop as t.Cleanup instead, in
-	// registration order [adminPool.Close, dropDatabase, pool.Close] so
-	// they execute in the reverse, correct order: pool.Close, dropDatabase,
-	// adminPool.Close.
-	t.Cleanup(adminPool.Close)
-
-	dbName := fmt.Sprintf("baobab_cp_migration_upgrade_%d", time.Now().UnixNano())
-	if _, err := adminPool.Exec(ctx, `CREATE DATABASE `+pgxIdentifier(dbName)); err != nil {
-		t.Fatalf("create throwaway database: %v", err)
-	}
-	t.Cleanup(func() {
-		cleanupCtx := context.Background()
-		if _, err := adminPool.Exec(cleanupCtx, `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`, dbName); err != nil {
-			t.Logf("terminate backends for throwaway database %s: %v", dbName, err)
-		}
-		if _, err := adminPool.Exec(cleanupCtx, `DROP DATABASE IF EXISTS `+pgxIdentifier(dbName)); err != nil {
-			t.Logf("drop throwaway database %s: %v", dbName, err)
-		}
-	})
-
-	testURL := *parsed
-	testURL.Path = "/" + dbName
-	pool, err := pgxpool.New(ctx, testURL.String())
-	if err != nil {
-		t.Fatalf("connect throwaway database: %v", err)
-	}
-	t.Cleanup(pool.Close)
+	pool := throwawayDatabase(t, ctx, baseURL)
 
 	migrations, err := LoadMigrations()
 	if err != nil {
@@ -180,9 +139,159 @@ func TestApplyMigrationsUpgradesExistingMarketAssignmentSafely(t *testing.T) {
 	}
 }
 
+// throwawayDatabase creates an empty database for one test and drops it
+// when the test ends.
+func throwawayDatabase(t *testing.T, ctx context.Context, baseURL string) *pgxpool.Pool {
+	t.Helper()
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		t.Fatalf("parse TEST_DATABASE_URL: %v", err)
+	}
+
+	adminURL := *parsed
+	adminURL.Path = "/postgres"
+	adminPool, err := pgxpool.New(ctx, adminURL.String())
+	if err != nil {
+		t.Fatalf("connect admin: %v", err)
+	}
+	// t.Cleanup runs LIFO, and (unlike a defer in this same function) always
+	// runs *after* every defer in this function has already fired. A
+	// `defer adminPool.Close()` here would therefore close adminPool before
+	// the DROP DATABASE cleanup below ever got to use it, and pgxpool.Exec
+	// on a closed pool fails silently, leaking the throwaway database on
+	// every run. Register every close/drop as t.Cleanup instead, in
+	// registration order [adminPool.Close, dropDatabase, pool.Close] so
+	// they execute in the reverse, correct order: pool.Close, dropDatabase,
+	// adminPool.Close.
+	t.Cleanup(adminPool.Close)
+
+	dbName := fmt.Sprintf("baobab_cp_migration_upgrade_%d", time.Now().UnixNano())
+	if _, err := adminPool.Exec(ctx, `CREATE DATABASE `+pgxIdentifier(dbName)); err != nil {
+		t.Fatalf("create throwaway database: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		if _, err := adminPool.Exec(cleanupCtx, `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`, dbName); err != nil {
+			t.Logf("terminate backends for throwaway database %s: %v", dbName, err)
+		}
+		if _, err := adminPool.Exec(cleanupCtx, `DROP DATABASE IF EXISTS `+pgxIdentifier(dbName)); err != nil {
+			t.Logf("drop throwaway database %s: %v", dbName, err)
+		}
+	})
+
+	testURL := *parsed
+	testURL.Path = "/" + dbName
+	pool, err := pgxpool.New(ctx, testURL.String())
+	if err != nil {
+		t.Fatalf("connect throwaway database: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
 // pgxIdentifier quotes name as a PostgreSQL identifier for use in DDL where
 // a bind parameter isn't accepted (CREATE/DROP DATABASE). name here is
 // always this test's own generated dbName, never external input.
 func pgxIdentifier(name string) string {
 	return `"` + name + `"`
+}
+
+// TestBindingProviderBackfill upgrades bindings created before providers
+// were enforced (000077): a binding whose engine has exactly one ACTIVE
+// provider supporting its capability takes it; one with none or several
+// is left for an operator, reported with the reason, and the constraint,
+// added NOT VALID, lets the migration through but refuses changing such a
+// binding while it stays ACTIVE.
+func TestBindingProviderBackfill(t *testing.T) {
+	baseURL := os.Getenv("TEST_DATABASE_URL")
+	if baseURL == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping PostgreSQL integration test")
+	}
+	ctx := context.Background()
+	pool := throwawayDatabase(t, ctx, baseURL)
+	migrations, err := LoadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyMigrationsThrough(ctx, pool, migrations, 76); err != nil {
+		t.Fatalf("apply migrations through 000076: %v", err)
+	}
+
+	const capability = "80000000-0000-0000-0000-000000000001"
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	exec(`INSERT INTO capability.capability(capability_id, code, name) VALUES ($1, 'test.backfill.capability', 'Backfill')`, capability)
+	provider := func(key, engine, status string) {
+		exec(`WITH p AS (INSERT INTO capability.capability_provider(provider_key, name, provider_type, engine_id, status)
+			VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, $3) RETURNING provider_id)
+			INSERT INTO capability.provider_capability_support(provider_id, capability_id, contract_versions) SELECT provider_id, $4::uuid, '{1}' FROM p`,
+			key, engine, status, capability)
+	}
+	// One binding per engine, each in its own scope: the single-provider
+	// engine, the two-provider engine, the engine with only a suspended
+	// provider, and the engine with none.
+	bindings := map[string]string{}
+	for i, name := range []string{"single", "ambiguous", "suspended", "none"} {
+		engine := fmt.Sprintf("80000000-0000-0000-0000-00000000010%d", i)
+		instance := fmt.Sprintf("80000000-0000-0000-0000-00000000020%d", i)
+		scope := fmt.Sprintf("80000000-0000-0000-0000-00000000030%d", i)
+		binding := fmt.Sprintf("80000000-0000-0000-0000-00000000040%d", i)
+		exec(`INSERT INTO topology.engine(engine_id, code, name) VALUES ($1::uuid, $2, $2)`, engine, "backfill-"+name)
+		exec(`INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status) VALUES ($1::uuid, $2::uuid, 'af-south-1', 'production', 'ACTIVE')`, instance, engine)
+		exec(`INSERT INTO capability.capability_scope(scope_id, tenant_id) VALUES ($1::uuid, $2)`, scope, "tn_backfill"+name)
+		exec(`INSERT INTO capability.capability_binding(id, capability_id, engine_instance_id, scope_id, binding_mode, priority, status, contract_version, effective_from)
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'PRIMARY', 1, 'ACTIVE', 1, now())`, binding, capability, instance, scope)
+		bindings[name] = binding
+		switch name {
+		case "single":
+			provider("backfill-single.engine", engine, "ACTIVE")
+		case "ambiguous":
+			provider("backfill-ambiguous.one", engine, "ACTIVE")
+			provider("backfill-ambiguous.two", engine, "ACTIVE")
+		case "suspended":
+			provider("backfill-suspended.engine", engine, "SUSPENDED")
+		}
+	}
+
+	if err := ApplyMigrations(ctx, pool); err != nil {
+		t.Fatalf("apply 000077 over bindings without providers: %v", err)
+	}
+
+	var single string
+	if err := pool.QueryRow(ctx, `SELECT cp.provider_key FROM capability.capability_binding cb JOIN capability.capability_provider cp USING (provider_id) WHERE cb.id = $1::uuid`,
+		bindings["single"]).Scan(&single); err != nil || single != "backfill-single.engine" {
+		t.Fatalf("the single-provider binding was not backfilled: %q %v", single, err)
+	}
+	reported := map[string]string{}
+	rows, err := pool.Query(ctx, `SELECT binding_id::text, reason FROM capability.binding_without_provider WHERE capability_key = 'test.backfill.capability'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var id, reason string
+		if err := rows.Scan(&id, &reason); err != nil {
+			t.Fatal(err)
+		}
+		reported[id] = reason
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{bindings["ambiguous"]: "AMBIGUOUS_PROVIDER", bindings["suspended"]: "NO_PROVIDER", bindings["none"]: "NO_PROVIDER"}
+	if fmt.Sprint(reported) != fmt.Sprint(want) {
+		t.Fatalf("binding_without_provider = %v, want %v", reported, want)
+	}
+
+	// An unresolved binding may not change while it stays ACTIVE, but may
+	// leave ACTIVE.
+	_, err = pool.Exec(ctx, `UPDATE capability.capability_binding SET priority = 2 WHERE id = $1::uuid`, bindings["none"])
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.ConstraintName != "capability_binding_active_provider_check" {
+		t.Fatalf("changing an ACTIVE binding without a provider: %v", err)
+	}
+	exec(`UPDATE capability.capability_binding SET status = 'SUSPENDED' WHERE id = $1::uuid`, bindings["none"])
 }

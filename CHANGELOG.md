@@ -723,6 +723,16 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Capability bindings name their provider (Shared `capability/v1` `binding.schema.json`; baobab-cp#76, #82).
+  - **Eligible provider.** A binding's provider is an ACTIVE provider on the binding's engine that ACTIVELY supports the binding's capability.
+  - **Creating bindings.** `CreateBinding`, used by provisioning, takes the provider the binding names when it is eligible; otherwise it takes the engine's only eligible provider.
+    - It refuses an ACTIVE binding whose provider is missing or ambiguous with `ErrBindingProviderUnresolved`.
+    - It refuses a named provider belonging to another engine with the same error.
+    - `SaveBinding` cannot make a binding without a provider ACTIVE.
+  - **Migration 000077.**
+    - Backfills existing bindings whose provider is unambiguous.
+    - Adds `capability_binding_active_provider_check` as `NOT VALID`: rows that couldn't be backfilled are not rejected, but a row without a provider can no longer become ACTIVE or change while it is ACTIVE.
+    - Reports the ACTIVE bindings still without a provider in `capability.binding_without_provider`, with reason `NO_PROVIDER` or `AMBIGUOUS_PROVIDER`. A later migration validates the constraint once that view is empty.
 - One market authority: the registry drives participation (Shared `market-lifecycle.yaml` `participation`).
   - **Coverage.** A country is covered by every registry market naming it as `default_country` or listing it in `countries`. The view `market.country_coverage` derives this from the registry; nothing stores it separately.
   - **Projection.** Activating a market, whether through the direct route or a `MARKET_ACTIVATION` changeset, projects each country the market covers into `market.market` in the same transaction.

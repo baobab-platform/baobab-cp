@@ -61,6 +61,7 @@ func seedZB02Fixture(t *testing.T, ctx context.Context, admin *pgxpool.Pool, rep
 		admin.Exec(ctx, `DELETE FROM capability.capability_scope WHERE tenant_id = $1`, f.TenantID)
 		admin.Exec(ctx, `DELETE FROM provisioning.tenant_provisioning WHERE tenant_id = $1`, f.TenantID)
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_instance_id = $1::uuid`, f.InstanceID)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE engine_id = $1::uuid`, f.EngineID)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE engine_id = $1::uuid`, f.EngineID)
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE capability_id = $1::uuid`, f.CapabilityID)
 		admin.Exec(ctx, `DELETE FROM market.market WHERE market_id IN ($1::uuid, $2::uuid)`, f.MarketUGID, f.MarketZAID)
@@ -97,7 +98,22 @@ func seedZB02Fixture(t *testing.T, ctx context.Context, admin *pgxpool.Pool, rep
 	if _, err := admin.Exec(ctx, `INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status) VALUES ($1::uuid, $2::uuid, 'af-south-1', 'production', 'ACTIVE')`, f.InstanceID, f.EngineID); err != nil {
 		t.Fatalf("fixture %s: create engine instance: %v", tenantSuffix, err)
 	}
+	seedActiveProvider(t, ctx, admin, "zb02-"+tenantSuffix+".settlement", f.EngineID, f.CapabilityID)
 	return f
+}
+
+// seedActiveProvider registers an ACTIVE provider on the engine supporting
+// the capability, so the bindings provisioning creates can name it.
+func seedActiveProvider(t *testing.T, ctx context.Context, admin *pgxpool.Pool, providerKey, engineID, capabilityID string) {
+	t.Helper()
+	if _, err := admin.Exec(ctx, `
+		WITH p AS (
+			INSERT INTO capability.capability_provider(provider_key, name, provider_type, engine_id, status)
+			VALUES ($1, 'Fixture provider', 'BAOBAB_ENGINE', $2::uuid, 'ACTIVE') RETURNING provider_id)
+		INSERT INTO capability.provider_capability_support(provider_id, capability_id, contract_versions)
+		SELECT provider_id, $3::uuid, '{1}' FROM p`, providerKey, engineID, capabilityID); err != nil {
+		t.Fatalf("fixture: register provider %s: %v", providerKey, err)
+	}
 }
 
 // manifest builds the standard UG/ZA CROSS_MARKET desired-state manifest

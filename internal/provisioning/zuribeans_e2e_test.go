@@ -83,6 +83,7 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 		admin.Exec(ctx, `DELETE FROM capability.capability_scope WHERE tenant_id = $1`, tenantID)
 		admin.Exec(ctx, `DELETE FROM provisioning.tenant_provisioning WHERE tenant_id = $1`, tenantID)
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_instance_id = $1::uuid`, instanceID)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE engine_id = $1::uuid`, engineID)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE engine_id = $1::uuid`, engineID)
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE capability_id = $1::uuid`, capabilityID)
 		admin.Exec(ctx, `DELETE FROM market.market WHERE market_id IN ($1::uuid, $2::uuid)`, marketUGID, marketZAID)
@@ -119,6 +120,7 @@ func TestZuriBeansUGZAManifestReachesActive(t *testing.T) {
 	if _, err := admin.Exec(ctx, `INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status) VALUES ($1::uuid, $2::uuid, 'af-south-1', 'production', 'ACTIVE')`, instanceID, engineID); err != nil {
 		t.Fatalf("fixture: create engine instance: %v", err)
 	}
+	seedActiveProvider(t, ctx, admin, "zb02-e2e.settlement", engineID, capabilityID)
 
 	// -- desired state: a declarative ZuriBeans UG/ZA manifest, symbolic
 	// references only (market codes, a capability key) --

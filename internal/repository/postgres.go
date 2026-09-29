@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
@@ -997,12 +998,50 @@ func (r *PostgresRepository) ListBindings(ctx context.Context, capabilityKey str
 	return out, nil
 }
 
+// ErrBindingProviderUnresolved: a binding's provider must be an ACTIVE
+// provider on the binding's engine that ACTIVELY supports its capability,
+// and an ACTIVE binding must name one (migration 000077).
+var ErrBindingProviderUnresolved = errors.New("the binding's provider could not be resolved")
+
+const bindingProviderCheck = "capability_binding_active_provider_check"
+
+// bindingProviderViolation maps the ACTIVE-needs-a-provider constraint to
+// ErrBindingProviderUnresolved.
+func bindingProviderViolation(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.ConstraintName == bindingProviderCheck {
+		return fmt.Errorf("%w: an ACTIVE binding names no provider", ErrBindingProviderUnresolved)
+	}
+	return err
+}
+
 func (r *PostgresRepository) CreateBinding(ctx context.Context, binding resolver.CapabilityBinding) error {
 	if r == nil || r.pool == nil {
 		return errors.New("repository is not initialized")
 	}
 	if binding.CapabilityKey == "" || binding.EngineID == "" || binding.EngineInstanceID == "" || binding.ScopeID == "" {
 		return errors.New("capability, engine, engine instance, and scope are required")
+	}
+	// The binding's provider: the one it names, which must be eligible, or
+	// else the engine's only eligible provider for the capability.
+	var providers []string
+	if err := r.pool.QueryRow(ctx, `
+		SELECT COALESCE(array_agg(cp.provider_id::text ORDER BY cp.provider_id), '{}')
+		FROM capability.capability_provider cp
+		JOIN capability.provider_capability_support pcs ON pcs.provider_id = cp.provider_id AND pcs.status = 'ACTIVE'
+		JOIN capability.capability c ON c.capability_id = pcs.capability_id AND c.code = $1
+		WHERE cp.engine_id = $2::uuid AND cp.status = 'ACTIVE' AND ($3 = '' OR cp.provider_id::text = $3)`,
+		binding.CapabilityKey, binding.EngineID, binding.ProviderID).Scan(&providers); err != nil {
+		return fmt.Errorf("resolve binding provider: %w", err)
+	}
+	var providerID *string
+	switch {
+	case len(providers) == 1:
+		providerID = &providers[0]
+	case binding.ProviderID != "":
+		return fmt.Errorf("%w: provider %s is not an ACTIVE provider of the engine supporting %s", ErrBindingProviderUnresolved, binding.ProviderID, binding.CapabilityKey)
+	case strings.EqualFold(binding.Status, "ACTIVE"):
+		return fmt.Errorf("%w: the engine has %d ACTIVE providers supporting %s", ErrBindingProviderUnresolved, len(providers), binding.CapabilityKey)
 	}
 	// status and binding_mode are stored upper-cased so that the
 	// capability_binding_primary_excl exclusion constraint (which is defined
@@ -1011,11 +1050,11 @@ func (r *PostgresRepository) CreateBinding(ctx context.Context, binding resolver
 	// constraint for every binding created through this path: see
 	// docs/adr/ADR-0005-bcp-db-001-conformance-gap.md.
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO capability.capability_binding(capability_id, engine_instance_id, scope_id, binding_mode, priority, status, contract_version, effective_from)
-		SELECT c.capability_id, ei.engine_instance_id, $4::uuid, UPPER($5), $6, UPPER($7), $8, now()
+		INSERT INTO capability.capability_binding(capability_id, engine_instance_id, scope_id, binding_mode, priority, status, contract_version, effective_from, provider_id)
+		SELECT c.capability_id, ei.engine_instance_id, $4::uuid, UPPER($5), $6, UPPER($7), $8, now(), $9::uuid
 		FROM capability.capability c JOIN topology.engine_instance ei ON ei.engine_instance_id=$3::uuid AND ei.engine_id=$2::uuid
-		WHERE c.code=$1`, binding.CapabilityKey, binding.EngineID, binding.EngineInstanceID, binding.ScopeID, string(binding.BindingMode), binding.Priority, binding.Status, binding.ContractVersion)
-	return err
+		WHERE c.code=$1`, binding.CapabilityKey, binding.EngineID, binding.EngineInstanceID, binding.ScopeID, string(binding.BindingMode), binding.Priority, binding.Status, binding.ContractVersion, providerID)
+	return bindingProviderViolation(err)
 }
 
 func (r *PostgresRepository) SaveBinding(ctx context.Context, binding resolver.CapabilityBinding, expectedVersion int64) error {
@@ -1024,7 +1063,7 @@ func (r *PostgresRepository) SaveBinding(ctx context.Context, binding resolver.C
 	}
 	result, err := r.pool.Exec(ctx, `UPDATE capability.capability_binding cb SET binding_mode=UPPER($2), priority=$3, status=UPPER($4), contract_version=$5, version=version+1, updated_at=now() FROM capability.capability c WHERE cb.id=$1::uuid AND cb.capability_id=c.capability_id AND c.code=$6 AND cb.version=$7`, binding.ID, string(binding.BindingMode), binding.Priority, binding.Status, binding.ContractVersion, binding.CapabilityKey, expectedVersion)
 	if err != nil {
-		return err
+		return bindingProviderViolation(err)
 	}
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("binding %s version conflict or not found", binding.EngineInstanceID)
