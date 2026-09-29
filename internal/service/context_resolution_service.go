@@ -24,6 +24,21 @@ var ErrIdentityResolutionFailed = errors.New("identity resolution failed")
 // unknown/inactive -> DENY").
 var ErrTenantNotActive = errors.New("tenant is not active")
 
+// ErrMarketContextAmbiguous: the tenant participates in several countries
+// and the request selected none (Shared control-plane/v1
+// resolvePlatformContext).
+var ErrMarketContextAmbiguous = errors.New("the tenant participates in several markets and none was selected")
+
+// ErrMarketContextNotParticipating: the selected country is not one of the
+// tenant's ACTIVE market participations.
+var ErrMarketContextNotParticipating = errors.New("the selected country is not a market the tenant participates in")
+
+// MarketParticipationReader lists a tenant's ACTIVE, effective market
+// participations in countries an available registry market covers.
+type MarketParticipationReader interface {
+	ActiveMarketParticipations(ctx context.Context, tenantID string, at time.Time) ([]domain.MarketParticipation, error)
+}
+
 // ErrOrganisationNotResolved is returned when IAM organisation evidence does
 // not resolve, through an active link, to exactly one canonical Organisation
 // (ADR-BCP-018 section 66). Resolution fails closed on it.
@@ -71,6 +86,19 @@ type ContextResolutionService struct {
 	// matching counterparty role for the tenant (ADR-BCP-024 clause 8,
 	// ADR-BCP-018 gate ORG-13). Nil keeps exact-kind attestation strict.
 	CounterpartyRoles CounterpartyRoleReader
+	// Markets fills the context's market from the tenant's participation.
+	// Nil leaves the context without a market, which resolution policy
+	// denies.
+	Markets MarketParticipationReader
+	// country is the participation the request selected, set by WithCountry.
+	country string
+}
+
+// WithCountry selects, for one resolution, the market participation the
+// context resolves for when the tenant participates in more than one.
+func (s ContextResolutionService) WithCountry(countryCode string) ContextResolutionService {
+	s.country = countryCode
+	return s
 }
 
 // CounterpartyRoleReader reports whether an organisation holds an ACTIVE,
@@ -205,6 +233,9 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 			trustedContext.Provenance["organisation_id"] = *organisationSource
 		}
 	}
+	if err := s.resolveMarket(ctx, &trustedContext, tenantID, now); err != nil {
+		return nil, domain.Context{}, err
+	}
 	if err := trustedContext.Validate(); err != nil {
 		return nil, domain.Context{}, err
 	}
@@ -306,4 +337,45 @@ func recordOrganisationFailure(err error) error {
 		}
 	}
 	return err
+}
+
+// resolveMarket fills the context's country, primary registry market and
+// currency from the tenant's ACTIVE market participation: its only one, or
+// the one the request selected. A tenant that participates nowhere keeps a
+// context without a market, which resolution policy denies.
+func (s ContextResolutionService) resolveMarket(ctx context.Context, trusted *domain.Context, tenantID string, now time.Time) error {
+	if s.Markets == nil {
+		if s.country != "" {
+			return ErrMarketContextNotParticipating
+		}
+		return nil
+	}
+	participations, err := s.Markets.ActiveMarketParticipations(ctx, tenantID, now)
+	if err != nil {
+		return fmt.Errorf("resolve market participation: %w", err)
+	}
+	var chosen *domain.MarketParticipation
+	switch {
+	case s.country != "":
+		for i := range participations {
+			if participations[i].CountryCode == s.country {
+				chosen = &participations[i]
+			}
+		}
+		if chosen == nil {
+			return ErrMarketContextNotParticipating
+		}
+	case len(participations) == 1:
+		chosen = &participations[0]
+	case len(participations) > 1:
+		return ErrMarketContextAmbiguous
+	default:
+		return nil
+	}
+	trusted.CountryCode, trusted.MarketID, trusted.CurrencyCode = chosen.CountryCode, chosen.RegistryMarketID, chosen.CurrencyCode
+	source := domain.ContextSource{Source: "baobab-cp:tenant-market-participation", TrustLevel: domain.TrustSystem, Evidence: chosen.RegistryMarketID}
+	for _, field := range []string{"country_code", "market_id", "currency_code"} {
+		trusted.Provenance[field] = source
+	}
+	return nil
 }

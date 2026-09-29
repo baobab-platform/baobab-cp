@@ -57,6 +57,8 @@ func TestMarketParticipationProjection(t *testing.T) {
 	tenant, legalEntity := "tn_mpp"+suffix, "MPP-"+strings.ToUpper(suffix)
 	const country, neighbour = "XR", "XS"
 	cleanup := func() {
+		admin.Exec(ctx, `DELETE FROM market.market_participation_capability WHERE market_assignment_id IN (SELECT market_assignment_id FROM market.market_assignment WHERE tenant_id = $1)`, tenant)
+		admin.Exec(ctx, `DELETE FROM market.market_assignment WHERE tenant_id = $1`, tenant)
 		admin.Exec(ctx, `DELETE FROM market.market WHERE code IN ($1, $2)`, country, neighbour)
 		admin.Exec(ctx, `DELETE FROM market.registry WHERE owner_tenant_id = $1`, tenant)
 		admin.Exec(ctx, `DELETE FROM tenants WHERE tenant_id = $1`, tenant)
@@ -161,5 +163,40 @@ func TestMarketParticipationProjection(t *testing.T) {
 	project()
 	if r := projected(); r.Primary != "mkt_national"+suffix {
 		t.Fatalf("a later default-country market became primary: %+v", r)
+	}
+
+	// A tenant's ACTIVE, effective participation in a covered country is
+	// its market context, with the primary market and its currency; a
+	// pending assignment is not.
+	participations := func() []domain.MarketParticipation {
+		t.Helper()
+		got, err := repo.ActiveMarketParticipations(ctx, tenant, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	var marketID string
+	if err := admin.QueryRow(ctx, `SELECT market_id::text FROM market.market WHERE code = $1`, country).Scan(&marketID); err != nil {
+		t.Fatal(err)
+	}
+	assign := func(status domain.MarketParticipationStatus) {
+		t.Helper()
+		if err := repo.CreateMarketAssignment(ctx, domain.MarketAssignment{ID: domain.NewUUIDv7(), TenantID: tenant, LegalEntityID: legalEntity,
+			MarketID: marketID, Capabilities: []domain.MarketParticipationCapability{domain.MarketParticipationSelling},
+			EffectiveFrom: now.Add(-time.Hour), Status: status, Source: domain.MarketParticipationSourceProvisioning, PolicyVersion: "1"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	assign(domain.MarketParticipationPending)
+	if got := participations(); len(got) != 0 {
+		t.Fatalf("a pending assignment is a participation: %+v", got)
+	}
+	admin.Exec(ctx, `DELETE FROM market.market_participation_capability WHERE market_assignment_id IN (SELECT market_assignment_id FROM market.market_assignment WHERE tenant_id = $1)`, tenant)
+	admin.Exec(ctx, `DELETE FROM market.market_assignment WHERE tenant_id = $1`, tenant)
+	assign(domain.MarketParticipationActive)
+	want := domain.MarketParticipation{CountryCode: country, RegistryMarketID: "mkt_national" + suffix, CurrencyCode: "UGX"}
+	if got := participations(); len(got) != 1 || got[0] != want {
+		t.Fatalf("participations = %+v, want [%+v]", got, want)
 	}
 }

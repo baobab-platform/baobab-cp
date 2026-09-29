@@ -723,6 +723,16 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- A resolved context carries the tenant's market participation (Shared control-plane/v1 OpenAPI 1.20.0, EA-01 phase 2.5).
+  - `ContextResolutionService` fills `country_code`, `market_id` and `currency_code`:
+    - the country comes from the tenant's ACTIVE, effective market assignment in a country an available registry market covers;
+    - `market_id` is that country's primary registry market (`market.market.registry_market_id`), and `currency_code` is that market's currency.
+  - `POST /v1/platform-context/resolve`:
+    - takes an optional `country_code` to choose among the tenant's own participations;
+    - answers `MARKET_CONTEXT_AMBIGUOUS` (403) when there are several and none was chosen, and `MARKET_CONTEXT_NOT_PARTICIPATING` (403) for a country the tenant doesn't participate in;
+    - returns the three fields.
+  - A tenant that participates nowhere keeps a context without a market, which resolution policy still denies.
+  - Resolution policy has always required a market or country in the context. Resolved contexts now carry one, so the deprecated `/v1/resolve` reaches a decision again.
 - Engine registration records a provider's logical invocation reference (Shared `capability/v1` `registration.schema.json` `provider.invocation`). Migration 000078 adds `service_reference` and `invocation_protocol` to `capability.capability_provider`.
   - The store accepts only `service://` references, never hosts, and the two columns must be set together.
   - A registration without an invocation clears any reference recorded earlier.

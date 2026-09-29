@@ -56,35 +56,40 @@ func TestContextResolutionRoutesConformToShared(t *testing.T) {
 		Tenants:   &fakeStore{tenant: active},
 		Canonical: canonical,
 		Mappings:  noOrganisationMappings{},
+		Markets:   contractMarkets{{CountryCode: "UG", RegistryMarketID: "mkt_contractug", CurrencyCode: "UGX"}},
 	}
 
-	request := []byte(`{"organisation_id":"org-contract","expected_organisation_type":"BUYER_ORGANISATION"}`)
+	request := []byte(`{"organisation_id":"org-contract","expected_organisation_type":"BUYER_ORGANISATION","country_code":"UG"}`)
 	conform("platform-context request", "PlatformContextResolveRequest", request)
 	w := call(PlatformContextHandler{ContextResolution: contexts, Contexts: repo, TTL: 5 * time.Minute}.Resolve,
 		"/v1/platform-context/resolve", request)
 	conform("platform-context response", "PlatformContext", w.Body.Bytes())
+	var resolved platformContextResolveResponse
+	mustNoError(t, json.Unmarshal(w.Body.Bytes(), &resolved))
+	if resolved.CountryCode != "UG" || resolved.MarketID != "mkt_contractug" || resolved.CurrencyCode != "UGX" {
+		t.Fatalf("the context does not carry the tenant's market participation: %+v", resolved)
+	}
+	// A country the tenant does not participate in is refused.
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform-context/resolve", bytes.NewReader([]byte(`{"country_code":"KE"}`)))
+	req = req.WithContext(auth.WithPrincipal(context.WithValue(context.Background(), correlationKey{}, "00000000-0000-4000-8000-0000000000c3"), principal))
+	refused := httptest.NewRecorder()
+	PlatformContextHandler{ContextResolution: contexts, Contexts: repo}.Resolve(refused, req)
+	if refused.Code != http.StatusForbidden || !bytes.Contains(refused.Body.Bytes(), []byte(`"MARKET_CONTEXT_NOT_PARTICIPATING"`)) {
+		t.Fatalf("a foreign country: %d %s", refused.Code, refused.Body.String())
+	}
 
-	// The composed decision body is shared with CapabilityResolveHandler,
-	// which adds context_id; /v1/resolve's own context carries no market,
-	// so its pipeline never reaches a decision (RESOLUTION_FAILED).
+	// With the tenant's market in its context, the deprecated composed
+	// resolution reaches a decision.
 	seedCapabilityResolveFixture(t, repo, tenantID)
-	seedResolvedContext(t, repo, "context-contract", tenantID)
 	composed := []byte(`{"capability_key":"commerce.order.create","canonical_entity_id":"` + tenantID + `"}`)
 	conform("composed request", "ComposedResolutionRequest", composed)
 	resolution := service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}, Repository: repo}
-	w = call(CapabilityResolveHandler{Contexts: repo, Service: resolution}.Resolve, "/v1/capabilities/resolve",
-		[]byte(`{"context_id":"context-contract","capability_key":"commerce.order.create","canonical_entity_id":"`+tenantID+`"}`))
-	var body map[string]any
-	mustNoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	delete(body, "context_id")
-	raw, _ := json.Marshal(body)
-	conform("composed response", "ComposedResolution", raw)
+	w = call(ResolverHandler{Service: resolution, ContextResolution: contexts}.Resolve, "/v1/resolve", composed)
+	conform("composed response", "ComposedResolution", w.Body.Bytes())
+}
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/resolve", bytes.NewReader(composed))
-	req = req.WithContext(auth.WithPrincipal(context.WithValue(context.Background(), correlationKey{}, "00000000-0000-4000-8000-0000000000c2"), principal))
-	failed := httptest.NewRecorder()
-	ResolverHandler{Service: resolution, ContextResolution: contexts}.Resolve(failed, req)
-	if failed.Code != http.StatusBadRequest || !bytes.Contains(failed.Body.Bytes(), []byte(`"RESOLUTION_FAILED"`)) {
-		t.Fatalf("/v1/resolve: %d %s", failed.Code, failed.Body.String())
-	}
+type contractMarkets []domain.MarketParticipation
+
+func (m contractMarkets) ActiveMarketParticipations(context.Context, string, time.Time) ([]domain.MarketParticipation, error) {
+	return m, nil
 }

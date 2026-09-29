@@ -62,6 +62,9 @@ type platformContextResolveRequest struct {
 	// optional for backwards compatibility, but commands granting
 	// kind-specific authority must supply it.
 	ExpectedOrganisationType string `json:"expected_organisation_type,omitempty"`
+	// CountryCode selects among the tenant's ACTIVE market participations
+	// when it has more than one; it can never name another.
+	CountryCode string `json:"country_code,omitempty"`
 }
 
 type platformContextResolveResponse struct {
@@ -69,6 +72,9 @@ type platformContextResolveResponse struct {
 	TenantID         string     `json:"tenant_id"`
 	ResolvedAt       time.Time  `json:"resolved_at"`
 	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
+	CountryCode      string     `json:"country_code,omitempty"`
+	MarketID         string     `json:"market_id,omitempty"`
+	CurrencyCode     string     `json:"currency_code,omitempty"`
 	OrganisationID   string     `json:"organisation_id,omitempty"`
 	OrganisationType string     `json:"organisation_type,omitempty"`
 }
@@ -110,10 +116,11 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 	}
 	var trustedContext domain.Context
 	var err error
+	contexts := h.ContextResolution.WithCountry(req.CountryCode)
 	if req.IamOrganization != nil {
-		_, trustedContext, err = h.ContextResolution.ResolveWithIamOrganisationKind(r.Context(), principal, tenantID, *req.IamOrganization, req.ExpectedOrganisationType, correlationID(r), time.Now())
+		_, trustedContext, err = contexts.ResolveWithIamOrganisationKind(r.Context(), principal, tenantID, *req.IamOrganization, req.ExpectedOrganisationType, correlationID(r), time.Now())
 	} else {
-		_, trustedContext, err = h.ContextResolution.ResolveExpectedOrganisationKind(r.Context(), principal, tenantID, req.OrganisationID, req.ExpectedOrganisationType, correlationID(r), time.Now())
+		_, trustedContext, err = contexts.ResolveExpectedOrganisationKind(r.Context(), principal, tenantID, req.OrganisationID, req.ExpectedOrganisationType, correlationID(r), time.Now())
 	}
 	if err != nil {
 		switch {
@@ -123,6 +130,10 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 			problem(w, r, http.StatusForbidden, "IDENTITY_RESOLUTION_FAILED", "the authenticated identity could not be resolved", false)
 		case errors.Is(err, service.ErrTenantNotActive):
 			problem(w, r, http.StatusForbidden, "TENANT_NOT_ACTIVE", "the tenant is not active", false)
+		case errors.Is(err, service.ErrMarketContextAmbiguous):
+			problem(w, r, http.StatusForbidden, "MARKET_CONTEXT_AMBIGUOUS", "the tenant participates in several markets; select one with country_code", false)
+		case errors.Is(err, service.ErrMarketContextNotParticipating):
+			problem(w, r, http.StatusForbidden, "MARKET_CONTEXT_NOT_PARTICIPATING", "the tenant does not participate in the selected country", false)
 		default:
 			problem(w, r, http.StatusForbidden, "CONTEXT_DENIED", "trusted Context could not be constructed", false)
 		}
@@ -147,5 +158,8 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 		ExpiresAt:        trustedContext.ExpiresAt,
 		OrganisationID:   trustedContext.OrganisationID,
 		OrganisationType: req.ExpectedOrganisationType,
+		CountryCode:      trustedContext.CountryCode,
+		MarketID:         trustedContext.MarketID,
+		CurrencyCode:     trustedContext.CurrencyCode,
 	})
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.19.0
+  version: 1.20.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -214,9 +214,14 @@ paths:
       responses:
         "200":
           description: >-
-            The resolved, persisted context. 403 codes: TENANT_CONTEXT_MISMATCH,
+            The resolved, persisted context, carrying the tenant's market
+            participation: its only ACTIVE participation, or the one
+            country_code selects. 403 codes: TENANT_CONTEXT_MISMATCH,
             ORGANISATION_NOT_RESOLVED, IDENTITY_RESOLUTION_FAILED,
-            TENANT_NOT_ACTIVE and CONTEXT_DENIED.
+            TENANT_NOT_ACTIVE, MARKET_CONTEXT_AMBIGUOUS (several
+            participations and none selected), MARKET_CONTEXT_NOT_PARTICIPATING
+            (the selected country is not an ACTIVE participation) and
+            CONTEXT_DENIED.
           content:
             application/json:
               schema:
