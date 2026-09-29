@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/capability/v1/resolution.schema.json",
+  "title": "Capability resolution request, response and persisted record",
+  "description": "The runtime decision of whether a capability may execute and, if so, which provider serves it. baobab-platform/baobab-cp is the sole runtime authority for producing this decision (ADR-BCP-007); this package defines only its shape.",
+  "$defs": {
+    "operationScope": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Explicitly-approved operation-specific fields that may influence resolution. Arbitrary domain payloads are not accepted here -- only fields a capability's own contract declares as scope-relevant.",
+      "properties": {
+        "origin_country": { "type": "string", "pattern": "^[A-Z]{2}$" },
+        "destination_country": { "type": "string", "pattern": "^[A-Z]{2}$" },
+        "transit_countries": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z]{2}$" }
+        },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "jurisdiction": { "type": "string", "maxLength": 63 },
+        "transaction_type": {
+          "type": "string",
+          "enum": ["GOODS", "SERVICE", "LOGISTICS", "COMMODITY_TRADE", "DIGITAL_SERVICE"]
+        }
+      }
+    },
+    "resolutionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability_key", "context_id", "correlation_id"],
+      "properties": {
+        "capability_key": { "$ref": "domain.schema.json#/$defs/capabilityKey" },
+        "required_contract_version": { "type": "integer", "minimum": 1 },
+        "context_id": {
+          "type": "string",
+          "description": "Identifier of a previously-resolved PlatformContext (see ../../control-plane/v1/context-resolution.schema.json for the pre-capability-centric context endpoint this supersedes). A caller never supplies raw tenant/estate/market identity directly to capability resolution -- context resolution happens first."
+        },
+        "operation_scope": { "$ref": "#/$defs/operationScope" },
+        "correlation_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/uuid" }
+      }
+    },
+    "batchResolutionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_id", "capabilities", "correlation_id"],
+      "properties": {
+        "context_id": { "type": "string" },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "$ref": "domain.schema.json#/$defs/capabilityKey" }
+        },
+        "correlation_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/uuid" }
+      }
+    },
+    "invocationDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service_reference", "protocol", "contract_version", "provider_id", "engine_instance_id"],
+      "properties": {
+        "service_reference": {
+          "type": "string",
+          "format": "uri",
+          "description": "Logical service reference, e.g. \"service://baobab-trade/orders\". Never a raw deployment hostname or credential."
+        },
+        "route_reference": { "type": "string", "maxLength": 255 },
+        "protocol": { "type": "string", "enum": ["http", "grpc"] },
+        "contract_version": { "type": "integer", "minimum": 1 },
+        "provider_id": { "$ref": "domain.schema.json#/$defs/capabilityProviderId" },
+        "engine_instance_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId" },
+        "metadata": { "type": "object" }
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resolution_id", "context_id", "capability_key", "decision", "resolved_at", "correlation_id"],
+      "properties": {
+        "resolution_id": { "$ref": "domain.schema.json#/$defs/capabilityResolutionId" },
+        "context_id": { "type": "string" },
+        "capability_key": { "$ref": "domain.schema.json#/$defs/capabilityKey" },
+        "contract_version": { "type": "integer", "minimum": 1 },
+        "decision": { "$ref": "domain.schema.json#/$defs/capabilityResolutionDecision" },
+        "reason_code": {
+          "type": "string",
+          "description": "Set when decision is not RESOLVED. See contracts/authorization/v1/reason-code-registry.yaml category capability_resolution_denial."
+        },
+        "grant_id": { "$ref": "domain.schema.json#/$defs/capabilityGrantId" },
+        "binding_id": { "$ref": "domain.schema.json#/$defs/capabilityBindingId" },
+        "invocation": { "$ref": "#/$defs/invocationDescriptor" },
+        "resolved_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "correlation_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/uuid" }
+      },
+      "if": {
+        "properties": { "decision": { "const": "RESOLVED" } }
+      },
+      "then": { "required": ["grant_id", "binding_id", "invocation"] },
+      "else": { "required": ["reason_code"] }
+    },
+    "batchResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_id", "decisions", "resolved_at"],
+      "properties": {
+        "context_id": { "type": "string" },
+        "decisions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/resolution" },
+          "description": "Each capability in the batch is decided independently; a batch has no transactional atomicity across its members."
+        },
+        "resolved_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

@@ -63,6 +63,12 @@ func (EntitlementResolverImpl) Resolve(_ context.Context, q EntitlementResolutio
 	return EntitlementDecision{Entitled: false, Reason: "no effective compatible grant"}, nil
 }
 
+// ScopeCompatible reports whether a CapabilityScope's populated dimensions
+// are compatible with ctx; see scopeCompatible.
+func ScopeCompatible(ctx Context, scope capabilitydomain.CapabilityScope) bool {
+	return scopeCompatible(ctx, scope)
+}
+
 // scopeCompatible reports whether a CapabilityScope's populated dimensions
 // are compatible with ctx (ADR-BCP-003 §14-15): an unspecified scope
 // dimension means "not further restricted on this axis", never a wildcard

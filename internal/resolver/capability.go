@@ -12,6 +12,15 @@ import (
 // CapabilityBinding represents the effective binding between a capability and a runtime engine instance.
 type CapabilityBinding = capabilitydomain.CapabilityBinding
 
+// Capability resolution outcomes callers tell apart (capability/v1
+// capability_resolution_denial: CAPABILITY_INACTIVE, BINDING_NOT_FOUND,
+// BINDING_AMBIGUOUS).
+var (
+	ErrCapabilityNotResolvable = errors.New("capability is not in a resolvable lifecycle state")
+	ErrBindingNotFound         = errors.New("capability not found")
+	ErrBindingAmbiguous        = errors.New("capability binding is ambiguous")
+)
+
 // CapabilityResolutionQuery resolves a capability in the current trusted context.
 type CapabilityResolutionQuery struct {
 	CapabilityKey string
@@ -59,10 +68,10 @@ func (CapabilityResolverImpl) Resolve(_ context.Context, q CapabilityResolutionQ
 		return ResolvedCapability{}, errors.New("capability key is required")
 	}
 	if q.Capability != nil && !q.Capability.IsResolvable() {
-		return ResolvedCapability{}, errors.New("capability is not in a resolvable lifecycle state")
+		return ResolvedCapability{}, ErrCapabilityNotResolvable
 	}
 	if len(q.Bindings) == 0 {
-		return ResolvedCapability{}, errors.New("capability not found")
+		return ResolvedCapability{}, ErrBindingNotFound
 	}
 
 	at := q.At
@@ -107,7 +116,7 @@ func (CapabilityResolverImpl) Resolve(_ context.Context, q CapabilityResolutionQ
 		active = append(active, rankedBinding{binding: b, specificity: specificity})
 	}
 	if len(active) == 0 {
-		return ResolvedCapability{}, errors.New("capability not found")
+		return ResolvedCapability{}, ErrBindingNotFound
 	}
 
 	// Tie-break order follows baobab-platform/shared's canonical
@@ -133,7 +142,7 @@ func (CapabilityResolverImpl) Resolve(_ context.Context, q CapabilityResolutionQ
 	if len(active) > 1 && active[0].specificity == active[1].specificity &&
 		bindingModeRank(active[0].binding.BindingMode) == bindingModeRank(active[1].binding.BindingMode) &&
 		active[0].binding.Priority == active[1].binding.Priority {
-		return ResolvedCapability{}, errors.New("capability binding is ambiguous")
+		return ResolvedCapability{}, ErrBindingAmbiguous
 	}
 	chosen := active[0]
 	// A SHADOW binding is non-authoritative: even when it wins ranking (no
@@ -142,7 +151,7 @@ func (CapabilityResolverImpl) Resolve(_ context.Context, q CapabilityResolutionQ
 	// existed (capabilitydomain.BindingModeShadow; baobab-platform/shared's
 	// scope-specificity.yaml "binding mode preference").
 	if chosen.binding.BindingMode == capabilitydomain.BindingModeShadow {
-		return ResolvedCapability{}, errors.New("capability not found")
+		return ResolvedCapability{}, ErrBindingNotFound
 	}
 	return ResolvedCapability{
 		BindingID:        chosen.binding.ID,

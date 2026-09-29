@@ -1,96 +1,145 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/service"
 )
 
-// CapabilityResolveHandler exposes ADR-BCP-003's capability resolution
-// ("POST /v1/capabilities/resolve") atop an already-resolved Context,
-// redeemed by context_id (baobab-platform/shared's resolutionRequest contract)
-// rather than accepting an inline context -- the caller is expected to have
-// called PlatformContextHandler.Resolve first.
+// Capability resolution by context_id (Shared control-plane/v1
+// resolveCapability and resolveCapabilityBatch; capability/v1
+// resolution.schema.json). The caller redeems a PlatformContext it resolved
+// earlier; it never states a tenant, provider or engine instance.
+var (
+	resolutionRequestSchema      = contracts.MustSchema("capability/v1/resolution.schema.json#/$defs/resolutionRequest")
+	batchResolutionRequestSchema = contracts.MustSchema("capability/v1/resolution.schema.json#/$defs/batchResolutionRequest")
+)
+
+// CapabilityResolveHandler serves POST /v1/capabilities/resolve.
 type CapabilityResolveHandler struct {
 	Contexts repository.ContextRepository
-	Service  service.ResolutionService
+	Service  service.CapabilityResolutionService
 }
 
-type capabilityResolveRequest struct {
-	ContextID         string `json:"context_id"`
-	CanonicalEntityID string `json:"canonical_entity_id"`
-	CapabilityKey     string `json:"capability_key"`
+type resolutionRequest struct {
+	CapabilityKey           string `json:"capability_key"`
+	RequiredContractVersion int    `json:"required_contract_version"`
+	ContextID               string `json:"context_id"`
+	CorrelationID           string `json:"correlation_id"`
 }
 
-func (h CapabilityResolveHandler) Resolve(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		problem(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only", false)
-		return
+type invocationDescriptor struct {
+	ServiceReference string `json:"service_reference"`
+	Protocol         string `json:"protocol"`
+	ContractVersion  int    `json:"contract_version"`
+	ProviderID       string `json:"provider_id"`
+	EngineInstanceID string `json:"engine_instance_id"`
+}
+
+type resolutionBody struct {
+	ResolutionID    string                `json:"resolution_id"`
+	ContextID       string                `json:"context_id"`
+	CapabilityKey   string                `json:"capability_key"`
+	ContractVersion int                   `json:"contract_version,omitempty"`
+	Decision        string                `json:"decision"`
+	ReasonCode      string                `json:"reason_code,omitempty"`
+	GrantID         string                `json:"grant_id,omitempty"`
+	BindingID       string                `json:"binding_id,omitempty"`
+	Invocation      *invocationDescriptor `json:"invocation,omitempty"`
+	ResolvedAt      time.Time             `json:"resolved_at"`
+	ExpiresAt       *time.Time            `json:"expires_at,omitempty"`
+	CorrelationID   string                `json:"correlation_id"`
+}
+
+// resolutionOf renders a recorded decision in the capability/v1 grammar.
+// Only a RESOLVED decision names what it resolved to.
+func resolutionOf(rec repository.CapabilityResolutionRecord) (resolutionBody, error) {
+	body := resolutionBody{ResolutionID: rec.ResolutionID, ContextID: rec.ContextID, CapabilityKey: rec.CapabilityKey,
+		Decision: rec.Decision, ReasonCode: rec.ReasonCode, ResolvedAt: rec.ResolvedAt, ExpiresAt: rec.ExpiresAt, CorrelationID: rec.CorrelationID}
+	if rec.Decision != service.DecisionResolved {
+		return body, nil
 	}
-	var req capabilityResolveRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", err.Error(), false)
-		return
+	grant, err := domain.FormatResourceID("grant", rec.GrantID)
+	if err != nil {
+		return body, err
 	}
-	if req.ContextID == "" || req.CanonicalEntityID == "" || req.CapabilityKey == "" {
-		problem(w, r, http.StatusBadRequest, "INVALID_REQUEST", "context_id, canonical_entity_id and capability_key are required", false)
-		return
+	binding, err := domain.FormatResourceID("bind", rec.BindingID)
+	if err != nil {
+		return body, err
 	}
+	provider, err := domain.FormatResourceID("provider", rec.ProviderID)
+	if err != nil {
+		return body, err
+	}
+	body.ContractVersion, body.GrantID, body.BindingID = rec.ContractVersion, grant, binding
+	body.Invocation = &invocationDescriptor{ServiceReference: rec.ServiceReference, Protocol: rec.Protocol, ContractVersion: rec.ContractVersion,
+		ProviderID: provider, EngineInstanceID: domain.EngineInstanceKey(rec.EngineInstanceID)}
+	return body, nil
+}
+
+// redeemContext returns the caller's resolved context: a workload holding
+// context:resolve, redeeming a context bound to its own tenant.
+func redeemContext(w http.ResponseWriter, r *http.Request, contexts repository.ContextRepository, contextID string) (domain.Context, bool) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok || principal.ActorType != "workload" || !principal.HasScope("context:resolve") {
 		problem(w, r, http.StatusUnauthorized, "AUTH_TOKEN_REQUIRED", "verified workload identity is required", false)
-		return
+		return domain.Context{}, false
 	}
-	if h.Contexts == nil {
+	if contexts == nil {
 		problem(w, r, http.StatusServiceUnavailable, "CONTEXT_STORE_UNAVAILABLE", "context persistence is temporarily unavailable", true)
-		return
+		return domain.Context{}, false
 	}
-	trustedContext, err := h.Contexts.GetContext(r.Context(), req.ContextID)
+	trusted, err := contexts.GetContext(r.Context(), contextID)
 	if errors.Is(err, repository.ErrContextNotFound) {
 		problem(w, r, http.StatusNotFound, "CONTEXT_NOT_FOUND", "the referenced context_id does not exist or has expired", false)
-		return
+		return domain.Context{}, false
 	}
 	if err != nil {
-		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "context lookup failed", true)
-		return
+		problem(w, r, http.StatusServiceUnavailable, "CONTEXT_STORE_UNAVAILABLE", "context lookup failed", true)
+		return domain.Context{}, false
 	}
-	// A resolved Context is bound to the tenant that produced it
-	// (ADR-BCP-004 §71, Context Immutability). A workload token for a
-	// different tenant redeeming someone else's context_id is exactly the
-	// cross-tenant leakage this check exists to prevent -- it must fail
-	// closed rather than silently resolve against the wrong tenant. Uses
-	// resolveWorkloadTenant, not a bare equality check, because a workload
-	// token with no tenant_id claim of its own (every real workload client
-	// today) has nothing to compare against; the context it is redeeming
-	// was itself already tenant-validated when PlatformContextHandler
-	// created it, so that is what's trusted here instead.
-	if _, ok := resolveWorkloadTenant(principal.TenantID, trustedContext.TenantID); !ok {
+	// A context is bound to the tenant that produced it (ADR-BCP-004 §71):
+	// another tenant's workload redeeming it fails closed.
+	if _, ok := resolveWorkloadTenant(principal.TenantID, trusted.TenantID); !ok {
 		problem(w, r, http.StatusForbidden, "TENANT_CONTEXT_MISMATCH", "the referenced context does not belong to the authenticated tenant", false)
+		return domain.Context{}, false
+	}
+	return trusted, true
+}
+
+func (h CapabilityResolveHandler) Resolve(w http.ResponseWriter, r *http.Request) {
+	raw, ok := readBody(w, r)
+	if !ok {
 		return
 	}
-
-	result, err := h.Service.Resolve(r.Context(), service.ResolutionRequest{
-		TenantID:          trustedContext.TenantID,
-		CanonicalEntityID: req.CanonicalEntityID,
-		CapabilityKey:     req.CapabilityKey,
-		Context:           trustedContext,
-	})
+	var req resolutionRequest
+	if !decodeRaw(w, r, resolutionRequestSchema, raw, &req) {
+		return
+	}
+	trusted, ok := redeemContext(w, r, h.Contexts, req.ContextID)
+	if !ok {
+		return
+	}
+	if h.Service.Store == nil {
+		problem(w, r, http.StatusServiceUnavailable, "CAPABILITY_RESOLUTION_UNAVAILABLE", "capability resolution is temporarily unavailable", true)
+		return
+	}
+	rec, err := h.Service.Resolve(r.Context(), service.CapabilityResolutionRequest{Context: trusted, CapabilityKey: req.CapabilityKey,
+		RequiredContractVersion: req.RequiredContractVersion, CorrelationID: req.CorrelationID})
 	if err != nil {
-		// ADR-0008 §45 ("Denial Model"): reason codes SHALL not expose
-		// sensitive information indiscriminately to external clients,
-		// mirroring ResolverHandler.Resolve's identical handling of the same
-		// underlying *resolver.ResolutionError.
-		problem(w, r, http.StatusBadRequest, "RESOLUTION_FAILED", "the request could not be resolved to an authorized routing decision", false)
+		problem(w, r, http.StatusServiceUnavailable, "CAPABILITY_RESOLUTION_UNAVAILABLE", "the capability could not be resolved", true)
 		return
 	}
-
-	body := composedResolution(result, req.CapabilityKey)
-	body["context_id"] = trustedContext.ID
+	body, err := resolutionOf(rec)
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "the resolution could not be rendered", true)
+		return
+	}
 	writeJSON(w, http.StatusOK, body)
 }

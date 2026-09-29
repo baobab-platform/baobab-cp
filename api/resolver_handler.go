@@ -100,8 +100,7 @@ func (h ResolverHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 
 // composedResolution is the body of the composed pipeline's decision
 // (Shared control-plane/v1 platform-context.schema.json
-// ComposedResolution), shared by the deprecated /v1/resolve and
-// CapabilityResolveHandler until the latter conforms to capability/v1.
+// ComposedResolution), answered only by the deprecated /v1/resolve.
 func composedResolution(result service.ResolutionResult, capabilityKey string) map[string]any {
 	return map[string]any{
 		"tenant_id":      result.Context.TenantID,

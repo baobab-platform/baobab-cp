@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.20.0
+  version: 1.21.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -187,6 +187,90 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
+  /capabilities/resolve:
+    post:
+      operationId: resolveCapability
+      summary: Resolve one capability for a resolved PlatformContext
+      description: >-
+        Redeems a context_id from resolvePlatformContext (bound to the caller's
+        tenant: another tenant's context is TENANT_CONTEXT_MISMATCH, 403; an
+        unknown or expired one is CONTEXT_NOT_FOUND, 404) and decides the
+        capability as capability/v1 resolution.schema.json. A non-RESOLVED
+        decision is a normal 200 carrying a capability_resolution_denial
+        reason_code: DENIED for CAPABILITY_UNKNOWN, GRANT_NOT_FOUND,
+        GRANT_SUSPENDED, GRANT_REVOKED, GRANT_EXPIRED and
+        RESIDENCY_POLICY_MISMATCH; UNAVAILABLE for CAPABILITY_INACTIVE,
+        BINDING_NOT_FOUND, PROVIDER_UNAVAILABLE, PROVIDER_HEALTH_UNKNOWN and
+        PROVIDER_INVOCATION_UNDECLARED; AMBIGUOUS for BINDING_AMBIGUOUS;
+        INCOMPATIBLE for CONTRACT_VERSION_UNSUPPORTED. A RESOLVED decision
+        names the grant, the binding and the invocation (the binding's
+        provider's registered logical reference and engine instance) and
+        expires when the health it relied on does. Every decision is recorded
+        under its resolution_id.
+      security:
+        - workloadOidc: [context:resolve]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/Traceparent"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../capability/v1/resolution.schema.json#/$defs/resolutionRequest
+      responses:
+        "200":
+          description: The resolution decision
+          content:
+            application/json:
+              schema:
+                $ref: ../../capability/v1/resolution.schema.json#/$defs/resolution
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /capabilities/resolve-batch:
+    post:
+      operationId: resolveCapabilityBatch
+      summary: Resolve up to 50 capabilities for one resolved PlatformContext
+      description: >-
+        As resolveCapability for each capability, decided independently: a
+        batch has no atomicity across its members, and each decision is
+        recorded under its own resolution_id.
+      security:
+        - workloadOidc: [context:resolve]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/Traceparent"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../capability/v1/resolution.schema.json#/$defs/batchResolutionRequest
+      responses:
+        "200":
+          description: One decision per requested capability, in request order
+          content:
+            application/json:
+              schema:
+                $ref: ../../capability/v1/resolution.schema.json#/$defs/batchResolution
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /platform-context/resolve:
     post:
       operationId: resolvePlatformContext
