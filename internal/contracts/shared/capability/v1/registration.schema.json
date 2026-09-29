@@ -125,6 +125,31 @@
             "production_permitted": {
               "type": "boolean",
               "default": false
+            },
+            "invocation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "service_reference",
+                "protocol"
+              ],
+              "description": "How callers invoke this provider: the source of a RESOLVED CapabilityResolution's invocation descriptor (resolution.schema.json invocationDescriptor). A logical reference only, never a deployment hostname or credential; the Control Plane pairs it with the resolved binding's engine instance.",
+              "properties": {
+                "service_reference": {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^service://[a-z][a-z0-9-]*(?:/[a-z0-9-]+)*$",
+                  "maxLength": 255,
+                  "description": "Logical service reference, e.g. service://baobab-trade/orders."
+                },
+                "protocol": {
+                  "type": "string",
+                  "enum": [
+                    "http",
+                    "grpc"
+                  ]
+                }
+              }
             }
           },
           "allOf": [

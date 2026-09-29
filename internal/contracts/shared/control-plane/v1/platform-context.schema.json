@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/platform-context.schema.json",
+  "title": "Platform context resolution",
+  "description": "POST /v1/platform-context/resolve resolves and persists the trusted PlatformContext a workload redeems by context_id in capability resolution (capability/v1 resolution.schema.json). POST /v1/resolve is the deprecated composed resolution that predates the context_id flow (ADR-BCP-004 section 52, ADR-BCP-016, ADR-BCP-018 ORG-10, ADR-BCP-024).",
+  "$defs": {
+    "organisationKind": {
+      "type": "string",
+      "enum": ["ORGANISATION", "BUYER_ORGANISATION", "SUPPLIER_ORGANISATION"],
+      "description": "The organisation-kind canonical entity types (canonical-entity.schema.json canonicalEntityType) an organisation may be attested as."
+    },
+    "PlatformContextResolveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Every member is optional, and so is the body. The tenant, principal and legal entity come from the verified workload token; the Control Plane never takes a buyer context from a header alone (ADR-0010 section 36).",
+      "properties": {
+        "tenant_id": {
+          "$ref": "domain.schema.json#/$defs/tenantId",
+          "description": "Needed only when the workload token carries no tenant_id claim; when it does, the two must be equal (TENANT_CONTEXT_MISMATCH, 403)."
+        },
+        "organisation_id": {
+          "$ref": "domain.schema.json#/$defs/canonicalEntityId",
+          "description": "An organisation the caller asserts for its authenticated user. It is attested against the tenant, never trusted because it is well-formed (ADR-BCP-016)."
+        },
+        "iam_organization": {
+          "$ref": "../../organisation/v1/iam.schema.json#/$defs/IamOrganisationEvidence",
+          "description": "The alternative to organisation_id: IAM organisation evidence, resolved through an ACTIVE IamOrganisationReference and then attested (ADR-BCP-018 ORG-10). Evidence that does not resolve is ORGANISATION_NOT_RESOLVED (403)."
+        },
+        "expected_organisation_type": {
+          "$ref": "#/$defs/organisationKind",
+          "description": "Requests exact-kind attestation of the named organisation (ADR-BCP-024). Commands that grant kind-specific authority supply it."
+        }
+      },
+      "not": { "required": ["organisation_id", "iam_organization"] }
+    },
+    "PlatformContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_id", "tenant_id", "resolved_at"],
+      "properties": {
+        "context_id": {
+          "$ref": "domain.schema.json#/$defs/uuid",
+          "description": "The persisted context a capability resolution redeems. It is bound to its tenant: another tenant's workload redeeming it is TENANT_CONTEXT_MISMATCH."
+        },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "resolved_at": { "type": "string", "format": "date-time" },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the Control Plane bounds context lifetime (ADR-BCP-004 section 72). Absent means unbounded."
+        },
+        "organisation_id": {
+          "$ref": "domain.schema.json#/$defs/canonicalEntityId",
+          "description": "The attested organisation, when one was requested."
+        },
+        "organisation_type": {
+          "$ref": "#/$defs/organisationKind",
+          "description": "The kind the organisation was attested as, when expected_organisation_type was supplied."
+        }
+      }
+    },
+    "ComposedResolutionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_entity_id", "capability_key"],
+      "description": "Deprecated with POST /v1/resolve. It carries tenant_id in the body, which capability resolution never accepts; callers move to platform-context/resolve and then capability resolution by context_id.",
+      "properties": {
+        "tenant_id": {
+          "$ref": "domain.schema.json#/$defs/tenantId",
+          "description": "As in PlatformContextResolveRequest: only when the token carries no tenant_id, and equal to it when it does."
+        },
+        "canonical_entity_id": { "$ref": "domain.schema.json#/$defs/canonicalEntityId" },
+        "capability_key": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "ComposedResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_id", "capability_key", "mapping", "capability", "policy", "topology"],
+      "description": "Deprecated with POST /v1/resolve: the mapping, binding, policy and engine instance the composed pipeline chose. A request the pipeline cannot resolve is RESOLUTION_FAILED (400) with an opaque detail (ADR-0008 section 45).",
+      "properties": {
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "capability_key": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "mapping": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "status"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "status": { "type": "string", "minLength": 1, "maxLength": 32 }
+          }
+        },
+        "capability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["binding_mode", "engine_instance_id"],
+          "properties": {
+            "binding_mode": { "type": "string", "enum": ["PRIMARY", "FALLBACK", "SHADOW", "MIGRATION", "DISABLED"] },
+            "engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" }
+          }
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["allowed"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "reason": { "type": "string", "maxLength": 256 }
+          }
+        },
+        "topology": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "environment"],
+          "properties": {
+            "id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
+            "environment": { "type": "string", "minLength": 1, "maxLength": 32 }
+          }
+        }
+      }
+    }
+  }
+}

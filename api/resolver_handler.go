@@ -93,11 +93,17 @@ func (h ResolverHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, composedResolution(result, req.CapabilityKey))
+}
+
+// composedResolution is the body of the composed pipeline's decision
+// (Shared control-plane/v1 platform-context.schema.json
+// ComposedResolution), shared by the deprecated /v1/resolve and
+// CapabilityResolveHandler until the latter conforms to capability/v1.
+func composedResolution(result service.ResolutionResult, capabilityKey string) map[string]any {
+	return map[string]any{
 		"tenant_id":      result.Context.TenantID,
-		"capability_key": req.CapabilityKey,
+		"capability_key": capabilityKey,
 		"mapping": map[string]any{
 			"id":     result.Mapping.Mapping.ID,
 			"status": result.Mapping.Mapping.Status,
@@ -114,5 +120,5 @@ func (h ResolverHandler) Resolve(w http.ResponseWriter, r *http.Request) {
 			"id":          domain.EngineInstanceKey(result.Topology.ID),
 			"environment": result.Topology.Environment,
 		},
-	})
+	}
 }

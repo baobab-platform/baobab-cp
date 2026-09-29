@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"net/http"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
@@ -91,25 +90,7 @@ func (h CapabilityResolveHandler) Resolve(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"context_id":     trustedContext.ID,
-		"tenant_id":      result.Context.TenantID,
-		"capability_key": req.CapabilityKey,
-		"mapping": map[string]any{
-			"id":     result.Mapping.Mapping.ID,
-			"status": result.Mapping.Mapping.Status,
-		},
-		"capability": map[string]any{
-			"binding_mode":       result.Capability.BindingMode,
-			"engine_instance_id": domain.EngineInstanceKey(result.Capability.EngineInstanceID),
-		},
-		"policy": map[string]any{
-			"allowed": result.Policy.Allowed,
-			"reason":  result.Policy.Reason,
-		},
-		"topology": map[string]any{
-			"id":          domain.EngineInstanceKey(result.Topology.ID),
-			"environment": result.Topology.Environment,
-		},
-	})
+	body := composedResolution(result, req.CapabilityKey)
+	body["context_id"] = trustedContext.ID
+	writeJSON(w, http.StatusOK, body)
 }
