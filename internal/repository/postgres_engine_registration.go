@@ -12,6 +12,7 @@ import (
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/jackc/pgx/v5"
 )
 
 // EngineRegistrationProvider is the provider an engine registers.
@@ -24,6 +25,15 @@ type EngineRegistrationProvider struct {
 	Ownership           string
 	Simulated           bool
 	ProductionPermitted bool
+	// Invocation is how callers invoke the provider, when it declares one.
+	Invocation *ProviderInvocation
+}
+
+// ProviderInvocation is a provider's logical invocation reference (Shared
+// capability/v1 registration.schema.json provider.invocation).
+type ProviderInvocation struct {
+	ServiceReference string
+	Protocol         string
 }
 
 // EngineRegistrationSupport is one capability the provider implements.
@@ -99,6 +109,12 @@ func (r *PostgresRepository) RegisterEngine(ctx context.Context, reg EngineRegis
 		domain.NewUUIDv7(), p.ProviderKey, p.Name, p.ProviderType, engineID, p.Lifecycle, p.Ownership, metadata); err != nil {
 		return fmt.Errorf("register provider %s: %w", p.ProviderKey, err)
 	}
+	// A registration without an invocation clears one registered earlier:
+	// the registration is the provider's whole description.
+	var serviceReference, protocol *string
+	if p.Invocation != nil {
+		serviceReference, protocol = &p.Invocation.ServiceReference, &p.Invocation.Protocol
+	}
 	var providerID, providerEngine string
 	if err := tx.QueryRow(ctx, `SELECT provider_id::text, engine_id::text FROM capability.capability_provider WHERE provider_key = $1 FOR UPDATE`,
 		p.ProviderKey).Scan(&providerID, &providerEngine); err != nil {
@@ -109,10 +125,10 @@ func (r *PostgresRepository) RegisterEngine(ctx context.Context, reg EngineRegis
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE capability.capability_provider SET name = $2, provider_type = $3, status = $4, ownership = $5, metadata = $6::jsonb,
-			version = version + 1, updated_at = now()
-		WHERE provider_id = $1::uuid AND (name, provider_type, status, COALESCE(ownership, ''), metadata)
-			IS DISTINCT FROM ($2, $3, $4, $5, $6::jsonb)`,
-		providerID, p.Name, p.ProviderType, p.Lifecycle, p.Ownership, metadata); err != nil {
+			service_reference = $7, invocation_protocol = $8, version = version + 1, updated_at = now()
+		WHERE provider_id = $1::uuid AND (name, provider_type, status, COALESCE(ownership, ''), metadata, service_reference, invocation_protocol)
+			IS DISTINCT FROM ($2, $3, $4, $5, $6::jsonb, $7, $8)`,
+		providerID, p.Name, p.ProviderType, p.Lifecycle, p.Ownership, metadata, serviceReference, protocol); err != nil {
 		return fmt.Errorf("update provider %s: %w", p.ProviderKey, err)
 	}
 	for _, s := range reg.Support {
@@ -129,4 +145,19 @@ func (r *PostgresRepository) RegisterEngine(ctx context.Context, reg EngineRegis
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// ProviderInvocationByID reads the invocation reference a provider
+// registered; ok is false when it declared none.
+func (r *PostgresRepository) ProviderInvocationByID(ctx context.Context, providerID string) (ProviderInvocation, bool, error) {
+	var ref, protocol *string
+	err := r.pool.QueryRow(ctx, `SELECT service_reference, invocation_protocol FROM capability.capability_provider WHERE provider_id = $1::uuid`,
+		providerID).Scan(&ref, &protocol)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && ref == nil) {
+		return ProviderInvocation{}, false, nil
+	}
+	if err != nil {
+		return ProviderInvocation{}, false, err
+	}
+	return ProviderInvocation{ServiceReference: *ref, Protocol: *protocol}, true, nil
 }

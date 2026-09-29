@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
 )
 
 type staticToken string
@@ -118,5 +121,31 @@ func TestRegistrationsAreValidated(t *testing.T) {
 		"support":[{"capability_key":"billing.subscription.manage","contract_versions":[1]}]}`
 	if _, err := ParseRegistration([]byte(simulatedInProduction)); err == nil {
 		t.Fatal("a simulated provider can never be permitted in production")
+	}
+
+	// A provider's logical invocation reference is carried to registration;
+	// a deployment hostname never conforms.
+	raw, err := contracts.ReadEmbedded("subscriptions/v1/capabilities.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	withReference := func(ref string) []byte {
+		var doc map[string]any
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatal(err)
+		}
+		doc["provider"].(map[string]any)["invocation"] = map[string]any{"service_reference": ref, "protocol": "http"}
+		out, _ := json.Marshal(doc)
+		return out
+	}
+	rec, err := ParseRegistration(withReference("service://baobab-subscriptions/billing"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv := rec.Provider.Invocation; inv == nil || inv.ServiceReference != "service://baobab-subscriptions/billing" || inv.Protocol != "http" {
+		t.Fatalf("invocation = %+v", rec.Provider.Invocation)
+	}
+	if _, err := ParseRegistration(withReference("https://billing.internal:8443/")); err == nil {
+		t.Fatal("a deployment hostname is not an invocation reference")
 	}
 }

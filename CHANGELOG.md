@@ -723,6 +723,10 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- Engine registration records a provider's logical invocation reference (Shared `capability/v1` `registration.schema.json` `provider.invocation`). Migration 000078 adds `service_reference` and `invocation_protocol` to `capability.capability_provider`.
+  - The store accepts only `service://` references, never hosts, and the two columns must be set together.
+  - A registration without an invocation clears any reference recorded earlier.
+  - `ProviderInvocationByID` reads the reference for capability resolution. It becomes the invocation descriptor when the capability routes conform to `capability/v1` (EA-01 phase 3).
 - `POST /v1/platform-context/resolve` and the deprecated `POST /v1/resolve` are now described by Shared control-plane/v1 OpenAPI 1.19.0 (`platform-context.schema.json`), and the drift test no longer lists them as undescribed.
   - `TestContextResolutionRoutesConformToShared` validates their requests and responses against the Shared schemas.
   - Both routes now build the composed decision body with one function, `composedResolution`, which `/v1/capabilities/resolve` also uses, adding its `context_id`.

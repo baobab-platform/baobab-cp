@@ -39,6 +39,10 @@ type registrationDocument struct {
 		Ownership           string `json:"ownership"`
 		Simulated           bool   `json:"simulated"`
 		ProductionPermitted bool   `json:"production_permitted"`
+		Invocation          *struct {
+			ServiceReference string `json:"service_reference"`
+			Protocol         string `json:"protocol"`
+		} `json:"invocation"`
 	} `json:"provider"`
 	Support []struct {
 		CapabilityKey    string `json:"capability_key"`
@@ -70,6 +74,9 @@ func ParseRegistration(raw []byte) (repository.EngineRegistrationRecord, error) 
 	rec.Provider = repository.EngineRegistrationProvider{ProviderKey: p.ProviderKey, Name: p.Name, ProviderType: p.ProviderType,
 		EngineKey: p.EngineKey, Lifecycle: p.Lifecycle, Ownership: p.Ownership, Simulated: p.Simulated,
 		ProductionPermitted: p.ProductionPermitted}
+	if p.Invocation != nil {
+		rec.Provider.Invocation = &repository.ProviderInvocation{ServiceReference: p.Invocation.ServiceReference, Protocol: p.Invocation.Protocol}
+	}
 	for _, s := range doc.Support {
 		rec.Support = append(rec.Support, repository.EngineRegistrationSupport{CapabilityKey: s.CapabilityKey, ContractVersions: s.ContractVersions})
 	}
