@@ -1005,6 +1005,36 @@ var ErrBindingProviderUnresolved = errors.New("the binding's provider could not 
 
 const bindingProviderCheck = "capability_binding_active_provider_check"
 
+// ErrBindingContractUnsupported: an ACTIVE binding's contract major must be
+// one its provider supports for the bound capability (ADR-SHARED-017 SS36,
+// SS60): ACTIVE binding => provider supports the capability => supports
+// the binding's contract major.
+var ErrBindingContractUnsupported = errors.New("the binding's provider does not support its contract version")
+
+// providerSupportsContract checks that providerID supports capabilityKey at
+// contractVersion's major.
+func (r *PostgresRepository) providerSupportsContract(ctx context.Context, providerID, capabilityKey, contractVersion string) error {
+	var supported []int32
+	err := r.pool.QueryRow(ctx, `
+		SELECT pcs.contract_versions FROM capability.provider_capability_support pcs
+		JOIN capability.capability c ON c.capability_id = pcs.capability_id AND c.code = $2
+		WHERE pcs.provider_id = $1::uuid`, providerID, capabilityKey).Scan(&supported)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%w: provider %s does not support %s", ErrBindingProviderUnresolved, providerID, capabilityKey)
+	}
+	if err != nil {
+		return fmt.Errorf("read provider support: %w", err)
+	}
+	major := contractMajor(contractVersion)
+	for _, v := range supported {
+		if major > 0 && int(v) == major {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: provider %s supports %s at contract majors %v, not %q", ErrBindingContractUnsupported, providerID,
+		capabilityKey, supported, contractVersion)
+}
+
 // bindingProviderViolation maps the ACTIVE-needs-a-provider constraint to
 // ErrBindingProviderUnresolved.
 func bindingProviderViolation(err error) error {
@@ -1043,6 +1073,11 @@ func (r *PostgresRepository) CreateBinding(ctx context.Context, binding resolver
 	case strings.EqualFold(binding.Status, "ACTIVE"):
 		return fmt.Errorf("%w: the engine has %d ACTIVE providers supporting %s", ErrBindingProviderUnresolved, len(providers), binding.CapabilityKey)
 	}
+	if strings.EqualFold(binding.Status, "ACTIVE") {
+		if err := r.providerSupportsContract(ctx, *providerID, binding.CapabilityKey, binding.ContractVersion); err != nil {
+			return err
+		}
+	}
 	// status and binding_mode are stored upper-cased so that the
 	// capability_binding_primary_excl exclusion constraint (which is defined
 	// against status = 'ACTIVE' AND binding_mode = 'PRIMARY') actually fires.
@@ -1060,6 +1095,20 @@ func (r *PostgresRepository) CreateBinding(ctx context.Context, binding resolver
 func (r *PostgresRepository) SaveBinding(ctx context.Context, binding resolver.CapabilityBinding, expectedVersion int64) error {
 	if r == nil || r.pool == nil {
 		return errors.New("repository is not initialized")
+	}
+	if strings.EqualFold(binding.Status, "ACTIVE") {
+		// A binding without a provider is refused by
+		// capability_binding_active_provider_check below.
+		var providerID *string
+		err := r.pool.QueryRow(ctx, `SELECT provider_id::text FROM capability.capability_binding WHERE id = $1::uuid`, binding.ID).Scan(&providerID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("read binding provider: %w", err)
+		}
+		if providerID != nil {
+			if err := r.providerSupportsContract(ctx, *providerID, binding.CapabilityKey, binding.ContractVersion); err != nil {
+				return err
+			}
+		}
 	}
 	result, err := r.pool.Exec(ctx, `UPDATE capability.capability_binding cb SET binding_mode=UPPER($2), priority=$3, status=UPPER($4), contract_version=$5, version=version+1, updated_at=now() FROM capability.capability c WHERE cb.id=$1::uuid AND cb.capability_id=c.capability_id AND c.code=$6 AND cb.version=$7`, binding.ID, string(binding.BindingMode), binding.Priority, binding.Status, binding.ContractVersion, binding.CapabilityKey, expectedVersion)
 	if err != nil {
