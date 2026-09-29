@@ -111,6 +111,7 @@ var canonicalMigrationNames = []string{
 	"000074_changeset_targets.sql",
 	"000075_provider_migration_execution.sql",
 	"000076_market_participation_projection.sql",
+	"000077_binding_provider_enforcement.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
