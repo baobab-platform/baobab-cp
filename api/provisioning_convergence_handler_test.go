@@ -77,6 +77,7 @@ func newConvergenceFixture(t *testing.T, name string) convergenceFixture {
 		admin.Exec(ctx, `DELETE FROM market.market_participation_capability WHERE market_assignment_id IN (SELECT market_assignment_id FROM market.market_assignment WHERE tenant_id = $1)`, f.TenantID)
 		admin.Exec(ctx, `DELETE FROM market.market_assignment WHERE tenant_id = $1`, f.TenantID)
 		admin.Exec(ctx, `DELETE FROM market.market WHERE code = 'XQ'`)
+		admin.Exec(ctx, `DELETE FROM market.registry WHERE market_id = $1`, "mkt_xq"+suffix)
 		admin.Exec(ctx, `DELETE FROM capability.provider_capability_support WHERE provider_id IN (SELECT provider_id FROM capability.capability_provider WHERE provider_key = $1)`, providerKey)
 		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, providerKey)
 		admin.Exec(ctx, `DELETE FROM capability.capability_composition_member WHERE composition_id IN (SELECT composition_id FROM capability.capability_composition WHERE composition_key = $1)`, compositionKey)
@@ -92,6 +93,12 @@ func newConvergenceFixture(t *testing.T, name string) convergenceFixture {
 	// mandatory capability, and a provider permitted in production running
 	// on the fixture's af-south-1 production instance.
 	mustNoError(t, repo.CreateMarket(ctx, domain.Market{ID: domain.NewUUIDv7(), Code: "XQ", Name: "Private use", Currency: "ZAR", Region: "af-south-1", IsActive: true}))
+	// The registry is the market authority: XQ is plannable because an
+	// ACTIVE registry market covers it.
+	_, err := admin.Exec(ctx, `INSERT INTO market.registry (market_id, canonical_key, owner_tenant_id, configuration, status, created_at, created_by, activated_at, activated_by)
+		VALUES ($1, $1, $2, jsonb_build_object('default_country', 'XQ', 'default_currency', 'ZAR'), 'ACTIVE', now(), 'maker', now(), 'checker')`,
+		"mkt_xq"+suffix, f.TenantID)
+	mustNoError(t, err)
 	capabilityID := domain.NewUUIDv7()
 	mustNoError(t, repo.CreateCapability(ctx, capabilitydomain.Capability{ID: capabilityID, Key: capabilityKey, Name: "Settlement", DomainKey: "trade",
 		Lifecycle: capabilitydomain.CapabilityLifecycleActive, Maturity: capabilitydomain.CapabilityMaturitySupported}))

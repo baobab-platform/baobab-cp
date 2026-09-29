@@ -53,6 +53,7 @@ func TestMarketRoutes(t *testing.T) {
 	tenant, legalEntity, key := "tn_mkt"+suffix, "MKT-API-"+strings.ToUpper(suffix), "za.b2b"+suffix
 	cleanup := func() {
 		admin.Exec(ctx, `UPDATE market.registry SET parent_market_id = NULL WHERE owner_tenant_id = $1`, tenant)
+		admin.Exec(ctx, `DELETE FROM market.market WHERE code = 'XM'`)
 		admin.Exec(ctx, `DELETE FROM market.registry WHERE owner_tenant_id = $1`, tenant)
 		admin.Exec(ctx, `DELETE FROM tenants WHERE tenant_id = $1`, tenant)
 		admin.Exec(ctx, `DELETE FROM legal_entities WHERE legal_entity_id = $1`, legalEntity)
@@ -150,7 +151,7 @@ func TestMarketRoutes(t *testing.T) {
 	}
 
 	create := map[string]any{"canonical_key": key, "name": "South Africa B2B", "owner_tenant_id": tenant, "market_type": "B2B",
-		"default_country": "ZA", "countries": []string{"ZA"}, "default_currency": "ZAR", "allowed_currencies": []string{"ZAR", "USD"},
+		"default_country": "XM", "countries": []string{"XM"}, "default_currency": "ZAR", "allowed_currencies": []string{"ZAR", "USD"},
 		"supported_locales": []string{"en-ZA"}, "timezone": "Africa/Johannesburg"}
 	idem := map[string]string{"Idempotency-Key": "market-create-" + suffix}
 
@@ -227,10 +228,25 @@ func TestMarketRoutes(t *testing.T) {
 	}
 	expectProblem(call(http.MethodPost, path+"/activate", "checker", map[string]string{"If-Match": `"2"`}, nil),
 		http.StatusPreconditionFailed, "MARKET_REVISION_MISMATCH", "activating an older revision")
+	if plannable, err := repo.PlanningMarket(ctx, "XM"); err != nil || plannable {
+		t.Fatalf("a VALIDATED market's country is plannable: %v %v", plannable, err)
+	}
 	active := read(call(http.MethodPost, path+"/activate", "checker", map[string]string{"If-Match": `"3"`},
 		map[string]any{"reason": "Reviewed against the launch plan."}), http.StatusOK, "activation")
 	if active.Status != "ACTIVE" || active.ActivatedBy == "" || active.Revision != 4 {
 		t.Fatalf("active: %+v", active)
+	}
+	// Activation projects the countries the market covers for
+	// participation (market-lifecycle.yaml participation), in the same
+	// transaction.
+	var projected struct{ Name, Currency, Region, Primary string }
+	mustNoError(t, admin.QueryRow(ctx, `SELECT name, currency, region, registry_market_id FROM market.market WHERE code = 'XM' AND is_active`).
+		Scan(&projected.Name, &projected.Currency, &projected.Region, &projected.Primary))
+	if projected != (struct{ Name, Currency, Region, Primary string }{"South Africa B2B", "ZAR", "XM", draft.MarketID}) {
+		t.Fatalf("participation projection: %+v", projected)
+	}
+	if plannable, err := repo.PlanningMarket(ctx, "XM"); err != nil || !plannable {
+		t.Fatalf("an ACTIVE market's country is not plannable: %v %v", plannable, err)
 	}
 
 	// An active market is read by workloads and changed only by a governed change.

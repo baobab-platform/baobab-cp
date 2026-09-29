@@ -110,6 +110,7 @@ var canonicalMigrationNames = []string{
 	"000073_applicant_claim_idempotency.sql",
 	"000074_changeset_targets.sql",
 	"000075_provider_migration_execution.sql",
+	"000076_market_participation_projection.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

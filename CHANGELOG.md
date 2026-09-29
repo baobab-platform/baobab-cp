@@ -723,6 +723,14 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- One market authority: the registry drives participation (Shared `market-lifecycle.yaml` `participation`).
+  - **Coverage.** A country is covered by every registry market naming it as `default_country` or listing it in `countries`. The view `market.country_coverage` derives this from the registry; nothing stores it separately.
+  - **Projection.** Activating a market, whether through the direct route or a `MARKET_ACTIVATION` changeset, projects each country the market covers into `market.market` in the same transaction.
+    - The row is created if missing, marked active, and linked to the country's primary market through `registry_market_id`, from which it also takes its name, currency and region.
+    - The primary market is the earliest-activated available market whose `default_country` is the country; failing that, it is the earliest-activated one that lists the country.
+  - **Planning.** Provisioning plans participation in a country only while an ACTIVE registry market covers it. A `market.market` row on its own no longer counts, and a country without coverage is `MARKET_NOT_AVAILABLE`. Existing assignments are unaffected.
+  - **Legacy rows.** The view `market.uncovered_country_market` lists the country rows that no ACTIVE registry market covers.
+  - Migration 000076.
 - Provider migration execution in both modes, with engine migration tasks (ADR-SHARED-016; Shared control-plane OpenAPI 1.18.0).
   - **Approval.** `POST /v1/provider-migrations/{id}/approve` (`provider-migration:approve`, If-Match) records one decision on the current plan's digest.
     - The creator never approves.

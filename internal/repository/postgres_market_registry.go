@@ -261,7 +261,44 @@ func activateLockedRegistryMarket(ctx context.Context, tx pgx.Tx, m market.Marke
 		"market_id": m.MarketID, "reason": reason, "revision": m.Revision}); err != nil {
 		return m, err
 	}
+	for _, country := range m.Countries() {
+		if err := projectCountryParticipation(ctx, tx, country); err != nil {
+			return m, err
+		}
+	}
 	return m, nil
+}
+
+// projectCountryParticipation brings a country's participation projection
+// (market.market) in line with the registry (market-lifecycle.yaml
+// participation): the row exists, is active and carries the attributes of
+// the country's primary market. Serialised per country, so concurrent
+// activations covering it agree on the primary.
+func projectCountryParticipation(ctx context.Context, tx pgx.Tx, country string) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('market.participation:' || $1))`, country); err != nil {
+		return fmt.Errorf("lock country %s participation: %w", country, err)
+	}
+	var primaryID, name, currency, region string
+	err := tx.QueryRow(ctx, `
+		SELECT r.market_id, r.configuration->>'name', r.configuration->>'default_currency',
+			COALESCE(r.configuration->>'operating_region_id', c.country_code)
+		FROM market.country_coverage c
+		JOIN market.registry r ON r.market_id = c.registry_market_id
+		WHERE c.country_code = $1 AND c.status = ANY($2)
+		ORDER BY c.is_default_country DESC, c.activated_at, c.registry_market_id
+		LIMIT 1`, country, market.AvailableStatuses()).Scan(&primaryID, &name, &currency, &region)
+	if err != nil {
+		return fmt.Errorf("primary market for %s: %w", country, err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO market.market (code, name, currency, region, is_active, registry_market_id)
+		VALUES ($1, $2, $3, $4, true, $5)
+		ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, currency = EXCLUDED.currency,
+			region = EXCLUDED.region, is_active = true, registry_market_id = EXCLUDED.registry_market_id`,
+		country, name, currency, region, primaryID); err != nil {
+		return fmt.Errorf("project country %s participation: %w", country, err)
+	}
+	return nil
 }
 
 func nonNilFindings(f []market.Finding) []market.Finding {

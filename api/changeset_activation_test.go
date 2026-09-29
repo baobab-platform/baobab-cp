@@ -156,6 +156,7 @@ func TestMarketActivationChangeset(t *testing.T) {
 	var markets []string
 	cleanup := func() {
 		cleanupChangesets(ctx, admin, func() []string { return append(markets, "mkt_nosuchmarket"+suffix) })
+		admin.Exec(ctx, `DELETE FROM market.market WHERE registry_market_id IN (SELECT market_id FROM market.registry WHERE owner_tenant_id = $1)`, tenant)
 		admin.Exec(ctx, `DELETE FROM market.registry WHERE owner_tenant_id = $1`, tenant)
 		admin.Exec(ctx, `DELETE FROM tenants WHERE tenant_id = $1`, tenant)
 		admin.Exec(ctx, `DELETE FROM legal_entities WHERE legal_entity_id = $1`, legalEntity)
@@ -196,7 +197,7 @@ func TestMarketActivationChangeset(t *testing.T) {
 	register := func(canonical string) (string, int64) {
 		t.Helper()
 		body := map[string]any{"canonical_key": canonical, "name": "Kenya B2B", "owner_tenant_id": tenant, "market_type": "B2B",
-			"default_country": "KE", "countries": []string{"KE"}, "default_currency": "KES", "allowed_currencies": []string{"KES"},
+			"default_country": "XN", "countries": []string{"XN"}, "default_currency": "KES", "allowed_currencies": []string{"KES"},
 			"supported_locales": []string{"en-KE"}, "default_locale": "en-KE", "timezone": "Africa/Nairobi", "effective_from": "2026-11-01T00:00:00Z"}
 		w := h.call(http.MethodPost, "/v1/markets", "maker", map[string]string{"Idempotency-Key": "mca-" + canonical}, body)
 		h.expect(w, http.StatusCreated, `"VALIDATED"`, "register "+canonical)
