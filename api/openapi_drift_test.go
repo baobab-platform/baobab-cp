@@ -129,11 +129,8 @@ func described(t *testing.T) map[string]bool {
 
 // undescribed are served but not yet described by Shared's
 // control-plane/v1 OpenAPI (CP Console FE-00 gap B2). The list may only
-// shrink: describe a route in Shared and remove it here.
-var undescribed = []string{
-	"POST /v1/capabilities/resolve",
-	"POST /v1/capabilities/resolve-batch",
-}
+// shrink: describe a route in Shared and remove it here. EA-01 emptied it.
+var undescribed = []string{}
 
 // unimplemented are described by Shared but not served (FE-00 gap G2).
 // The list may only shrink; the market registry emptied it.

@@ -723,6 +723,20 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- `POST /v1/capabilities/resolve` and `/resolve-batch` now answer Shared `capability/v1` resolutions (control-plane/v1 OpenAPI 1.21.0, EA-01 phase 3). **Breaking** for callers of these two routes. With this, every Control Plane route is described.
+  - **Request:** `resolutionRequest` or `batchResolutionRequest`, validated against the schema. `correlation_id` is required and no canonical entity is accepted. The `context_id` is redeemed as before and stays bound to the caller's tenant.
+  - **Decision order:** a new `CapabilityResolutionService` checks, in turn:
+    1. the capability is registered (else `CAPABILITY_UNKNOWN`) and ACTIVE (else `CAPABILITY_INACTIVE`);
+    2. an effective grant's scope covers the context; otherwise `GRANT_SUSPENDED`, `GRANT_REVOKED`, `GRANT_EXPIRED` or `GRANT_NOT_FOUND`. Grant enforcement applies to these routes only; `/v1/resolve` is unchanged;
+    3. `required_contract_version`, else `CONTRACT_VERSION_UNSUPPORTED`;
+    4. binding selection by the binding's own scope, mode, priority and health: `BINDING_NOT_FOUND`, `BINDING_AMBIGUOUS`, or the health codes;
+    5. the engine instance's eligibility;
+    6. residency: a context without a market is `RESIDENCY_POLICY_MISMATCH`;
+    7. the provider's registered invocation reference, else `PROVIDER_INVOCATION_UNDECLARED`.
+  - **RESOLVED** names `grant_…`, `bind_…` and an invocation (service reference, protocol, contract version, `provider_…`, `ei_…`). It expires when the health or the context it relied on does.
+  - **Recording:** migration 000079 adds `capability.capability_resolution`, which stores every decision under its `res_` id, including each member of a batch. A RESOLVED record must name its grant, binding, provider, instance and reference, and any other record must name its reason.
+  - **Grant report:** the view `capability.tenant_binding_without_grant` lists ACTIVE bindings whose tenant holds no effective grant. Those bindings resolve to `GRANT_NOT_FOUND` until a grant is issued.
+  - `resolver` exports `ErrBindingNotFound`, `ErrBindingAmbiguous`, `ErrCapabilityNotResolvable` and `ScopeCompatible`.
 - A resolved context carries the tenant's market participation (Shared control-plane/v1 OpenAPI 1.20.0, EA-01 phase 2.5).
   - `ContextResolutionService` fills `country_code`, `market_id` and `currency_code`:
     - the country comes from the tenant's ACTIVE, effective market assignment in a country an available registry market covers;

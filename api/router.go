@@ -53,6 +53,9 @@ type Dependencies struct {
 	// tenant's ACTIVE participation. Nil leaves contexts without a market,
 	// which resolution policy denies.
 	MarketParticipations service.MarketParticipationReader
+	// CapabilityResolutions backs capability/v1 capability resolution and
+	// records every decision. Nil answers 503.
+	CapabilityResolutions service.CapabilityResolutionStore
 	// OrganisationObservability backs the relationship drift and
 	// organisation audit lineage routes (ADR-BCP-018 ORG-15). Nil skips them.
 	OrganisationObservability repository.OrganisationObservabilityRepository
@@ -186,6 +189,7 @@ func New(dependencies Dependencies) http.Handler {
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
+	capabilityResolution := service.CapabilityResolutionService{Store: dependencies.CapabilityResolutions}
 	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store, Canonical: dependencies.Canonical.Repository, Mappings: dependencies.OrganisationMappings, IamOrganisations: dependencies.IamOrganisations, CounterpartyRoles: dependencies.Counterparties, Markets: dependencies.MarketParticipations}
 	r := chi.NewRouter()
 	r.Use(a.securityHeaders, a.correlation, a.requestLog)
@@ -213,8 +217,8 @@ func New(dependencies Dependencies) http.Handler {
 	// (which are the pre-existing, differently-shaped endpoints above): see
 	// PlatformContextHandler's doc comment for why.
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/platform-context/resolve", PlatformContextHandler{ContextResolution: contextResolution, Contexts: dependencies.Contexts, TTL: dependencies.PlatformContextTTL}.Resolve)
-	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: dependencies.Contexts, Service: a.resolution}.Resolve)
-	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve-batch", CapabilityResolveBatchHandler{Contexts: dependencies.Contexts, Service: a.resolution}.Resolve)
+	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: dependencies.Contexts, Service: capabilityResolution}.Resolve)
+	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve-batch", CapabilityResolveBatchHandler{Contexts: dependencies.Contexts, Service: capabilityResolution}.Resolve)
 	// Privileged diagnostics (ADR-BCP-004 §77, ADR-BCP-003 §80): admin-only,
 	// distinct scope from the workload resolve endpoints above -- see
 	// CapabilityExplainHandler's doc comment for why it deliberately is not
