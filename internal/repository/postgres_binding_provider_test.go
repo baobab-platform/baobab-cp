@@ -16,7 +16,8 @@ import (
 // provider (migration 000077): CreateBinding takes the engine's only
 // ACTIVE provider supporting the capability, refuses a provider of another
 // engine, refuses an ACTIVE binding whose provider is ambiguous unless it
-// names one, and SaveBinding cannot make a provider-less binding ACTIVE.
+// names one, SaveBinding cannot make a provider-less binding ACTIVE, and
+// an ACTIVE binding's contract major must be one its provider supports.
 //
 // Set TEST_DATABASE_URL to run it; it is skipped otherwise.
 func TestCreateBindingResolvesItsProvider(t *testing.T) {
@@ -139,5 +140,27 @@ func TestCreateBindingResolvesItsProvider(t *testing.T) {
 	activated.ID = id
 	if err := repo.SaveBinding(ctx, activated, version); !errors.Is(err, ErrBindingProviderUnresolved) {
 		t.Fatalf("activating a binding without a provider: %v", err)
+	}
+
+	// An ACTIVE binding's contract major must be one its provider supports
+	// (ADR-SHARED-017 SS36, SS60); the providers here support only major 1.
+	unsupported := binding(scopes[3], "ACTIVE", first)
+	unsupported.ContractVersion = "v2"
+	if err := repo.CreateBinding(ctx, unsupported); !errors.Is(err, ErrBindingContractUnsupported) {
+		t.Fatalf("an ACTIVE binding at an unsupported contract major: %v", err)
+	}
+	draft := binding(scopes[3], "DRAFT", first)
+	draft.ContractVersion = "2"
+	if err := repo.CreateBinding(ctx, draft); err != nil {
+		t.Fatalf("a DRAFT binding may name an unsupported major until activated: %v", err)
+	}
+	id, _, version = stored(scopes[3])
+	draft.ID, draft.Status = id, "ACTIVE"
+	if err := repo.SaveBinding(ctx, draft, version); !errors.Is(err, ErrBindingContractUnsupported) {
+		t.Fatalf("activating a binding at an unsupported contract major: %v", err)
+	}
+	draft.ContractVersion = "1.0.0"
+	if err := repo.SaveBinding(ctx, draft, version); err != nil {
+		t.Fatalf("activating a binding at a supported contract major: %v", err)
 	}
 }
