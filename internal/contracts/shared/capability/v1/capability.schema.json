@@ -49,6 +49,63 @@
         "updated_at": { "type": "string", "format": "date-time" }
       }
     },
+    "canonicalCapabilityDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A capability as Shared authors it, before the Control Plane registers it: the #/$defs/capability fields without the identifiers and revision the Control Plane mints (capability_id, version, created_at, updated_at). Authored only in a CapabilityDefinitionDocument indexed by catalogue.yaml (ADR-SHARED-017 SS18-20). Carries no provider, engine, tenant, region, binding or health.",
+      "required": ["capability_key", "name", "domain", "owner", "lifecycle", "maturity", "contracts"],
+      "properties": {
+        "capability_key": { "$ref": "domain.schema.json#/$defs/capabilityKey" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "domain": { "$ref": "domain.schema.json#/$defs/capabilityDomain" },
+        "owner": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "maxLength": 63,
+          "description": "Repository stewarding this capability's semantics. Semantic ownership is not a provider monopoly: other providers may implement it (ADR-SHARED-017 SS15)."
+        },
+        "lifecycle": { "$ref": "domain.schema.json#/$defs/capabilityLifecycle" },
+        "maturity": { "$ref": "domain.schema.json#/$defs/capabilityMaturity" },
+        "contracts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/capabilityContractVersion" }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capabilityDependency" }
+        },
+        "health_criticality": { "$ref": "domain.schema.json#/$defs/capabilityHealthCriticality" },
+        "data_classification": {
+          "type": "string",
+          "enum": ["PUBLIC", "INTERNAL", "TENANT_CONFIDENTIAL", "RESTRICTED"]
+        },
+        "metadata": { "type": "object" }
+      }
+    },
+    "CapabilityDefinitionDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A file of canonical capability definitions, e.g. contracts/payments/v1/capabilities.yaml. Membership of the canonical catalogue comes from catalogue.yaml naming a definition and this document, never from the file's name or serialization (ADR-SHARED-017 SS30, SS54). Contract schema references resolve relative to the document.",
+      "required": ["schema", "capabilities"],
+      "properties": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "const": "baobab-capability-definitions" },
+            "version": { "const": "1.0" }
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/canonicalCapabilityDefinition" }
+        }
+      }
+    },
     "capabilityContractVersion": {
       "type": "object",
       "additionalProperties": false,

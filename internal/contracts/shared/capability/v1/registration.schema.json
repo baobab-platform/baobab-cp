@@ -2,11 +2,46 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.baobab-platform.com/capability/v1/registration.schema.json",
   "title": "Engine Capability Registration (ADR-SHARED-011)",
-  "description": "Definition library for an engine's published capability registration: the capabilities it implements and the provider it registers, without the identifiers the Control Plane mints on registration (capability_id, provider_id). The Control Plane registers these through its normal capability registry, provider and binding mechanisms; nothing is special-cased by engine name. Validate against #/$defs/EngineRegistration.",
+  "description": "TRANSITIONAL registration bundle (ADR-SHARED-017 SS32). Definition library for an engine's published capability registration: the capabilities it implements and the provider it registers, without the identifiers the Control Plane mints on registration (capability_id, provider_id). The Control Plane registers these through its normal capability registry, provider and binding mechanisms; nothing is special-cased by engine name. An EngineRegistration is no longer an authoring format: its capabilities must equal the canonical definitions indexed by catalogue.yaml, and scripts/capability_catalogue.py generates it from those definitions plus an engine's provider declaration (provider-declaration.schema.json). Which bundles exist is stated by registration-bundles.yaml (#/$defs/RegistrationBundleIndex), never by a file name. Validate against #/$defs/EngineRegistration.",
   "type": "object",
   "additionalProperties": false,
   "properties": {},
   "$defs": {
+    "RegistrationBundleIndex": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "TRANSITIONAL. The explicit list of EngineRegistration bundles the Control Plane bootstraps from while it still registers providers from Shared (ADR-SHARED-017 SS30, SS32). It replaces discovery by the /capabilities.json file-name suffix; it is removed once providers register through governed provider registration instead.",
+      "required": ["schema", "bundles"],
+      "properties": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "const": "baobab-engine-registration-bundle-index" },
+            "version": { "const": "1.0" }
+          }
+        },
+        "bundles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "engine_id", "provider_key"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9.-]*)*\\.(?:json|yaml)$",
+                "maxLength": 255,
+                "description": "Path of the EngineRegistration under contracts/, e.g. payments/v1/capabilities.json."
+              },
+              "engine_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineId" },
+              "provider_key": { "$ref": "domain.schema.json#/$defs/capabilityProviderKey" }
+            }
+          }
+        }
+      }
+    },
     "EngineRegistration": {
       "type": "object",
       "additionalProperties": false,
