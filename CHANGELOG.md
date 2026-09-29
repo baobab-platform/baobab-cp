@@ -723,6 +723,11 @@ The changelog focuses on changes that are meaningful to users, contributors, mai
 
 ## Added
 
+- `POST /v1/platform-context/resolve` and the deprecated `POST /v1/resolve` are now described by Shared control-plane/v1 OpenAPI 1.19.0 (`platform-context.schema.json`), and the drift test no longer lists them as undescribed.
+  - `TestContextResolutionRoutesConformToShared` validates their requests and responses against the Shared schemas.
+  - Both routes now build the composed decision body with one function, `composedResolution`, which `/v1/capabilities/resolve` also uses, adding its `context_id`.
+  - `/v1/resolve` builds its context without a market or country, so its pipeline answers `RESOLUTION_FAILED`. It stays deprecated until its callers move to platform-context resolution.
+  - `/v1/capabilities/resolve` and `/resolve-batch` stay undescribed until they conform to `capability/v1`.
 - Capability bindings name their provider (Shared `capability/v1` `binding.schema.json`; baobab-cp#76, #82).
   - **Eligible provider.** A binding's provider is an ACTIVE provider on the binding's engine that ACTIVELY supports the binding's capability.
   - **Creating bindings.** `CreateBinding`, used by provisioning, takes the provider the binding names when it is eligible; otherwise it takes the engine's only eligible provider.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.18.0
+  version: 1.19.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -187,6 +187,86 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
+  /platform-context/resolve:
+    post:
+      operationId: resolvePlatformContext
+      summary: Resolve and persist the trusted PlatformContext a capability resolution redeems
+      description: >-
+        Resolves identity, tenant, the principal's relationship to the tenant
+        and legal entity from the verified workload token, fails closed at each
+        step (ADR-BCP-004 section 52), and optionally attests an organisation
+        the caller names, by organisation_id or by IAM organisation evidence,
+        and its exact kind (ADR-BCP-016, ADR-BCP-018 ORG-10, ADR-BCP-024). The
+        context is persisted and returned by context_id, which capability
+        resolution (capability/v1 resolution.schema.json) redeems instead of
+        an inline tenant. An empty body is valid.
+      security:
+        - workloadOidc: [context:resolve]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/Traceparent"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: ./platform-context.schema.json#/$defs/PlatformContextResolveRequest
+      responses:
+        "200":
+          description: >-
+            The resolved, persisted context. 403 codes: TENANT_CONTEXT_MISMATCH,
+            ORGANISATION_NOT_RESOLVED, IDENTITY_RESOLUTION_FAILED,
+            TENANT_NOT_ACTIVE and CONTEXT_DENIED.
+          content:
+            application/json:
+              schema:
+                $ref: ./platform-context.schema.json#/$defs/PlatformContext
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /resolve:
+    post:
+      operationId: resolveComposed
+      deprecated: true
+      summary: Deprecated composed resolution of a canonical entity and capability
+      description: >-
+        Deprecated: it takes tenant_id in the body, which capability resolution
+        never accepts, and answers with the composed pipeline's internals rather
+        than a CapabilityResolution. Callers move to resolvePlatformContext and
+        then capability resolution by context_id. Served until its callers have
+        moved. A request the pipeline cannot resolve is RESOLUTION_FAILED (400)
+        with an opaque detail (ADR-0008 section 45).
+      security:
+        - workloadOidc: [context:resolve]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/Traceparent"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./platform-context.schema.json#/$defs/ComposedResolutionRequest
+      responses:
+        "200":
+          description: The composed routing decision
+          content:
+            application/json:
+              schema:
+                $ref: ./platform-context.schema.json#/$defs/ComposedResolution
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   # ---------------------------------------------------------------------------
   # Mappings (Canonical Mapping Model sections 8-9, 23 and 46-49; ADR-SHARED-012):
   # ExternalReferences record that a native object exists; Mappings relate a

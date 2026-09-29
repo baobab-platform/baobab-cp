@@ -133,8 +133,6 @@ func described(t *testing.T) map[string]bool {
 var undescribed = []string{
 	"POST /v1/capabilities/resolve",
 	"POST /v1/capabilities/resolve-batch",
-	"POST /v1/platform-context/resolve",
-	"POST /v1/resolve",
 }
 
 // unimplemented are described by Shared but not served (FE-00 gap G2).
