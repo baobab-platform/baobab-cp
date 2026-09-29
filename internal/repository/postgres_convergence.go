@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/market"
 	"github.com/baobab-platform/baobab-cp/internal/operations"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
 	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
@@ -120,11 +121,17 @@ func (r *PostgresRepository) PlanningComposition(ctx context.Context, compositio
 }
 
 func (r *PostgresRepository) PlanningMarket(ctx context.Context, code string) (bool, error) {
-	market, err := r.GetMarketByCode(ctx, code)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	return err == nil && market.IsActive, err
+	// The registry is the market authority (market-lifecycle.yaml
+	// participation): a country is plannable only while a registry market
+	// in an available status covers it. A country row alone is not enough.
+	var found bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM market.market m
+			JOIN market.country_coverage c ON c.country_code = m.code
+			WHERE m.code = $1 AND m.is_active AND c.status = ANY($2))`,
+		code, market.AvailableStatuses()).Scan(&found)
+	return found, err
 }
 
 func (r *PostgresRepository) PlanningCapability(ctx context.Context, capabilityKey string) (bool, error) {

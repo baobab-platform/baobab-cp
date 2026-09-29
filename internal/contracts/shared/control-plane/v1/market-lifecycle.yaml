@@ -42,3 +42,20 @@ validation_rules:
   - {code: MARKET_EFFECTIVE_FROM_REQUIRED, field: effective_from,     rule: "effective_from is set"}
   - {code: MARKET_EFFECTIVE_WINDOW_INVALID, field: effective_to,      rule: "when effective_to is set, it is a later instant than effective_from"}
   - {code: MARKET_PARENT_UNKNOWN,          field: parent_market_id,   rule: "when parent_market_id is set, it names another existing market"}
+# Participation (ADR-BCP-004 section 18, ADR-BCP-011 section 6). Admission
+# and provisioning name the market a tenant participates in by country
+# (admission/v1 marketParticipation.market is a countryCode), while a
+# country may have several markets. The registry is the only market
+# authority: a country is available for participation while at least one
+# market in an available status covers it, through default_country or
+# countries. The Control Plane keeps a per-country participation
+# projection derived from the registry and never edited directly; its
+# attributes come from the country's primary market. A country no market
+# covers is MARKET_NOT_AVAILABLE to provisioning.
+participation:
+  key: country
+  covered_by: [default_country, countries]
+  available_statuses: [ACTIVE]
+  # The earliest-activated covering market whose default_country is the
+  # country, else the earliest-activated covering market listing it.
+  primary: [default_country, countries]

@@ -240,6 +240,12 @@ type lifecycleDocument struct {
 		To      string `yaml:"to"`
 		Served  bool   `yaml:"served"`
 	} `yaml:"transitions"`
+	Participation struct {
+		Key               string   `yaml:"key"`
+		CoveredBy         []string `yaml:"covered_by"`
+		AvailableStatuses []string `yaml:"available_statuses"`
+		Primary           []string `yaml:"primary"`
+	} `yaml:"participation"`
 }
 
 var (
@@ -264,6 +270,14 @@ func load() (*lifecycleDocument, error) {
 			loadErr = fmt.Errorf("%s does not describe the market lifecycle this package implements", lifecyclePath)
 			return
 		}
+		// The projection covers a country through exactly these fields, and
+		// picks the primary market in this order.
+		p := doc.Participation
+		coverage := []string{"default_country", "countries"}
+		if p.Key != "country" || !slices.Equal(p.CoveredBy, coverage) || !slices.Equal(p.Primary, coverage) || len(p.AvailableStatuses) == 0 {
+			loadErr = fmt.Errorf("%s: participation is not the country projection this package implements", lifecyclePath)
+			return
+		}
 		for _, rule := range doc.ValidationRules {
 			if messages[rule.Code] == "" {
 				loadErr = fmt.Errorf("%s: validation rule %s is not implemented", lifecyclePath, rule.Code)
@@ -281,6 +295,29 @@ func mustLoad() *lifecycleDocument {
 		panic(err)
 	}
 	return doc
+}
+
+// AvailableStatuses are the statuses in which a market makes the countries
+// it covers available for participation (participation available_statuses).
+func AvailableStatuses() []string { return slices.Clone(mustLoad().Participation.AvailableStatuses) }
+
+// Countries are the countries a market covers: its default_country, then
+// the countries it lists, each once.
+func (m Market) Countries() []string {
+	var out []string
+	if c := m.String("default_country"); c != "" {
+		out = append(out, c)
+	}
+	var listed []string
+	if raw, ok := m.Config["countries"]; ok {
+		_ = json.Unmarshal(raw, &listed)
+	}
+	for _, c := range listed {
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // Served reports whether the lifecycle serves command from one status to
