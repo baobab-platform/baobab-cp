@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
@@ -54,11 +55,18 @@ type EngineRegistrationRecord struct {
 // another engine. Registration never moves a provider between engines.
 var ErrProviderEngineConflict = errors.New("provider is registered for another engine")
 
+// ErrRegistrationOutsideCatalogue: the registration names a capability, a
+// domain or a contract major that the canonical catalogue projection does
+// not define. Nothing is registered.
+var ErrRegistrationOutsideCatalogue = errors.New("engine registration is outside the canonical capability catalogue")
+
 // EngineRegistrar records engine registrations in the capability registry.
 type EngineRegistrar interface {
-	// RegisterEngine records the engine, any capabilities the registry does
-	// not know yet, the provider and what it supports, in one transaction.
-	// Re-registering converges; existing capabilities are never rewritten.
+	// RegisterEngine records the engine, the provider and what it supports,
+	// in one transaction. Every capability and contract major it names must
+	// already be in the catalogue projection (ErrRegistrationOutsideCatalogue);
+	// registration never creates or rewrites a capability. Re-registering
+	// converges.
 	RegisterEngine(ctx context.Context, reg EngineRegistrationRecord) error
 }
 
@@ -83,15 +91,20 @@ func (r *PostgresRepository) RegisterEngine(ctx context.Context, reg EngineRegis
 	if err := tx.QueryRow(ctx, `SELECT engine_id::text FROM topology.engine WHERE code = $1`, reg.Repository).Scan(&engineID); err != nil {
 		return err
 	}
+	// Capabilities are projected from Shared's canonical catalogue by
+	// CapabilityCatalogueSync, which runs before any provider registers.
+	// Registration only references them: it never creates or rewrites one
+	// (ADR-SHARED-017 SS28, SS59, G-CP-3).
 	for _, c := range reg.Capabilities {
 		if err := c.Validate(); err != nil {
 			return fmt.Errorf("capability %s: %w", c.Key, err)
 		}
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO capability.capability (capability_id, code, name, description, domain_key, status, maturity)
-			VALUES ($1::uuid, $2, $3, NULLIF($4, ''), $5, $6, $7) ON CONFLICT (code) DO NOTHING`,
-			domain.NewUUIDv7(), c.Key, c.Name, c.Description, c.DomainKey, string(c.Lifecycle), string(c.Maturity)); err != nil {
-			return fmt.Errorf("register capability %s: %w", c.Key, err)
+		catalogued, err := lockCatalogueCapability(ctx, tx, c.Key)
+		if err != nil {
+			return err
+		}
+		if catalogued.domainKey != c.DomainKey {
+			return fmt.Errorf("%w: %s is in domain %s, not %s", ErrRegistrationOutsideCatalogue, c.Key, catalogued.domainKey, c.DomainKey)
 		}
 	}
 	p := reg.Provider
@@ -132,19 +145,47 @@ func (r *PostgresRepository) RegisterEngine(ctx context.Context, reg EngineRegis
 		return fmt.Errorf("update provider %s: %w", p.ProviderKey, err)
 	}
 	for _, s := range reg.Support {
-		tag, err := tx.Exec(ctx, `
-			INSERT INTO capability.provider_capability_support (provider_id, capability_id, contract_versions)
-			SELECT $1::uuid, capability_id, $3 FROM capability.capability WHERE code = $2
-			ON CONFLICT (provider_id, capability_id) DO UPDATE SET contract_versions = EXCLUDED.contract_versions`,
-			providerID, s.CapabilityKey, s.ContractVersions)
+		catalogued, err := lockCatalogueCapability(ctx, tx, s.CapabilityKey)
 		if err != nil {
-			return fmt.Errorf("register support for %s: %w", s.CapabilityKey, err)
+			return err
 		}
-		if tag.RowsAffected() == 0 {
-			return fmt.Errorf("provider %s supports unknown capability %s", p.ProviderKey, s.CapabilityKey)
+		for _, v := range s.ContractVersions {
+			if !slices.Contains(catalogued.contractVersions, int32(v)) {
+				return fmt.Errorf("%w: provider %s supports %s contract major %d", ErrRegistrationOutsideCatalogue, p.ProviderKey, s.CapabilityKey, v)
+			}
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO capability.provider_capability_support (provider_id, capability_id, contract_versions)
+			VALUES ($1::uuid, $2::uuid, $3)
+			ON CONFLICT (provider_id, capability_id) DO UPDATE SET contract_versions = EXCLUDED.contract_versions`,
+			providerID, catalogued.id, s.ContractVersions); err != nil {
+			return fmt.Errorf("register support for %s: %w", s.CapabilityKey, err)
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+type catalogueCapabilityRow struct {
+	id, domainKey    string
+	contractVersions []int32
+}
+
+// lockCatalogueCapability reads a capability the catalogue sync projected,
+// holding it against a concurrent sync until the transaction ends. A sync
+// locks the same row before it checks which contract majors providers
+// support, so the two serialise.
+func lockCatalogueCapability(ctx context.Context, tx pgx.Tx, key string) (catalogueCapabilityRow, error) {
+	var row catalogueCapabilityRow
+	var digest *string
+	err := tx.QueryRow(ctx, `SELECT capability_id::text, COALESCE(domain_key, ''), COALESCE(contract_versions, '{}'), canonical_digest
+		FROM capability.capability WHERE code = $1 FOR SHARE`, key).Scan(&row.id, &row.domainKey, &row.contractVersions, &digest)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && digest == nil) {
+		return row, fmt.Errorf("%w: capability %s is not in the catalogue", ErrRegistrationOutsideCatalogue, key)
+	}
+	if err != nil {
+		return row, fmt.Errorf("read capability %s: %w", key, err)
+	}
+	return row, nil
 }
 
 // ProviderInvocationByID reads the invocation reference a provider
