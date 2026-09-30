@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -68,6 +69,16 @@ func TestRegisterEngineRecordsProviderInvocation(t *testing.T) {
 			t.Fatal(err)
 		}
 		return id
+	}
+
+	// Registration references catalogue capabilities; it never creates one.
+	if _, err := repo.SyncCapabilityCatalogue(ctx, []CatalogueCapability{{
+		Capability: capabilitydomain.Capability{Key: capability, Name: "Invocation test", DomainKey: "trade",
+			Lifecycle: capabilitydomain.CapabilityLifecycleActive, Maturity: capabilitydomain.CapabilityMaturitySupported},
+		ContractVersions: []int{1}, DataClassification: "INTERNAL", Owner: engine, Source: "fixtures/invocation-test",
+		Digest: "sha256:" + strings.Repeat("1", 64),
+	}}); err != nil {
+		t.Fatal(err)
 	}
 
 	want := ProviderInvocation{ServiceReference: "service://baobab-invocationtest/orders", Protocol: "http"}

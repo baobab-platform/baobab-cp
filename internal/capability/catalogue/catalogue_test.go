@@ -3,12 +3,14 @@ package catalogue
 import (
 	"context"
 	"io/fs"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/baobab-platform/baobab-cp/internal/billing"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
@@ -137,5 +139,11 @@ func TestSyncEmbeddedCatalogue(t *testing.T) {
 	}
 	if owner != "baobab-trade" || source != "trade/v1/capabilities.yaml" || len(versions) != 1 || versions[0] != 1 {
 		t.Fatalf("commercial.quotation.manage = %s %s %v", owner, source, versions)
+	}
+	// Every embedded registration bundle stays inside the catalogue, so
+	// registration after the sync succeeds (G-CP-3).
+	registered, err := billing.RegisterEmbeddedEngines(ctx, repo, "test", slog.New(slog.DiscardHandler))
+	if err != nil || len(registered) == 0 {
+		t.Fatalf("registering the embedded engines after the sync: %v %v", registered, err)
 	}
 }
