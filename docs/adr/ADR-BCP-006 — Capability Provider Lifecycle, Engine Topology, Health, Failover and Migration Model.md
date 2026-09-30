@@ -1,7 +1,7 @@
 # ADR-BCP-006 — Capability Provider Lifecycle, Engine Topology, Health, Failover and Migration Model
 
 **Status:** Accepted — Normative Platform Architecture, amended in part  
-**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`)  
+**Amended By:** BCP-TS-ONBOARDING-001 CR-001 (its Gate 0 is replaced by the single Phase-0 classification, `docs/reconciliation/phase-0-architecture-inventory-and-lock.md`); `shared` ADR-SHARED-012 and ADR-SHARED-017 §8–9 (an Engine is a Baobab engine/service named by its repository, e.g. `baobab-trade`, never a technology family; the technology is the provider's `implementation_key`)  
 **Date:** 2026-09-11  
 **Decision Owners:** NABHOLD / Baobab Platform Architecture  
 **Repository:** `baobab-platform/baobab-cp`  
@@ -56,6 +56,8 @@ A capability describes **what** Baobab can do.
 A provider describes **which implementation offers that capability**.
 
 An engine describes **the technology/runtime family**.
+
+> **Amended by `shared` ADR-SHARED-012 and ADR-SHARED-017 §8–9**: an engine is a **Baobab engine/service**, identified by `engine_id` and named by its repository (`baobab-trade`, `baobab-erp`, `baobab-payments`). The technology/runtime family (MedusaJS, iDempiere, Payload, Haystack, Ory, HyperSwitch) is the provider's `implementation_key`. So: Engine ≠ Provider ≠ Implementation technology.
 
 An engine instance describes **a deployable, region-specific, environment-specific runtime instance**.
 
@@ -170,6 +172,8 @@ These are provider identities.
 
 They SHALL not become capability names.
 
+> **Clarified by `shared` ADR-SHARED-017 §9, §23**: a provider key is `<engine-id>.<provider-name>`. Its first segment is the owning engine (`baobab-trade`), and the second usually matches the provider's `implementation_key` (`medusa`). One engine MAY own several providers at once, e.g. `baobab-iam.keycloak` and `baobab-iam.ory` during a provider migration.
+
 ---
 
 # 6. Provider Type
@@ -201,6 +205,8 @@ type = EXTERNAL_SERVICE
 
 # 7. Engine
 
+> **Superseded by `shared` ADR-SHARED-012 and ADR-SHARED-017 §8–9**: the definition and examples below are not valid. An Engine is a first-class Baobab engine/service, named by its repository and identified by `engine_id` (control-plane/v1 `engineId`), e.g. `baobab-trade`, `baobab-erp`, `baobab-cms`, `baobab-pulse`, `baobab-iam`, `baobab-payments`, `baobab-subscriptions` or `baobab-regulations`. `topology.engine.code` already holds exactly this. The technology family (`medusa`, `idempiere`, `payload`, `haystack`, `keycloak`) is the provider's `implementation_key`, and the v1 `engine_key` field that carried it is deprecated. Vendor process components (e.g. Ory Kratos and Hydra) remain implementation topology beneath a provider unless they independently meet the criteria for an engine (ADR-SHARED-017 §45).
+
 Engine SHALL represent the underlying technology/runtime family.
 
 Conceptually:
@@ -231,6 +237,8 @@ keycloak
 ---
 
 # 8. Engine Is Not Provider
+
+> **Amended by `shared` ADR-SHARED-017 §8, §23**: read "Medusa Engine" below as the `baobab-trade` engine with its `baobab-trade.medusa` provider. The rule stands: one engine MAY own several providers, and one capability MAY have providers in several engines.
 
 One engine MAY support multiple providers.
 
@@ -2223,6 +2231,8 @@ Exact schema names MAY vary.
 ---
 
 # 115. Suggested Engine Table
+
+> **Superseded by `shared` ADR-SHARED-012 and ADR-SHARED-017 §8–9**: `topology.engine.code` is the engine id (`baobab-trade`), not a technology `engine_key`. Technology belongs on the provider as `implementation_key`.
 
 Conceptually:
 
