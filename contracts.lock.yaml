@@ -3,7 +3,7 @@ contract_bundle:
   version: "1.0.0"
   source_repository: "baobab-platform/shared"
   source_commit: 1bb1c94327d02a8040f267d6eed49ef181c74561
-schema: nabhold-contract-consumer-lock
+schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
