@@ -73,6 +73,11 @@ contracts:
   - contracts/capability/v1/capability.schema.json
   - contracts/capability/v1/registration.schema.json
   - contracts/capability/v1/registration-bundles.yaml
+  - contracts/capability/v1/catalogue.schema.json
+  - contracts/capability/v1/catalogue.yaml
+  - contracts/payments/v1/capabilities.yaml
+  - contracts/subscriptions/v1/capabilities.yaml
+  - contracts/trade/v1/capabilities.yaml
   - contracts/capability/v1/resolution.schema.json
   - contracts/capability/v1/health.schema.json
   - contracts/capability/v1/health-policy.yaml

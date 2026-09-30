@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/capability/v1/catalogue.schema.json",
+  "title": "Canonical Capability Catalogue (ADR-SHARED-017)",
+  "description": "The explicit index of every canonical Baobab capability. It answers only: which canonical capabilities exist, who stewards their meaning, and which Shared definition document holds each definition. It never answers which providers implement a capability, which are certified or active, where they run, or who is entitled or bound: those belong to provider declarations, EA-09 and the Control Plane. A capability is canonical if and only if it is listed here; no consumer discovers capabilities by scanning files or guessing names (ADR-SHARED-017 SS19, SS30, SS54). The root validates a whole catalogue.yaml.",
+  "$ref": "#/$defs/CapabilityCatalogue",
+  "$defs": {
+    "CapabilityCatalogue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "capabilities"],
+      "properties": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "const": "baobab-capability-catalogue" },
+            "version": { "const": "1.0" }
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/catalogueEntry" },
+          "description": "Every canonical capability, once, sorted by capability_key so that the catalogue and every projection of it are deterministic."
+        }
+      }
+    },
+    "catalogueEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability_key", "owner", "source"],
+      "properties": {
+        "capability_key": { "$ref": "domain.schema.json#/$defs/capabilityKey" },
+        "owner": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+          "maxLength": 63,
+          "description": "Repository stewarding the capability's semantics; must equal the definition's own owner. Not a provider monopoly (ADR-SHARED-017 SS15)."
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(?:\\.\\./)*[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9.-]*)*\\.(?:yaml|json)$",
+          "maxLength": 255,
+          "description": "Path of the CapabilityDefinitionDocument (capability.schema.json#/$defs/CapabilityDefinitionDocument) holding the definition, relative to this catalogue, e.g. ../../payments/v1/capabilities.yaml. YAML or JSON: serialization is not membership."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,66 @@
+# contracts/trade/v1/capabilities.yaml
+#
+# Canonical capability definitions for the Trade B2B boundary: WHAT each
+# capability means (ADR-SHARED-017 SS20, SS79). Indexed by
+# contracts/capability/v1/catalogue.yaml, which alone makes a capability
+# canonical. Contract references resolve relative to this file.
+#
+# Normalized on 2026-09-29 from the earlier `version: 1` list, which carried
+# only key, owner, classification and schemas, into the one canonical
+# definition shape (capability.schema.json#/$defs/CapabilityDefinitionDocument).
+# The earlier per-capability `idempotency` note is kept under metadata.
+# No key, owner, classification or schema reference changed.
+#
+# This file names no provider. Which providers implement these capabilities
+# (for example baobab-trade.medusa) is declared by baobab-trade in
+# .baobab/capability-provider.yaml.
+
+schema:
+  name: baobab-capability-definitions
+  version: '1.0'
+capabilities:
+- capability_key: commerce.cart.manage
+  name: Manage B2B cart
+  description: Validate quick-order lines and mutate a buyer organisation's cart in server-resolved buyer context; cart mutation and checkout repeat authoritative availability, eligibility, pricing and approval checks.
+  domain: commerce
+  owner: baobab-trade
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: quick-order.schema.json#/$defs/request
+    response_schema: quick-order.schema.json#/$defs/response
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: TENANT_CONFIDENTIAL
+  metadata:
+    idempotency: required_for_cart_mutation
+- capability_key: commercial.rfq.manage
+  name: Manage request for quotation
+  description: Create and progress a buyer organisation's request for quotation in server-resolved buyer context.
+  domain: commercial
+  owner: baobab-trade
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: rfq-create.schema.json
+    response_schema: rfq.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: TENANT_CONFIDENTIAL
+  metadata:
+    idempotency: required_for_commands
+- capability_key: commercial.quotation.manage
+  name: Manage quotation
+  description: Issue, read and accept versioned quotations against a request for quotation; only an unexpired accepted version can create an order.
+  domain: commercial
+  owner: baobab-trade
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: rfq.schema.json
+    response_schema: quotation.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+  metadata:
+    idempotency: required_for_commands

@@ -1,0 +1,50 @@
+# contracts/subscriptions/v1/capabilities.yaml
+#
+# Canonical capability definitions for the billing domain: WHAT each
+# capability means (ADR-SHARED-011, ADR-SHARED-017 SS20). Indexed by
+# contracts/capability/v1/catalogue.yaml, which alone makes a capability
+# canonical. Contract references resolve relative to this file.
+#
+# This file names no provider. Which providers implement these capabilities
+# is declared by engine repositories in .baobab/capability-provider.yaml.
+# capabilities.json beside it is the TRANSITIONAL EngineRegistration bundle
+# the Control Plane still bootstraps from; its capabilities must equal the
+# definitions here (scripts/capability_catalogue.py enforces this).
+
+schema:
+  name: baobab-capability-definitions
+  version: '1.0'
+capabilities:
+- capability_key: billing.subscription.manage
+  name: Manage subscription billing
+  description: Ensure, read, suspend and cancel the billing projection of a classified Control Plane ProductSubscription.
+  domain: billing
+  owner: baobab-subscriptions
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: billing.schema.json#/$defs/EnsureBillingProjectionRequest
+    response_schema: billing.schema.json#/$defs/BillingProjection
+    error_schema: ../../errors/v1/problem-details.schema.json
+    event_schemas:
+    - events.schema.json#/$defs/BillingSubscriptionCreated
+    - events.schema.json#/$defs/BillingSubscriptionSuspended
+    - events.schema.json#/$defs/BillingSubscriptionResumed
+    - events.schema.json#/$defs/BillingSubscriptionTerminated
+  data_classification: TENANT_CONFIDENTIAL
+- capability_key: billing.usage.record
+  name: Record usage
+  description: Meter usage against a billing projection; billable only where the subscription's policy charges.
+  domain: billing
+  owner: baobab-subscriptions
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: billing.schema.json#/$defs/RecordUsageRequest
+    response_schema: billing.schema.json#/$defs/UsageRecord
+    error_schema: ../../errors/v1/problem-details.schema.json
+    event_schemas:
+    - events.schema.json#/$defs/UsageRecorded
+  data_classification: TENANT_CONFIDENTIAL
