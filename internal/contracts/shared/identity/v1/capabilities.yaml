@@ -1,0 +1,51 @@
+# contracts/identity/v1/capabilities.yaml
+#
+# Canonical capability definitions for human and workload authentication
+# (ADR-SHARED-017 SS20, SS79, EA-02B candidate review).
+# Indexed by contracts/capability/v1/catalogue.yaml, which alone makes a capability
+# canonical. Contract references resolve relative to this file.
+#
+# Authority: Baobab IAM (ADR-0006, ADR-0007, ADR-IAM-0019, ADR-IAM-0024).
+# IAM owns authentication mechanics and token profiles per OIDC and OAuth security best practice.
+#
+# This file names no provider. Which provider implements these capabilities
+# (baobab-iam.ory or baobab-iam.keycloak) is declared by baobab-iam in
+# .baobab/capability-provider.yaml.
+
+schema:
+  name: baobab-capability-definitions
+  version: '1.0'
+capabilities:
+- capability_key: identity.authentication.perform
+  name: Perform human authentication
+  description: Interactive authentication of a human user (browser or native app) through Authorization Code with PKCE, producing an access token and ID token per the ADR-0006 profile. Names no realm or provider construct; assurance is requested as OIDC acr values.
+  domain: identity
+  owner: baobab-iam
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: human-authentication-request.schema.json#/$defs/HumanAuthenticationRequest
+    response_schema: human-authentication-response.schema.json#/$defs/HumanAuthenticationResponse
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+  metadata:
+    profile: "ADR-0006 Authorization Code + PKCE"
+    assurance: "OIDC acr values; AssuranceRequirement and AuthenticationAssurance (identity/v1)"
+- capability_key: identity.workload-token.issue
+  name: Issue workload access token
+  description: Obtain a short-lived Baobab workload access token for a registered workload, audience and scopes, carrying workload claims per the ADR-0006 and ADR-0007 profiles. The credential mechanism (federated platform token via RFC 7523 JWT bearer, private_key_jwt, or IdP client credential) follows the workload's registered credential_type and stays behind the provider boundary.
+  domain: identity
+  owner: baobab-iam
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: workload-token-request.schema.json#/$defs/WorkloadTokenRequest
+    response_schema: workload-token-response.schema.json#/$defs/WorkloadTokenResponse
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+  metadata:
+    profile: "ADR-0006 token profile + ADR-0007 workload identity"
+    workload_registry: workload-registry.yaml
+    credential_types: "client_credentials, federated_workload_token (never a static secret)"

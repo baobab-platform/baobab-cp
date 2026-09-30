@@ -35,29 +35,45 @@ func TestEmbeddedCatalogue(t *testing.T) {
 		}
 	}
 	want := "billing.subscription.manage,billing.usage.record,commerce.cart.manage,commercial.quotation.manage," +
-		"commercial.rfq.manage,finance.order-consequence.process,payment.intent.cancel,payment.intent.create," +
-		"payment.payment.authorize,payment.payment.capture,payment.refund.create"
+		"commercial.rfq.manage,content.entry.resolve,customer.buyer-application.manage,customer.buyer-membership.manage," +
+		"finance.order-consequence.process,identity.authentication.perform,identity.workload-token.issue," +
+		"payment.intent.cancel,payment.intent.create,payment.payment.authorize,payment.payment.capture,payment.refund.create"
 	if strings.Join(keys, ",") != want {
 		t.Fatalf("catalogue = %v", keys)
 	}
-	capture := capabilities[9]
+	byKey := make(map[string]repository.CatalogueCapability, len(capabilities))
+	for _, c := range capabilities {
+		byKey[c.Capability.Key] = c
+	}
+	capture := byKey["payment.payment.capture"]
 	if capture.Capability.DomainKey != "payment" || capture.Owner != "baobab-payments" || capture.Source != "payments/v1/capabilities.yaml" ||
 		capture.DataClassification != "TENANT_CONFIDENTIAL" || len(capture.ContractVersions) != 1 || capture.ContractVersions[0] != 1 ||
 		capture.Capability.Lifecycle != "ACTIVE" || capture.Capability.Maturity != "EXPERIMENTAL" {
 		t.Fatalf("payment.payment.capture = %+v", capture)
 	}
-	if capabilities[2].Source != "trade/v1/capabilities.yaml" || capabilities[2].Owner != "baobab-trade" {
-		t.Fatalf("commerce.cart.manage = %+v", capabilities[2])
-	}
-	if capabilities[5].Source != "erp/v1/capabilities.yaml" || capabilities[5].Owner != "baobab-erp" || capabilities[5].Capability.DomainKey != "finance" {
-		t.Fatalf("finance.order-consequence.process = %+v", capabilities[5])
+	for key, want := range map[string]struct{ source, owner, domain string }{
+		"commerce.cart.manage":              {"trade/v1/capabilities.yaml", "baobab-trade", "commerce"},
+		"finance.order-consequence.process": {"erp/v1/capabilities.yaml", "baobab-erp", "finance"},
+		"customer.buyer-application.manage": {"buyer-organisation/v1/capabilities.yaml", "baobab-trade", "customer"},
+		"identity.workload-token.issue":     {"identity/v1/capabilities.yaml", "baobab-iam", "identity"},
+		"content.entry.resolve":             {"content/v1/capabilities.yaml", "baobab-cms", "content"},
+	} {
+		c := byKey[key]
+		if c.Source != want.source || c.Owner != want.owner || c.Capability.DomainKey != want.domain {
+			t.Errorf("%s = %+v", key, c)
+		}
 	}
 	again, err := Embedded()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again[9].Digest != capture.Digest || capabilities[8].Digest == capture.Digest {
-		t.Fatal("a digest must be stable for one definition and differ between definitions")
+	for _, c := range again {
+		if c.Capability.Key == "payment.payment.capture" && c.Digest != capture.Digest {
+			t.Fatal("a digest must be stable for one definition")
+		}
+	}
+	if byKey["payment.payment.authorize"].Digest == capture.Digest {
+		t.Fatal("a digest must differ between definitions")
 	}
 }
 
@@ -127,7 +143,7 @@ func TestSyncEmbeddedCatalogue(t *testing.T) {
 		t.Fatal(err)
 	}
 	report, err := SyncEmbedded(ctx, repo)
-	if err != nil || len(report.Unchanged) != 11 || len(report.Created)+len(report.Updated) != 0 {
+	if err != nil || len(report.Unchanged) != 16 || len(report.Created)+len(report.Updated) != 0 {
 		t.Fatalf("second sync: %+v %v", report, err)
 	}
 	admin, err := pgxpool.New(ctx, url)

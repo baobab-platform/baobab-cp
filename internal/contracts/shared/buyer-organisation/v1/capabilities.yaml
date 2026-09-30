@@ -1,0 +1,50 @@
+# contracts/buyer-organisation/v1/capabilities.yaml
+#
+# Canonical capability definitions for buyer application and membership management
+# (ADR-SHARED-017 SS20, SS79, EA-02B candidate review).
+# Indexed by contracts/capability/v1/catalogue.yaml, which alone makes a capability
+# canonical. Contract references resolve relative to this file.
+#
+# Authority: Baobab Trade (ADR-0018, ADR-0021, Gate ZB-04).
+# Trade owns buyer organisational relationships, commercial approval and membership.
+#
+# This file names no provider. Which provider implements these capabilities
+# (baobab-trade.medusa) is declared by baobab-trade in
+# .baobab/capability-provider.yaml.
+
+schema:
+  name: baobab-capability-definitions
+  version: '1.0'
+capabilities:
+- capability_key: customer.buyer-application.manage
+  name: Manage buyer application
+  description: Submit, withdraw, provide evidence for, and review B2B buyer organisation applications. Trade validates application evidence and makes commercial approval decisions.
+  domain: customer
+  owner: baobab-trade
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: buyer-application-request.schema.json#/$defs/BuyerApplicationRequest
+    response_schema: buyer-application-response.schema.json#/$defs/BuyerApplicationResponse
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: TENANT_CONFIDENTIAL
+  metadata:
+    applies_to: buyer-organisation-lifecycle-gate-zb-04
+    related_events: com.baobab-platform.customer.buyer-application.submitted.v1, com.baobab-platform.customer.buyer-application.decision-recorded.v1, com.baobab-platform.customer.buyer-application-evidence.decided.v1
+- capability_key: customer.buyer-membership.manage
+  name: Manage buyer membership
+  description: Invite, accept invitations, revoke, and update roles for members of a buyer organisation. Trade manages membership and purchasing authority independently of application approval.
+  domain: customer
+  owner: baobab-trade
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: buyer-membership-request.schema.json#/$defs/BuyerMembershipRequest
+    response_schema: buyer-membership-response.schema.json#/$defs/BuyerMembershipResponse
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: TENANT_CONFIDENTIAL
+  metadata:
+    applies_to: buyer-membership-lifecycle
+    related_events: com.baobab-platform.customer.buyer-membership.changed.v1
