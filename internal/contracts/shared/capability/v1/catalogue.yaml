@@ -1,0 +1,67 @@
+# contracts/capability/v1/catalogue.yaml
+#
+# The Canonical Capability Catalogue (ADR-SHARED-017 SS18-19, EA-02C).
+# Conforms to catalogue.schema.json.
+#
+# A capability is canonical Baobab vocabulary if and only if it is listed
+# here. Each entry names the capability, the repository stewarding its
+# meaning, and the Shared definition document holding its definition
+# (capability.schema.json#/$defs/CapabilityDefinitionDocument). Nothing
+# discovers capabilities by scanning directories or by file name or
+# extension: this file is the index.
+#
+# This catalogue answers "which canonical capabilities exist?". It never
+# answers which provider implements one (engine .baobab/capability-provider.yaml),
+# whether an implementation is certified (EA-09), or whether support is
+# active, where it runs, who is entitled or how it resolves (Control Plane).
+#
+# Rules, enforced by scripts/capability_catalogue.py in CI:
+#   - entries are unique and sorted by capability_key;
+#   - every entry resolves to exactly one definition in its source, with the
+#     same owner, in a domain registered in namespace-registry.yaml;
+#   - every definition in an indexed source, and every capability in an
+#     EngineRegistration bundle, is catalogued (no unindexed definitions);
+#   - every contract, error and event schema reference resolves;
+#   - every dependency targets a catalogued capability, and REQUIRED
+#     dependencies are acyclic;
+#   - no key names a vendor, tenant, country or region.
+#
+# Owner is semantic stewardship, not a provider monopoly (SS15).
+#
+# Scope today: the capabilities Shared already defined before EA-02. The
+# cross-engine capability census (EA-02A) adds entries only after its
+# candidates are accepted; planned capabilities stay in provider
+# declarations until then.
+
+schema:
+  name: baobab-capability-catalogue
+  version: "1.0"
+
+capabilities:
+  - capability_key: billing.subscription.manage
+    owner: baobab-subscriptions
+    source: ../../subscriptions/v1/capabilities.yaml
+  - capability_key: billing.usage.record
+    owner: baobab-subscriptions
+    source: ../../subscriptions/v1/capabilities.yaml
+  - capability_key: commerce.cart.manage
+    owner: baobab-trade
+    source: ../../trade/v1/capabilities.yaml
+  - capability_key: commercial.quotation.manage
+    owner: baobab-trade
+    source: ../../trade/v1/capabilities.yaml
+  - capability_key: commercial.rfq.manage
+    owner: baobab-trade
+    source: ../../trade/v1/capabilities.yaml
+  - capability_key: payment.intent.create
+    owner: baobab-payments
+    source: ../../payments/v1/capabilities.yaml
+  - capability_key: payment.payment.authorize
+    owner: baobab-payments
+    source: ../../payments/v1/capabilities.yaml
+  - capability_key: payment.payment.capture
+    owner: baobab-payments
+    source: ../../payments/v1/capabilities.yaml
+  - capability_key: payment.refund.create
+    owner: baobab-payments
+    source: ../../payments/v1/capabilities.yaml

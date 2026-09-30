@@ -1,0 +1,79 @@
+# contracts/payments/v1/capabilities.yaml
+#
+# Canonical capability definitions for the payment domain: WHAT each
+# capability means (ADR-SHARED-011, ADR-SHARED-017 SS20). Indexed by
+# contracts/capability/v1/catalogue.yaml, which alone makes a capability
+# canonical. Contract references resolve relative to this file.
+#
+# This file names no provider. Which providers implement these capabilities
+# is declared by engine repositories in .baobab/capability-provider.yaml.
+# capabilities.json beside it is the TRANSITIONAL EngineRegistration bundle
+# the Control Plane still bootstraps from; its capabilities must equal the
+# definitions here (scripts/capability_catalogue.py enforces this).
+
+schema:
+  name: baobab-capability-definitions
+  version: '1.0'
+capabilities:
+- capability_key: payment.intent.create
+  name: Create payment intent
+  description: Create a payment intent for an authorised monetary obligation in Control Plane-resolved context.
+  domain: payment
+  owner: baobab-payments
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: payment.schema.json#/$defs/CreatePaymentIntentRequest
+    response_schema: payment.schema.json#/$defs/PaymentIntent
+    error_schema: ../../errors/v1/problem-details.schema.json
+    event_schemas:
+    - events.schema.json#/$defs/PaymentCreated
+  data_classification: TENANT_CONFIDENTIAL
+- capability_key: payment.payment.authorize
+  name: Authorise payment
+  description: Authorise funds for a payment intent through an eligible provider.
+  domain: payment
+  owner: baobab-payments
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: payment.schema.json#/$defs/ConfirmPaymentIntentRequest
+    response_schema: payment.schema.json#/$defs/Payment
+    error_schema: ../../errors/v1/problem-details.schema.json
+    event_schemas:
+    - events.schema.json#/$defs/PaymentAuthorized
+    - events.schema.json#/$defs/PaymentFailed
+  data_classification: TENANT_CONFIDENTIAL
+- capability_key: payment.payment.capture
+  name: Capture payment
+  description: Capture an authorised payment.
+  domain: payment
+  owner: baobab-payments
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: payment.schema.json#/$defs/CapturePaymentRequest
+    response_schema: payment.schema.json#/$defs/Payment
+    error_schema: ../../errors/v1/problem-details.schema.json
+    event_schemas:
+    - events.schema.json#/$defs/PaymentCaptured
+    - events.schema.json#/$defs/PaymentFailed
+  data_classification: TENANT_CONFIDENTIAL
+- capability_key: payment.refund.create
+  name: Refund payment
+  description: Refund a captured payment in whole or part.
+  domain: payment
+  owner: baobab-payments
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: payment.schema.json#/$defs/CreateRefundRequest
+    response_schema: payment.schema.json#/$defs/Refund
+    error_schema: ../../errors/v1/problem-details.schema.json
+    event_schemas:
+    - events.schema.json#/$defs/PaymentRefunded
+  data_classification: TENANT_CONFIDENTIAL

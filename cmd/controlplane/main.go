@@ -13,6 +13,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/api"
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/billing"
+	"github.com/baobab-platform/baobab-cp/internal/capability/catalogue"
 	"github.com/baobab-platform/baobab-cp/internal/config"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning"
@@ -85,6 +86,16 @@ func main() {
 	applications := &application.Service{Repo: resolverRepository, Eligibility: eligibility}
 	classifications := &subscription.Classifier{Repo: resolverRepository, Admissions: resolverRepository, Orgs: resolverRepository,
 		Memberships: resolverRepository, Eligibility: eligibility}
+	// ADR-SHARED-017 gate G-CP-2: the capability registry converges on
+	// Shared's canonical catalogue before any provider registers, so
+	// canonical meaning comes from Shared rather than from a registration.
+	synced, err := catalogue.SyncEmbedded(ctx, resolverRepository)
+	if err != nil {
+		slog.Error("capability catalogue sync failed", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("capability catalogue synchronised", "created", synced.Created, "updated", synced.Updated,
+		"unchanged", len(synced.Unchanged))
 	// ADR-BCP-018 gate ORG-11: engines register from their Shared
 	// EngineRegistration through the capability registry, all on one path.
 	registered, err := billing.RegisterEmbeddedEngines(ctx, resolverRepository, cfg.Environment, slog.Default())
