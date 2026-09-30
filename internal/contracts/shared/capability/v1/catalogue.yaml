@@ -53,9 +53,24 @@ capabilities:
   - capability_key: commercial.rfq.manage
     owner: baobab-trade
     source: ../../trade/v1/capabilities.yaml
+  - capability_key: content.entry.resolve
+    owner: baobab-cms
+    source: ../../content/v1/capabilities.yaml
+  - capability_key: customer.buyer-application.manage
+    owner: baobab-trade
+    source: ../../buyer-organisation/v1/capabilities.yaml
+  - capability_key: customer.buyer-membership.manage
+    owner: baobab-trade
+    source: ../../buyer-organisation/v1/capabilities.yaml
   - capability_key: finance.order-consequence.process
     owner: baobab-erp
     source: ../../erp/v1/capabilities.yaml
+  - capability_key: identity.authentication.perform
+    owner: baobab-iam
+    source: ../../identity/v1/capabilities.yaml
+  - capability_key: identity.workload-token.issue
+    owner: baobab-iam
+    source: ../../identity/v1/capabilities.yaml
   - capability_key: payment.intent.cancel
     owner: baobab-payments
     source: ../../payments/v1/capabilities.yaml

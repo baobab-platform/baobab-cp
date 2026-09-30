@@ -1,0 +1,34 @@
+# contracts/content/v1/capabilities.yaml
+#
+# Canonical capability definitions for content entry resolution
+# (ADR-SHARED-017 SS20, SS79, EA-02B candidate review).
+# Indexed by contracts/capability/v1/catalogue.yaml, which alone makes a capability
+# canonical. Contract references resolve relative to this file.
+#
+# Authority: Baobab CMS (ADR-0015: Content and Editorial Lifecycle).
+# CMS owns content entry resolution and editorial lifecycle per OIDC and OAuth security best practice.
+#
+# This file names no provider. Which provider implements these capabilities
+# (baobab-cms.payload or baobab-cms.custom) is declared by baobab-cms in
+# .baobab/capability-provider.yaml.
+
+schema:
+  name: baobab-capability-definitions
+  version: '1.0'
+capabilities:
+- capability_key: content.entry.resolve
+  name: Resolve content entry by context
+  description: Deterministic content entry resolution by market, locale, and digital estate context. Returns the most specific eligible record per ADR-0014 content inheritance policy, with fallback chain and resolution trace for auditability.
+  domain: content
+  owner: baobab-cms
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: content-resolve-request.schema.json#/$defs/ContentResolveRequest
+    response_schema: content-resolve-response.schema.json#/$defs/ContentResolveResponse
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+  metadata:
+    profile: "ADR-0014 Content Inheritance and Locale Fallback"
+    resolution_modes: "EXACT (requested level), FALLBACK (chain), NONE (no match)"
