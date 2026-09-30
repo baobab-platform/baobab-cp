@@ -35,11 +35,12 @@ func TestEmbeddedCatalogue(t *testing.T) {
 		}
 	}
 	want := "billing.subscription.manage,billing.usage.record,commerce.cart.manage,commercial.quotation.manage," +
-		"commercial.rfq.manage,payment.intent.create,payment.payment.authorize,payment.payment.capture,payment.refund.create"
+		"commercial.rfq.manage,finance.order-consequence.process,payment.intent.cancel,payment.intent.create," +
+		"payment.payment.authorize,payment.payment.capture,payment.refund.create"
 	if strings.Join(keys, ",") != want {
 		t.Fatalf("catalogue = %v", keys)
 	}
-	capture := capabilities[7]
+	capture := capabilities[9]
 	if capture.Capability.DomainKey != "payment" || capture.Owner != "baobab-payments" || capture.Source != "payments/v1/capabilities.yaml" ||
 		capture.DataClassification != "TENANT_CONFIDENTIAL" || len(capture.ContractVersions) != 1 || capture.ContractVersions[0] != 1 ||
 		capture.Capability.Lifecycle != "ACTIVE" || capture.Capability.Maturity != "EXPERIMENTAL" {
@@ -48,11 +49,14 @@ func TestEmbeddedCatalogue(t *testing.T) {
 	if capabilities[2].Source != "trade/v1/capabilities.yaml" || capabilities[2].Owner != "baobab-trade" {
 		t.Fatalf("commerce.cart.manage = %+v", capabilities[2])
 	}
+	if capabilities[5].Source != "erp/v1/capabilities.yaml" || capabilities[5].Owner != "baobab-erp" || capabilities[5].Capability.DomainKey != "finance" {
+		t.Fatalf("finance.order-consequence.process = %+v", capabilities[5])
+	}
 	again, err := Embedded()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again[7].Digest != capture.Digest || capabilities[6].Digest == capture.Digest {
+	if again[9].Digest != capture.Digest || capabilities[8].Digest == capture.Digest {
 		t.Fatal("a digest must be stable for one definition and differ between definitions")
 	}
 }
@@ -123,7 +127,7 @@ func TestSyncEmbeddedCatalogue(t *testing.T) {
 		t.Fatal(err)
 	}
 	report, err := SyncEmbedded(ctx, repo)
-	if err != nil || len(report.Unchanged) != 9 || len(report.Created)+len(report.Updated) != 0 {
+	if err != nil || len(report.Unchanged) != 11 || len(report.Created)+len(report.Updated) != 0 {
 		t.Fatalf("second sync: %+v %v", report, err)
 	}
 	admin, err := pgxpool.New(ctx, url)

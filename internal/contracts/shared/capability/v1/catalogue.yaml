@@ -28,10 +28,10 @@
 #
 # Owner is semantic stewardship, not a provider monopoly (SS15).
 #
-# Scope today: the capabilities Shared already defined before EA-02. The
-# cross-engine capability census (EA-02A) adds entries only after its
-# candidates are accepted; planned capabilities stay in provider
-# declarations until then.
+# Scope: the capabilities Shared defined before EA-02, plus candidates the
+# EA-02B review accepted (docs/architecture/ea-02b-candidate-review.md).
+# The census (EA-02A) adds entries only after a candidate is accepted;
+# planned capabilities stay in provider declarations until then.
 
 schema:
   name: baobab-capability-catalogue
@@ -53,6 +53,12 @@ capabilities:
   - capability_key: commercial.rfq.manage
     owner: baobab-trade
     source: ../../trade/v1/capabilities.yaml
+  - capability_key: finance.order-consequence.process
+    owner: baobab-erp
+    source: ../../erp/v1/capabilities.yaml
+  - capability_key: payment.intent.cancel
+    owner: baobab-payments
+    source: ../../payments/v1/capabilities.yaml
   - capability_key: payment.intent.create
     owner: baobab-payments
     source: ../../payments/v1/capabilities.yaml

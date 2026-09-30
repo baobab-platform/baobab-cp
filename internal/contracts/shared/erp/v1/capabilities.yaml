@@ -1,0 +1,38 @@
+# contracts/erp/v1/capabilities.yaml
+#
+# Canonical capability definitions for the ERP boundary: WHAT each
+# capability means (ADR-SHARED-017 SS20). Indexed by
+# contracts/capability/v1/catalogue.yaml, which alone makes a capability
+# canonical. Contract references resolve relative to this file.
+#
+# Accepted by the EA-02B candidate review
+# (docs/architecture/ea-02b-candidate-review.md). The contracts are the
+# existing vendor-neutral ERP boundary: the Trade order input on the
+# tradeToErp channel, and the status and outcomes on erpOutcomes and
+# GET /order-consequences/{commerce_order_id}.
+#
+# This file names no provider. Which providers implement these capabilities
+# (for example baobab-erp.idempiere) is declared by baobab-erp in
+# .baobab/capability-provider.yaml.
+
+schema:
+  name: baobab-capability-definitions
+  version: '1.0'
+capabilities:
+- capability_key: finance.order-consequence.process
+  name: Process commerce order consequences
+  description: Carry a commerce order's ERP consequences (sales order, shipment, customer invoice, payment accounting) for its legal entity, and report their status.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: commerce-order-consequence.schema.json
+    response_schema: order-consequence-status.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+    event_schemas:
+    - order-consequence-status.schema.json
+    - invoice-outcome.schema.json
+    - payment-outcome.schema.json
+  data_classification: TENANT_CONFIDENTIAL
