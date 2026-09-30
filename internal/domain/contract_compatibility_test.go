@@ -196,3 +196,24 @@ func TestIdentityReferenceMatchesSharedSchema(t *testing.T) {
 	}
 	contracttest.ValidateJSON(t, schema, reference)
 }
+
+// Gate IAM-M1-C / M1-B: provider_type=ory is valid against shared
+// identity/v1 external-identity schema (free string, not Keycloak-only enum).
+func TestExternalIdentityOryMatchesSharedSchema(t *testing.T) {
+	dir := contracttest.SharedDir(t)
+	schema := contracttest.CompileSchema(t, dir, "identity/v1/external-identity.schema.json")
+
+	external := domain.ExternalIdentity{
+		ID:           domain.NewExternalIdentityID(),
+		PrincipalID:  domain.NewPrincipalID(),
+		Issuer:       "https://hydra.baobab-platform.com/",
+		Subject:      "kratos-identity-9c2d3e4f-5a6b-7c8d-9e0f-1a2b3c4d5e6f",
+		ProviderType: "ory",
+		Status:       "ACTIVE",
+		CreatedAt:    time.Now().UTC(),
+	}
+	if err := external.Validate(); err != nil {
+		t.Fatalf("ory external identity should be valid: %v", err)
+	}
+	contracttest.ValidateJSON(t, schema, external)
+}

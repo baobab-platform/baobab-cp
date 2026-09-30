@@ -218,3 +218,61 @@ func TestIdentityServiceResolvePropagatesUnexpectedLinkError(t *testing.T) {
 		t.Fatalf("expected wrapped boom error, got %v", err)
 	}
 }
+
+// Gate IAM-M1-C (ADR-IAM-0019 / ADR-0020): resolution is by (issuer, subject).
+// An Ory-shaped issuer/subject must resolve without requiring provider_type
+// == "keycloak". ProviderType is operational metadata only.
+func TestIdentityServiceResolveOryIssuerSubject(t *testing.T) {
+	const (
+		oryIssuer  = "https://hydra.baobab-platform.com/"
+		orySubject = "kratos-identity-9c2d3e4f-5a6b-7c8d-9e0f-1a2b3c4d5e6f"
+	)
+	expected := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "human", Status: "ACTIVE"}
+	repo := &fakeIdentityRepository{
+		resolve: func(_ context.Context, _ int) (domain.Principal, error) {
+			return expected, nil
+		},
+	}
+	service := IdentityService{Repository: repo, Provision: deny}
+
+	resolved, err := service.Resolve(context.Background(), oryIssuer, orySubject, "human")
+	if err != nil {
+		t.Fatalf("resolve ory identity: %v", err)
+	}
+	if resolved.ID != expected.ID {
+		t.Fatalf("expected principal %s, got %s", expected.ID, resolved.ID)
+	}
+}
+
+// Ensure provisioning path does not inject a Keycloak-only provider_type.
+func TestIdentityServiceProvisionDoesNotRequireProviderType(t *testing.T) {
+	const (
+		oryIssuer  = "https://hydra.baobab-platform.com/"
+		orySubject = "kratos-identity-aabbccdd-eeff-0011-2233-445566778899"
+	)
+	var linked domain.ExternalIdentity
+	repo := &fakeIdentityRepository{
+		resolve: func(context.Context, int) (domain.Principal, error) {
+			return domain.Principal{}, repository.ErrIdentityNotFound
+		},
+		link: func(_ context.Context, external domain.ExternalIdentity) error {
+			linked = external
+			return nil
+		},
+	}
+	service := IdentityService{Repository: repo, Provision: allow}
+
+	principal, err := service.Resolve(context.Background(), oryIssuer, orySubject, "human")
+	if err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	if principal.ID == "" {
+		t.Fatal("expected provisioned principal id")
+	}
+	if linked.Issuer != oryIssuer || linked.Subject != orySubject {
+		t.Fatalf("linked external mismatch: %+v", linked)
+	}
+	if linked.ProviderType != "" {
+		t.Fatalf("provision path must not require or invent provider_type; got %q", linked.ProviderType)
+	}
+}
