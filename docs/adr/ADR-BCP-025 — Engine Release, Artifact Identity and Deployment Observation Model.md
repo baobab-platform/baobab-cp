@@ -1,9 +1,9 @@
 # ADR-BCP-025 — Engine Release, Artifact Identity and Deployment Observation Model
 
-**Status:** Proposed
-**Date:** 2026-09-27
+**Status:** Accepted — Normative Platform Architecture (2026-09-30, platform architecture owner). Accepted with amendments A1–A4, incorporated below.
+**Date:** 2026-09-27 (proposed); 2026-09-30 (accepted)
 **Repository:** `baobab-platform/baobab-cp`
-**Depends on:** ADR-BCP-006, ADR-BCP-008, ADR-BCP-009, ADR-BCP-021, ADR-SHARED-007, ADR-SHARED-012
+**Depends on:** ADR-BCP-006, ADR-BCP-008, ADR-BCP-009, ADR-BCP-021, ADR-SHARED-007, ADR-SHARED-012, ADR-SHARED-017
 **Refines:** ADR-BCP-006 §13 (engine contract compatibility), §59–61 (engine upgrade, instance replacement, rolling upgrade), §92–95 (topology reconciliation, infrastructure boundary, instance registration, attestation)
 **Gate:** EA-03 (runtime topology)
 
@@ -40,7 +40,8 @@ An **EngineRelease** is the Control Plane's immutable record of one version of o
 | `engine_id` | The engine it is a release of. |
 | `release_version` | The engine's semantic version (`MAJOR.MINOR.PATCH`, optional pre-release). |
 | `artifacts` | One or more artifacts (§2.2). There is at least one. |
-| `contract_versions` | For each capability the release implements, the capability contract **major** versions it supports, as integers (§2.1.1). |
+| `provider_support` | For each provider the release contains, each capability it supports and the capability contract **major** versions, as integers (§2.1.1, §2.1.2). *(A1)* |
+| `capability_provider_declaration_digest` | `sha256:` digest of the repository's `.baobab/capability-provider.yaml` at `source_revision` (§2.1.3). *(A2)* |
 | `source_revision` | The source commit the release was built from (40-hex git SHA). |
 | `provenance` | Optional reference to a build provenance attestation (§2.3). |
 | `status` | `CANDIDATE`, `APPROVED`, `DEPRECATED` or `REVOKED` (§2.4). |
@@ -48,10 +49,10 @@ An **EngineRelease** is the Control Plane's immutable record of one version of o
 
 **Rules:**
 
-1. **Immutable identity.** Once recorded, a release's `engine_id`, `release_version`, `artifacts`, `contract_versions` and `source_revision` never change. Only `status` moves, with an audited reason. Correcting a release means recording a new version.
+1. **Immutable identity.** Once recorded, a release's `engine_id`, `release_version`, `artifacts`, `provider_support`, `capability_provider_declaration_digest` and `source_revision` never change. Only `status` moves, with an audited reason. Correcting a release means recording a new version.
 2. **One identity per version.** Recording an existing `(engine_id, release_version)` again is accepted only if it is byte-identical, which makes it a replay. Different content is refused (`RELEASE_VERSION_CONFLICT`).
 3. **One owner per digest.** An artifact digest belongs to at most one release of one engine. Recording it under another release is refused, so an observed digest always identifies a single release.
-4. **Contract versions are the release's, not the engine's.** An engine's supported contract versions are the union over its releases that are `APPROVED` and deployed. §13 compatibility is checked against the release an instance runs (§2.6), not against the registration.
+4. **Contract support is the release's, not the engine's.** A provider's supported contract versions are the union over the engine's releases that are `APPROVED` and deployed. §13 compatibility is checked against the release an instance runs (§2.6), not against the registration, and always for the binding's provider.
 
 
 #### 2.1.1 Contract version representation
@@ -63,7 +64,25 @@ Compatibility needs one representation on both sides. Today:
 This ADR fixes the representation: **a contract version is the capability contract's major version, a positive integer.** Minor and patch versions are backward-compatible by the capability contract rules, so they never decide compatibility.
 - ER-01 declares the canonical form in Shared.
 - ER-02 migrates stored binding versions to it. `v1`, `1` and `1.x.y` all normalise to `1`; a value that cannot be normalised is a data defect, reported and never guessed.
-- Compatibility is set membership: the binding's major version is in the release's `contract_versions` for the capability.
+- Compatibility is set membership: the binding's major version is in the release's `provider_support` contract versions for the binding's provider and capability.
+
+#### 2.1.2 Provider dimension of release support *(amendment A1)*
+
+ADR-SHARED-017 places support on **provider + capability + contract major**, not on the engine. One engine release can contain several providers, for example `baobab-iam.keycloak` and `baobab-iam.ory`. A release therefore records its support per provider:
+
+```text
+EngineRelease
+    └── provider_support[]
+            ├── provider_key        (<engine-id>.<provider-name>)
+            ├── capability_key      (a catalogued capability)
+            └── contract_versions[] (majors)
+```
+
+Every `provider_key` belongs to the release's engine, and every `capability_key` is in the Shared catalogue. Only `IMPLEMENTED` declared support is recorded; `PARTIAL` and planned capabilities never are. EA-09 certification can then name provider, capability, contract major and release without reconstructing which providers a release contained.
+
+#### 2.1.3 Declaration digest *(amendment A2)*
+
+`capability_provider_declaration_digest` binds the release to the provider declaration it was built from: `sha256` over the exact bytes of `.baobab/capability-provider.yaml` at `source_revision`. `provider_support` must equal what that declaration's `IMPLEMENTED` support says. The release therefore proves what the source declared when it was built. It is never reinterpreted from a later `main`.
 ### 2.2 Artifact identity
 
 An **artifact** is identified by content, never by name:
@@ -98,7 +117,7 @@ CANDIDATE ──approve──▶ APPROVED ──deprecate──▶ DEPRECATED
 | Status | Meaning |
 |---|---|
 | `CANDIDATE` | Recorded, not yet approved for desired state. |
-| `APPROVED` | May be named as an instance's desired release (§2.5). Approval is a controlled mutation under ADR-BCP-021, and in production is subject to the maker/checker rules of ADR-BCP-020. |
+| `APPROVED` | This immutable release may be used in desired-state operations: it may be named as an instance's desired release (§2.5). Approval is a controlled mutation under ADR-BCP-021, and in production is subject to the maker/checker rules of ADR-BCP-020. It is **not** certification (A3). |
 | `DEPRECATED` | May still run, but may no longer be newly desired. |
 | `REVOKED` | Must not run: a security or correctness withdrawal. It is terminal. |
 
@@ -107,6 +126,8 @@ CANDIDATE ──approve──▶ APPROVED ──deprecate──▶ DEPRECATED
 - Reads of desired state also refuse to return a release that is not `APPROVED` or `DEPRECATED`. This is a second guard, so a desired pointer to a revoked release can never reach deployment tooling.
 
 An instance observed running a `REVOKED` release is critical drift (§2.7).
+
+**Approval is not certification** *(amendment A3)*. `APPROVED` says the artifact may be deployed. Whether a specific provider, capability and contract major in that release passed qualification is a separate record: EA-09's `ProviderCapabilityCertification(provider, capability, contract major, engine release, …)`. A release can be `APPROVED` while some of its provider–capability pairs are uncertified. Environment policy (a Shared policy value) decides whether desired-state eligibility or provider activation also requires certification. Neither status implies the other.
 
 ### 2.5 Desired release
 
@@ -203,7 +224,7 @@ A ProviderMigration's plan (§120) may name the target provider's instances and 
 Shared owns the contracts; the Control Plane implements them:
 
 - `contracts/topology/v1/`, a new domain:
-  - `release.schema.json`: EngineRelease, Artifact, Provenance, the lifecycle enum;
+  - `release.schema.json`: EngineRelease (with `provider_support` and `capability_provider_declaration_digest`), Artifact, Provenance, the lifecycle enum;
   - `deployment-observation.schema.json`: DeploymentObservation and the derived observed release;
   - `release-policy.yaml`: grace periods, observation TTL bounds, production provenance requirement;
   - `openapi` routes for recording and reading releases, setting the desired release (through the changeset API once ADR-BCP-021 lands), and submitting and reading observations;
@@ -223,7 +244,9 @@ Shared owns the contracts; the Control Plane implements them:
 | ER-03 | Desired release on EngineInstance through a controlled change. |
 | ER-04 | DeploymentObservation intake from registered reporters under workload identity; observed release derivation. |
 | ER-05 | Drift and readiness integration; events; metrics. |
-| ER-06 | Resolution compatibility enforcement (§2.8 phase 2). **Needs separate acceptance.** |
+| ER-06 | Resolution compatibility enforcement (§2.8 phase 2). **Not accepted by this ADR** *(amendment A4)*: it needs its own explicit activation decision on phase-1 evidence. |
+
+Acceptance authorises ER-01 to ER-05. Observation stays observation: nothing in ER-01 to ER-05 changes capability resolution. Turning an observed incompatibility into routing exclusion (ER-06) is a materially different operational consequence and is decided separately *(A4)*.
 
 ## 5. Non-goals
 
@@ -245,6 +268,7 @@ Shared owns the contracts; the Control Plane implements them:
   - This breaks the infrastructure boundary (§93).
   - The Control Plane would need cluster credentials.
 - **Tag plus digest as a composite identity.** The tag adds nothing trustworthy and invites comparing tags.
+- **Engine-level contract versions** (the original `contract_versions` per capability). Superseded by A1: it cannot tell which of an engine's providers supports a contract, and EA-09 certification needs that.
 
 ## 7. Consequences
 
