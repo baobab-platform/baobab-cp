@@ -30,6 +30,21 @@ capabilities:
     event_schemas:
     - events.schema.json#/$defs/PaymentCreated
   data_classification: TENANT_CONFIDENTIAL
+- capability_key: payment.intent.cancel
+  name: Cancel payment intent
+  description: Cancel an uncaptured payment intent, voiding any authorisation it holds.
+  domain: payment
+  owner: baobab-payments
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: payment.schema.json#/$defs/CancelPaymentRequest
+    response_schema: payment.schema.json#/$defs/PaymentIntent
+    error_schema: ../../errors/v1/problem-details.schema.json
+    event_schemas:
+    - events.schema.json#/$defs/PaymentCancelled
+  data_classification: TENANT_CONFIDENTIAL
 - capability_key: payment.payment.authorize
   name: Authorise payment
   description: Authorise funds for a payment intent through an eligible provider.
