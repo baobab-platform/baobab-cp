@@ -39,7 +39,7 @@ func TestNewPrincipalIDIsUniqueAndUUIDShaped(t *testing.T) {
 func TestExternalIdentityValidateIsProviderNeutral(t *testing.T) {
 	for _, providerType := range []string{"keycloak", "ory", "google", ""} {
 		e := ExternalIdentity{
-			PrincipalID: "p-1",
+			PrincipalID:  "p-1",
 			Issuer:       "https://identity.example",
 			Subject:      "sub-1",
 			ProviderType: providerType,
