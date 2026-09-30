@@ -59,6 +59,35 @@ func TestIdentityServiceResolveReturnsExistingPrincipal(t *testing.T) {
 	}
 }
 
+func TestIdentityServiceResolveOryIssuerUsesCanonicalPath(t *testing.T) {
+	repo := repository.NewInMemoryRepository()
+	ctx := context.Background()
+	principal := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "workload", Status: "ACTIVE"}
+	if err := repo.CreateIdentity(ctx, principal); err != nil {
+		t.Fatalf("seed principal: %v", err)
+	}
+	external := domain.ExternalIdentity{
+		ID:           domain.NewExternalIdentityID(),
+		PrincipalID:  principal.ID,
+		Issuer:       "https://identity.example",
+		Subject:      "ory-workload-subject",
+		ProviderType: "ory",
+		Status:       "ACTIVE",
+	}
+	if err := repo.LinkExternalIdentity(ctx, external); err != nil {
+		t.Fatalf("seed Ory external identity: %v", err)
+	}
+
+	service := IdentityService{Repository: repo, Provision: deny}
+	resolved, err := service.Resolve(ctx, external.Issuer, external.Subject, "workload")
+	if err != nil {
+		t.Fatalf("resolve Ory identity: %v", err)
+	}
+	if resolved.ID != principal.ID || resolved.ActorType != "workload" {
+		t.Fatalf("unexpected canonical principal: %+v", resolved)
+	}
+}
+
 // TestIdentityServiceResolveDeniesProvisioningByDefault covers ADR-0004
 // §13's "automatic provisioning SHOULD not be universal": a nil
 // ProvisioningPolicy fails closed rather than silently creating identities.
