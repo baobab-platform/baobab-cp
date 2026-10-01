@@ -335,3 +335,84 @@ func TestBindingProviderBackfill(t *testing.T) {
 		t.Fatalf("after 000083: provider %q, constraint validated %v, candidates for a v2 binding %d", suspended, validated, candidates)
 	}
 }
+
+// TestBindingContractMajor upgrades bindings stored before contract
+// versions were majors (000085, ADR-BCP-025 section 2.1.1): "v1", "1.0.0"
+// and "01" become "1", a binding already holding its major is untouched, a
+// value that is no contract major stops the migration and is named, and
+// once corrected the migration applies and the column holds majors only.
+func TestBindingContractMajor(t *testing.T) {
+	baseURL := os.Getenv("TEST_DATABASE_URL")
+	if baseURL == "" {
+		t.Skip("TEST_DATABASE_URL not set; skipping PostgreSQL integration test")
+	}
+	ctx := context.Background()
+	pool := throwawayDatabase(t, ctx, baseURL)
+	migrations, err := LoadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyMigrationsThrough(ctx, pool, migrations, 84); err != nil {
+		t.Fatalf("apply migrations through 000084: %v", err)
+	}
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	const (
+		capability = "81000000-0000-0000-0000-000000000001"
+		engine     = "81000000-0000-0000-0000-000000000002"
+		instance   = "81000000-0000-0000-0000-000000000003"
+	)
+	exec(`INSERT INTO capability.capability(capability_id, code, name) VALUES ($1, 'test.major.capability', 'Major')`, capability)
+	exec(`INSERT INTO topology.engine(engine_id, code, name) VALUES ($1::uuid, 'major-engine', 'major-engine')`, engine)
+	exec(`INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status) VALUES ($1::uuid, $2::uuid, 'af-south-1', 'staging', 'ACTIVE')`, instance, engine)
+	stored := map[string]string{"v1": "1", "1.0.0": "1", "01": "1", "2": "2", "V3.1": "3", "latest": ""}
+	ids := map[string]string{}
+	i := 0
+	for value := range stored {
+		i++
+		scope := fmt.Sprintf("81000000-0000-0000-0000-0000000003%02d", i)
+		id := fmt.Sprintf("81000000-0000-0000-0000-0000000004%02d", i)
+		exec(`INSERT INTO capability.capability_scope(scope_id, tenant_id) VALUES ($1::uuid, $2)`, scope, fmt.Sprintf("tn_major%02d", i))
+		exec(`INSERT INTO capability.capability_binding(id, capability_id, engine_instance_id, scope_id, binding_mode, priority, status, contract_version, effective_from)
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'PRIMARY', 1, 'SUSPENDED', $5, now())`, id, capability, instance, scope, value)
+		ids[value] = id
+	}
+
+	err = ApplyMigrations(ctx, pool)
+	if err == nil || !strings.Contains(err.Error(), ids["latest"]+" ('latest')") || strings.Contains(err.Error(), ids["v1"]) {
+		t.Fatalf("000085 over a binding that is no contract major: %v", err)
+	}
+	exec(`UPDATE capability.capability_binding SET contract_version = '4' WHERE id = $1::uuid`, ids["latest"])
+	stored["latest"] = "4"
+	if err := ApplyMigrations(ctx, pool); err != nil {
+		t.Fatalf("000085 once every binding is correctable: %v", err)
+	}
+	for value, want := range stored {
+		var got string
+		var version int64
+		if err := pool.QueryRow(ctx, `SELECT contract_version, version FROM capability.capability_binding WHERE id = $1::uuid`, ids[value]).Scan(&got, &version); err != nil {
+			t.Fatal(err)
+		}
+		// "2" and the corrected "4" were already majors; only rewritten
+		// bindings move their version.
+		wantVersion := int64(2)
+		if value == "2" {
+			wantVersion = 1
+		}
+		if value == "latest" {
+			wantVersion = 1
+		}
+		if got != want || version != wantVersion {
+			t.Fatalf("binding stored %q: now %q at version %d, want %q at version %d", value, got, version, want, wantVersion)
+		}
+	}
+	_, err = pool.Exec(ctx, `UPDATE capability.capability_binding SET contract_version = 'v1' WHERE id = $1::uuid`, ids["2"])
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.ConstraintName != "capability_binding_contract_major_check" {
+		t.Fatalf("storing a contract version that is not a major: %v", err)
+	}
+}

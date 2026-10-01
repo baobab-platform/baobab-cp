@@ -116,8 +116,8 @@ func TestStatefulMigrationEngineTasks(t *testing.T) {
 		scopeA, tenantA, scopeB, tenantB)
 	exec(`INSERT INTO capability.capability_binding (id, capability_id, engine_instance_id, scope_id, binding_mode, status,
 		contract_version, effective_from, provider_id)
-		VALUES ($1::uuid, $3::uuid, $4::uuid, $5::uuid, 'PRIMARY', 'ACTIVE', 'v1', now() - interval '1 day', $7::uuid),
-			($2::uuid, $3::uuid, $4::uuid, $6::uuid, 'PRIMARY', 'ACTIVE', 'v1', now() - interval '1 day', $7::uuid)`,
+		VALUES ($1::uuid, $3::uuid, $4::uuid, $5::uuid, 'PRIMARY', 'ACTIVE', '1', now() - interval '1 day', $7::uuid),
+			($2::uuid, $3::uuid, $4::uuid, $6::uuid, 'PRIMARY', 'ACTIVE', '1', now() - interval '1 day', $7::uuid)`,
 		bindingA, bindingB, capability, sourceInstance, scopeA, scopeB, sourceProvider)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	if err := repo.RecordHealthObservation(ctx, health.Observation{Subject: health.Subject{EngineInstanceID: targetInstance},

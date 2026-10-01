@@ -309,7 +309,7 @@ func (s capabilityBindingApplyStep) Apply(ctx context.Context, _ provisioningdom
 	for _, b := range s.manifest.CapabilityBindings {
 		desired := DesiredCapabilityBinding{
 			CapabilityKey: b.CapabilityKey, EngineID: b.EngineID, EngineInstanceID: b.EngineInstanceID,
-			ScopeID: s.scopeID, BindingMode: b.Mode, Priority: b.Priority, ContractVersion: "v1",
+			ScopeID: s.scopeID, BindingMode: b.Mode, Priority: b.Priority, ContractVersion: "1",
 			EffectiveFrom: s.now(),
 		}
 		if _, _, err := s.provisioner.Apply(ctx, desired, trusted); err != nil {

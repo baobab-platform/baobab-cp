@@ -119,6 +119,7 @@ var canonicalMigrationNames = []string{
 	"000082_engine_releases.sql",
 	"000083_binding_provider_integrity.sql",
 	"000084_engine_release_approval_changeset.sql",
+	"000085_binding_contract_major.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
