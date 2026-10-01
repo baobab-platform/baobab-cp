@@ -81,6 +81,7 @@ func main() {
 	// ADR-BCP-018 section 130 state gauges read on scrape, cached so frequent
 	// scrapes do not become frequent database reads.
 	metrics.Default.Register(&metrics.CachedCollector{Collector: resolverrepo.OrganisationMetricsCollector{Repo: resolverRepository}, TTL: 30 * time.Second})
+	metrics.Default.Register(&metrics.CachedCollector{Collector: resolverrepo.TopologyMetricsCollector{Repo: resolverRepository}, TTL: 30 * time.Second})
 	// ADR-BCP-017: INTERNAL classification is evaluated by the Control Plane
 	// from governed relationships on the default platform.
 	eligibility := &svcorg.EligibilityResolver{Orgs: resolverRepository}

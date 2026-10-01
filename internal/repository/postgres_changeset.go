@@ -783,6 +783,14 @@ func (r *PostgresRepository) applyToTarget(ctx context.Context, tx pgx.Tx, c cha
 		if err := checkTargetMakerChecker(ctx, tx, c, approver, approverSubject); err != nil {
 			return "", "", false, err
 		}
+		var previousStatus string
+		if err := tx.QueryRow(ctx, `SELECT status FROM topology.engine_release WHERE release_key = $1 FOR UPDATE`,
+			c.DesiredChange.ReleaseID).Scan(&previousStatus); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return "", "", false, ErrChangesetPlanStale
+			}
+			return "", "", false, err
+		}
 		res, err := tx.Exec(ctx, `UPDATE topology.engine_release SET status = $2, status_changed_by = $3, status_changed_at = $4,
 			status_reason = $5 WHERE release_key = $1 AND status = ANY($6)`,
 			c.DesiredChange.ReleaseID, kind.ToStatus, approver, now, releaseStatusReason(c.ChangesetID, c.Reason), kind.FromStatus)
@@ -791,6 +799,9 @@ func (r *PostgresRepository) applyToTarget(ctx context.Context, tx pgx.Tx, c cha
 		}
 		if res.RowsAffected() != 1 {
 			return "", "", false, ErrChangesetPlanStale
+		}
+		if err := publishEngineReleaseStatusChanged(ctx, tx, r.eventSource(), c.DesiredChange.ReleaseID, previousStatus, kind.ToStatus, now); err != nil {
+			return "", "", false, err
 		}
 		if err := tx.QueryRow(ctx, `SELECT status FROM topology.engine_release WHERE release_key = $1`,
 			c.DesiredChange.ReleaseID).Scan(&status); err != nil {
@@ -805,7 +816,7 @@ func (r *PostgresRepository) applyToTarget(ctx context.Context, tx pgx.Tx, c cha
 		if !slices.Contains(kind.FromStatus, target.Status) {
 			return "", "", false, ErrChangesetPlanStale
 		}
-		ok, err := setDesiredRelease(ctx, tx, c.DesiredChange.EngineInstanceID, c.DesiredChange.ReleaseID, revision, c.ChangesetID, now)
+		ok, err := setDesiredRelease(ctx, tx, r.eventSource(), c.DesiredChange.EngineInstanceID, c.DesiredChange.ReleaseID, revision, c.ChangesetID, now)
 		if err != nil {
 			return "", "", false, err
 		}

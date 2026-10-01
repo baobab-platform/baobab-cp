@@ -9,6 +9,7 @@ import (
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
+	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/topology/release"
 )
@@ -57,6 +58,7 @@ func (h deploymentObservationHandler) submit(w http.ResponseWriter, r *http.Requ
 		scope, registered = h.reporters.Reporter(principal.ClientID)
 	}
 	if !registered || !scope.Allows(req.Environment, req.Region) {
+		metrics.DeploymentObservationRejected.Inc(release.ReasonObservationOutOfScope)
 		problem(w, r, http.StatusForbidden, release.ReasonObservationOutOfScope,
 			"the reporter is not registered for the environment and region this observation names", false)
 		return
@@ -94,6 +96,9 @@ func (h deploymentObservationHandler) observedRelease(w http.ResponseWriter, r *
 
 func (h deploymentObservationHandler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	var invalid *release.ErrInvalid
+	if errors.As(err, &invalid) && (invalid.Code == release.ReasonObservationInstanceUnknown || invalid.Code == release.ReasonObservationWindowInvalid) {
+		metrics.DeploymentObservationRejected.Inc(invalid.Code)
+	}
 	switch {
 	case errors.As(err, &invalid) && invalid.Code == release.ReasonObservationInstanceUnknown:
 		problem(w, r, http.StatusNotFound, invalid.Code, invalid.Detail, false)

@@ -158,6 +158,9 @@ func (r *PostgresRepository) RecordEngineRelease(ctx context.Context, req releas
 	if err != nil {
 		return release.Release{}, false, err
 	}
+	if err := publishEngineReleaseRecorded(ctx, tx, r.eventSource(), recorded); err != nil {
+		return release.Release{}, false, err
+	}
 	return recorded, false, tx.Commit(ctx)
 }
 
