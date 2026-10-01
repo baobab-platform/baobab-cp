@@ -64,3 +64,58 @@ func TestLoadWorkloadRegistryFileMalformedYAML(t *testing.T) {
 		t.Fatal("expected an error for malformed YAML")
 	}
 }
+
+// TestWorkloadRegistryReporters: a workload is a reporter (ADR-BCP-025
+// section 2.9) only when it is ACTIVE, may hold deployment:observe and lists
+// regions; it may report only for its environment and those regions.
+func TestWorkloadRegistryReporters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.yaml")
+	if err := os.WriteFile(path, []byte(`
+workloads:
+  controller:
+    environment: staging
+    allowed_scopes: ["deployment:observe"]
+    deployment_regions: [af-south-1, eu-west-1]
+    status: ACTIVE
+  suspended:
+    environment: staging
+    allowed_scopes: ["deployment:observe"]
+    deployment_regions: [af-south-1]
+    status: SUSPENDED
+  no-regions:
+    environment: staging
+    allowed_scopes: ["deployment:observe"]
+    status: ACTIVE
+  no-scope:
+    environment: staging
+    allowed_scopes: ["context:resolve"]
+    deployment_regions: [af-south-1]
+    status: ACTIVE
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := LoadWorkloadRegistryFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, client := range []string{"suspended", "no-regions", "no-scope", "unknown"} {
+		if _, ok := registry.Reporter(client); ok {
+			t.Fatalf("%s must not be a reporter", client)
+		}
+	}
+	scope, ok := registry.Reporter("controller")
+	if !ok {
+		t.Fatal("controller must be a reporter")
+	}
+	for _, c := range []struct {
+		environment, region string
+		want                bool
+	}{
+		{"staging", "af-south-1", true}, {"staging", "eu-west-1", true},
+		{"staging", "us-east-1", false}, {"production", "af-south-1", false}, {"", "af-south-1", false},
+	} {
+		if got := scope.Allows(c.environment, c.region); got != c.want {
+			t.Fatalf("Allows(%q, %q) = %v, want %v", c.environment, c.region, got, c.want)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
@@ -42,7 +43,47 @@ type WorkloadRegistry interface {
 // default -- see api.Dependencies.WorkloadRegistry) disables the check
 // entirely, preserving exactly today's behavior until that snapshot exists.
 type StaticWorkloadRegistry struct {
-	active map[string]bool
+	active    map[string]bool
+	reporters map[string]ReporterScope
+}
+
+// ReporterScope is where a registered deployment-observation reporter may
+// report (ADR-BCP-025 section 2.9): its workload-registry `environment` and
+// `deployment_regions`.
+type ReporterScope struct {
+	Environment string
+	Regions     []string
+}
+
+// Allows reports whether an observation of environment and region is inside
+// the reporter's registration.
+func (s ReporterScope) Allows(environment, region string) bool {
+	if s.Environment == "" || environment != s.Environment {
+		return false
+	}
+	for _, r := range s.Regions {
+		if r == region {
+			return true
+		}
+	}
+	return false
+}
+
+// ReporterRegistry answers where a workload is registered to report
+// deployment observations. A workload that is unknown, not ACTIVE, not
+// allowed deployment:observe, or lists no region has no scope: an
+// observation from it is refused, never stored.
+type ReporterRegistry interface {
+	Reporter(clientID string) (ReporterScope, bool)
+}
+
+// ObserveScope is the workload scope that makes a workload a reporter.
+const ObserveScope = "deployment:observe"
+
+// Reporter implements ReporterRegistry.
+func (r *StaticWorkloadRegistry) Reporter(clientID string) (ReporterScope, bool) {
+	scope, ok := r.reporters[clientID]
+	return scope, ok
 }
 
 func (r *StaticWorkloadRegistry) IsActive(clientID string) bool {
@@ -57,7 +98,10 @@ func (r *StaticWorkloadRegistry) IsActive(clientID string) bool {
 // baobab-platform/shared's own concern, not re-modelled here.
 type workloadRegistryFile struct {
 	Workloads map[string]struct {
-		Status string `yaml:"status"`
+		Status            string   `yaml:"status"`
+		Environment       string   `yaml:"environment"`
+		AllowedScopes     []string `yaml:"allowed_scopes"`
+		DeploymentRegions []string `yaml:"deployment_regions"`
 	} `yaml:"workloads"`
 }
 
@@ -82,8 +126,12 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 		return nil, fmt.Errorf("parse workload registry file: %w", err)
 	}
 	active := make(map[string]bool, len(parsed.Workloads))
+	reporters := map[string]ReporterScope{}
 	for clientID, entry := range parsed.Workloads {
 		active[clientID] = entry.Status == "ACTIVE"
+		if active[clientID] && slices.Contains(entry.AllowedScopes, ObserveScope) && entry.Environment != "" && len(entry.DeploymentRegions) > 0 {
+			reporters[clientID] = ReporterScope{Environment: entry.Environment, Regions: entry.DeploymentRegions}
+		}
 	}
-	return &StaticWorkloadRegistry{active: active}, nil
+	return &StaticWorkloadRegistry{active: active, reporters: reporters}, nil
 }

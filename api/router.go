@@ -139,6 +139,10 @@ type Dependencies struct {
 	// EngineReleases backs the /v1/engine-releases routes (ADR-BCP-025
 	// gate ER-02); nil disables them.
 	EngineReleases repository.EngineReleaseRepository
+	// DeploymentObservations backs deployment observation intake and reads
+	// (ADR-BCP-025 gate ER-04). Intake needs WorkloadRegistry to implement
+	// auth.ReporterRegistry; without it every observation is refused.
+	DeploymentObservations repository.ObservationRepository
 	// DesiredReleases backs release deprecation and revocation and the
 	// desired-release read (ADR-BCP-025 gate ER-03); it needs
 	// EngineReleases.
@@ -388,6 +392,16 @@ func New(dependencies Dependencies) http.Handler {
 			r.With(a.authorize(a.adminVerifier, "human", "topology:write"), a.requireAdminRole(nil, true)).Post("/v1/engine-releases/{releaseID}/status-changes", releases.changeStatus)
 			r.With(a.adminOrWorkload("topology:read", "desired-release:read")).Get("/v1/engine-instances/{engineInstanceID}/desired-release", releases.desiredRelease)
 		}
+	}
+	if dependencies.DeploymentObservations != nil {
+		// ADR-BCP-025 gate ER-04: only a registered reporter workload with
+		// deployment:observe submits (an administrator is not a reporter);
+		// administrators read under topology:read.
+		reporters, _ := dependencies.WorkloadRegistry.(auth.ReporterRegistry)
+		observations := deploymentObservationHandler{repo: dependencies.DeploymentObservations, reporters: reporters}
+		r.With(a.authorize(a.workloadVerifier, "workload", auth.ObserveScope)).Post("/v1/deployment-observations", observations.submit)
+		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/engine-instances/{engineInstanceID}/deployment-observations", observations.list)
+		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/engine-instances/{engineInstanceID}/observed-release", observations.observedRelease)
 	}
 	if dependencies.PlatformAccounts != nil {
 		// ADR-BCP-018 ORG-07: the account lifecycle is canonical registry

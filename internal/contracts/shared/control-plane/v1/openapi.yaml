@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.24.0
+  version: 1.25.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -4625,6 +4625,132 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /deployment-observations:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: submitDeploymentObservation
+      summary: Report what is running on an engine instance
+      description: >-
+        Appends one DeploymentObservation (ADR-BCP-025 section 2.6, gate
+        ER-04). Only a registered reporter calls it: infrastructure tooling
+        authenticated by workload identity with deployment:observe, never the
+        engine it describes (section 2.9). The reporter must be registered in
+        the workload registry for the observation's environment (its
+        environment) and region (its deployment_regions); otherwise the
+        observation is refused, never stored
+        (DEPLOYMENT_OBSERVATION_OUT_OF_SCOPE, 403). An unknown engine
+        instance is DEPLOYMENT_OBSERVATION_INSTANCE_UNKNOWN (404); a validity
+        window that is empty or outside release-policy.yaml
+        observation.ttl_seconds is DEPLOYMENT_OBSERVATION_WINDOW_INVALID
+        (422). The Control Plane mints observation_id, assigns recorded_at
+        and the monotonic ingestion_sequence, and takes source from the
+        verified caller; none is accepted in the request. Observations are
+        append-only, so every accepted submission is a new observation. A
+        mismatch between the observed environment or region and the
+        instance's own is stored and surfaces as
+        DEPLOYMENT_LOCATION_MISMATCH drift; it never edits the instance.
+        Observation does not change capability resolution (gate ER-06 is
+        not accepted).
+      security:
+        - workloadOidc: [deployment:observe]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../topology/v1/deployment-observation.schema.json#/$defs/DeploymentObservationSubmission
+      responses:
+        "201":
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: ../../topology/v1/deployment-observation.schema.json#/$defs/DeploymentObservation
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /engine-instances/{engine_instance_id}/deployment-observations:
+    parameters:
+      - $ref: "#/components/parameters/EngineInstanceId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Topology]
+      operationId: listEngineInstanceDeploymentObservations
+      summary: List an engine instance's deployment observations
+      description: >-
+        The instance's accepted observations, newest first by observed_at and
+        then ingestion_sequence (ADR-BCP-025 section 2.6, gate ER-04),
+        including expired ones: observations are append-only.
+      security:
+        - adminOidc: [topology:read]
+      parameters:
+        - name: page_token
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+      responses:
+        "200":
+          description: A page of observations
+          content:
+            application/json:
+              schema:
+                $ref: ../../topology/v1/deployment-observation.schema.json#/$defs/DeploymentObservationPage
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /engine-instances/{engine_instance_id}/observed-release:
+    parameters:
+      - $ref: "#/components/parameters/EngineInstanceId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Topology]
+      operationId: getEngineInstanceObservedRelease
+      summary: Read the release an engine instance is observed running
+      description: >-
+        The observed release derived from the instance's current observation
+        (ADR-BCP-025 section 2.6, gate ER-04): a release, UNKNOWN_ARTIFACT,
+        FOREIGN_ARTIFACT, MIXED, or UNKNOWN when no current observation
+        exists (none, expired or future-dated). The current observation is
+        the latest observed_at, then the highest ingestion_sequence.
+        Derived on read; nothing here changes resolution.
+      security:
+        - adminOidc: [topology:read]
+      responses:
+        "200":
+          description: The observed release
+          content:
+            application/json:
+              schema:
+                $ref: ../../topology/v1/deployment-observation.schema.json#/$defs/ObservedRelease
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
   /engine-migration-tasks:

@@ -57,6 +57,12 @@ type releasePolicyDocument struct {
 		MayBecomeDesired  []string `yaml:"may_become_desired"`
 		ReadableAsDesired []string `yaml:"readable_as_desired"`
 	} `yaml:"desired_state"`
+	Observation struct {
+		TTLSeconds struct {
+			Minimum int `yaml:"minimum"`
+			Maximum int `yaml:"maximum"`
+		} `yaml:"ttl_seconds"`
+	} `yaml:"observation"`
 	StatusTransitions struct {
 		Transitions []struct {
 			Command string   `yaml:"command"`
@@ -86,8 +92,9 @@ func loadReleasePolicy() (releasePolicyDocument, error) {
 		}
 		if len(doc.Approval.CertificationRequired) == 0 || len(doc.Approval.ProvenanceRequired) == 0 ||
 			len(doc.DesiredState.MayBecomeDesired) == 0 || len(doc.DesiredState.ReadableAsDesired) == 0 ||
-			len(doc.StatusTransitions.Transitions) == 0 {
-			releasePolicyErr = fmt.Errorf("%s lacks approval, desired_state or status_transitions", releasePolicyPath)
+			len(doc.StatusTransitions.Transitions) == 0 ||
+			doc.Observation.TTLSeconds.Minimum < 1 || doc.Observation.TTLSeconds.Maximum < doc.Observation.TTLSeconds.Minimum {
+			releasePolicyErr = fmt.Errorf("%s lacks approval, desired_state, status_transitions or observation.ttl_seconds", releasePolicyPath)
 			return
 		}
 		releasePolicyDoc = doc
