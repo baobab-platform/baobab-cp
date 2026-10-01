@@ -188,8 +188,8 @@ func planDelegation(c *Catalogue, caller string, source Grant, sources map[strin
 	if !p.Delegable {
 		return Grant{}, refuse(CodeDelegationInvalid, "%s is not delegable", q.Permission)
 	}
-	if !sameScope(source.Scope, q.Scope) {
-		return Grant{}, refuse(CodeDelegationInvalid, "a delegation carries the source grant's scope exactly")
+	if !Contains(source.Scope, q.Scope) {
+		return Grant{}, refuse(CodeDelegationInvalid, "a delegation's scope stays within the source grant's: it must be the same or provably narrower")
 	}
 	if source.DelegableDepth < 1 || source.DelegationDepth+1 > maxDelegationHopsDepth {
 		return Grant{}, refuse(CodeDelegationInvalid, "the source grant allows no further delegation")
@@ -208,10 +208,10 @@ func planDelegation(c *Catalogue, caller string, source Grant, sources map[strin
 	}
 	until := q.ValidUntil.UTC()
 	g := Grant{
-		PrincipalID: q.PrincipalID, Permission: q.Permission, Scope: source.Scope, Conditions: source.Conditions,
+		PrincipalID: q.PrincipalID, Permission: q.Permission, Scope: q.Scope, Conditions: source.Conditions,
 		GrantType: TypeTimeBound, Source: SourceDelegation, DelegatedFromGrantID: source.GrantID,
 		DelegationDepth: source.DelegationDepth + 1, DelegableDepth: q.DelegableDepth,
-		RiskClass: EffectiveRisk(p, source.Scope), ValidFrom: now, ValidUntil: &until, Status: StatusActive,
+		RiskClass: EffectiveRisk(p, q.Scope), ValidFrom: now, ValidUntil: &until, Status: StatusActive,
 		GrantedBy: caller, Reason: q.Reason, CreatedAt: now, Version: 1,
 	}
 	if err := g.Validate(c); err != nil {
@@ -296,14 +296,14 @@ func Replaceable(g Grant, now time.Time) bool {
 }
 
 // AddsAuthority reports whether replacing old with next would give the
-// principal authority old did not: another permission, another scope (the
-// comparison is exact until scope containment is available), a later end,
+// principal authority old did not: another permission, a scope the old one
+// does not contain, a later end,
 // more delegation, or a weaker assurance condition. A replacement that adds
 // none is no authority change and needs no second person, as a revoke does
 // not.
 func AddsAuthority(old, next Grant) bool {
 	switch {
-	case old.Permission != next.Permission, !sameScope(old.Scope, next.Scope):
+	case old.Permission != next.Permission, !Contains(old.Scope, next.Scope):
 		return true
 	case next.DelegableDepth > old.DelegableDepth:
 		return true
