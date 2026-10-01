@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.22.0
+  version: 1.23.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -4905,8 +4905,10 @@ paths:
         scope (403) and meets the target's own maker-checker rule, exactly as
         on the kind's direct route: a MARKET_ACTIVATION approver is neither
         the market's creator nor its last editor (MARKET_SELF_ACTIVATION,
-        403) and a MAPPING_ACTIVATION approver is not the mapping's creator
-        (MAPPING_SELF_APPROVAL, 403). A
+        403), a MAPPING_ACTIVATION approver is not the mapping's creator
+        (MAPPING_SELF_APPROVAL, 403) and an ENGINE_RELEASE_APPROVAL approver
+        is not the principal who recorded the release
+        (RELEASE_SELF_APPROVAL, 403). A
         decision naming another plan or digest is PLAN_DIGEST_MISMATCH (409);
         a stale plan is PLAN_STALE (409). The changeset's revision is
         required in If-Match.

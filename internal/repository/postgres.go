@@ -57,6 +57,10 @@ type PostgresRepository struct {
 	// EventSource overrides defaultEventSource (outbox.go) when set;
 	// production callers normally leave this at its zero value.
 	EventSource string
+	// Environment is the Control Plane's own deployment environment
+	// (BAOBAB_ENVIRONMENT). ENGINE_RELEASE_APPROVAL applies release-policy.yaml
+	// approval requirements for it as well as for the engine's instances.
+	Environment string
 }
 
 var _ MappingRepository = (*PostgresRepository)(nil)

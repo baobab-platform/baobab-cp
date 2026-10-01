@@ -407,3 +407,114 @@ func TestProviderActivationChangeset(t *testing.T) {
 		t.Fatalf("a blocked activation changed the provider to %s", status)
 	}
 }
+
+// TestEngineReleaseApprovalChangeset drives ENGINE_RELEASE_APPROVAL
+// (ADR-BCP-025 section 2.4) through the routes: an administrator records a
+// CANDIDATE release, and only an approval changeset makes it APPROVED.
+// Approving needs engine-release:approve as well as changeset:approve; the
+// administrator who recorded the release never approves it
+// (RELEASE_SELF_APPROVAL); another does, and apply approves the release
+// under that approver's principal. Every response conforms.
+func TestEngineReleaseApprovalChangeset(t *testing.T) {
+	ctx, admin, repo := activationDatabase(t)
+	short := strings.ReplaceAll(domain.NewUUIDv7(), "-", "")[20:]
+	engine := "baobab-apiapproval" + short
+	capabilityKey := "test.apiapproval" + short + ".perform"
+	var releaseID string
+	cleanup := func() {
+		cleanupChangesets(ctx, admin, func() []string { return []string{releaseID} })
+		tx, err := admin.Begin(ctx)
+		if err == nil {
+			// Releases are never deleted in operation; this test-only
+			// cleanup turns the immutability triggers off for itself.
+			tx.Exec(ctx, `SET LOCAL session_replication_role = replica`)
+			for _, stmt := range []string{
+				`DELETE FROM topology.engine_release_artifact WHERE engine_release_id IN (SELECT r.engine_release_id FROM topology.engine_release r JOIN topology.engine e ON e.engine_id = r.engine_id WHERE e.code = $1)`,
+				`DELETE FROM topology.engine_release_provider_support WHERE engine_release_id IN (SELECT r.engine_release_id FROM topology.engine_release r JOIN topology.engine e ON e.engine_id = r.engine_id WHERE e.code = $1)`,
+				`DELETE FROM topology.engine_release WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`,
+			} {
+				tx.Exec(ctx, stmt, engine)
+			}
+			tx.Commit(ctx)
+		}
+		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
+		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
+		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
+	}
+	cleanup()
+	t.Cleanup(cleanup)
+	var engineID string
+	mustNoError(t, admin.QueryRow(ctx, `INSERT INTO topology.engine (code, name) VALUES ($1, $1) RETURNING engine_id::text`, engine).Scan(&engineID))
+	_, err := admin.Exec(ctx, `INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status)
+		VALUES ($1, $2, 'af-south-1', 'staging', 'ACTIVE')`, domain.NewUUIDv7(), engineID)
+	mustNoError(t, err)
+	_, err = repo.SyncCapabilityCatalogue(ctx, []repository.CatalogueCapability{{Capability: capabilitydomain.Capability{Key: capabilityKey,
+		Name: "API approval test", DomainKey: "test", Lifecycle: capabilitydomain.CapabilityLifecycleActive,
+		Maturity: capabilitydomain.CapabilityMaturitySupported}, ContractVersions: []int{1}, DataClassification: "INTERNAL",
+		Owner: engine, Source: "fixtures/api-approval-test", Digest: "sha256:" + strings.Repeat("8", 64)}})
+	mustNoError(t, err)
+
+	identities := repository.NewInMemoryRepository()
+	principals := map[string]string{}
+	principal := func(subject string, scopes ...string) auth.Principal {
+		p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "human", Status: "ACTIVE"}
+		mustNoError(t, identities.CreateIdentity(ctx, p))
+		mustNoError(t, identities.LinkExternalIdentity(ctx, domain.ExternalIdentity{ID: domain.NewExternalIdentityID(),
+			PrincipalID: p.ID, Issuer: testRealm, Subject: subject + "-" + short, Status: "ACTIVE"}))
+		principals[subject] = p.ID
+		set := map[string]struct{}{}
+		for _, s := range scopes {
+			set[s] = struct{}{}
+		}
+		return auth.Principal{Subject: subject + "-" + short, Issuer: testRealm, ActorType: "human", TokenID: "ra-" + subject, Scopes: set,
+			Roles: map[string]struct{}{RolePlatformAdmin: {}}}
+	}
+	h := activationHarness{t: t, dir: contracttest.SharedDir(t), handler: New(Dependencies{Store: &fakeStore{}, Identities: identities,
+		Changesets: repo, Operations: repo, EngineReleases: repo, AdminVerifier: tokenVerifier{
+			"recorder":  principal("recorder", "topology:write", "topology:read", "engine-release:approve", "changeset:read", "changeset:approve"),
+			"approver":  principal("approver", "changeset:read", "changeset:approve"),
+			"releaser":  principal("releaser", "engine-release:approve", "changeset:read", "changeset:approve", "topology:read"),
+			"requester": principal("requester", "changeset:read", "changeset:write", "operation:read"),
+		}})}
+
+	recorded := h.call(http.MethodPost, "/v1/engine-releases", "recorder", nil, map[string]any{"engine_id": engine, "release_version": "3.0.0",
+		"artifacts":                              []map[string]any{{"artifact_type": "OCI_IMAGE", "repository": "ghcr.io/baobab-platform/" + engine, "digest": "sha256:" + strings.Repeat("c", 52) + short}},
+		"provider_support":                       []map[string]any{{"provider_key": engine + ".engine", "capability_key": capabilityKey, "contract_versions": []int{1}}},
+		"capability_provider_declaration_digest": "sha256:" + strings.Repeat("d", 64), "source_revision": strings.Repeat("a", 40),
+		"reason": "Built from main."})
+	h.expect(recorded, http.StatusCreated, `"CANDIDATE"`, "record")
+	var rel struct {
+		ReleaseID       string `json:"release_id"`
+		Status          string `json:"status"`
+		StatusChangedBy string `json:"status_changed_by"`
+	}
+	mustNoError(t, json.Unmarshal(recorded.Body.Bytes(), &rel))
+	releaseID = rel.ReleaseID
+
+	// Only an engine release identifier names a release.
+	h.expect(h.call(http.MethodPost, "/v1/admin/changesets", "requester", map[string]string{"Idempotency-Key": "release-uuid-" + short},
+		map[string]any{"title": "Approve", "reason": "Reviewed.", "desired_change": map[string]any{"kind": "ENGINE_RELEASE_APPROVAL", "release_id": engineID}}),
+		http.StatusBadRequest, "", "a UUID release id")
+
+	c, submitted := h.submitted("requester", "release-approval-"+short, map[string]any{"kind": "ENGINE_RELEASE_APPROVAL", "release_id": releaseID})
+	if c.State != changeset.StateAwaitingApproval || c.ChangesetType != "MODIFY" {
+		t.Fatalf("submitted: %+v", c)
+	}
+	plan := h.call(http.MethodGet, "/v1/admin/changesets/"+c.ChangesetID+"/plan", "requester", nil, nil)
+	h.expect(plan, http.StatusOK, `"APPROVE_ENGINE_RELEASE"`, "plan")
+	h.conforms("changeset.schema.json", "ChangesetPlan", plan)
+	h.expect(h.decide(c, submitted, "approver"), http.StatusForbidden, "engine-release:approve", "an approver without engine-release:approve")
+	h.expect(h.decide(c, submitted, "recorder"), http.StatusForbidden, "RELEASE_SELF_APPROVAL", "the release's recorder approving")
+	h.expect(h.decide(c, submitted, "releaser"), http.StatusOK, `"APPROVED"`, "approve")
+	o := h.apply(c, "requester", "release-approval-apply-"+short)
+	if o.AffectedResources[0].ResourceType != "ENGINE_RELEASE" || o.AffectedResources[0].After != "APPROVED" ||
+		o.VerificationResult.Checks[0].Check != "ENGINE_RELEASE_STATUS_MATCHES" {
+		t.Fatalf("outcome: %+v", o)
+	}
+	got := h.call(http.MethodGet, "/v1/engine-releases/"+releaseID, "releaser", nil, nil)
+	h.expect(got, http.StatusOK, `"APPROVED"`, "read the approved release")
+	mustNoError(t, json.Unmarshal(got.Body.Bytes(), &rel))
+	if rel.StatusChangedBy != principals["releaser"] {
+		t.Fatalf("approved by %q, want the approver's principal %q", rel.StatusChangedBy, principals["releaser"])
+	}
+}

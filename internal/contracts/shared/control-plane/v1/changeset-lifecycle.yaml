@@ -215,6 +215,36 @@ change_kinds:
       # from it.
       - check: MIGRATION_CONFLICTS
         blocker: PROVIDER_MIGRATION_CONFLICT
+  # ADR-BCP-025 section 2.4. The only path from a recorded (CANDIDATE)
+  # engine release to APPROVED: recording never approves, and approval is a
+  # controlled mutation under ADR-BCP-021. Approval is not certification
+  # (amendment A3). The approver holds engine-release:approve, is never the
+  # requester, and never the principal who recorded the release (maker/
+  # checker, ADR-BCP-020). Releases are not revisioned: status is the only
+  # thing about a release that moves, and only forward
+  # (topology/v1 release-policy.yaml status_transitions).
+  ENGINE_RELEASE_APPROVAL:
+    target: ENGINE_RELEASE
+    changeset_type: MODIFY
+    from_status: [CANDIDATE]
+    to_status: APPROVED
+    approval_scope: "engine-release:approve"
+    operations: [APPROVE_ENGINE_RELEASE, VERIFY_ENGINE_RELEASE_STATE]
+    plan_checks:
+      # Every capability and contract major in the release's provider
+      # support is still in the Shared capability catalogue.
+      - check: SUPPORT_CATALOGUED
+        blocker: RELEASE_SUPPORT_NOT_CATALOGUED
+      # release-policy.yaml approval.provenance_required, for the Control
+      # Plane's own environment and every environment in which the
+      # release's engine has an instance that is not RETIRED.
+      - check: PROVENANCE
+        blocker: RELEASE_PROVENANCE_MISSING
+      # release-policy.yaml approval.certification_required, for the same
+      # environments. EA-09 records certification; until it does, an
+      # environment that requires it always blocks.
+      - check: CERTIFICATION
+        blocker: RELEASE_NOT_CERTIFIED
 # Codes a changeset carries as blocking_reasons, or its plan as blockers;
 # each is registered in authorization/v1/reason-code-registry.yaml under
 # changeset_blocker.
@@ -231,3 +261,6 @@ blocking_codes:
   - PROVIDER_NO_ELIGIBLE_INSTANCE
   - PROVIDER_HEALTH_NOT_ELIGIBLE
   - PROVIDER_MIGRATION_CONFLICT
+  - RELEASE_SUPPORT_NOT_CATALOGUED
+  - RELEASE_PROVENANCE_MISSING
+  - RELEASE_NOT_CERTIFIED

@@ -145,6 +145,23 @@
         }
       }
     },
+    "EngineReleaseApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "release_id"
+      ],
+      "description": "Approve a recorded CANDIDATE engine release through a governed change (ADR-BCP-025 section 2.4). A MODIFY changeset, and the only path from CANDIDATE to APPROVED: recording never approves. Planning inspects, side-effect free, each check in changeset-lifecycle.yaml change_kinds.ENGINE_RELEASE_APPROVAL.plan_checks: the release's provider support is still catalogued, and the provenance and certification topology/v1 release-policy.yaml approval requires for the Control Plane's environment and every environment the engine has a non-RETIRED instance in. Any failed check is a plan blocker. The approver holds engine-release:approve, is never the requester and never the release's recorder. Approval is not certification (amendment A3).",
+      "properties": {
+        "kind": {
+          "const": "ENGINE_RELEASE_APPROVAL"
+        },
+        "release_id": {
+          "$ref": "domain.schema.json#/$defs/engineReleaseId"
+        }
+      }
+    },
     "desiredChange": {
       "description": "What outcome is wanted, in canonical platform concepts, never provider commands (section 6). One kind per changeset; kinds are added additively.",
       "oneOf": [
@@ -162,6 +179,9 @@
         },
         {
           "$ref": "#/$defs/ProviderActivation"
+        },
+        {
+          "$ref": "#/$defs/EngineReleaseApproval"
         }
       ]
     },
@@ -505,6 +525,20 @@
                   "const": "MODIFY"
                 }
               }
+            },
+            {
+              "properties": {
+                "desired_change": {
+                  "properties": {
+                    "kind": {
+                      "const": "ENGINE_RELEASE_APPROVAL"
+                    }
+                  }
+                },
+                "changeset_type": {
+                  "const": "MODIFY"
+                }
+              }
             }
           ],
           "description": "The type is the one the change kind derives."
@@ -541,14 +575,16 @@
         "ACTIVATE_MAPPING",
         "VERIFY_MAPPING_STATE",
         "ACTIVATE_PROVIDER",
-        "VERIFY_PROVIDER_STATE"
+        "VERIFY_PROVIDER_STATE",
+        "APPROVE_ENGINE_RELEASE",
+        "VERIFY_ENGINE_RELEASE_STATE"
       ],
       "description": "Canonical changeset step operations. Extended additively as change kinds are added; each kind's operations are in changeset-lifecycle.yaml change_kinds."
     },
     "changesetStepResources": {
       "type": "object",
       "additionalProperties": false,
-      "description": "The one resource a step acts on and the statuses it moves between, in that resource's own lifecycle vocabulary. A step naming market_id is a market step (market status), one naming mapping_id a mapping step (mappingStatus), one naming provider_id a provider step (capability/v1 capabilityLifecycle); any other step is a tenant step, exactly as before market and mapping kinds existed (tenant lifecycleStatus). A step never names two resources. The Control Plane plans every step on the desired change's own resource; a plan whose step names another resource is never generated or applied.",
+      "description": "The one resource a step acts on and the statuses it moves between, in that resource's own lifecycle vocabulary. A step naming market_id is a market step (market status), one naming mapping_id a mapping step (mappingStatus), one naming provider_id a provider step (capability/v1 capabilityLifecycle), one naming release_id an engine release step (topology/v1 releaseStatus); any other step is a tenant step, exactly as before market and mapping kinds existed (tenant lifecycleStatus). A step never names two resources. The Control Plane plans every step on the desired change's own resource; a plan whose step names another resource is never generated or applied.",
       "properties": {
         "tenant_id": {
           "$ref": "domain.schema.json#/$defs/tenantId"
@@ -562,6 +598,9 @@
         "provider_id": {
           "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderId"
         },
+        "release_id": {
+          "$ref": "domain.schema.json#/$defs/engineReleaseId"
+        },
         "from_status": {
           "type": "string"
         },
@@ -571,7 +610,7 @@
         "target_revision": {
           "type": "integer",
           "minimum": 1,
-          "description": "The target's revision the plan was computed against, where the target is revisioned (markets, mappings and providers). Applying refuses a target whose revision has moved (PLAN_STALE), as the direct route's If-Match does."
+          "description": "The target's revision the plan was computed against, where the target is revisioned (markets, mappings and providers; an engine release is not revisioned, and its plan records revision 1). Applying refuses a target whose revision has moved (PLAN_STALE), as the direct route's If-Match does."
         }
       },
       "allOf": [
@@ -597,6 +636,11 @@
                 {
                   "required": [
                     "provider_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "release_id"
                   ]
                 }
               ]
@@ -634,6 +678,11 @@
                   "required": [
                     "provider_id"
                   ]
+                },
+                {
+                  "required": [
+                    "release_id"
+                  ]
                 }
               ]
             },
@@ -670,6 +719,11 @@
                   "required": [
                     "mapping_id"
                   ]
+                },
+                {
+                  "required": [
+                    "release_id"
+                  ]
                 }
               ]
             },
@@ -679,6 +733,47 @@
               },
               "to_status": {
                 "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityLifecycle"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "release_id"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "market_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "mapping_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "provider_id"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "from_status": {
+                "$ref": "../../topology/v1/domain.schema.json#/$defs/releaseStatus"
+              },
+              "to_status": {
+                "$ref": "../../topology/v1/domain.schema.json#/$defs/releaseStatus"
               }
             }
           }
@@ -700,6 +795,11 @@
                 {
                   "required": [
                     "provider_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "release_id"
                   ]
                 }
               ]
@@ -970,6 +1070,56 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "desired_change": {
+                "properties": {
+                  "kind": {
+                    "const": "ENGINE_RELEASE_APPROVAL"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "changeset_type": {
+                "const": "MODIFY"
+              },
+              "steps": {
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "APPROVE_ENGINE_RELEASE"
+                      },
+                      "resources": {
+                        "required": [
+                          "release_id"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "VERIFY_ENGINE_RELEASE_STATE"
+                      },
+                      "resources": {
+                        "required": [
+                          "release_id"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
         }
       ],
       "required": [
@@ -1012,7 +1162,8 @@
             "TENANT",
             "MARKET",
             "MAPPING",
-            "PROVIDER"
+            "PROVIDER",
+            "ENGINE_RELEASE"
           ],
           "description": "The kind of resource changed: every change kind's target (changeset-lifecycle.yaml change_kinds target)."
         },

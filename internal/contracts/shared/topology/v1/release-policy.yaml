@@ -13,6 +13,8 @@ policy_version: 1
 
 # EngineRelease lifecycle (section 2.4). Only status moves; everything else
 # about a release is immutable. REVOKED is terminal.
+# approve is the control-plane/v1 ENGINE_RELEASE_APPROVAL changeset
+# (ADR-BCP-021); it has no direct route.
 status_transitions:
   initial: CANDIDATE
   terminal: [REVOKED]

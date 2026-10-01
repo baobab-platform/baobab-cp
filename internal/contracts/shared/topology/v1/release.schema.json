@@ -136,12 +136,12 @@
     "EngineReleaseStatusChangeRequest": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Move a release along release-policy.yaml status_transitions. Revocation must say what happens to every instance whose desired release is the revoked one: each is given an APPROVED replacement of the same engine or has its desired release cleared, in the same transaction; revocation is refused while any such instance is uncovered (RELEASE_REVOCATION_UNCOVERED, section 2.4).",
+      "description": "Deprecate or revoke a release along release-policy.yaml status_transitions. Approval is not a status change request: it is the control-plane/v1 ENGINE_RELEASE_APPROVAL changeset, the only path from CANDIDATE to APPROVED (ADR-BCP-021, section 2.4). Revocation must say what happens to every instance whose desired release is the revoked one: each is given an APPROVED replacement of the same engine or has its desired release cleared, in the same transaction; revocation is refused while any such instance is uncovered (RELEASE_REVOCATION_UNCOVERED, section 2.4).",
       "required": ["target_status", "reason"],
       "properties": {
         "target_status": {
           "type": "string",
-          "enum": ["APPROVED", "DEPRECATED", "REVOKED"]
+          "enum": ["DEPRECATED", "REVOKED"]
         },
         "reason": { "$ref": "#/$defs/auditReason" },
         "desired_release_dispositions": {

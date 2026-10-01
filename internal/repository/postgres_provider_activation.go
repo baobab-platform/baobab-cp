@@ -38,38 +38,49 @@ const (
 	endedProviderMigrationSQL = `('COMPLETE', 'CANCELLED', 'ROLLED_BACK')`
 )
 
+// ReleaseApprovalPolicy is topology/v1 release-policy.yaml approval at the
+// pinned Shared commit: by environment, whether approval requires a
+// provenance reference and whether it requires certified provider support
+// (ADR-BCP-025 section 2.4, amendment A3).
+type ReleaseApprovalPolicy struct {
+	ProvenanceRequired    map[string]bool `yaml:"provenance_required"`
+	CertificationRequired map[string]bool `yaml:"certification_required"`
+}
+
 var (
-	certificationOnce     sync.Once
-	certificationRequired map[string]bool
-	certificationErr      error
+	releasePolicyOnce sync.Once
+	releasePolicyDoc  ReleaseApprovalPolicy
+	releasePolicyErr  error
 )
 
-// certificationPolicy is topology/v1 release-policy.yaml
-// approval.certification_required at the pinned Shared commit: whether an
-// environment requires certified provider support (ADR-BCP-025 amendment A3).
-func certificationPolicy() (map[string]bool, error) {
-	certificationOnce.Do(func() {
+func releasePolicy() (ReleaseApprovalPolicy, error) {
+	releasePolicyOnce.Do(func() {
 		raw, err := contracts.ReadEmbedded(releasePolicyPath)
 		if err != nil {
-			certificationErr = err
+			releasePolicyErr = err
 			return
 		}
 		var doc struct {
-			Approval struct {
-				CertificationRequired map[string]bool `yaml:"certification_required"`
-			} `yaml:"approval"`
+			Approval ReleaseApprovalPolicy `yaml:"approval"`
 		}
 		if err := yaml.Unmarshal(raw, &doc); err != nil {
-			certificationErr = fmt.Errorf("parse %s: %w", releasePolicyPath, err)
+			releasePolicyErr = fmt.Errorf("parse %s: %w", releasePolicyPath, err)
 			return
 		}
-		if len(doc.Approval.CertificationRequired) == 0 {
-			certificationErr = fmt.Errorf("%s names no approval.certification_required", releasePolicyPath)
+		if len(doc.Approval.CertificationRequired) == 0 || len(doc.Approval.ProvenanceRequired) == 0 {
+			releasePolicyErr = fmt.Errorf("%s names no approval.provenance_required or approval.certification_required", releasePolicyPath)
 			return
 		}
-		certificationRequired = doc.Approval.CertificationRequired
+		releasePolicyDoc = doc.Approval
 	})
-	return certificationRequired, certificationErr
+	return releasePolicyDoc, releasePolicyErr
+}
+
+// certificationPolicy is release-policy.yaml approval.certification_required:
+// whether an environment requires certified provider support.
+func certificationPolicy() (map[string]bool, error) {
+	policy, err := releasePolicy()
+	return policy.CertificationRequired, err
 }
 
 // approvedReleaseCovering reports whether an APPROVED release of the
