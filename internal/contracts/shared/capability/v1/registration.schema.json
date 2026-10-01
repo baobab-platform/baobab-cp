@@ -146,7 +146,8 @@
               "$ref": "domain.schema.json#/$defs/engineKey"
             },
             "lifecycle": {
-              "$ref": "domain.schema.json#/$defs/capabilityLifecycle"
+              "const": "DRAFT",
+              "description": "Registration never activates a provider (EA-02C): a registered provider is DRAFT. Re-registering an existing provider never changes its lifecycle. A provider becomes ACTIVE only through a PROVIDER_ACTIVATION changeset (control-plane/v1 changeset-lifecycle.yaml), whose plan checks its declaration, support, contract compatibility, release, instances and health."
             },
             "ownership": {
               "type": "string",

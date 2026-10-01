@@ -114,7 +114,7 @@
     "name": "Sandbox payment provider (non-production only)",
     "provider_type": "BAOBAB_ENGINE",
     "engine_key": "sandbox-payments",
-    "lifecycle": "ACTIVE",
+    "lifecycle": "DRAFT",
     "ownership": "baobab-payments",
     "simulated": true,
     "production_permitted": false

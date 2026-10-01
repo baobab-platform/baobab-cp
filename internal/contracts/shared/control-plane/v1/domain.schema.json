@@ -72,6 +72,20 @@
       "maxLength": 63,
       "description": "Control Plane-minted identifier of a concrete engine deployment. The single grammar for engine_instance_id in every contract (ADR-SHARED-012)."
     },
+    "engineReleaseId": {
+      "type": "string",
+      "pattern": "^erl_[a-z0-9]+$",
+      "minLength": 7,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of an immutable EngineRelease (ADR-BCP-025 section 2.1, topology/v1 release.schema.json)."
+    },
+    "deploymentObservationId": {
+      "type": "string",
+      "pattern": "^dob_[a-z0-9]+$",
+      "minLength": 7,
+      "maxLength": 63,
+      "description": "Control Plane-minted identifier of one accepted DeploymentObservation (ADR-BCP-025 section 2.6, topology/v1 deployment-observation.schema.json)."
+    },
     "mappingId": {
       "type": "string",
       "pattern": "^map_[a-z0-9]+$",
@@ -208,8 +222,8 @@
     },
     "driftObjectType": {
       "type": "string",
-      "enum": ["TENANT", "LEGAL_ENTITY", "DIGITAL_ESTATE", "MARKET_PARTICIPATION", "PRODUCT_SUBSCRIPTION", "CAPABILITY_GRANT", "CAPABILITY_BINDING", "PROVIDER_CONFIGURATION", "TRADE_LANE"],
-      "description": "The class of object a Drift record compares desired vs. observed state for. Intentionally the set of objects Programme Gate P0's classification (phase-0-architecture-inventory-and-lock.md) identified as carrying desired/observed state, not an open-ended free-text field."
+      "enum": ["TENANT", "LEGAL_ENTITY", "DIGITAL_ESTATE", "MARKET_PARTICIPATION", "PRODUCT_SUBSCRIPTION", "CAPABILITY_GRANT", "CAPABILITY_BINDING", "PROVIDER_CONFIGURATION", "TRADE_LANE", "ENGINE_INSTANCE_RELEASE"],
+      "description": "The class of object a Drift record compares desired vs. observed state for. Intentionally the set of objects Programme Gate P0's classification (phase-0-architecture-inventory-and-lock.md) identified as carrying desired/observed state, not an open-ended free-text field. ENGINE_INSTANCE_RELEASE (ADR-BCP-025 section 2.7) compares an engine instance's desired release with the release it is observed running; its object_reference is the engine_instance_id, its reason_code a topology/v1 releaseDriftReason, and it is recorded for each tenant bound to the instance (ADR-BCP-006 section 67 reverse impact)."
     },
     "driftResolution": {
       "type": "string",

@@ -47,13 +47,36 @@
           "type": ["string", "null"],
           "maxLength": 128,
           "description": "Opaque reference to the ReconciliationRun that resolved this drift, once resolution=RECONCILED."
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$",
+          "maxLength": 64,
+          "description": "Registered code saying why the object drifted. Required for ENGINE_INSTANCE_RELEASE, where it is a topology/v1 releaseDriftReason (ADR-BCP-025 section 2.7); optional for the other object types."
         }
       },
-      "if": {
-        "properties": { "resolution": { "const": "RECONCILED" } },
-        "required": ["resolution"]
-      },
-      "then": { "required": ["reconciled_at"] }
+      "allOf": [
+        {
+          "if": {
+            "properties": { "resolution": { "const": "RECONCILED" } },
+            "required": ["resolution"]
+          },
+          "then": { "required": ["reconciled_at"] }
+        },
+        {
+          "if": {
+            "properties": { "object_type": { "const": "ENGINE_INSTANCE_RELEASE" } },
+            "required": ["object_type"]
+          },
+          "then": {
+            "required": ["reason_code"],
+            "properties": {
+              "object_reference": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
+              "reason_code": { "$ref": "../../topology/v1/domain.schema.json#/$defs/releaseDriftReason" }
+            }
+          }
+        }
+      ]
     }
   }
 }

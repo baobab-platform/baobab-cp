@@ -52,7 +52,7 @@
     "name": "Temporary billing provider (development/integration only)",
     "provider_type": "BAOBAB_ENGINE",
     "engine_key": "temporary-billing",
-    "lifecycle": "ACTIVE",
+    "lifecycle": "DRAFT",
     "ownership": "baobab-subscriptions",
     "simulated": true,
     "production_permitted": false

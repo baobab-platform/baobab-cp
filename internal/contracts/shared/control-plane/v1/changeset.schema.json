@@ -128,6 +128,23 @@
         }
       }
     },
+    "ProviderActivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "provider_id"
+      ],
+      "description": "Activate a DRAFT capability provider through a governed change (EA-02D). A MODIFY changeset. Registration never activates a provider (EA-02C); this is the only path from DRAFT to ACTIVE. Planning inspects, side-effect free, each check in changeset-lifecycle.yaml change_kinds.PROVIDER_ACTIVATION.plan_checks: the provider declaration, IMPLEMENTED capability support, contract compatibility, certification where release-policy.yaml requires it, production_permitted against the environments of its instances, an APPROVED engine release supporting its contracts, an eligible engine instance, health, and conflicting provider migrations. Any failed check is a plan blocker, so a blocked plan cannot be approved. The approver must hold provider:approve and is never the requester.",
+      "properties": {
+        "kind": {
+          "const": "PROVIDER_ACTIVATION"
+        },
+        "provider_id": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderId"
+        }
+      }
+    },
     "desiredChange": {
       "description": "What outcome is wanted, in canonical platform concepts, never provider commands (section 6). One kind per changeset; kinds are added additively.",
       "oneOf": [
@@ -142,6 +159,9 @@
         },
         {
           "$ref": "#/$defs/MappingActivation"
+        },
+        {
+          "$ref": "#/$defs/ProviderActivation"
         }
       ]
     },
@@ -471,6 +491,20 @@
                   "const": "MODIFY"
                 }
               }
+            },
+            {
+              "properties": {
+                "desired_change": {
+                  "properties": {
+                    "kind": {
+                      "const": "PROVIDER_ACTIVATION"
+                    }
+                  }
+                },
+                "changeset_type": {
+                  "const": "MODIFY"
+                }
+              }
             }
           ],
           "description": "The type is the one the change kind derives."
@@ -505,14 +539,16 @@
         "ACTIVATE_MARKET",
         "VERIFY_MARKET_STATE",
         "ACTIVATE_MAPPING",
-        "VERIFY_MAPPING_STATE"
+        "VERIFY_MAPPING_STATE",
+        "ACTIVATE_PROVIDER",
+        "VERIFY_PROVIDER_STATE"
       ],
       "description": "Canonical changeset step operations. Extended additively as change kinds are added; each kind's operations are in changeset-lifecycle.yaml change_kinds."
     },
     "changesetStepResources": {
       "type": "object",
       "additionalProperties": false,
-      "description": "The one resource a step acts on and the statuses it moves between, in that resource's own lifecycle vocabulary. A step naming market_id is a market step (market status), one naming mapping_id a mapping step (mappingStatus); any other step is a tenant step, exactly as before market and mapping kinds existed (tenant lifecycleStatus). A step never names two resources. The Control Plane plans every step on the desired change's own resource; a plan whose step names another resource is never generated or applied.",
+      "description": "The one resource a step acts on and the statuses it moves between, in that resource's own lifecycle vocabulary. A step naming market_id is a market step (market status), one naming mapping_id a mapping step (mappingStatus), one naming provider_id a provider step (capability/v1 capabilityLifecycle); any other step is a tenant step, exactly as before market and mapping kinds existed (tenant lifecycleStatus). A step never names two resources. The Control Plane plans every step on the desired change's own resource; a plan whose step names another resource is never generated or applied.",
       "properties": {
         "tenant_id": {
           "$ref": "domain.schema.json#/$defs/tenantId"
@@ -523,6 +559,9 @@
         "mapping_id": {
           "$ref": "domain.schema.json#/$defs/mappingId"
         },
+        "provider_id": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderId"
+        },
         "from_status": {
           "type": "string"
         },
@@ -532,7 +571,7 @@
         "target_revision": {
           "type": "integer",
           "minimum": 1,
-          "description": "The target's revision the plan was computed against, where the target is revisioned (markets and mappings). Applying refuses a target whose revision has moved (PLAN_STALE), as the direct route's If-Match does."
+          "description": "The target's revision the plan was computed against, where the target is revisioned (markets, mappings and providers). Applying refuses a target whose revision has moved (PLAN_STALE), as the direct route's If-Match does."
         }
       },
       "allOf": [
@@ -553,6 +592,11 @@
                 {
                   "required": [
                     "mapping_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "provider_id"
                   ]
                 }
               ]
@@ -585,6 +629,11 @@
                   "required": [
                     "market_id"
                   ]
+                },
+                {
+                  "required": [
+                    "provider_id"
+                  ]
                 }
               ]
             },
@@ -594,6 +643,42 @@
               },
               "to_status": {
                 "$ref": "domain.schema.json#/$defs/mappingStatus"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "provider_id"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "market_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "mapping_id"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "from_status": {
+                "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityLifecycle"
+              },
+              "to_status": {
+                "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityLifecycle"
               }
             }
           }
@@ -610,6 +695,11 @@
                 {
                   "required": [
                     "mapping_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "provider_id"
                   ]
                 }
               ]
@@ -822,6 +912,56 @@
                       "resources": {
                         "required": [
                           "mapping_id"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "desired_change": {
+                "properties": {
+                  "kind": {
+                    "const": "PROVIDER_ACTIVATION"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "changeset_type": {
+                "const": "MODIFY"
+              },
+              "steps": {
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "ACTIVATE_PROVIDER"
+                      },
+                      "resources": {
+                        "required": [
+                          "provider_id"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "VERIFY_PROVIDER_STATE"
+                      },
+                      "resources": {
+                        "required": [
+                          "provider_id"
                         ]
                       }
                     }

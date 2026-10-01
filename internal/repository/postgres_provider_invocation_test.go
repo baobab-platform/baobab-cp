@@ -58,7 +58,7 @@ func TestRegisterEngineRecordsProviderInvocation(t *testing.T) {
 			Capabilities: []capabilitydomain.Capability{{Key: capability, Name: "Invocation test", DomainKey: "trade",
 				Lifecycle: capabilitydomain.CapabilityLifecycleActive, Maturity: capabilitydomain.CapabilityMaturitySupported}},
 			Provider: EngineRegistrationProvider{ProviderKey: providerKey, Name: "Invocation test", ProviderType: "BAOBAB_ENGINE",
-				EngineKey: "engine", Lifecycle: "ACTIVE", Ownership: engine, Invocation: invocation},
+				EngineKey: "engine", Lifecycle: "DRAFT", Ownership: engine, Invocation: invocation},
 			Support: []EngineRegistrationSupport{{CapabilityKey: capability, ContractVersions: []int{1}}},
 		}
 	}
