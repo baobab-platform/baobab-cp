@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/administration/v1/grant-administration.schema.json",
+  "title": "AdministrativeGrant administration requests and pages",
+  "description": "The commands and reads by which AdministrativeGrants are issued, inspected, suspended, resumed, revoked, withdrawn and delegated (ADR-BCP-020 sections 38-48, 57-64; roles-to-grants decision, ADA-05). The Control Plane derives who is acting, the grant's status, risk class, source and version; the caller states only the authority wanted and why. A definition library: validate against the fragments.",
+  "$defs": {
+    "GrantIssueRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal_id", "permission", "scope", "grant_type", "reason"],
+      "properties": {
+        "principal_id": {
+          "$ref": "domain.schema.json#/$defs/principalId",
+          "description": "The grantee. Never the caller (section 39)."
+        },
+        "permission": { "$ref": "domain.schema.json#/$defs/administrativePermissionKey" },
+        "scope": { "$ref": "scope.schema.json#/$defs/AdministrativeScope" },
+        "grant_type": { "$ref": "domain.schema.json#/$defs/grantType" },
+        "valid_from": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Defaults to now. A future start leaves the grant PENDING until then."
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Required for TIME_BOUND and JUST_IN_TIME grants; forbidden on STANDING."
+        },
+        "delegable_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 0,
+          "description": "Honoured only where the permission is delegable (section 49)."
+        },
+        "conditions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minimum_acr": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "grant_type": { "enum": ["TIME_BOUND", "JUST_IN_TIME"] } } },
+          "then": { "required": ["valid_until"] }
+        },
+        {
+          "if": { "properties": { "grant_type": { "const": "STANDING" } } },
+          "then": { "not": { "required": ["valid_until"] } }
+        }
+      ]
+    },
+    "GrantTransitionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "reason"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "enum": ["suspend", "resume", "revoke", "withdraw"],
+          "description": "A lifecycle.yaml command a person may issue. activate and expire belong to the Control Plane alone (section 61)."
+        },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "GrantDelegationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal_id", "permission", "scope", "valid_until", "reason"],
+      "properties": {
+        "principal_id": {
+          "$ref": "domain.schema.json#/$defs/principalId",
+          "description": "The delegate. Never the caller."
+        },
+        "permission": { "$ref": "domain.schema.json#/$defs/administrativePermissionKey" },
+        "scope": { "$ref": "scope.schema.json#/$defs/AdministrativeScope" },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Never after the source grant's own end (section 46)."
+        },
+        "delegable_depth": { "type": "integer", "minimum": 0, "maximum": 1, "default": 0 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "GrantPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "grant.schema.json#/$defs/AdministrativeGrant" }
+        },
+        "next_cursor": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    }
+  }
+}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/administration"
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/health"
@@ -159,6 +160,9 @@ type Dependencies struct {
 	// AdministrativeGrants backs GET /v1/admin/effective-authority
 	// (ADR-BCP-020): the caller's own administrative grants.
 	AdministrativeGrants repository.AdministrativeGrantReader
+	// AdministrativeGrantAdmin backs the /v1/admin/grants routes, the
+	// grant administration API (ADR-BCP-020 gate ADA-05). Nil disables them.
+	AdministrativeGrantAdmin repository.AdministrativeGrantAdministrator
 	// WorkloadRegistry backs request-time enforcement of ADR-0007 §45's
 	// workload lifecycle status (Gate ZB-03.10, closing the gap
 	// docs/reconciliation/gate-zb03-authority-contract-freeze.md §7 named):
@@ -253,6 +257,26 @@ func New(dependencies Dependencies) http.Handler {
 	if dependencies.AdministrativeGrants != nil {
 		authority := effectiveAuthorityHandler{identities: dependencies.Identities, grants: dependencies.AdministrativeGrants}
 		r.With(a.authorize(a.adminVerifier, "human", "authority:self")).Get("/v1/admin/effective-authority", authority.get)
+	}
+	if dependencies.AdministrativeGrantAdmin != nil && dependencies.Identities != nil {
+		// Grant administration (ADR-BCP-020 gate ADA-05). Roles stay
+		// authoritative for everything but delegation: the platform
+		// administrator role guards the routes while the comparison with the
+		// caller's own grants is shadowed. Delegation has no legacy role and
+		// is decided by the caller's grants alone.
+		catalogue, err := administration.DefaultCatalogue()
+		if err != nil {
+			panic(err)
+		}
+		admin := grantAdminHandler{identities: dependencies.Identities, grants: dependencies.AdministrativeGrantAdmin,
+			catalogue: catalogue, environment: dependencies.Environment}
+		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "administrator:read"), a.requireAdminRole(nil, true)}
+		write := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "administrator:write"), a.requireAdminRole(nil, true)}
+		r.With(read...).Get("/v1/admin/grants", admin.list)
+		r.With(write...).Post("/v1/admin/grants", admin.issue)
+		r.With(read...).Get("/v1/admin/grants/{grantID}", admin.get)
+		r.With(write...).Post("/v1/admin/grants/{grantID}/transitions", admin.transition)
+		r.With(a.authorize(a.adminVerifier, "human", "administrator:write")).Post("/v1/admin/grants/{grantID}/delegations", admin.delegate)
 	}
 	if dependencies.Operations != nil {
 		// Platform administrators read every operation; a tenant

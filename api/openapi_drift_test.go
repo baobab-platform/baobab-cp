@@ -58,6 +58,10 @@ func fullRouter(t *testing.T) chi.Routes {
 		AdministrativeGrants: struct {
 			repository.AdministrativeGrantReader
 		}{},
+		AdministrativeGrantAdmin: struct {
+			repository.AdministrativeGrantAdministrator
+		}{},
+		Identities: struct{ repository.IdentityRepository }{},
 		ProviderMigrations: struct {
 			repository.ProviderMigrationRepository
 		}{},

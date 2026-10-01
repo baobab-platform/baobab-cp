@@ -123,6 +123,7 @@ var canonicalMigrationNames = []string{
 	"000086_engine_instance_desired_release.sql",
 	"000087_deployment_observation.sql",
 	"000088_engine_instance_release_drift.sql",
+	"000089_administrative_grant_commands.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
