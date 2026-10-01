@@ -139,6 +139,10 @@ type Dependencies struct {
 	// EngineReleases backs the /v1/engine-releases routes (ADR-BCP-025
 	// gate ER-02); nil disables them.
 	EngineReleases repository.EngineReleaseRepository
+	// DesiredReleases backs release deprecation and revocation and the
+	// desired-release read (ADR-BCP-025 gate ER-03); it needs
+	// EngineReleases.
+	DesiredReleases repository.DesiredReleaseRepository
 	// EngineMigrationTasks backs the workload /v1/engine-migration-tasks
 	// routes (ADR-SHARED-016 section 4). Nil disables them.
 	EngineMigrationTasks repository.EngineMigrationTaskRepository
@@ -373,10 +377,17 @@ func New(dependencies Dependencies) http.Handler {
 		// ADR-BCP-025 gate ER-02: release tooling records under its own
 		// workload scope, a platform administrator under topology:write;
 		// reading is topology:read.
-		releases := engineReleaseHandler{repo: dependencies.EngineReleases, identities: a.identities}
+		releases := engineReleaseHandler{repo: dependencies.EngineReleases, desired: dependencies.DesiredReleases, identities: a.identities}
 		r.With(a.adminOrWorkload("topology:write", "engine-release:record")).Post("/v1/engine-releases", releases.record)
 		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/engine-releases", releases.list)
 		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/engine-releases/{releaseID}", releases.get)
+		if dependencies.DesiredReleases != nil {
+			// Gate ER-03: an administrator deprecates or revokes a release;
+			// infrastructure tooling reads a desired release under its own
+			// workload scope. Setting a desired release is a changeset.
+			r.With(a.authorize(a.adminVerifier, "human", "topology:write"), a.requireAdminRole(nil, true)).Post("/v1/engine-releases/{releaseID}/status-changes", releases.changeStatus)
+			r.With(a.adminOrWorkload("topology:read", "desired-release:read")).Get("/v1/engine-instances/{engineInstanceID}/desired-release", releases.desiredRelease)
+		}
 	}
 	if dependencies.PlatformAccounts != nil {
 		// ADR-BCP-018 ORG-07: the account lifecycle is canonical registry

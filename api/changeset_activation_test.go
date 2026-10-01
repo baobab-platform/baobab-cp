@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
+	"github.com/baobab-platform/baobab-cp/internal/topology/release"
 )
 
 // activationHarness drives the changeset routes for the activation kinds
@@ -517,4 +519,148 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 	if rel.StatusChangedBy != principals["releaser"] {
 		t.Fatalf("approved by %q, want the approver's principal %q", rel.StatusChangedBy, principals["releaser"])
 	}
+}
+
+// TestDesiredReleaseRoutes drives ADR-BCP-025 gate ER-03 through the
+// routes. A release approved through its changeset becomes an engine
+// instance's desired release through ENGINE_INSTANCE_DESIRED_RELEASE, which
+// needs desired-release:approve. Infrastructure tooling reads it under
+// desired-release:read. An administrator deprecates it and revokes it; the
+// revocation must dispose of the instance. Every response conforms.
+func TestDesiredReleaseRoutes(t *testing.T) {
+	ctx, admin, repo := activationDatabase(t)
+	short := strings.ReplaceAll(domain.NewUUIDv7(), "-", "")[20:]
+	engine := "baobab-apidesired" + short
+	capabilityKey := "test.apidesired" + short + ".perform"
+	var releaseID, instanceKey string
+	cleanup := func() {
+		cleanupChangesets(ctx, admin, func() []string { return []string{releaseID, instanceKey} })
+		admin.Exec(ctx, `UPDATE topology.engine_instance SET desired_release_id = NULL WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
+		tx, err := admin.Begin(ctx)
+		if err == nil {
+			// Releases are never deleted in operation; this test-only
+			// cleanup turns the immutability triggers off for itself.
+			tx.Exec(ctx, `SET LOCAL session_replication_role = replica`)
+			for _, stmt := range []string{
+				`DELETE FROM topology.engine_release_artifact WHERE engine_release_id IN (SELECT r.engine_release_id FROM topology.engine_release r JOIN topology.engine e ON e.engine_id = r.engine_id WHERE e.code = $1)`,
+				`DELETE FROM topology.engine_release_provider_support WHERE engine_release_id IN (SELECT r.engine_release_id FROM topology.engine_release r JOIN topology.engine e ON e.engine_id = r.engine_id WHERE e.code = $1)`,
+				`DELETE FROM topology.engine_release WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`,
+			} {
+				tx.Exec(ctx, stmt, engine)
+			}
+			tx.Commit(ctx)
+		}
+		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
+		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
+		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
+	}
+	cleanup()
+	t.Cleanup(cleanup)
+	var engineID string
+	mustNoError(t, admin.QueryRow(ctx, `INSERT INTO topology.engine (code, name) VALUES ($1, $1) RETURNING engine_id::text`, engine).Scan(&engineID))
+	mustNoError(t, admin.QueryRow(ctx, `INSERT INTO topology.engine_instance(engine_id, region, environment, status)
+		VALUES ($1::uuid, 'af-south-1', 'staging', 'ACTIVE') RETURNING engine_instance_key`, engineID).Scan(&instanceKey))
+	_, err := repo.SyncCapabilityCatalogue(ctx, []repository.CatalogueCapability{{Capability: capabilitydomain.Capability{Key: capabilityKey,
+		Name: "API desired test", DomainKey: "test", Lifecycle: capabilitydomain.CapabilityLifecycleActive,
+		Maturity: capabilitydomain.CapabilityMaturitySupported}, ContractVersions: []int{1}, DataClassification: "INTERNAL",
+		Owner: engine, Source: "fixtures/api-desired-test", Digest: "sha256:" + strings.Repeat("5", 64)}})
+	mustNoError(t, err)
+
+	identities := repository.NewInMemoryRepository()
+	principal := func(subject string, scopes ...string) auth.Principal {
+		p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "human", Status: "ACTIVE"}
+		mustNoError(t, identities.CreateIdentity(ctx, p))
+		mustNoError(t, identities.LinkExternalIdentity(ctx, domain.ExternalIdentity{ID: domain.NewExternalIdentityID(),
+			PrincipalID: p.ID, Issuer: testRealm, Subject: subject + "-" + short, Status: "ACTIVE"}))
+		set := map[string]struct{}{}
+		for _, s := range scopes {
+			set[s] = struct{}{}
+		}
+		return auth.Principal{Subject: subject + "-" + short, Issuer: testRealm, ActorType: "human", TokenID: "dr-" + subject, Scopes: set,
+			Roles: map[string]struct{}{RolePlatformAdmin: {}}}
+	}
+	workload := func(client string, scopes ...string) auth.Principal {
+		set := map[string]struct{}{}
+		for _, s := range scopes {
+			set[s] = struct{}{}
+		}
+		return auth.Principal{Subject: client, Issuer: testRealm, ActorType: "workload", ClientID: client, TokenID: "dr-" + client, Scopes: set}
+	}
+	h := activationHarness{t: t, dir: contracttest.SharedDir(t), handler: New(Dependencies{Store: &fakeStore{}, Identities: identities,
+		Changesets: repo, Operations: repo, EngineReleases: repo, DesiredReleases: repo,
+		AdminVerifier: tokenVerifier{
+			"requester": principal("requester", "changeset:read", "changeset:write", "operation:read"),
+			"releaser":  principal("releaser", "engine-release:approve", "changeset:read", "changeset:approve"),
+			"approver":  principal("approver", "changeset:read", "changeset:approve"),
+			"deployer":  principal("deployer", "desired-release:approve", "changeset:read", "changeset:approve"),
+			"operator":  principal("operator", "topology:write", "topology:read"),
+			"reader":    principal("reader", "topology:read"),
+		},
+		WorkloadVerifier: tokenVerifier{
+			"tooling":  workload("deploy-controller", "desired-release:read"),
+			"stranger": workload("other-workload", "context:resolve"),
+		}})}
+	topology := func(definition string, w *httptest.ResponseRecorder) {
+		t.Helper()
+		var v any
+		mustNoError(t, json.Unmarshal(w.Body.Bytes(), &v))
+		contracttest.ValidateJSON(t, contracttest.CompileSchema(t, h.dir, "topology/v1/release.schema.json#/$defs/"+definition), v)
+	}
+
+	rel, _, err := repo.RecordEngineRelease(ctx, release.RecordRequest{EngineID: engine, ReleaseVersion: "4.0.0",
+		Artifacts: []release.Artifact{{ArtifactType: "OCI_IMAGE", Repository: "ghcr.io/baobab-platform/" + engine,
+			Digest: "sha256:" + strings.Repeat("e", 52) + short}},
+		ProviderSupport:                     []release.ProviderSupport{{ProviderKey: engine + ".engine", CapabilityKey: capabilityKey, ContractVersions: []int{1}}},
+		CapabilityProviderDeclarationDigest: "sha256:" + strings.Repeat("d", 64), SourceRevision: strings.Repeat("a", 40),
+		Reason: "Built from main."}, "workload:release-tooling", time.Now().UTC().Truncate(time.Microsecond),
+		repository.AuditActor{ActorID: "workload:release-tooling", ActorType: "workload", CorrelationID: domain.NewUUIDv7()})
+	mustNoError(t, err)
+	releaseID = rel.ReleaseID
+	c, submitted := h.submitted("requester", "approve-"+short, map[string]any{"kind": "ENGINE_RELEASE_APPROVAL", "release_id": releaseID})
+	h.expect(h.decide(c, submitted, "releaser"), http.StatusOK, `"APPROVED"`, "approve the release")
+	h.apply(c, "requester", "approve-apply-"+short)
+
+	// Desiring it is a changeset approved under desired-release:approve.
+	c, submitted = h.submitted("requester", "desire-"+short,
+		map[string]any{"kind": "ENGINE_INSTANCE_DESIRED_RELEASE", "engine_instance_id": instanceKey, "release_id": releaseID})
+	if c.State != changeset.StateAwaitingApproval || c.ChangesetType != "MODIFY" {
+		t.Fatalf("submitted: %+v", c)
+	}
+	h.expect(h.decide(c, submitted, "approver"), http.StatusForbidden, "desired-release:approve", "an approver without desired-release:approve")
+	h.expect(h.decide(c, submitted, "deployer"), http.StatusOK, `"APPROVED"`, "approve the desired release")
+	o := h.apply(c, "requester", "desire-apply-"+short)
+	if o.AffectedResources[0].ResourceType != "ENGINE_INSTANCE" || o.AffectedResources[0].After != releaseID {
+		t.Fatalf("outcome: %+v", o)
+	}
+
+	// Tooling reads it; so does an administrator.
+	path := "/v1/engine-instances/" + instanceKey + "/desired-release"
+	read := h.call(http.MethodGet, path, "tooling", nil, nil)
+	h.expect(read, http.StatusOK, releaseID, "tooling reads the desired release")
+	topology("EngineInstanceDesiredRelease", read)
+	h.expect(h.call(http.MethodGet, path, "reader", nil, nil), http.StatusOK, releaseID, "an administrator reads it")
+	h.expect(h.call(http.MethodGet, path, "stranger", nil, nil), http.StatusForbidden, "", "a workload without desired-release:read")
+	h.expect(h.call(http.MethodGet, "/v1/engine-instances/ei_00000000000000000000000000000000/desired-release", "tooling", nil, nil),
+		http.StatusNotFound, "ENGINE_INSTANCE_NOT_FOUND", "an unknown instance")
+
+	// Deprecation and revocation.
+	statusPath := "/v1/engine-releases/" + releaseID + "/status-changes"
+	h.expect(h.call(http.MethodPost, statusPath, "reader", nil, map[string]any{"target_status": "DEPRECATED", "reason": "Superseded."}),
+		http.StatusForbidden, "", "an administrator without topology:write")
+	h.expect(h.call(http.MethodPost, statusPath, "operator", nil, map[string]any{"target_status": "APPROVED", "reason": "Qualified."}),
+		http.StatusBadRequest, "VALIDATION_FAILED", "an approval as a status change")
+	deprecated := h.call(http.MethodPost, statusPath, "operator", nil, map[string]any{"target_status": "DEPRECATED", "reason": "Superseded."})
+	h.expect(deprecated, http.StatusOK, `"DEPRECATED"`, "deprecate")
+	topology("EngineRelease", deprecated)
+	h.expect(h.call(http.MethodPost, statusPath, "operator", nil, map[string]any{"target_status": "REVOKED", "reason": "Withdrawn.",
+		"desired_release_dispositions": []map[string]any{}}), http.StatusUnprocessableEntity, "RELEASE_REVOCATION_UNCOVERED", "an uncovered revocation")
+	revoked := h.call(http.MethodPost, statusPath, "operator", nil, map[string]any{"target_status": "REVOKED", "reason": "Withdrawn.",
+		"desired_release_dispositions": []map[string]any{{"engine_instance_id": instanceKey, "action": "CLEAR"}}})
+	h.expect(revoked, http.StatusOK, `"REVOKED"`, "revoke, clearing the instance")
+	topology("EngineRelease", revoked)
+	cleared := h.call(http.MethodGet, path, "tooling", nil, nil)
+	h.expect(cleared, http.StatusOK, `"desired_release_id":null`, "the cleared desired release")
+	topology("EngineInstanceDesiredRelease", cleared)
+	h.expect(h.call(http.MethodPost, statusPath, "operator", nil, map[string]any{"target_status": "DEPRECATED", "reason": "Again."}),
+		http.StatusConflict, "RELEASE_STATUS_TRANSITION_INVALID", "deprecating a revoked release")
 }

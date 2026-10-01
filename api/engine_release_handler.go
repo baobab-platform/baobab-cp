@@ -14,13 +14,17 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/topology/release"
 )
 
-var engineReleaseRecordSchema = contracts.MustSchema("topology/v1/release.schema.json#/$defs/EngineReleaseRecordRequest")
+var (
+	engineReleaseRecordSchema       = contracts.MustSchema("topology/v1/release.schema.json#/$defs/EngineReleaseRecordRequest")
+	engineReleaseStatusChangeSchema = contracts.MustSchema("topology/v1/release.schema.json#/$defs/EngineReleaseStatusChangeRequest")
+)
 
 // engineReleaseHandler serves the ADR-BCP-025 gate ER-02 routes: recording
 // an immutable engine release and reading releases. Recording never
 // approves, desires or deploys a release.
 type engineReleaseHandler struct {
 	repo       repository.EngineReleaseRepository
+	desired    repository.DesiredReleaseRepository
 	identities repository.IdentityRepository
 	now        func() time.Time
 }
@@ -111,6 +115,40 @@ func (h engineReleaseHandler) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rel)
 }
 
+// changeStatus deprecates or revokes a release (ADR-BCP-025 gate ER-03),
+// recording the administrator as who changed it.
+func (h engineReleaseHandler) changeStatus(w http.ResponseWriter, r *http.Request) {
+	changedBy, actor, ok := resolveActor(w, r, h.identities, false)
+	if !ok {
+		return
+	}
+	raw, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	var req release.StatusChangeRequest
+	if !decodeRaw(w, r, engineReleaseStatusChangeSchema, raw, &req) {
+		return
+	}
+	changed, err := h.desired.ChangeEngineReleaseStatus(r.Context(), chi.URLParam(r, "releaseID"), req, changedBy, h.clock(), actor)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, changed)
+}
+
+// desiredRelease serves an engine instance's desired release to
+// infrastructure tooling and administrators (ADR-BCP-025 section 2.5).
+func (h engineReleaseHandler) desiredRelease(w http.ResponseWriter, r *http.Request) {
+	desired, err := h.desired.GetEngineInstanceDesiredRelease(r.Context(), chi.URLParam(r, "engineInstanceID"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, desired)
+}
+
 // fail maps a repository error to its problem: the engine_release reason
 // code where one is registered.
 func (h engineReleaseHandler) fail(w http.ResponseWriter, r *http.Request, err error) {
@@ -128,6 +166,12 @@ func (h engineReleaseHandler) fail(w http.ResponseWriter, r *http.Request, err e
 		problem(w, r, http.StatusConflict, release.ReasonDigestConflict, err.Error(), false)
 	case errors.Is(err, repository.ErrEngineReleaseNotFound):
 		problem(w, r, http.StatusNotFound, "ENGINE_RELEASE_NOT_FOUND", "no engine release has that id", false)
+	case errors.Is(err, repository.ErrEngineReleaseTransition):
+		problem(w, r, http.StatusConflict, release.ReasonTransitionInvalid, err.Error(), false)
+	case errors.Is(err, repository.ErrDesiredReleaseUnavailable):
+		problem(w, r, http.StatusConflict, release.ReasonDesiredUnavailable, err.Error(), false)
+	case errors.Is(err, repository.ErrEngineInstanceNotFound):
+		problem(w, r, http.StatusNotFound, "ENGINE_INSTANCE_NOT_FOUND", "no engine instance has that id", false)
 	case errors.Is(err, repository.ErrEngineReleaseMalformedPageToken):
 		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "page_token is malformed", false)
 	default:

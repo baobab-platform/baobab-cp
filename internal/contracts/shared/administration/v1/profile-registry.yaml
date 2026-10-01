@@ -46,6 +46,7 @@ profiles:
       - provider-migration.plan
       - provider-migration.approve
       - provider-migration.execute
+      - engine-release.change-status
       - engine-release.record
       - audit.view
       - changeset.submit

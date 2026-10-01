@@ -11,12 +11,15 @@ import (
 )
 
 // Target is the authoritative state of the resource a changeset names
-// (a tenant, market, mapping, provider or engine release), read when it is
-// planned.
+// (a tenant, market, mapping, provider, engine release or engine
+// instance), read when it is planned.
 type Target struct {
 	Found    bool
 	Status   string
 	Revision int64
+	// DesiredReleaseID is an engine instance's current desired release
+	// (its canonical erl_ id), "" when none is desired.
+	DesiredReleaseID string
 	// TenantID is the tenant that owns the target, when it has one; it is
 	// recorded on the audit and the operation.
 	TenantID string
@@ -112,6 +115,9 @@ func Generate(in PlanInput) (Plan, error) {
 			res.ProviderID = c.DesiredChange.ProviderID
 		case TargetRelease:
 			res.ReleaseID = c.DesiredChange.ReleaseID
+		case TargetInstance:
+			res.EngineInstanceID = c.DesiredChange.EngineInstanceID
+			res.DesiredReleaseID = c.DesiredChange.ReleaseID
 		default:
 			res.TenantID = c.DesiredChange.TenantID
 		}
@@ -138,6 +144,15 @@ func Generate(in PlanInput) (Plan, error) {
 		p.ReadinessRequirements = append(p.ReadinessRequirements, Check{Check: check.Check, Description: description})
 	}
 	switch {
+	case kind.Target == TargetInstance:
+		p.RiskClass = "HIGH"
+		desired := "no release"
+		if c.DesiredChange.ReleaseID != "" {
+			desired = "release " + c.DesiredChange.ReleaseID
+		}
+		p.ImpactAnalysis = ImpactAnalysis{Summary: fmt.Sprintf("Engine instance %s desires %s, at desired-release version %d: infrastructure tooling reads it and executes it.", c.DesiredChange.EngineInstanceID, desired, in.Target.Revision),
+			ResourcesChanged: 1, AvailabilityImpact: "The instance changes release when tooling executes the change; nothing changes until then."}
+		p.CompensationStrategy = "Desire the previous release with another ENGINE_INSTANCE_DESIRED_RELEASE changeset; nothing irreversible is planned."
 	case kind.Target == TargetRelease:
 		p.RiskClass = "HIGH"
 		p.ImpactAnalysis = ImpactAnalysis{Summary: fmt.Sprintf("Approves engine release %s: it may then be named as an engine instance's desired release and carry provider activations.", c.DesiredChange.ReleaseID),
@@ -171,7 +186,11 @@ func Generate(in PlanInput) (Plan, error) {
 	}
 	p.VerificationStrategy = fmt.Sprintf("Read the tenant back and require desired and observed status %s.", kind.ToStatus)
 	if kind.Target != TargetTenant {
-		p.VerificationStrategy = fmt.Sprintf("Read the %s back and require status %s.", strings.ToLower(kind.Target), kind.ToStatus)
+		p.VerificationStrategy = fmt.Sprintf("Read the %s back and require status %s.", strings.ToLower(strings.ReplaceAll(kind.Target, "_", " ")), kind.ToStatus)
+	}
+	if kind.Changes != "" {
+		p.VerificationStrategy = fmt.Sprintf("Read the %s back and require its %s to be the planned one.",
+			strings.ToLower(strings.ReplaceAll(kind.Target, "_", " ")), strings.ReplaceAll(kind.Changes, "_", " "))
 	}
 	p.PlanDigest = PlanDigest(p)
 	return p, nil

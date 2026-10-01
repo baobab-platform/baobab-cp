@@ -72,6 +72,11 @@
       "maxLength": 63,
       "description": "Control Plane-minted identifier of a concrete engine deployment. The single grammar for engine_instance_id in every contract (ADR-SHARED-012)."
     },
+    "engineInstanceStatus": {
+      "type": "string",
+      "enum": ["PROVISIONING", "ACTIVE", "DRAINING", "MAINTENANCE", "FAILED", "RETIRED"],
+      "description": "An engine instance's lifecycle status. Only an ACTIVE instance is eligible for capability resolution; RETIRED is terminal."
+    },
     "engineReleaseId": {
       "type": "string",
       "pattern": "^erl_[a-z0-9]+$",
