@@ -24,8 +24,10 @@ type SoDPolicy struct {
 	Actors                []string    `yaml:"actors"`
 	MinimumDistinctActors int         `yaml:"minimum_distinct_actors"`
 	AllowedGrantTypes     []GrantType `yaml:"allowed_grant_types"`
-	MaximumDurationDays   int         `yaml:"maximum_duration_days"`
-	Status                string      `yaml:"status"`
+	MaximumDurationHours  int         `yaml:"maximum_duration_hours"`
+	// JITTargetHours is guidance for a JUST_IN_TIME grant, not a limit.
+	JITTargetHours int    `yaml:"jit_target_hours"`
+	Status         string `yaml:"status"`
 }
 
 // SoD is the separation-of-duties policy set.
@@ -121,12 +123,12 @@ func (s *SoD) GrantBound(kind string, risk RiskClass, grantType GrantType, from 
 		if len(p.AllowedGrantTypes) > 0 && !slices.Contains(p.AllowedGrantTypes, grantType) {
 			return fmt.Errorf("%s: a %s grant may not be %s", p.ID, risk, grantType)
 		}
-		if p.MaximumDurationDays > 0 {
+		if p.MaximumDurationHours > 0 {
 			if until == nil {
 				return fmt.Errorf("%s: a %s grant needs an end", p.ID, risk)
 			}
-			if until.Sub(from) > time.Duration(p.MaximumDurationDays)*24*time.Hour {
-				return fmt.Errorf("%s: a %s grant lasts at most %d days", p.ID, risk, p.MaximumDurationDays)
+			if until.Sub(from) > time.Duration(p.MaximumDurationHours)*time.Hour {
+				return fmt.Errorf("%s: a %s grant lasts at most %d hours; extending it is a new approval", p.ID, risk, p.MaximumDurationHours)
 			}
 		}
 	}

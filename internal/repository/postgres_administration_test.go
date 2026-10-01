@@ -120,7 +120,7 @@ func TestAdministrativeGrantStore(t *testing.T) {
 	if !ok || src.Conditions == nil || src.Conditions.MinimumACR != "urn:baobab:acr:mfa" || src.ProfileKey != "tenant-administrator" {
 		t.Fatalf("delegation source: %+v %v", src, ok)
 	}
-	if e := administration.Effective(carol, grants, sources, now.Add(time.Minute)); len(e.Grants) != 1 {
+	if e := administration.Effective(carol, grants, sources, now.Add(time.Minute), administration.Relations{}); len(e.Grants) != 1 {
 		t.Fatalf("carol's delegated authority must be effective while its source is: %+v", e)
 	}
 	var audits int

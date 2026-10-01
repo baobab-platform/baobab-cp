@@ -125,6 +125,16 @@ func TestShadowEvaluationNeverChangesTheDecision(t *testing.T) {
 	}
 }
 
+// mappedGrants is a grant store whose tenants are mapped to organisations.
+type mappedGrants struct {
+	grantsFake
+	rel administration.Relations
+}
+
+func (m mappedGrants) EffectiveRelations(context.Context, []string, time.Time) (administration.Relations, error) {
+	return m.rel, nil
+}
+
 // failingIdentities is an identity store that is down.
 type failingIdentities struct{ repository.IdentityRepository }
 
@@ -168,11 +178,19 @@ func TestShadowSeparatesStoreFailuresAndUnanchoredScopes(t *testing.T) {
 			GrantType: administration.TypeStanding, Source: administration.SourceDirect, RiskClass: administration.RiskLow,
 			ValidFrom: time.Now().Add(-time.Hour), Status: administration.StatusActive, GrantedBy: "prn_platformops", Reason: "test", Version: 1}
 	}
-	// The tenant route does not resolve its organisation, so an
-	// organisation grant may cover it: not comparable.
-	orgScoped := &API{identities: identities, grants: grantsFake{p.ID: {grant(administration.LevelOrganisation, administration.Scope{OrganisationID: "org_1"})}}}
-	if outcome, comparable := orgScoped.shadowGrants(ctx, tenantView, principal, "tenant.view"); outcome != metrics.ShadowDeny || comparable {
-		t.Fatalf("unanchored organisation grant: %s comparable=%v", outcome, comparable)
+	// The route resolves its tenant's organisations through the effective
+	// TenantOrganisationMapping, so an organisation grant is judged: it
+	// denies when the tenant is not mapped to that organisation, and allows
+	// when it is.
+	orgGrants := grantsFake{p.ID: {grant(administration.LevelOrganisation, administration.Scope{OrganisationID: "org_1"})}}
+	unmapped := &API{identities: identities, grants: orgGrants}
+	if outcome, comparable := unmapped.shadowGrants(ctx, tenantView, principal, "tenant.view"); outcome != metrics.ShadowDeny || !comparable {
+		t.Fatalf("unmapped organisation grant: %s comparable=%v", outcome, comparable)
+	}
+	mapped := &API{identities: identities, grants: mappedGrants{orgGrants, administration.Relations{
+		TenantOrganisations: map[string][]string{"ten_1": {"org_1"}}}}}
+	if outcome, comparable := mapped.shadowGrants(ctx, tenantView, principal, "tenant.view"); outcome != metrics.ShadowAllow || !comparable {
+		t.Fatalf("mapped organisation grant: %s comparable=%v", outcome, comparable)
 	}
 	// A grant for another tenant is judged: the route names its tenant.
 	otherTenant := &API{identities: identities, grants: grantsFake{p.ID: {grant(administration.LevelTenant, administration.Scope{TenantID: "ten_2"})}}}

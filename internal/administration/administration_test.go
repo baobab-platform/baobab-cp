@@ -234,7 +234,7 @@ func TestEffectiveAuthority(t *testing.T) {
 			t.Fatalf("fixture %s: %v", g.GrantID, err)
 		}
 	}
-	e := Effective("prn_jane", []Grant{view, jit, jit2, suspended, other}, nil, now)
+	e := Effective("prn_jane", []Grant{view, jit, jit2, suspended, other}, nil, now, Relations{})
 	var ids []string
 	for _, g := range e.Grants {
 		ids = append(ids, g.GrantID)
@@ -245,7 +245,7 @@ func TestEffectiveAuthority(t *testing.T) {
 	if e.ElevatedUntil == nil || !e.ElevatedUntil.Equal(now.Add(10*time.Minute)) || !e.Grants[0].Elevated || e.Grants[2].Elevated {
 		t.Fatalf("elevation: %+v", e)
 	}
-	if empty := Effective("prn_nobody", nil, nil, now); empty.Grants == nil || len(empty.Grants) != 0 {
+	if empty := Effective("prn_nobody", nil, nil, now, Relations{}); empty.Grants == nil || len(empty.Grants) != 0 {
 		t.Fatal("a principal with no grants gets an empty list, not null")
 	}
 	schema := contracts.MustSchema("administration/v1/grant.schema.json#/$defs/EffectiveAuthority")

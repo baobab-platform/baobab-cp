@@ -155,20 +155,20 @@ type DelegationRequest struct {
 // and the same as the source's; the scope the same (the evaluator accepts
 // no other); the delegation may not outlive the source or allow more hops
 // than the source has left; and a principal never delegates to themselves.
-func PlanDelegation(c *Catalogue, caller string, source Grant, sources map[string]Grant, q DelegationRequest, now time.Time) (Grant, error) {
-	return planDelegation(c, caller, source, sources, q, now, "")
+func PlanDelegation(c *Catalogue, caller string, source Grant, sources map[string]Grant, q DelegationRequest, now time.Time, rel Relations) (Grant, error) {
+	return planDelegation(c, caller, source, sources, q, now, rel, "")
 }
 
 // PlanApprovedDelegation is PlanDelegation for a delegation approved through
 // an ADMINISTRATIVE_GRANT_DELEGATION changeset.
-func PlanApprovedDelegation(c *Catalogue, delegator string, source Grant, sources map[string]Grant, q DelegationRequest, now time.Time, approvalID string) (Grant, error) {
+func PlanApprovedDelegation(c *Catalogue, delegator string, source Grant, sources map[string]Grant, q DelegationRequest, now time.Time, rel Relations, approvalID string) (Grant, error) {
 	if approvalID == "" {
 		return Grant{}, refuse(CodeApprovalRequired, "an approved delegation names its approval")
 	}
-	return planDelegation(c, delegator, source, sources, q, now, approvalID)
+	return planDelegation(c, delegator, source, sources, q, now, rel, approvalID)
 }
 
-func planDelegation(c *Catalogue, caller string, source Grant, sources map[string]Grant, q DelegationRequest, now time.Time, approvalID string) (Grant, error) {
+func planDelegation(c *Catalogue, caller string, source Grant, sources map[string]Grant, q DelegationRequest, now time.Time, rel Relations, approvalID string) (Grant, error) {
 	if source.PrincipalID != caller {
 		return Grant{}, refuse(CodeDelegationInvalid, "a principal delegates only grants they hold")
 	}
@@ -178,7 +178,7 @@ func planDelegation(c *Catalogue, caller string, source Grant, sources map[strin
 	if !principalID.MatchString(q.PrincipalID) {
 		return Grant{}, refuse(CodeInvalidGrant, "principal_id is not a canonical principal id")
 	}
-	if why := ineligibility(source, now, sources, 0); why != "" {
+	if why := ineligibility(source, now, sources, rel, 0); why != "" {
 		return Grant{}, refuse(CodeDelegationInvalid, "the source grant is not usable now (%s)", why)
 	}
 	p, ok := c.Permission(q.Permission)
@@ -188,8 +188,14 @@ func planDelegation(c *Catalogue, caller string, source Grant, sources map[strin
 	if !p.Delegable {
 		return Grant{}, refuse(CodeDelegationInvalid, "%s is not delegable", q.Permission)
 	}
-	if !Contains(source.Scope, q.Scope) {
+	if !Contains(source.Scope, q.Scope, rel) {
 		return Grant{}, refuse(CodeDelegationInvalid, "a delegation's scope stays within the source grant's: it must be the same or provably narrower")
+	}
+	// Across levels (an organisation grant delegated at one of its tenants)
+	// the permission must be valid at both: the registry says where it may be
+	// granted, and a delegation never makes it valid somewhere it is not.
+	if source.Scope.Level != q.Scope.Level && (!slices.Contains(p.ScopeLevels, source.Scope.Level) || !slices.Contains(p.ScopeLevels, q.Scope.Level)) {
+		return Grant{}, refuse(CodeDelegationInvalid, "%s is not valid at both %s and %s scope", q.Permission, source.Scope.Level, q.Scope.Level)
 	}
 	if source.DelegableDepth < 1 || source.DelegationDepth+1 > maxDelegationHopsDepth {
 		return Grant{}, refuse(CodeDelegationInvalid, "the source grant allows no further delegation")
@@ -269,8 +275,8 @@ func TransitionTarget(g Grant, command Command, now time.Time) (Status, error) {
 
 // Usable reports whether g would be accepted by evaluation now, delegation
 // included.
-func Usable(g Grant, sources map[string]Grant, now time.Time) bool {
-	return ineligibility(g, now, sources, 0) == ""
+func Usable(g Grant, sources map[string]Grant, now time.Time, rel Relations) bool {
+	return ineligibility(g, now, sources, rel, 0) == ""
 }
 
 // ResourceOf is the resource a scope names, for judging whether authority
@@ -301,9 +307,9 @@ func Replaceable(g Grant, now time.Time) bool {
 // more delegation, or a weaker assurance condition. A replacement that adds
 // none is no authority change and needs no second person, as a revoke does
 // not.
-func AddsAuthority(old, next Grant) bool {
+func AddsAuthority(old, next Grant, rel Relations) bool {
 	switch {
-	case old.Permission != next.Permission, !Contains(old.Scope, next.Scope):
+	case old.Permission != next.Permission, !Contains(old.Scope, next.Scope, rel):
 		return true
 	case next.DelegableDepth > old.DelegableDepth:
 		return true
@@ -340,7 +346,7 @@ func (q ReplaceRequest) issue(principal string) IssueRequest {
 // the replacement would start later than now (a gap would lock the holder
 // out), or when it adds HIGH or CRITICAL authority, which is requested as
 // an ADMINISTRATIVE_GRANT_ISSUANCE changeset naming replaces_grant_id.
-func PlanReplacement(c *Catalogue, caller string, old Grant, q ReplaceRequest, now time.Time) (Grant, error) {
+func PlanReplacement(c *Catalogue, caller string, old Grant, q ReplaceRequest, now time.Time, rel Relations) (Grant, error) {
 	if !Replaceable(old, now) {
 		return Grant{}, refuse(CodeReplacementInvalid, "only a live DIRECT grant is replaced; revoke and delegate again, or let bootstrap authority lapse")
 	}
@@ -352,7 +358,7 @@ func PlanReplacement(c *Catalogue, caller string, old Grant, q ReplaceRequest, n
 		return Grant{}, err
 	}
 	g.Status, g.SupersedesGrantID = StatusActive, old.GrantID
-	if g.RiskClass.AtLeast(RiskHigh) && AddsAuthority(old, g) {
+	if g.RiskClass.AtLeast(RiskHigh) && AddsAuthority(old, g, rel) {
 		return Grant{}, refuse(CodeApprovalRequired,
 			"the replacement adds %s-risk authority: request it as an ADMINISTRATIVE_GRANT_ISSUANCE changeset naming replaces_grant_id", g.RiskClass)
 	}

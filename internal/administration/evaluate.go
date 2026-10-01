@@ -20,11 +20,19 @@ type Resource struct {
 	CorporateGroupID string
 	OrganisationID   string
 	TenantID         string
-	LegalEntityID    string
-	MarketID         string
-	DigitalEstateID  string
-	ResourceType     string
-	ResourceID       string
+	// MappedOrganisationIDs are the organisations with an effective
+	// TenantOrganisationMapping to TenantID (Relations.ResolveResource). An
+	// ORGANISATION scope reaches the resources of a tenant mapped to its
+	// organisation, and only through that mapping.
+	MappedOrganisationIDs []string
+	// TenantOrganisationsResolved says MappedOrganisationIDs was looked up,
+	// so an organisation grant that does not cover the resource is evidence.
+	TenantOrganisationsResolved bool
+	LegalEntityID               string
+	MarketID                    string
+	DigitalEstateID             string
+	ResourceType                string
+	ResourceID                  string
 }
 
 // Anchors reports whether the resource names its anchor at level, so a
@@ -39,7 +47,7 @@ func (r Resource) Anchors(level ScopeLevel) bool {
 	case LevelCorporateGroup:
 		return r.CorporateGroupID != "" || len(r.CorporateGroupIDs) > 0
 	case LevelOrganisation:
-		return r.OrganisationID != ""
+		return r.OrganisationID != "" || r.TenantOrganisationsResolved
 	case LevelTenant:
 		return r.TenantID != ""
 	case LevelLegalEntity:
@@ -76,7 +84,8 @@ func (s Scope) Covers(r Resource) bool {
 			return r.CorporateGroupID == s.CorporateGroupID
 		}
 	case LevelOrganisation:
-		return r.OrganisationID == s.OrganisationID
+		return r.OrganisationID == s.OrganisationID ||
+			(r.TenantID != "" && slices.ContainsFunc(r.MappedOrganisationIDs, func(o string) bool { return normaliseEntityID(o) == normaliseEntityID(s.OrganisationID) }))
 	case LevelTenant:
 		return r.TenantID == s.TenantID
 	case LevelLegalEntity:
@@ -122,6 +131,9 @@ type Request struct {
 	// Sources resolves delegation provenance: every grant a DELEGATION
 	// grant names, directly or up its chain, by grant id.
 	Sources map[string]Grant
+	// Relations are the canonical mappings a delegation's containment in its
+	// source is judged with; the zero value proves nothing across levels.
+	Relations Relations
 }
 
 // Decision is the evaluation's result (administration/v1
@@ -165,7 +177,7 @@ func Evaluate(q Request) Decision {
 	var eligible []Grant
 	reason := ""
 	for _, g := range covering {
-		if why := ineligibility(g, q.Now, q.Sources, 0); why != "" {
+		if why := ineligibility(g, q.Now, q.Sources, q.Relations, 0); why != "" {
 			if reason == "" || severity(why) > severity(reason) {
 				reason = why
 			}
@@ -194,7 +206,7 @@ func Evaluate(q Request) Decision {
 // DELEGATION grant is only as good as its source: the source must itself be
 // usable now, cover the same permission and scope, and allow this depth
 // (sections 43-48); an unresolvable source is invalid, never assumed valid.
-func ineligibility(g Grant, now time.Time, sources map[string]Grant, hops int) string {
+func ineligibility(g Grant, now time.Time, sources map[string]Grant, rel Relations, hops int) string {
 	switch {
 	case g.Status == StatusRevoked:
 		return "ADMINISTRATIVE_GRANT_REVOKED"
@@ -212,12 +224,12 @@ func ineligibility(g Grant, now time.Time, sources map[string]Grant, hops int) s
 	}
 	source, ok := sources[g.DelegatedFromGrantID]
 	if !ok || hops >= 3 || g.GrantedBy != source.PrincipalID || source.Permission != g.Permission ||
-		!Contains(source.Scope, g.Scope) || g.DelegationDepth != source.DelegationDepth+1 ||
+		!Contains(source.Scope, g.Scope, rel) || g.DelegationDepth != source.DelegationDepth+1 ||
 		source.DelegableDepth < 1 || g.DelegableDepth > source.DelegableDepth-1 ||
 		(source.ValidUntil != nil && (g.ValidUntil == nil || g.ValidUntil.After(*source.ValidUntil))) {
 		return "DELEGATION_INVALID"
 	}
-	if ineligibility(source, now, sources, hops+1) != "" {
+	if ineligibility(source, now, sources, rel, hops+1) != "" {
 		return "DELEGATION_INVALID"
 	}
 	return ""
@@ -278,10 +290,10 @@ type EffectiveAuthority struct {
 // Effective is the principal's effective authority at now: every grant of
 // theirs that evaluation would accept, sorted by permission then grant id
 // (sections 99-102, 110). A grant it omits authorises nothing.
-func Effective(principal string, grants []Grant, sources map[string]Grant, now time.Time) EffectiveAuthority {
+func Effective(principal string, grants []Grant, sources map[string]Grant, now time.Time, rel Relations) EffectiveAuthority {
 	out := EffectiveAuthority{PrincipalID: principal, EvaluatedAt: now, Grants: []EffectiveGrant{}}
 	for _, g := range grants {
-		if g.PrincipalID != principal || ineligibility(g, now, sources, 0) != "" {
+		if g.PrincipalID != principal || ineligibility(g, now, sources, rel, 0) != "" {
 			continue
 		}
 		e := EffectiveGrant{GrantID: g.GrantID, Permission: g.Permission, Scope: g.Scope, GrantType: g.GrantType,

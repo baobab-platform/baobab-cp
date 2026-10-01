@@ -624,6 +624,14 @@ func inForce(status string, effectiveTo *time.Time) bool {
 	return status == RelationshipStatusActive || (status == RelationshipStatusEnded && effectiveTo != nil)
 }
 
+// InEffect reports whether the mapping is ACTIVE and inside its effective
+// window at the given time: the one definition of an effective
+// TenantOrganisationMapping (ADR-BCP-018 section 50), shared by attestation
+// and by administrative authority.
+func (m TenantOrganisationMapping) InEffect(at time.Time) bool {
+	return m.Status == RelationshipStatusActive && inWindow(at, m.EffectiveFrom, m.EffectiveTo)
+}
+
 func inWindow(at, from time.Time, to *time.Time) bool {
 	if at.Before(from) {
 		return false

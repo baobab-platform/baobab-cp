@@ -214,8 +214,23 @@ func (a *API) shadowGrants(ctx context.Context, r *http.Request, principal auth.
 		return metrics.ShadowError, true
 	}
 	now := time.Now().UTC()
+	// An organisation grant reaches a tenant through its effective
+	// TenantOrganisationMapping and no other way (ADR-BCP-018 section 50);
+	// the same relation judges a delegation against its source.
+	scopes := []administration.Scope{{TenantID: resource.TenantID}}
+	for _, g := range grants {
+		scopes = append(scopes, g.Scope)
+	}
+	for _, g := range sources {
+		scopes = append(scopes, g.Scope)
+	}
+	rel, err := a.grants.EffectiveRelations(ctx, administration.TenantsOf(scopes...), now)
+	if err != nil {
+		return metrics.ShadowError, true
+	}
+	resource = rel.ResolveResource(resource)
 	decision := administration.Evaluate(administration.Request{
-		PrincipalID: caller.ID, PrincipalActive: true, Action: permission, Resource: resource,
+		PrincipalID: caller.ID, PrincipalActive: true, Action: permission, Resource: resource, Relations: rel,
 		// The verified token carries no assurance claim the Control Plane
 		// reads yet, so a grant requiring step-up counts as step_up.
 		Now: now, Grants: grants, Sources: sources,

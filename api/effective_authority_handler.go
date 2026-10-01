@@ -46,6 +46,20 @@ func (h effectiveAuthorityHandler) get(w http.ResponseWriter, r *http.Request) {
 	if h.now != nil {
 		now = h.now()
 	}
+	// A delegation across levels (an organisation grant delegated at one of
+	// its tenants) is usable only while the mapping it rests on is effective.
+	scopes := make([]administration.Scope, 0, len(grants)+len(sources))
+	for _, g := range grants {
+		scopes = append(scopes, g.Scope)
+	}
+	for _, g := range sources {
+		scopes = append(scopes, g.Scope)
+	}
+	rel, err := h.grants.EffectiveRelations(r.Context(), administration.TenantsOf(scopes...), now)
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "effective authority could not be read", true)
+		return
+	}
 	w.Header().Set("Cache-Control", "private, no-store")
-	writeJSON(w, http.StatusOK, administration.Effective(principalID, grants, sources, now))
+	writeJSON(w, http.StatusOK, administration.Effective(principalID, grants, sources, now, rel))
 }

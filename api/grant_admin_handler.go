@@ -180,6 +180,25 @@ func (h grantAdminHandler) fail(w http.ResponseWriter, r *http.Request, err erro
 	}
 }
 
+// relationsFor loads the canonical relations authority is judged with for
+// the tenants the scopes name (effective TenantOrganisationMapping,
+// ADR-BCP-018 section 50): the same relation coverage and containment read.
+func (h grantAdminHandler) relationsFor(r *http.Request, now time.Time, scopes ...administration.Scope) (administration.Relations, error) {
+	return h.grants.EffectiveRelations(r.Context(), administration.TenantsOf(scopes...), now)
+}
+
+// scopesOf lists the scopes of grants and the grants they rest on.
+func scopesOf(grants []administration.Grant, sources map[string]administration.Grant, extra ...administration.Scope) []administration.Scope {
+	out := append([]administration.Scope(nil), extra...)
+	for _, g := range grants {
+		out = append(out, g.Scope)
+	}
+	for _, g := range sources {
+		out = append(out, g.Scope)
+	}
+	return out
+}
+
 func writeGrant(w http.ResponseWriter, status int, g administration.Grant) {
 	w.Header().Set("ETag", entityTag(g.Version))
 	w.Header().Set("Cache-Control", "private, no-store")
@@ -345,9 +364,15 @@ func (h grantAdminHandler) delegate(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+	rel, err := h.relationsFor(r, h.clock(), scopesOf(grants, sources, body.Scope)...)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
 	decision := administration.Evaluate(administration.Request{
 		PrincipalID: callerID, PrincipalActive: true, Action: "administrator.delegate",
-		Resource: administration.ResourceOf(body.Scope, h.environment), Now: h.clock(), Grants: grants, Sources: sources,
+		Resource: rel.ResolveResource(administration.ResourceOf(body.Scope, h.environment)), Now: h.clock(), Grants: grants, Sources: sources,
+		Relations: rel,
 	})
 	if !decision.Allowed() {
 		code := "AUTHORIZATION_DENIED"
@@ -365,7 +390,7 @@ func (h grantAdminHandler) delegate(w http.ResponseWriter, r *http.Request) {
 		func(source administration.Grant, chain map[string]administration.Grant) (administration.Grant, error) {
 			return administration.PlanDelegation(h.catalogue, callerID, source, chain, administration.DelegationRequest{
 				PrincipalID: body.PrincipalID, Permission: body.Permission, Scope: body.Scope, ValidUntil: body.ValidUntil,
-				DelegableDepth: body.DelegableDepth, Reason: body.Reason}, now)
+				DelegableDepth: body.DelegableDepth, Reason: body.Reason}, now, rel)
 		})
 	if err != nil {
 		h.fail(w, r, err)
@@ -406,9 +431,19 @@ func (h grantAdminHandler) replace(w http.ResponseWriter, r *http.Request) {
 	request := administration.ReplaceRequest{Permission: body.Permission, Scope: body.Scope, GrantType: body.GrantType,
 		ValidFrom: body.ValidFrom, ValidUntil: body.ValidUntil, DelegableDepth: body.DelegableDepth, Conditions: body.Conditions, Reason: body.Reason}
 	now := h.clock()
+	current, err := h.grants.GetAdministrativeGrant(r.Context(), id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	rel, err := h.relationsFor(r, now, current.Scope, body.Scope)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
 	result, err := h.grants.ReplaceAdministrativeGrant(r.Context(), actor, key, requestHash("replace", id, body, version), id, version, body.Reason, now,
 		func(old administration.Grant) (administration.Grant, error) {
-			return administration.PlanReplacement(h.catalogue, callerID, old, request, now)
+			return administration.PlanReplacement(h.catalogue, callerID, old, request, now, rel)
 		})
 	if err != nil {
 		h.fail(w, r, err)

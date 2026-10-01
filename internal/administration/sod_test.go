@@ -54,7 +54,7 @@ func TestSoDIndependence(t *testing.T) {
 func TestSoDGrantBound(t *testing.T) {
 	s := MustDefaultSoD()
 	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
-	within, beyond := from.Add(29*24*time.Hour), from.Add(31*24*time.Hour)
+	within, beyond := from.Add(24*time.Hour), from.Add(24*time.Hour+time.Minute)
 	if err := s.GrantBound(KindIssuance, RiskCritical, TypeStanding, from, nil); err == nil {
 		t.Error("a STANDING CRITICAL grant was accepted")
 	}
@@ -64,8 +64,33 @@ func TestSoDGrantBound(t *testing.T) {
 	if err := s.GrantBound(KindIssuance, RiskCritical, TypeTimeBound, from, &within); err != nil {
 		t.Errorf("a bounded CRITICAL grant was refused: %v", err)
 	}
+	// Exactly 24 hours is allowed; a minute more is a new approval.
+	// HIGH grants do not inherit the CRITICAL bound.
+	long := from.Add(90 * 24 * time.Hour)
+	if err := s.GrantBound(KindIssuance, RiskHigh, TypeTimeBound, from, &long); err != nil {
+		t.Errorf("a long HIGH grant was held to the CRITICAL bound: %v", err)
+	}
 	if err := s.GrantBound(KindIssuance, RiskHigh, TypeStanding, from, nil); err != nil {
 		t.Errorf("a STANDING HIGH grant was refused by a CRITICAL bound: %v", err)
+	}
+}
+
+// The CRITICAL policy is the owner's decision (2026-10-01): never STANDING,
+// at most 24 hours, a 1 hour JIT target, no inheritance by HIGH.
+func TestCriticalPolicyIsTheOwnersDecision(t *testing.T) {
+	var critical *SoDPolicy
+	for i, p := range MustDefaultSoD().Policies {
+		if p.RiskThreshold == RiskCritical && p.Status == "ACTIVE" && p.MaximumDurationHours > 0 {
+			critical = &MustDefaultSoD().Policies[i]
+		}
+	}
+	if critical == nil || critical.MaximumDurationHours != 24 || critical.JITTargetHours != 1 {
+		t.Fatalf("the CRITICAL policy is %+v", critical)
+	}
+	for _, gt := range critical.AllowedGrantTypes {
+		if gt == TypeStanding {
+			t.Fatal("a CRITICAL grant may be STANDING")
+		}
 	}
 }
 

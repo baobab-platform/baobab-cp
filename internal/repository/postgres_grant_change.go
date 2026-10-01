@@ -65,6 +65,32 @@ func delegationRequestOf(d changeset.DesiredChange, reason string) administratio
 	return q
 }
 
+// relationsFor loads the effective tenant-organisation relations for the
+// tenants the scopes name, inside the caller's transaction.
+func relationsFor(ctx context.Context, tx pgx.Tx, now time.Time, scopes ...administration.Scope) (administration.Relations, error) {
+	rel := administration.Relations{TenantOrganisations: map[string][]string{}}
+	tenants := administration.TenantsOf(scopes...)
+	if len(tenants) == 0 {
+		return rel, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT tenant_id, organisation_id::text, status, effective_from, effective_to
+		FROM registry.tenant_organisation_mapping WHERE tenant_id = ANY($1) AND status <> 'ENDED'`, tenants)
+	if err != nil {
+		return rel, fmt.Errorf("load tenant organisation mappings: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var m domain.TenantOrganisationMapping
+		if err := rows.Scan(&m.TenantID, &m.OrganisationID, &m.Status, &m.EffectiveFrom, &m.EffectiveTo); err != nil {
+			return rel, err
+		}
+		if m.InEffect(now) {
+			rel.TenantOrganisations[m.TenantID] = append(rel.TenantOrganisations[m.TenantID], m.OrganisationID)
+		}
+	}
+	return rel, rows.Err()
+}
+
 // grantChangeFailures runs the plan checks of an administrative grant
 // change against authoritative state, side-effect free. Each failure is
 // keyed by its check name; one absent from the result passed.
@@ -115,9 +141,20 @@ func grantChangeFailures(ctx context.Context, tx pgx.Tx, c changeset.Changeset, 
 		if err != nil {
 			return nil, err
 		}
+		scopes := []administration.Scope{source.Scope}
+		if d.Scope != nil {
+			scopes = append(scopes, *d.Scope)
+		}
+		for _, link := range chain {
+			scopes = append(scopes, link.Scope)
+		}
+		rel, err := relationsFor(ctx, tx, now, scopes...)
+		if err != nil {
+			return nil, err
+		}
 		return administration.DelegationFailures(administration.DelegationFacts{Catalogue: catalogue, SoD: sod,
 			Request: delegationRequestOf(d, c.Reason), Requester: c.RequestedBy, Source: source, Chain: chain,
-			GranteeActive: granteeActive, Held: held, Now: now}), nil
+			GranteeActive: granteeActive, Held: held, Relations: rel, Now: now}), nil
 	}
 	failures := administration.IssuanceFailures(administration.IssuanceFacts{Catalogue: catalogue, SoD: sod,
 		Request: issueRequestOf(d), Requester: c.RequestedBy, GranteeActive: granteeActive, Held: held, Now: now})
@@ -227,8 +264,19 @@ func (r *PostgresRepository) applyGrantChange(ctx context.Context, tx pgx.Tx, c 
 		if err != nil {
 			return "", "", false, err
 		}
+		scopes := []administration.Scope{source.Scope}
+		if d.Scope != nil {
+			scopes = append(scopes, *d.Scope)
+		}
+		for _, link := range chain {
+			scopes = append(scopes, link.Scope)
+		}
+		rel, err := relationsFor(ctx, tx, now, scopes...)
+		if err != nil {
+			return "", "", false, err
+		}
 		if g, err = administration.PlanApprovedDelegation(catalogue, c.RequestedBy, source, chain,
-			delegationRequestOf(d, c.Reason), now, c.ApprovalID); err != nil {
+			delegationRequestOf(d, c.Reason), now, rel, c.ApprovalID); err != nil {
 			return "", "", false, grantPlanError(err)
 		}
 	}

@@ -8,16 +8,16 @@ import "slices"
 // it asks, for each kind of scope, whether outer.Covers(r) holds for every
 // resource r that inner.Covers(r) holds for.
 //
-// Only containment the scopes themselves state is proven, from their own
-// anchors, environment, market qualifiers and corporate-group membership
-// lists. Nothing is inferred from identifiers (no prefix or naming guess)
-// and no organisation-to-tenant or group-descendant relation is assumed,
-// because Evaluate does not follow one: an ORGANISATION scope reaches
-// resources that name that organisation, not the tenants it owns, and a
-// DYNAMIC_GROUP_DESCENDANTS scope's members are not known to a scope on
-// its own. Where containment cannot be proven the answer is false, so a
-// delegation is refused rather than widened.
-func Contains(outer, inner Scope) bool {
+// Containment is proven from the scopes' own anchors, environment, market
+// qualifiers and corporate-group membership lists, and from one canonical
+// relation: an effective TenantOrganisationMapping lets an ORGANISATION
+// scope contain a TENANT scope (Relations). Nothing is inferred from
+// identifiers (no prefix or naming guess), and no ownership, parentage,
+// PlatformAccount or group-descendant relation is assumed: a
+// DYNAMIC_GROUP_DESCENDANTS scope's members are not known until a group
+// graph is supplied. Where containment cannot be proven the answer is
+// false, so a delegation is refused rather than widened.
+func Contains(outer, inner Scope, rel Relations) bool {
 	// An environment-less scope reaches every environment; a named one only
 	// itself.
 	if outer.Environment != "" && outer.Environment != inner.Environment {
@@ -29,6 +29,14 @@ func Contains(outer, inner Scope) bool {
 	switch outer.Level {
 	case LevelCorporateGroup:
 		return containsGroup(outer, inner)
+	case LevelOrganisation:
+		// The one cross-level relation: an organisation reaches the tenants it
+		// has an effective TenantOrganisationMapping to (ADR-BCP-018 section 50),
+		// exactly as Covers reads it. Never the reverse, and never from
+		// ownership, naming, parentage or PlatformAccount membership.
+		if inner.Level == LevelTenant {
+			return rel.Maps(inner.TenantID, outer.OrganisationID)
+		}
 	case LevelMarket:
 		return inner.Level == LevelMarket && inner.MarketID == outer.MarketID &&
 			(outer.OrganisationID == "" || inner.OrganisationID == outer.OrganisationID) &&

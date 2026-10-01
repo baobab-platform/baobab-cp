@@ -105,7 +105,7 @@ func TestPlanDelegationNeverExceedsTheSource(t *testing.T) {
 	source := delegableSource(&end)
 	base := DelegationRequest{PrincipalID: "prn_bob", Permission: "tenant.view", Scope: source.Scope,
 		ValidUntil: now.Add(24 * time.Hour), DelegableDepth: 1, Reason: "cover"}
-	g, err := PlanDelegation(c, "prn_jane", source, nil, base, now)
+	g, err := PlanDelegation(c, "prn_jane", source, nil, base, now, Relations{})
 	if err != nil {
 		t.Fatalf("a valid delegation was refused: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestPlanDelegationNeverExceedsTheSource(t *testing.T) {
 		t.Fatalf("unexpected delegation %+v", g)
 	}
 	// The result is what evaluation accepts.
-	if !Usable(g, map[string]Grant{source.GrantID: source}, now) {
+	if !Usable(g, map[string]Grant{source.GrantID: source}, now, Relations{}) {
 		t.Fatal("a freshly planned delegation is not usable")
 	}
 
@@ -136,7 +136,7 @@ func TestPlanDelegationNeverExceedsTheSource(t *testing.T) {
 	for name, tc := range bad {
 		q := base
 		tc.edit(&q)
-		_, err := PlanDelegation(c, tc.caller, source, nil, q, now)
+		_, err := PlanDelegation(c, tc.caller, source, nil, q, now, Relations{})
 		if err == nil {
 			t.Errorf("%s was accepted", name)
 			continue
@@ -151,24 +151,24 @@ func TestPlanDelegationNeverExceedsTheSource(t *testing.T) {
 	// permission that is not delegable.
 	none := delegableSource(&end)
 	none.DelegableDepth = 0
-	_, err = PlanDelegation(c, "prn_jane", none, nil, base, now)
+	_, err = PlanDelegation(c, "prn_jane", none, nil, base, now, Relations{})
 	refusedWith(t, err, CodeDelegationInvalid)
 	suspended := delegableSource(&end)
 	suspended.Status = StatusSuspended
-	_, err = PlanDelegation(c, "prn_jane", suspended, nil, base, now)
+	_, err = PlanDelegation(c, "prn_jane", suspended, nil, base, now, Relations{})
 	refusedWith(t, err, CodeDelegationInvalid)
 	notDelegable := tenantGrant("agr_nd", "prn_jane", "administrator.grant", "tn_acmeug")
 	notDelegable.DelegableDepth = 1
 	q := base
 	q.Permission = "administrator.grant"
-	_, err = PlanDelegation(c, "prn_jane", notDelegable, nil, q, now)
+	_, err = PlanDelegation(c, "prn_jane", notDelegable, nil, q, now, Relations{})
 	refusedWith(t, err, CodeDelegationInvalid)
 	// A delegable HIGH permission still waits for a second person's approval.
 	highDelegable := tenantGrant("agr_hd", "prn_jane", "tenant.suspend", "tn_acmeug")
 	highDelegable.DelegableDepth = 2
 	q.Permission = "tenant.suspend"
 	q.DelegableDepth = 0
-	_, err = PlanDelegation(c, "prn_jane", highDelegable, nil, q, now)
+	_, err = PlanDelegation(c, "prn_jane", highDelegable, nil, q, now, Relations{})
 	refusedWith(t, err, CodeApprovalRequired)
 
 	// A delegation from a delegation is one hop deeper, and the third hop is the last.
@@ -179,7 +179,7 @@ func TestPlanDelegationNeverExceedsTheSource(t *testing.T) {
 	chain := map[string]Grant{source.GrantID: source}
 	q2 := DelegationRequest{PrincipalID: "prn_carol", Permission: "tenant.view", Scope: source.Scope,
 		ValidUntil: now.Add(12 * time.Hour), Reason: "cover"}
-	third, err := PlanDelegation(c, "prn_bob", second, chain, q2, now)
+	third, err := PlanDelegation(c, "prn_bob", second, chain, q2, now, Relations{})
 	if err != nil || third.DelegationDepth != 2 {
 		t.Fatalf("a second hop: %+v %v", third, err)
 	}
@@ -287,18 +287,18 @@ func TestAddsAuthority(t *testing.T) {
 		"a wider environment":    {func() Grant { g := same(func(*Grant) {}); return g }(), false},
 		"more delegation":        {same(func(g *Grant) { g.DelegableDepth = 1 }), true},
 	} {
-		if got := AddsAuthority(base, tc.next); got != tc.adds {
+		if got := AddsAuthority(base, tc.next, Relations{}); got != tc.adds {
 			t.Errorf("%s: AddsAuthority = %v, want %v", name, got, tc.adds)
 		}
 	}
 	guarded := base
 	guarded.Conditions = &Conditions{MinimumACR: "urn:baobab:acr:mfa"}
 	weaker := same(func(g *Grant) {})
-	if !AddsAuthority(guarded, weaker) {
+	if !AddsAuthority(guarded, weaker, Relations{}) {
 		t.Error("dropping the assurance condition is a weaker grant")
 	}
 	kept := same(func(g *Grant) { g.Conditions = &Conditions{MinimumACR: "urn:baobab:acr:mfa"} })
-	if AddsAuthority(guarded, kept) {
+	if AddsAuthority(guarded, kept, Relations{}) {
 		t.Error("keeping the assurance condition added authority")
 	}
 }
@@ -310,7 +310,7 @@ func TestPlanReplacement(t *testing.T) {
 	old.GrantType, old.ValidUntil = TypeTimeBound, &end
 	shorter := now.Add(24 * time.Hour)
 	q := ReplaceRequest{Permission: "tenant.suspend", Scope: old.Scope, GrantType: TypeTimeBound, ValidUntil: &shorter, Reason: "Shorten."}
-	g, err := PlanReplacement(c, "prn_ops", old, q, now)
+	g, err := PlanReplacement(c, "prn_ops", old, q, now, Relations{})
 	if err != nil {
 		t.Fatalf("a non-escalating HIGH replacement was refused: %v", err)
 	}
@@ -321,16 +321,16 @@ func TestPlanReplacement(t *testing.T) {
 	wider := q
 	long := end.Add(24 * time.Hour)
 	wider.ValidUntil = &long
-	_, err = PlanReplacement(c, "prn_ops", old, wider, now)
+	_, err = PlanReplacement(c, "prn_ops", old, wider, now, Relations{})
 	refusedWith(t, err, CodeApprovalRequired)
 	// LOW and MODERATE replacements are direct whatever they add.
 	view := tenantGrant("agr_view", "prn_jane", "tenant.view", "tn_acmeug")
 	if _, err := PlanReplacement(c, "prn_ops", view, ReplaceRequest{Permission: "tenant.view", Scope: Scope{Level: LevelTenant, TenantID: "tn_other"},
-		GrantType: TypeStanding, Reason: "Move."}, now); err != nil {
+		GrantType: TypeStanding, Reason: "Move."}, now, Relations{}); err != nil {
 		t.Fatalf("a LOW replacement was refused: %v", err)
 	}
 	// The holder never replaces their own grant.
-	_, err = PlanReplacement(c, "prn_jane", old, q, now)
+	_, err = PlanReplacement(c, "prn_jane", old, q, now, Relations{})
 	refusedWith(t, err, CodeSelfApproval)
 	// Only a live DIRECT grant is replaceable.
 	for name, mutate := range map[string]func(*Grant){
@@ -341,7 +341,7 @@ func TestPlanReplacement(t *testing.T) {
 	} {
 		bad := old
 		mutate(&bad)
-		_, err := PlanReplacement(c, "prn_ops", bad, q, now)
+		_, err := PlanReplacement(c, "prn_ops", bad, q, now, Relations{})
 		refusedWith(t, err, CodeReplacementInvalid)
 		_ = name
 	}
@@ -349,6 +349,6 @@ func TestPlanReplacement(t *testing.T) {
 	future := now.Add(time.Hour)
 	later := q
 	later.ValidFrom = &future
-	_, err = PlanReplacement(c, "prn_ops", old, later, now)
+	_, err = PlanReplacement(c, "prn_ops", old, later, now, Relations{})
 	refusedWith(t, err, CodeInvalidGrant)
 }
