@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -257,7 +258,7 @@ func TestBindingProviderBackfill(t *testing.T) {
 		}
 	}
 
-	if err := ApplyMigrations(ctx, pool); err != nil {
+	if err := applyMigrationsThrough(ctx, pool, migrations, 82); err != nil {
 		t.Fatalf("apply 000077 over bindings without providers: %v", err)
 	}
 
@@ -294,4 +295,43 @@ func TestBindingProviderBackfill(t *testing.T) {
 		t.Fatalf("changing an ACTIVE binding without a provider: %v", err)
 	}
 	exec(`UPDATE capability.capability_binding SET status = 'SUSPENDED' WHERE id = $1::uuid`, bindings["none"])
+
+	// EA-02E (000083) fails loudly while any ACTIVE binding names no
+	// provider: it names each one and its reason, and changes nothing.
+	err = ApplyMigrations(ctx, pool)
+	if err == nil || !strings.Contains(err.Error(), bindings["ambiguous"]+" (AMBIGUOUS_PROVIDER") ||
+		!strings.Contains(err.Error(), bindings["suspended"]+" (NO_PROVIDER") || strings.Contains(err.Error(), bindings["none"]) {
+		t.Fatalf("000083 over unresolved bindings: %v", err)
+	}
+	var applied bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM system.schema_migration WHERE version = 83)`).Scan(&applied); err != nil || applied {
+		t.Fatalf("000083 was recorded although it failed: %v %v", applied, err)
+	}
+
+	// The operator resolves them: names the ambiguous binding's provider,
+	// and activates the suspended engine's provider, which 000083 then
+	// backfills. A provider that does not support a binding's contract
+	// major is never its candidate.
+	exec(`UPDATE capability.capability_binding SET provider_id = (SELECT provider_id FROM capability.capability_provider WHERE provider_key = 'backfill-ambiguous.two')
+		WHERE id = $1::uuid`, bindings["ambiguous"])
+	exec(`UPDATE capability.capability_provider SET status = 'ACTIVE' WHERE provider_key = 'backfill-suspended.engine'`)
+	exec(`INSERT INTO capability.capability_binding(id, capability_id, engine_instance_id, scope_id, binding_mode, priority, status, contract_version, effective_from)
+		VALUES ('80000000-0000-0000-0000-000000000499', $1::uuid, '80000000-0000-0000-0000-000000000200', '80000000-0000-0000-0000-000000000300',
+			'PRIMARY', 2, 'SUSPENDED', 'v2', now())`, capability)
+	if err := ApplyMigrations(ctx, pool); err != nil {
+		t.Fatalf("000083 after the bindings were resolved: %v", err)
+	}
+	var suspended string
+	var validated bool
+	var candidates int
+	if err := pool.QueryRow(ctx, `SELECT
+			(SELECT cp.provider_key FROM capability.capability_binding cb JOIN capability.capability_provider cp USING (provider_id) WHERE cb.id = $1::uuid),
+			(SELECT convalidated FROM pg_constraint WHERE conname = 'capability_binding_active_provider_check'),
+			(SELECT count(*) FROM capability.binding_provider_candidate WHERE binding_id = '80000000-0000-0000-0000-000000000499')`,
+		bindings["suspended"]).Scan(&suspended, &validated, &candidates); err != nil {
+		t.Fatal(err)
+	}
+	if suspended != "backfill-suspended.engine" || !validated || candidates != 0 {
+		t.Fatalf("after 000083: provider %q, constraint validated %v, candidates for a v2 binding %d", suspended, validated, candidates)
+	}
 }
