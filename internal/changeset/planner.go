@@ -11,7 +11,8 @@ import (
 )
 
 // Target is the authoritative state of the resource a changeset names
-// (a tenant, market, mapping or provider), read when it is planned.
+// (a tenant, market, mapping, provider or engine release), read when it is
+// planned.
 type Target struct {
 	Found    bool
 	Status   string
@@ -109,6 +110,8 @@ func Generate(in PlanInput) (Plan, error) {
 			res.MappingID = c.DesiredChange.MappingID
 		case TargetProvider:
 			res.ProviderID = c.DesiredChange.ProviderID
+		case TargetRelease:
+			res.ReleaseID = c.DesiredChange.ReleaseID
 		default:
 			res.TenantID = c.DesiredChange.TenantID
 		}
@@ -135,6 +138,11 @@ func Generate(in PlanInput) (Plan, error) {
 		p.ReadinessRequirements = append(p.ReadinessRequirements, Check{Check: check.Check, Description: description})
 	}
 	switch {
+	case kind.Target == TargetRelease:
+		p.RiskClass = "HIGH"
+		p.ImpactAnalysis = ImpactAnalysis{Summary: fmt.Sprintf("Approves engine release %s: it may then be named as an engine instance's desired release and carry provider activations.", c.DesiredChange.ReleaseID),
+			ResourcesChanged: 1, AvailabilityImpact: "None until an instance desires the release."}
+		p.CompensationStrategy = "Deprecate or revoke the release through its own lifecycle; approval is never undone in place."
 	case kind.Target == TargetProvider:
 		p.RiskClass = "HIGH"
 		p.ImpactAnalysis = ImpactAnalysis{Summary: fmt.Sprintf("Activates capability provider %s at revision %d: capability bindings may then name it.", c.DesiredChange.ProviderID, in.Target.Revision),

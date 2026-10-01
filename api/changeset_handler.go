@@ -74,6 +74,8 @@ func (h changesetHandler) fail(w http.ResponseWriter, r *http.Request, err error
 		problem(w, r, http.StatusForbidden, "MARKET_SELF_ACTIVATION", "a market is never activated by its creator or last editor", false)
 	case errors.Is(err, repository.ErrMappingSelfApproval):
 		problem(w, r, http.StatusForbidden, "MAPPING_SELF_APPROVAL", "a mapping is never activated by its creator", false)
+	case errors.Is(err, repository.ErrEngineReleaseSelfApproval):
+		problem(w, r, http.StatusForbidden, "RELEASE_SELF_APPROVAL", "an engine release is never approved by the principal who recorded it", false)
 	case errors.Is(err, repository.ErrRegistryMarketNotValidated), errors.Is(err, repository.ErrMappingLifecycleConflict):
 		problem(w, r, http.StatusConflict, "CHANGESET_TARGET_STATE_CONFLICT", err.Error(), false)
 	case errors.Is(err, repository.ErrMappingOverlap):

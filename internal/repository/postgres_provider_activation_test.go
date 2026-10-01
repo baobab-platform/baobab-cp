@@ -19,7 +19,8 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/topology/release"
 )
 
-// TestProviderActivationChangeset covers EA-02D end to end: a registered
+// TestProviderActivationChangeset covers EA-02D end to end, its engine
+// releases approved through ENGINE_RELEASE_APPROVAL: a registered
 // provider is DRAFT and carries its canonical provider_ id; a
 // PROVIDER_ACTIVATION plan runs every plan check and blocks on each that
 // fails (no recorded engine release, a production instance for a provider
@@ -59,7 +60,11 @@ func TestProviderActivationChangeset(t *testing.T) {
 	providerKey := engine + ".engine"
 	capabilityKey := "test.activation" + suffix + ".perform"
 	var canonical string
+	var releases []string
 	cleanup := func() {
+		for _, id := range releases {
+			removeChangesetsFor(ctx, admin, id)
+		}
 		if canonical != "" {
 			admin.Exec(ctx, `DELETE FROM changeset.outcome WHERE changeset_id IN (SELECT changeset_id FROM changeset.changeset WHERE target_id = $1)`, canonical)
 			admin.Exec(ctx, `DELETE FROM changeset.approval WHERE changeset_id IN (SELECT changeset_id FROM changeset.changeset WHERE target_id = $1)`, canonical)
@@ -192,12 +197,15 @@ func TestProviderActivationChangeset(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		releases = append(releases, rel.ReleaseID)
 		return rel.ReleaseID
 	}
+	// Releases are approved as in operation: an ENGINE_RELEASE_APPROVAL
+	// changeset, decided by someone other than its requester.
+	approvals := releaseApproval{t: t, ctx: ctx, repo: repo, requester: requester, approver: approver, actor: actor, now: now}
 	approve := func(id string) {
 		t.Helper()
-		exec(`UPDATE topology.engine_release SET status = 'APPROVED', status_changed_by = 'prn_releaser', status_changed_at = $2,
-			status_reason = 'Qualified.' WHERE release_key = $1`, id, now)
+		approvals.approve(approvals.submit(approvals.draft(id, "key-release-"+id), changeset.StateAwaitingApproval))
 	}
 	covering := recordRelease("1.0.0", providerKey, 0)
 	c = submit(c, changeset.StateBlocked, "PROVIDER_NO_ELIGIBLE_RELEASE")

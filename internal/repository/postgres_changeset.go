@@ -113,6 +113,9 @@ var targetQueries = map[string]string{
 	changeset.TargetMarket:   `SELECT status, revision, '' FROM market.registry WHERE market_id = $1`,
 	changeset.TargetMapping:  `SELECT status, revision, tenant_id FROM mapping.mapping WHERE mapping_id = $1`,
 	changeset.TargetProvider: `SELECT status, version, '' FROM capability.capability_provider WHERE canonical_provider_id = $1`,
+	// A release is not revisioned: status is all that moves, only forward
+	// (release-policy.yaml status_transitions), so its revision is 1.
+	changeset.TargetRelease: `SELECT status, 1::bigint, '' FROM topology.engine_release WHERE release_key = $1`,
 }
 
 // TargetRevision is the current revision of the resource a desired change
@@ -229,11 +232,11 @@ func lockChangeset(ctx context.Context, tx pgx.Tx, id string, expected int64) (c
 	return c, nil
 }
 
-// readTarget reads the tenant, market, mapping or provider a changeset
-// names, locking it when lock is set, with the earlier open changesets that
-// hold its semantic lock and, for a kind with plan checks, each check's
-// failure as of now.
-func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool, now time.Time) (changeset.Target, error) {
+// readTarget reads the tenant, market, mapping, provider or engine release a
+// changeset names, locking it when lock is set, with the earlier open
+// changesets that hold its semantic lock and, for a kind with plan checks,
+// each check's failure as of now. environment is the Control Plane's own.
+func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool, now time.Time, environment string) (changeset.Target, error) {
 	var t changeset.Target
 	query, ok := targetQueries[c.DesiredChange.TargetType()]
 	if !ok {
@@ -271,6 +274,11 @@ func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool
 			return t, fmt.Errorf("read changeset provider: %w", err)
 		}
 		if t.CheckFailures, err = providerActivationChecks(ctx, tx, providerUUID, now); err != nil {
+			return t, err
+		}
+	}
+	if c.DesiredChange.TargetType() == changeset.TargetRelease {
+		if t.CheckFailures, err = engineReleaseApprovalChecks(ctx, tx, c.DesiredChange.ReleaseID, environment); err != nil {
 			return t, err
 		}
 	}
@@ -341,7 +349,7 @@ func (r *PostgresRepository) SubmitChangeset(ctx context.Context, id string, exp
 		c.DesiredChange.TargetType(), c.DesiredChange.TargetID()); err != nil {
 		return c, err
 	}
-	target, err := readTarget(ctx, tx, c, false, now)
+	target, err := readTarget(ctx, tx, c, false, now, r.Environment)
 	if err != nil {
 		return c, err
 	}
@@ -437,7 +445,8 @@ func freshlyStale(c changeset.Changeset, plan changeset.Plan, target changeset.T
 
 // checkTargetMakerChecker applies the target's own maker-checker rule to an
 // approver, exactly as the kind's direct route does: a market is never
-// activated by its creator or last editor, a mapping never by its creator.
+// activated by its creator or last editor, a mapping never by its creator,
+// an engine release never approved by its recorder.
 // approver is the principal, subject the verified token subject; either
 // matching the maker refuses the approval.
 func checkTargetMakerChecker(ctx context.Context, tx pgx.Tx, c changeset.Changeset, approver, subject string) error {
@@ -461,6 +470,15 @@ func checkTargetMakerChecker(ctx context.Context, tx pgx.Tx, c changeset.Changes
 		}
 		if is(creator) {
 			return fmt.Errorf("%w: %s", ErrMappingSelfApproval, c.DesiredChange.MappingID)
+		}
+	case changeset.TargetRelease:
+		var recorder string
+		err := tx.QueryRow(ctx, `SELECT recorded_by FROM topology.engine_release WHERE release_key = $1`, c.DesiredChange.ReleaseID).Scan(&recorder)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if is(recorder) {
+			return fmt.Errorf("%w: %s", ErrEngineReleaseSelfApproval, c.DesiredChange.ReleaseID)
 		}
 	}
 	return nil
@@ -493,7 +511,7 @@ func (r *PostgresRepository) DecideChangeset(ctx context.Context, id string, exp
 		return changeset.Approval{}, ErrChangesetPlanMismatch
 	}
 	if req.Decision == changeset.DecisionApproved {
-		target, err := readTarget(ctx, tx, c, false, now)
+		target, err := readTarget(ctx, tx, c, false, now, r.Environment)
 		if err != nil {
 			return changeset.Approval{}, err
 		}
@@ -609,7 +627,7 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 	if approvedDigest != plan.PlanDigest {
 		return operations.Operation{}, false, ErrChangesetPlanMismatch
 	}
-	target, err := readTarget(ctx, tx, c, true, now)
+	target, err := readTarget(ctx, tx, c, true, now, r.Environment)
 	if err != nil {
 		return operations.Operation{}, false, err
 	}
@@ -749,6 +767,27 @@ func (r *PostgresRepository) applyToTarget(ctx context.Context, tx pgx.Tx, c cha
 			return "", "", false, err
 		}
 		return "", "PROVIDER_STATUS_MATCHES", status == kind.ToStatus, nil
+	case changeset.TargetRelease:
+		// Only a release still in a status the kind starts from moves; the
+		// database enforces the transition itself (migration 000082). The
+		// approver is recorded as who changed its status.
+		if err := checkTargetMakerChecker(ctx, tx, c, approver, approverSubject); err != nil {
+			return "", "", false, err
+		}
+		res, err := tx.Exec(ctx, `UPDATE topology.engine_release SET status = $2, status_changed_by = $3, status_changed_at = $4,
+			status_reason = $5 WHERE release_key = $1 AND status = ANY($6)`,
+			c.DesiredChange.ReleaseID, kind.ToStatus, approver, now, releaseStatusReason(c.ChangesetID, c.Reason), kind.FromStatus)
+		if err != nil {
+			return "", "", false, fmt.Errorf("approve engine release: %w", err)
+		}
+		if res.RowsAffected() != 1 {
+			return "", "", false, ErrChangesetPlanStale
+		}
+		if err := tx.QueryRow(ctx, `SELECT status FROM topology.engine_release WHERE release_key = $1`,
+			c.DesiredChange.ReleaseID).Scan(&status); err != nil {
+			return "", "", false, err
+		}
+		return "", "ENGINE_RELEASE_STATUS_MATCHES", status == kind.ToStatus, nil
 	}
 	res, err := tx.Exec(ctx, `UPDATE tenants SET desired_state = $2, observed_state = $2, revision = revision + 1, updated_at = $4
 		WHERE tenant_id = $1 AND revision = $3`, c.DesiredChange.TenantID, kind.ToStatus, revision, now)

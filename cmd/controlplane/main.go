@@ -67,6 +67,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer resolverRepository.Close()
+	resolverRepository.Environment = cfg.Environment
 	resolution := service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}, Repository: resolverRepository}
 	identity := service.IdentityService{Repository: resolverRepository, Provision: service.WorkloadOnlyProvisioningPolicy}
 	// Canonical was previously never set here, leaving the
