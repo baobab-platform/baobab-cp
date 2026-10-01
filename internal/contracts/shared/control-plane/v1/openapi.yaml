@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.25.0
+  version: 1.26.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -4925,6 +4925,266 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/grants:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Administration]
+      operationId: listAdministrativeGrants
+      summary: List AdministrativeGrants
+      description: >-
+        Grants within scopes the caller holds administrator.view over, newest
+        first, optionally filtered. This is the governed way to inspect who
+        holds which authority (ADR-BCP-020 section 6); nothing listed is
+        itself authority. Never cached across principals.
+      security:
+        - adminOidc: [administrator:read]
+      parameters:
+        - name: principal_id
+          in: query
+          required: false
+          schema:
+            $ref: ../../administration/v1/domain.schema.json#/$defs/principalId
+        - name: permission
+          in: query
+          required: false
+          schema:
+            $ref: ../../administration/v1/domain.schema.json#/$defs/administrativePermissionKey
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: ../../administration/v1/domain.schema.json#/$defs/grantStatus
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 512 }
+      responses:
+        "200":
+          description: A page of grants
+          content:
+            application/json:
+              schema:
+                $ref: ../../administration/v1/grant-administration.schema.json#/$defs/GrantPage
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Administration]
+      operationId: issueAdministrativeGrant
+      summary: Issue an AdministrativeGrant
+      description: >-
+        Issues a DIRECT grant. The caller needs administrator.grant over the
+        requested scope, may not be the grantee (SELF_APPROVAL_PROHIBITED,
+        403), and may not issue authority they could not themselves be
+        trusted with: LOW and MODERATE permissions are issued directly;
+        HIGH and CRITICAL permissions, and any grant at PLATFORM scope of
+        such a permission, are refused with APPROVAL_REQUIRED (409) until
+        they are requested as a Changeset through the maker-checker path
+        (ADR-BCP-020 sections 38, 40-41; ADA-06). Delegations are made with
+        the delegations operation, never here. The Control Plane sets the
+        status (ACTIVE, or PENDING for a future valid_from), risk class,
+        source and version, and writes the audit record in the same
+        transaction. Replaying the same Idempotency-Key returns the same grant.
+      security:
+        - adminOidc: [administrator:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../administration/v1/grant-administration.schema.json#/$defs/GrantIssueRequest
+      responses:
+        "201":
+          description: Issued
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../administration/v1/grant.schema.json#/$defs/AdministrativeGrant
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/grants/{grant_id}:
+    parameters:
+      - name: grant_id
+        in: path
+        required: true
+        schema:
+          $ref: ../../administration/v1/domain.schema.json#/$defs/administrativeGrantId
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Administration]
+      operationId: getAdministrativeGrant
+      summary: Inspect an AdministrativeGrant
+      description: >-
+        One grant, with its lifecycle fields and revocation reason. The caller
+        needs administrator.view over the grant's scope; a grant outside every
+        scope they administer is NotFound, not Forbidden.
+      security:
+        - adminOidc: [administrator:read]
+      responses:
+        "200":
+          description: The grant
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../administration/v1/grant.schema.json#/$defs/AdministrativeGrant
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/grants/{grant_id}/transitions:
+    parameters:
+      - name: grant_id
+        in: path
+        required: true
+        schema:
+          $ref: ../../administration/v1/domain.schema.json#/$defs/administrativeGrantId
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Administration]
+      operationId: transitionAdministrativeGrant
+      summary: Suspend, resume, revoke or withdraw a grant
+      description: >-
+        Performs one lifecycle.yaml command on the grant. suspend, resume and
+        revoke need administrator.revoke over the grant's scope and are never
+        refused merely because the caller also granted it; withdraw (PENDING
+        only) needs administrator.grant. A command the current status does
+        not allow is GRANT_TRANSITION_INVALID (409). A stale If-Match is
+        refused (412). Revoking a grant also ends
+        every grant delegated from it (section 47). Each transition is
+        audited in the same transaction.
+      security:
+        - adminOidc: [administrator:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: If-Match
+          in: header
+          required: true
+          description: The grant's current version as a strong entity tag, e.g. "3".
+          schema:
+            type: string
+            pattern: '^"[1-9][0-9]*"$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../administration/v1/grant-administration.schema.json#/$defs/GrantTransitionRequest
+      responses:
+        "200":
+          description: The grant after the transition
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../administration/v1/grant.schema.json#/$defs/AdministrativeGrant
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/grants/{grant_id}/delegations:
+    parameters:
+      - name: grant_id
+        in: path
+        required: true
+        schema:
+          $ref: ../../administration/v1/domain.schema.json#/$defs/administrativeGrantId
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Administration]
+      operationId: delegateAdministrativeGrant
+      summary: Delegate part of a grant's authority
+      description: >-
+        Creates a DELEGATION grant from the named source grant. The caller must
+        be the source grant's holder and hold administrator.delegate over the
+        scope. The delegation may never exceed its source in permission, scope
+        or duration, the permission must be delegable, and the source must
+        allow another hop (delegable_depth); otherwise DELEGATION_INVALID
+        (422). Delegating to oneself is SELF_APPROVAL_PROHIBITED (403).
+        HIGH and CRITICAL permissions are not delegable.
+      security:
+        - adminOidc: [administrator:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../administration/v1/grant-administration.schema.json#/$defs/GrantDelegationRequest
+      responses:
+        "201":
+          description: Delegated
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: ../../administration/v1/grant.schema.json#/$defs/AdministrativeGrant
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
         "500":
           $ref: "#/components/responses/InternalError"
   /admin/changesets:
