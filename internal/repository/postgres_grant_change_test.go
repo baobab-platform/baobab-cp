@@ -57,9 +57,9 @@ func TestAdministrativeGrantChangesets(t *testing.T) {
 		}
 		return p.ID
 	}
-	grantee, delegate, dormant, delegator, bounded := newPrincipal("ACTIVE"), newPrincipal("ACTIVE"), newPrincipal("SUSPENDED"), newPrincipal("ACTIVE"), newPrincipal("ACTIVE")
+	grantee, delegate, dormant, delegator, bounded, holder := newPrincipal("ACTIVE"), newPrincipal("ACTIVE"), newPrincipal("SUSPENDED"), newPrincipal("ACTIVE"), newPrincipal("ACTIVE"), newPrincipal("ACTIVE")
 	maker, checker := "prn_maker"+suffix, "prn_checker"+suffix
-	who := []string{grantee, delegate, dormant, delegator, bounded}
+	who := []string{grantee, delegate, dormant, delegator, bounded, holder}
 	cleanup := func() {
 		admin.Exec(ctx, `DELETE FROM changeset.outcome WHERE changeset_id IN (SELECT changeset_id FROM changeset.changeset WHERE requested_by = ANY($1))`, append([]string{maker}, who...))
 		admin.Exec(ctx, `DELETE FROM changeset.approval WHERE changeset_id IN (SELECT changeset_id FROM changeset.changeset WHERE requested_by = ANY($1))`, append([]string{maker}, who...))
@@ -67,6 +67,7 @@ func TestAdministrativeGrantChangesets(t *testing.T) {
 		admin.Exec(ctx, `DELETE FROM operations.execution_operation WHERE requested_by = ANY($1)`, append([]string{maker}, who...))
 		admin.Exec(ctx, `DELETE FROM changeset.plan WHERE changeset_id IN (SELECT changeset_id FROM changeset.changeset WHERE requested_by = ANY($1))`, append([]string{maker}, who...))
 		admin.Exec(ctx, `DELETE FROM changeset.changeset WHERE requested_by = ANY($1)`, append([]string{maker}, who...))
+		admin.Exec(ctx, `UPDATE policy.administrative_grant SET superseded_by_grant_id = NULL, supersedes_grant_id = NULL WHERE principal_id = ANY($1)`, who)
 		admin.Exec(ctx, `DELETE FROM policy.administrative_grant WHERE principal_id = ANY($1) AND delegated_from IS NOT NULL`, who)
 		admin.Exec(ctx, `DELETE FROM policy.administrative_grant WHERE principal_id = ANY($1)`, who)
 	}
@@ -266,4 +267,44 @@ func TestAdministrativeGrantChangesets(t *testing.T) {
 		t.Fatal("an approved delegation must be usable by the evaluator")
 	}
 	_ = dapproval
+
+	// --- Replacement that adds HIGH authority: a changeset naming replaces_grant_id.
+	oldEnd := now.Add(24 * time.Hour)
+	heldGrant := administration.Grant{GrantID: domain.NewResourceID("agr"), PrincipalID: holder, Permission: "tenant.suspend", Scope: tenantScope,
+		GrantType: administration.TypeTimeBound, Source: administration.SourceDirect, RiskClass: administration.RiskHigh, ValidUntil: &oldEnd,
+		ValidFrom: now.Add(-time.Hour), Status: administration.StatusActive, GrantedBy: "prn_ops" + suffix, Reason: "seed", CreatedAt: now, Version: 1}
+	if err := repo.CreateAdministrativeGrant(ctx, heldGrant, as("prn_ops"+suffix)); err != nil {
+		t.Fatal(err)
+	}
+	replacing := func(for_ string, replaces string) changeset.DesiredChange {
+		d := issuance(for_)
+		d.ReplacesGrantID = replaces
+		return d
+	}
+	// Without replaces_grant_id the same request is a duplicate; with it, it is not.
+	blocked("a duplicate without replaces_grant_id", "GRANT_ALREADY_HELD", maker, issuance(holder))
+	blocked("replacing someone else's grant", "GRANT_REPLACED_GRANT_INVALID", maker, replacing(grantee, heldGrant.GrantID))
+	blocked("replacing a grant that does not exist", "GRANT_REPLACED_GRANT_INVALID", maker, replacing(holder, "agr_01k9doesnotexist"))
+	r := submit(maker, draft(maker, replacing(holder, heldGrant.GrantID)))
+	if r.State != changeset.StateAwaitingApproval {
+		t.Fatalf("a replacement changeset did not reach approval: %s %+v", r.State, r.BlockingReasons)
+	}
+	// Another change replacing the same grant is blocked while this one is open.
+	// (It targets the same grantee, so the section 66 lock reports first; the plan check holds on its own.)
+	if _, err := decide(maker, checker, r); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = repo.GetChangeset(ctx, r.ChangesetID)
+	if _, _, err := repo.ApplyChangeset(ctx, r.ChangesetID, r.Revision, domain.NewResourceID("op"), "apply-replace-"+suffix, "h", maker, now, as(maker)); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := repo.GetAdministrativeGrant(ctx, heldGrant.GrantID)
+	if after.Status != administration.StatusRevoked || after.SupersededByGrantID == "" || after.ValidUntil == nil || !after.ValidUntil.Equal(oldEnd) {
+		t.Fatalf("the replaced grant was not revoked unchanged: %+v", after)
+	}
+	next, err := repo.GetAdministrativeGrant(ctx, after.SupersededByGrantID)
+	if err != nil || next.SupersedesGrantID != heldGrant.GrantID || next.PrincipalID != holder || next.Status != administration.StatusActive ||
+		next.ApprovalReference == "" || next.GrantedBy != maker || next.ValidUntil == nil || !next.ValidUntil.Equal(until) {
+		t.Fatalf("unexpected replacement grant %+v %v", next, err)
+	}
 }

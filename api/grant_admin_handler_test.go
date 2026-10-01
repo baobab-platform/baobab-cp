@@ -128,6 +128,32 @@ func (f *grantAdminFake) TransitionAdministrativeGrant(_ context.Context, actor 
 	return g, nil
 }
 
+func (f *grantAdminFake) ReplaceAdministrativeGrant(_ context.Context, actor repository.AuditActor, key, hash, id string, version int64,
+	reason string, now time.Time, plan func(administration.Grant) (administration.Grant, error)) (repository.GrantReplacement, error) {
+	if prior, ok, err := f.replay(actor, key, hash); ok || err != nil {
+		old := f.grants[prior.SupersedesGrantID]
+		return repository.GrantReplacement{Replacement: prior, Superseded: old, RevokedDelegations: []string{}}, err
+	}
+	old, ok := f.grants[id]
+	if !ok {
+		return repository.GrantReplacement{}, repository.ErrGrantNotFound
+	}
+	if old.Version != version {
+		return repository.GrantReplacement{}, repository.ErrGrantVersionMismatch
+	}
+	next, err := plan(old)
+	if err != nil {
+		return repository.GrantReplacement{}, err
+	}
+	next.GrantID = domain.NewResourceID("agr")
+	f.put(next)
+	old.Status, old.SupersededByGrantID, old.Version = administration.StatusRevoked, next.GrantID, old.Version+1
+	old.RevokedAt, old.RevokedBy, old.RevocationReason = &now, actor.ActorID, "replaced: "+reason
+	f.grants[id] = old
+	f.keys[actor.ActorID+key] = next.GrantID + "|" + hash
+	return repository.GrantReplacement{Replacement: next, Superseded: old, RevokedDelegations: []string{}}, nil
+}
+
 func (f *grantAdminFake) SweepAdministrativeGrants(context.Context, time.Time) (int, int, error) {
 	return 0, 0, nil
 }
@@ -290,6 +316,44 @@ func TestGrantAdministrationAPI(t *testing.T) {
 		t.Fatalf("unexpected transition result %+v", after)
 	}
 	expect(call("ops", http.MethodPost, "/v1/admin/grants/agr_missing0001/transitions", suspend, map[string]string{"If-Match": `"1"`}), http.StatusNotFound, "ADMINISTRATIVE_GRANT_NOT_FOUND")
+
+	// Replacement (Shared replaceAdministrativeGrant): atomic, linked, never an amend.
+	repBody := func(permission string) map[string]any {
+		return map[string]any{"permission": permission, "grant_type": "STANDING", "dependent_delegations": "REVOKE", "reason": "Narrowing.",
+			"scope": map[string]any{"level": "TENANT", "tenant_id": "tn_acmeug"}}
+	}
+	narrower := call("ops", http.MethodPost, "/v1/admin/grants", issueBody(ids["bob"], "market.view"), nil)
+	expect(narrower, http.StatusCreated, "")
+	target := validateGrant(narrower)
+	rpath := "/v1/admin/grants/" + target.GrantID + "/replacements"
+	etag1 := map[string]string{"If-Match": `"1"`}
+	expect(call("ops", http.MethodPost, rpath, repBody("market.view"), nil), http.StatusPreconditionRequired, "IF_MATCH_REQUIRED")
+	expect(call("ops", http.MethodPost, rpath, repBody("market.view"), map[string]string{"If-Match": `"9"`}), http.StatusPreconditionFailed, "GRANT_VERSION_MISMATCH")
+	bad := repBody("market.view")
+	bad["dependent_delegations"] = "RETAIN"
+	expect(call("ops", http.MethodPost, rpath, bad, etag1), http.StatusUnprocessableEntity, "INVALID_GRANT")
+	// A replacement that adds HIGH authority is a changeset, not a direct route.
+	expect(call("ops", http.MethodPost, rpath, repBody("tenant.suspend"), etag1), http.StatusConflict, "APPROVAL_REQUIRED")
+	expect(call("ops", http.MethodPost, "/v1/admin/grants/agr_missing0001/replacements", repBody("market.view"), etag1), http.StatusNotFound, "ADMINISTRATIVE_GRANT_NOT_FOUND")
+	replacedResp := call("ops", http.MethodPost, rpath, repBody("tenant.view"), etag1)
+	expect(replacedResp, http.StatusCreated, "")
+	var replaced struct {
+		Replacement administration.Grant `json:"replacement"`
+		Superseded  administration.Grant `json:"superseded"`
+		Revoked     []string             `json:"revoked_delegations"`
+	}
+	mustNoError(t, json.Unmarshal(replacedResp.Body.Bytes(), &replaced))
+	if replaced.Replacement.SupersedesGrantID != target.GrantID || replaced.Superseded.SupersededByGrantID != replaced.Replacement.GrantID ||
+		replaced.Superseded.Status != administration.StatusRevoked || replaced.Replacement.Status != administration.StatusActive || replaced.Revoked == nil {
+		t.Fatalf("unexpected replacement %+v", replaced)
+	}
+	if dir := os.Getenv("SHARED_CONTRACTS_DIR"); dir != "" {
+		var raw map[string]any
+		mustNoError(t, json.Unmarshal(replacedResp.Body.Bytes(), &raw))
+		contracttest.ValidateJSON(t, contracttest.CompileSchema(t, dir, "administration/v1/grant-administration.schema.json#/$defs/GrantReplacement"), raw)
+	}
+	// The replaced grant cannot be replaced again.
+	expect(call("ops", http.MethodPost, rpath, repBody("tenant.view"), map[string]string{"If-Match": `"2"`}), http.StatusConflict, "GRANT_REPLACEMENT_INVALID")
 
 	// Delegation is decided by the caller's own grants, not by any role.
 	delegation := func(to string) map[string]any {

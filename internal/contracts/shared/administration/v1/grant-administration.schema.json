@@ -86,6 +86,56 @@
         "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
       }
     },
+    "GrantReplaceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["permission", "scope", "grant_type", "dependent_delegations", "reason"],
+      "description": "Replace one of a principal's DIRECT grants with a new, complete one, atomically (roles-to-grants decision: replace/supersede). The new grant is for the same principal. The replaced grant is REVOKED and names its replacement; neither is amended. Only an ACTIVE, SUSPENDED or PENDING DIRECT grant is replaceable: a delegation is revoked and re-delegated, bootstrap authority lapses.",
+      "properties": {
+        "permission": { "$ref": "domain.schema.json#/$defs/administrativePermissionKey" },
+        "scope": { "$ref": "scope.schema.json#/$defs/AdministrativeScope" },
+        "grant_type": { "$ref": "domain.schema.json#/$defs/grantType" },
+        "valid_from": { "type": "string", "format": "date-time" },
+        "valid_until": { "type": "string", "format": "date-time" },
+        "delegable_depth": { "type": "integer", "minimum": 0, "maximum": 2, "default": 0 },
+        "conditions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minimum_acr": { "type": "string", "minLength": 1, "maxLength": 128 } }
+        },
+        "dependent_delegations": {
+          "type": "string",
+          "enum": ["REVOKE"],
+          "description": "What happens to grants delegated from the replaced grant. REVOKE ends them with it, as revoking would (section 47); the response lists them so they can be delegated again. A delegation rests on its source's exact permission and scope, so re-pointing is not offered; other values may be added."
+        },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "grant_type": { "enum": ["TIME_BOUND", "JUST_IN_TIME"] } } },
+          "then": { "required": ["valid_until"] }
+        },
+        {
+          "if": { "properties": { "grant_type": { "const": "STANDING" } } },
+          "then": { "not": { "required": ["valid_until"] } }
+        }
+      ]
+    },
+    "GrantReplacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replacement", "superseded", "revoked_delegations"],
+      "properties": {
+        "replacement": { "$ref": "grant.schema.json#/$defs/AdministrativeGrant" },
+        "superseded": { "$ref": "grant.schema.json#/$defs/AdministrativeGrant" },
+        "revoked_delegations": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "domain.schema.json#/$defs/administrativeGrantId" },
+          "description": "The delegations that rested on the replaced grant and were revoked with it."
+        }
+      }
+    },
     "GrantPage": {
       "type": "object",
       "additionalProperties": false,

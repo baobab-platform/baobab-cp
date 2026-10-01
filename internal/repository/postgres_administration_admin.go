@@ -50,6 +50,10 @@ type AdministrativeGrantAdministrator interface {
 	// delegated from it, directly or further down (section 47).
 	TransitionAdministrativeGrant(ctx context.Context, actor AuditActor, key, hash, grantID string, command administration.Command,
 		reason string, expectedVersion int64, now time.Time) (administration.Grant, error)
+	// ReplaceAdministrativeGrant creates the grant plan returns, revokes the
+	// replaced grant and ends its delegations, atomically.
+	ReplaceAdministrativeGrant(ctx context.Context, actor AuditActor, key, hash, grantID string, expectedVersion int64, reason string,
+		now time.Time, plan func(old administration.Grant) (administration.Grant, error)) (GrantReplacement, error)
 	// SweepAdministrativeGrants is the Control Plane's own lifecycle work:
 	// PENDING grants whose start has come become ACTIVE, and grants past
 	// their end become EXPIRED (section 61).
@@ -321,7 +325,7 @@ func (r *PostgresRepository) TransitionAdministrativeGrant(ctx context.Context, 
 			return administration.Grant{}, err
 		}
 		if to == administration.StatusRevoked {
-			if err := revokeDelegations(ctx, tx, actor, rowID, now, "source grant "+grantID+" revoked"); err != nil {
+			if _, err := revokeDelegations(ctx, tx, actor, rowID, now, "source grant "+grantID+" revoked"); err != nil {
 				return administration.Grant{}, err
 			}
 		}
@@ -334,7 +338,7 @@ func (r *PostgresRepository) TransitionAdministrativeGrant(ctx context.Context, 
 
 // revokeDelegations revokes every live grant delegated from rootRow,
 // directly or through further delegations (section 47).
-func revokeDelegations(ctx context.Context, tx pgx.Tx, actor AuditActor, rootRow string, now time.Time, reason string) error {
+func revokeDelegations(ctx context.Context, tx pgx.Tx, actor AuditActor, rootRow string, now time.Time, reason string) ([]string, error) {
 	rows, err := tx.Query(ctx, `
 		WITH RECURSIVE d(grant_id) AS (
 			SELECT grant_id FROM policy.administrative_grant WHERE delegated_from = $1::uuid
@@ -346,7 +350,7 @@ func revokeDelegations(ctx context.Context, tx pgx.Tx, actor AuditActor, rootRow
 		WHERE grant_id IN (SELECT grant_id FROM d) AND status IN ('PENDING', 'ACTIVE', 'SUSPENDED')
 		RETURNING grant_id::text, permission, principal_id`, rootRow, now, actor.ActorID, reason)
 	if err != nil {
-		return fmt.Errorf("revoke delegations: %w", err)
+		return nil, fmt.Errorf("revoke delegations: %w", err)
 	}
 	type revoked struct{ id, permission, principal string }
 	var ended []revoked
@@ -354,25 +358,27 @@ func revokeDelegations(ctx context.Context, tx pgx.Tx, actor AuditActor, rootRow
 		var v revoked
 		if err := rows.Scan(&v.id, &v.permission, &v.principal); err != nil {
 			rows.Close()
-			return err
+			return nil, err
 		}
 		ended = append(ended, v)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return err
+		return nil, err
 	}
+	ids := make([]string, 0, len(ended))
 	for _, v := range ended {
 		id, err := domain.FormatResourceID(grantIDPrefix, v.id)
 		if err != nil {
-			return err
+			return nil, err
 		}
+		ids = append(ids, id)
 		if err := insertProvisioningAudit(ctx, tx, actor, "", "administrative_grant.REVOKED", id,
 			map[string]any{"grant_id": id, "permission": v.permission, "principal_id": v.principal, "reason": reason, "cascade": true}); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return ids, nil
 }
 
 // lifecycleActor is the audit actor of the Control Plane's own lifecycle
@@ -435,4 +441,127 @@ func (r *PostgresRepository) SweepAdministrativeGrants(ctx context.Context, now 
 		return 0, 0, fmt.Errorf("activate administrative grants: %w", err)
 	}
 	return activated, expired, tx.Commit(ctx)
+}
+
+// GrantReplacement is the result of an atomic replacement.
+type GrantReplacement struct {
+	Replacement        administration.Grant
+	Superseded         administration.Grant
+	RevokedDelegations []string
+}
+
+// ReplaceAdministrativeGrant implements AdministrativeGrantAdministrator:
+// it locks the replaced grant at expectedVersion, asks plan for the grant
+// that replaces it, and creates that grant, revokes the old one and ends its
+// delegations in one transaction. Both records remain; neither is amended
+// beyond the old grant's revocation and its link to its replacement.
+func (r *PostgresRepository) ReplaceAdministrativeGrant(ctx context.Context, actor AuditActor, key, hash, grantID string,
+	expectedVersion int64, reason string, now time.Time, plan func(old administration.Grant) (administration.Grant, error)) (GrantReplacement, error) {
+	catalogue, err := administration.DefaultCatalogue()
+	if err != nil {
+		return GrantReplacement{}, err
+	}
+	var out GrantReplacement
+	_, err = r.withCommand(ctx, actor, func(tx pgx.Tx) (administration.Grant, error) {
+		if prior, ok, err := replayed(ctx, tx, actor.ActorID, key, hash); ok || err != nil {
+			if ok {
+				out, err = loadReplacement(ctx, tx, prior)
+			}
+			return prior, err
+		}
+		oldRow, err := domain.ParseResourceID(grantIDPrefix, grantID)
+		if err != nil {
+			return administration.Grant{}, ErrGrantNotFound
+		}
+		old, err := queryGrant(ctx, tx, `SELECT `+grantColumns+` FROM policy.administrative_grant g WHERE g.grant_id = $1::uuid FOR UPDATE`, oldRow)
+		if err != nil {
+			return administration.Grant{}, err
+		}
+		if old.Version != expectedVersion {
+			return administration.Grant{}, ErrGrantVersionMismatch
+		}
+		next, err := plan(old)
+		if err != nil {
+			return administration.Grant{}, err
+		}
+		next.GrantID = domain.NewResourceID(grantIDPrefix)
+		revoked, err := supersedeInTx(ctx, tx, catalogue, actor, old, oldRow, next, reason, now)
+		if err != nil {
+			return administration.Grant{}, err
+		}
+		if err := recordCommand(ctx, tx, actor.ActorID, key, hash, next.GrantID); err != nil {
+			return administration.Grant{}, err
+		}
+		created, err := queryGrant(ctx, tx, `SELECT `+grantColumns+` FROM policy.administrative_grant g WHERE g.grant_id = $1::uuid`, mustRowID(next.GrantID))
+		if err != nil {
+			return administration.Grant{}, err
+		}
+		superseded, err := queryGrant(ctx, tx, `SELECT `+grantColumns+` FROM policy.administrative_grant g WHERE g.grant_id = $1::uuid`, oldRow)
+		if err != nil {
+			return administration.Grant{}, err
+		}
+		out = GrantReplacement{Replacement: created, Superseded: superseded, RevokedDelegations: revoked}
+		return created, nil
+	})
+	return out, err
+}
+
+// supersedeInTx creates next as the replacement of old (locked by the
+// caller), revokes old naming next, and revokes the grants delegated from
+// old. It returns the delegations it revoked.
+func supersedeInTx(ctx context.Context, tx pgx.Tx, catalogue *administration.Catalogue, actor AuditActor,
+	old administration.Grant, oldRow string, next administration.Grant, reason string, now time.Time) ([]string, error) {
+	if !administration.Replaceable(old, now) {
+		return nil, &administration.Refusal{Code: administration.CodeReplacementInvalid,
+			Detail: "only a live DIRECT grant is replaced"}
+	}
+	next.SupersedesGrantID = old.GrantID
+	if next.PrincipalID != old.PrincipalID {
+		return nil, &administration.Refusal{Code: administration.CodeReplacementInvalid, Detail: "a replacement is for the same principal"}
+	}
+	if err := insertGrant(ctx, tx, catalogue, next, actor); err != nil {
+		return nil, err
+	}
+	newRow := mustRowID(next.GrantID)
+	if _, err := tx.Exec(ctx, `UPDATE policy.administrative_grant SET status = 'REVOKED', revoked_at = $2, revoked_by = $3,
+		revocation_reason = $4, superseded_by_grant_id = $5::uuid, updated_at = $2, version = version + 1 WHERE grant_id = $1::uuid`,
+		oldRow, now, actor.ActorID, "replaced: "+reason, newRow); err != nil {
+		return nil, fmt.Errorf("supersede administrative grant: %w", err)
+	}
+	if err := insertProvisioningAudit(ctx, tx, actor, old.Scope.TenantID, "administrative_grant.superseded", old.GrantID, map[string]any{
+		"grant_id": old.GrantID, "superseded_by_grant_id": next.GrantID, "principal_id": old.PrincipalID, "permission": old.Permission,
+		"replacement_permission": next.Permission, "reason": reason}); err != nil {
+		return nil, err
+	}
+	return revokeDelegations(ctx, tx, actor, oldRow, now, "source grant "+old.GrantID+" superseded by "+next.GrantID)
+}
+
+// loadReplacement rebuilds the result of an earlier replacement for a replay.
+func loadReplacement(ctx context.Context, tx pgx.Tx, created administration.Grant) (GrantReplacement, error) {
+	oldRow, err := domain.ParseResourceID(grantIDPrefix, created.SupersedesGrantID)
+	if err != nil {
+		return GrantReplacement{}, err
+	}
+	superseded, err := queryGrant(ctx, tx, `SELECT `+grantColumns+` FROM policy.administrative_grant g WHERE g.grant_id = $1::uuid`, oldRow)
+	if err != nil {
+		return GrantReplacement{}, err
+	}
+	rows, err := tx.Query(ctx, `SELECT grant_id::text FROM policy.administrative_grant WHERE revocation_reason = $1 ORDER BY grant_id`,
+		"source grant "+superseded.GrantID+" superseded by "+created.GrantID)
+	if err != nil {
+		return GrantReplacement{}, err
+	}
+	rowIDs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return GrantReplacement{}, err
+	}
+	revoked := make([]string, 0, len(rowIDs))
+	for _, id := range rowIDs {
+		formatted, err := domain.FormatResourceID(grantIDPrefix, id)
+		if err != nil {
+			return GrantReplacement{}, err
+		}
+		revoked = append(revoked, formatted)
+	}
+	return GrantReplacement{Replacement: created, Superseded: superseded, RevokedDelegations: revoked}, nil
 }

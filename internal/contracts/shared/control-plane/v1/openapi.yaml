@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.27.0
+  version: 1.28.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -5116,6 +5116,83 @@ paths:
             application/json:
               schema:
                 $ref: ../../administration/v1/grant.schema.json#/$defs/AdministrativeGrant
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/grants/{grant_id}/replacements:
+    parameters:
+      - name: grant_id
+        in: path
+        required: true
+        schema:
+          $ref: ../../administration/v1/domain.schema.json#/$defs/administrativeGrantId
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Administration]
+      operationId: replaceAdministrativeGrant
+      summary: Atomically replace a grant
+      description: >-
+        Creates a new grant for the same principal and revokes the replaced
+        one in a single transaction, so there is neither a lockout (revoke
+        first) nor overlapping authority (issue first). It is not an amend:
+        both records remain, the new names the old in supersedes_grant_id,
+        the old names the new in superseded_by_grant_id, and authority-bearing
+        fields are never rewritten. Only an ACTIVE, SUSPENDED or PENDING
+        DIRECT grant is replaceable (GRANT_REPLACEMENT_INVALID, 409). The
+        replacement is judged as an issue is: the caller needs
+        administrator.grant and administrator.revoke over both scopes, may
+        not be the grantee (SELF_APPROVAL_PROHIBITED, 403), and a
+        replacement that adds authority at HIGH or CRITICAL risk is refused
+        with APPROVAL_REQUIRED (409) and is requested as an
+        ADMINISTRATIVE_GRANT_ISSUANCE changeset naming replaces_grant_id. A
+        replacement that adds none (same permission and scope, no later end,
+        no more delegation, no weaker condition) is made directly, as a
+        revoke is. Grants delegated from the replaced grant are handled as
+        dependent_delegations states and listed in the response. A stale
+        If-Match is refused (412). Replaying the same Idempotency-Key
+        returns the same result.
+      security:
+        - adminOidc: [administrator:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: If-Match
+          in: header
+          required: true
+          description: The replaced grant's current version as a strong entity tag, e.g. "3".
+          schema:
+            type: string
+            pattern: '^"[1-9][0-9]*"$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../administration/v1/grant-administration.schema.json#/$defs/GrantReplaceRequest
+      responses:
+        "201":
+          description: Replaced
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: ../../administration/v1/grant-administration.schema.json#/$defs/GrantReplacement
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":

@@ -18,6 +18,7 @@ const (
 	CheckNotAlreadyHeld      = "NOT_ALREADY_HELD"
 	CheckRequesterHolds      = "REQUESTER_HOLDS_SOURCE"
 	CheckWithinSource        = "WITHIN_SOURCE"
+	CheckReplacedGrantValid  = "REPLACED_GRANT_VALID"
 )
 
 // Change kinds the checks plan for.

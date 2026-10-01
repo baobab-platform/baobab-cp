@@ -206,7 +206,11 @@ type Grant struct {
 	RevokedAt            *time.Time  `json:"revoked_at,omitempty"`
 	RevokedBy            string      `json:"revoked_by,omitempty"`
 	RevocationReason     string      `json:"revocation_reason,omitempty"`
-	Version              int64       `json:"version"`
+	// SupersedesGrantID names the grant a replacement replaced;
+	// SupersededByGrantID names the replacement of a grant REVOKED by one.
+	SupersedesGrantID   string `json:"supersedes_grant_id,omitempty"`
+	SupersededByGrantID string `json:"superseded_by_grant_id,omitempty"`
+	Version             int64  `json:"version"`
 }
 
 // Validate applies the contract's rules and the catalogue's: the permission

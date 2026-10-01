@@ -95,6 +95,14 @@ func insertGrant(ctx context.Context, tx pgx.Tx, catalogue *administration.Catal
 			return fmt.Errorf("%s already holds live bootstrap authority for %s", g.PrincipalID, g.Permission)
 		}
 	}
+	var supersedes any
+	if g.SupersedesGrantID != "" {
+		row, err := domain.ParseResourceID(grantIDPrefix, g.SupersedesGrantID)
+		if err != nil {
+			return err
+		}
+		supersedes = row
+	}
 	scope, err := json.Marshal(g.Scope)
 	if err != nil {
 		return err
@@ -114,22 +122,26 @@ func insertGrant(ctx context.Context, tx pgx.Tx, catalogue *administration.Catal
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO policy.administrative_grant (grant_id, principal_id, permission, scope_level, scope, conditions,
 			grant_type, source, profile_key, delegated_from, delegation_depth, delegable_depth, risk_class,
-			valid_from, valid_until, status, granted_by, approval_reference, reason, created_at, version)
-		VALUES ($1::uuid, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9, $10::uuid, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 1)`,
+			valid_from, valid_until, status, granted_by, approval_reference, reason, created_at, version, supersedes_grant_id)
+		VALUES ($1::uuid, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9, $10::uuid, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 1, $21::uuid)`,
 		rowID, g.PrincipalID, g.Permission, string(g.Scope.Level), scope, conditions, string(g.GrantType), string(g.Source),
 		nullable(g.ProfileKey), delegatedFrom, g.DelegationDepth, g.DelegableDepth, string(g.RiskClass),
-		g.ValidFrom, g.ValidUntil, string(g.Status), g.GrantedBy, nullable(g.ApprovalReference), g.Reason, created); err != nil {
+		g.ValidFrom, g.ValidUntil, string(g.Status), g.GrantedBy, nullable(g.ApprovalReference), g.Reason, created, supersedes); err != nil {
 		return fmt.Errorf("create administrative grant: %w", err)
 	}
 	payload := map[string]any{"grant_id": g.GrantID, "principal_id": g.PrincipalID, "permission": g.Permission,
 		"scope": g.Scope, "grant_type": g.GrantType, "source": g.Source, "risk_class": g.RiskClass, "status": g.Status}
+	if g.SupersedesGrantID != "" {
+		payload["supersedes_grant_id"] = g.SupersedesGrantID
+	}
 	return insertProvisioningAudit(ctx, tx, actor, g.Scope.TenantID, "administrative_grant.created", g.GrantID, payload)
 }
 
 const grantColumns = `g.grant_id::text, g.principal_id, g.permission, g.scope, g.conditions, g.grant_type, g.source,
 	COALESCE(g.profile_key, ''), COALESCE(g.delegated_from::text, ''), g.delegation_depth, g.delegable_depth, g.risk_class,
 	g.valid_from, g.valid_until, g.status, g.granted_by, COALESCE(g.approval_reference, ''), g.reason, g.created_at,
-	g.updated_at, g.revoked_at, COALESCE(g.revoked_by, ''), COALESCE(g.revocation_reason, ''), g.version`
+	g.updated_at, g.revoked_at, COALESCE(g.revoked_by, ''), COALESCE(g.revocation_reason, ''), g.version,
+	COALESCE(g.supersedes_grant_id::text, ''), COALESCE(g.superseded_by_grant_id::text, '')`
 
 // AdministrativeGrantsOf implements AdministrativeGrantReader. The
 // delegation chain is followed at most three hops, the deepest delegation
@@ -173,13 +185,26 @@ func scanGrant(row pgx.CollectableRow) (administration.Grant, error) {
 	var (
 		g                                                   administration.Grant
 		rowID, delegatedFrom, grantType, source, risk, stat string
+		supersedes, supersededBy                            string
 		scope, conditions                                   []byte
 	)
 	err := row.Scan(&rowID, &g.PrincipalID, &g.Permission, &scope, &conditions, &grantType, &source, &g.ProfileKey,
 		&delegatedFrom, &g.DelegationDepth, &g.DelegableDepth, &risk, &g.ValidFrom, &g.ValidUntil, &stat, &g.GrantedBy,
-		&g.ApprovalReference, &g.Reason, &g.CreatedAt, &g.UpdatedAt, &g.RevokedAt, &g.RevokedBy, &g.RevocationReason, &g.Version)
+		&g.ApprovalReference, &g.Reason, &g.CreatedAt, &g.UpdatedAt, &g.RevokedAt, &g.RevokedBy, &g.RevocationReason, &g.Version,
+		&supersedes, &supersededBy)
 	if err != nil {
 		return g, err
+	}
+	for _, link := range []struct {
+		row string
+		to  *string
+	}{{supersedes, &g.SupersedesGrantID}, {supersededBy, &g.SupersededByGrantID}} {
+		if link.row == "" {
+			continue
+		}
+		if *link.to, err = domain.FormatResourceID(grantIDPrefix, link.row); err != nil {
+			return g, err
+		}
 	}
 	if g.GrantID, err = domain.FormatResourceID(grantIDPrefix, rowID); err != nil {
 		return g, err

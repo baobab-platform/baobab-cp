@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/administration"
@@ -120,6 +121,9 @@ type DesiredChange struct {
 	DelegableDepth int                        `json:"delegable_depth,omitempty"`
 	Conditions     *administration.Conditions `json:"conditions,omitempty"`
 	SourceGrantID  string                     `json:"source_grant_id,omitempty"`
+	// ReplacesGrantID makes an issuance a replacement: on apply the new grant
+	// is created and this one revoked, atomically.
+	ReplacesGrantID string `json:"replaces_grant_id,omitempty"`
 }
 
 // MarshalJSON writes release_id null for a desired-release change that
@@ -411,6 +415,8 @@ func Draft(req CreateRequest, id, requester, source, correlationID string, baseR
 		CreatedAt: now, UpdatedAt: now, Revision: 1}, nil
 }
 
+var validGrantID = regexp.MustCompile(`^agr_[a-z0-9]+$`)
+
 // grantChangeScope validates the shape of an administrative grant change and
 // returns its target scope: the scope of the authority it concerns. Whether
 // the authority is grantable is a plan check, not a shape error.
@@ -423,6 +429,9 @@ func grantChangeScope(d DesiredChange, target string) (administration.Scope, err
 	}
 	if target == TargetAdminGrant && (d.SourceGrantID == "" || d.GrantType != "") {
 		return administration.Scope{}, fmt.Errorf("%w: a delegation names its source_grant_id and no grant_type", ErrInvalid)
+	}
+	if d.ReplacesGrantID != "" && (target != TargetAdminPrincipal || !validGrantID.MatchString(d.ReplacesGrantID)) {
+		return administration.Scope{}, fmt.Errorf("%w: replaces_grant_id belongs to an issuance and names a grant", ErrInvalid)
 	}
 	if target == TargetAdminPrincipal && (d.SourceGrantID != "" || d.GrantType == "") {
 		return administration.Scope{}, fmt.Errorf("%w: an issuance names its grant_type and no source_grant_id", ErrInvalid)

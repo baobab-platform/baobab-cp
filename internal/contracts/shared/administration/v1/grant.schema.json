@@ -126,6 +126,14 @@
         "version": {
           "type": "integer",
           "minimum": 1
+        },
+        "supersedes_grant_id": {
+          "$ref": "domain.schema.json#/$defs/administrativeGrantId",
+          "description": "REPLACEMENT only: the grant this one replaced. The replaced grant is REVOKED in the same transaction and names this one in superseded_by_grant_id; neither record is amended otherwise."
+        },
+        "superseded_by_grant_id": {
+          "$ref": "domain.schema.json#/$defs/administrativeGrantId",
+          "description": "REVOKED by replacement only: the grant that replaced this one."
         }
       },
       "allOf": [
@@ -243,7 +251,8 @@
             "properties": {
               "revoked_at": false,
               "revoked_by": false,
-              "revocation_reason": false
+              "revocation_reason": false,
+              "superseded_by_grant_id": false
             }
           }
         }

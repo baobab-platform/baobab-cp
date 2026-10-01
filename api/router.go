@@ -276,6 +276,7 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(write...).Post("/v1/admin/grants", admin.issue)
 		r.With(read...).Get("/v1/admin/grants/{grantID}", admin.get)
 		r.With(write...).Post("/v1/admin/grants/{grantID}/transitions", admin.transition)
+		r.With(write...).Post("/v1/admin/grants/{grantID}/replacements", admin.replace)
 		r.With(a.authorize(a.adminVerifier, "human", "administrator:write")).Post("/v1/admin/grants/{grantID}/delegations", admin.delegate)
 	}
 	if dependencies.Operations != nil {
