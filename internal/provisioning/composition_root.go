@@ -118,6 +118,10 @@ type ZB02Dependencies struct {
 	Repo         ZB02Repository
 	Provisioning TenantProvisioningStore
 	Now          func() time.Time
+	// ReleaseReadiness, when set, adds the engine-instance-release readiness
+	// check (ADR-BCP-025 section 2.8): a tenant is not READY while a mandatory
+	// dependency runs a revoked or unrecorded release or in the wrong place.
+	ReleaseReadiness ReleaseReadinessSource
 }
 
 // EnsureDefaultCapabilityScope returns the tenant-wide, unconstrained
@@ -221,7 +225,7 @@ func BuildZB02Pipeline(deps ZB02Dependencies, manifest ResolvedManifest, scopeID
 		},
 	}}, Snapshots: deps.Repo}
 
-	readinessWorker := ReadinessWorker{Evaluator: NewReadinessEvaluator(
+	readinessChecks := []ReadinessCheck{
 		NewProbeCheck("market-participation", marketParticipationProbe{repo: deps.Repo, manifest: manifest}),
 		NewProbeCheck("capability-grants", capabilityGrantsProbe{repo: deps.Repo, manifest: manifest, scopeID: scopeID}),
 		NewProbeCheck("capability-bindings", capabilityBindingsProbe{repo: deps.Repo, manifest: manifest, scopeID: scopeID}),
@@ -229,7 +233,11 @@ func BuildZB02Pipeline(deps ZB02Dependencies, manifest ResolvedManifest, scopeID
 		NewProbeCheck("context-resolution", contextResolutionProbe{resolver: contextResolver, manifest: manifest}),
 		NewProbeCheck("trade-lanes", tradeLanesProbe{repo: deps.Repo, manifest: manifest}),
 		NewProbeCheck("isolation-and-residency", isolationResidencyProbe{repo: deps.Repo, manifest: manifest}),
-	), Snapshots: deps.Repo}
+	}
+	if deps.ReleaseReadiness != nil {
+		readinessChecks = append(readinessChecks, NewProbeCheck(ReleaseReadinessCheckKey, releaseReadinessProbe{source: deps.ReleaseReadiness}))
+	}
+	readinessWorker := ReadinessWorker{Evaluator: NewReadinessEvaluator(readinessChecks...), Snapshots: deps.Repo}
 
 	return NewOrchestrator(deps.Provisioning, applyWorker, reconcileWorker, readinessWorker), nil
 }

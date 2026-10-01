@@ -9,6 +9,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/baobab-platform/baobab-cp/internal/topology/release"
 	"slices"
 	"strings"
 	"sync"
@@ -59,8 +60,9 @@ type releasePolicyDocument struct {
 	} `yaml:"desired_state"`
 	Drift struct {
 		Reasons map[string]struct {
-			GraceSeconds int    `yaml:"grace_seconds"`
-			Severity     string `yaml:"severity"`
+			GraceSeconds    int    `yaml:"grace_seconds"`
+			Severity        string `yaml:"severity"`
+			ReadinessEffect string `yaml:"readiness_effect"`
 		} `yaml:"reasons"`
 		SweepIntervalSeconds int `yaml:"sweep_interval_seconds"`
 	} `yaml:"drift"`
@@ -85,6 +87,17 @@ var (
 	releasePolicyErr  error
 )
 
+// driftReadinessEffectsComplete: every drift reason states what it does to
+// readiness. A missing effect is a broken policy, never a default.
+func driftReadinessEffectsComplete(doc releasePolicyDocument) bool {
+	for _, rule := range doc.Drift.Reasons {
+		if rule.ReadinessEffect != release.EffectBlocked && rule.ReadinessEffect != release.EffectDegraded {
+			return false
+		}
+	}
+	return true
+}
+
 func loadReleasePolicy() (releasePolicyDocument, error) {
 	releasePolicyOnce.Do(func() {
 		raw, err := contracts.ReadEmbedded(releasePolicyPath)
@@ -101,7 +114,7 @@ func loadReleasePolicy() (releasePolicyDocument, error) {
 			len(doc.DesiredState.MayBecomeDesired) == 0 || len(doc.DesiredState.ReadableAsDesired) == 0 ||
 			len(doc.StatusTransitions.Transitions) == 0 ||
 			doc.Observation.TTLSeconds.Minimum < 1 || doc.Observation.TTLSeconds.Maximum < doc.Observation.TTLSeconds.Minimum ||
-			len(doc.Drift.Reasons) == 0 || doc.Drift.SweepIntervalSeconds < 1 {
+			len(doc.Drift.Reasons) == 0 || doc.Drift.SweepIntervalSeconds < 1 || !driftReadinessEffectsComplete(doc) {
 			releasePolicyErr = fmt.Errorf("%s lacks approval, desired_state, status_transitions, observation.ttl_seconds or drift", releasePolicyPath)
 			return
 		}

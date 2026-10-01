@@ -19,6 +19,10 @@ const DriftObjectType = "ENGINE_INSTANCE_RELEASE"
 type DriftRule struct {
 	Grace    time.Duration
 	Severity string
+	// ReadinessEffect is what open drift of the reason does to the readiness
+	// of the tenants that depend on the instance (EffectBlocked or
+	// EffectDegraded), apart from its severity.
+	ReadinessEffect string
 }
 
 // DriftPolicy is release-policy.yaml drift, by reason.

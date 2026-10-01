@@ -31,8 +31,23 @@
             "properties": {
               "code": {
                 "type": "string",
-                "description": "A capability_resolution_denial or provisioning_blocker code from contracts/authorization/v1/reason-code-registry.yaml, e.g. BINDING_NOT_FOUND (matches the Technical Specification SS51 example verbatim)."
+                "description": "A capability_resolution_denial or provisioning_blocker code from contracts/authorization/v1/reason-code-registry.yaml, e.g. BINDING_NOT_FOUND (matches the Technical Specification SS51 example verbatim), or a release_drift code whose readiness_effect in topology/v1 release-policy.yaml is BLOCKED (ADR-BCP-025 section 2.8). A release_drift code is a readiness consequence, never a capability resolution denial."
               },
+              "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
+              "detail": { "type": "string", "maxLength": 500 }
+            }
+          },
+          "default": []
+        },
+        "degrading_reasons": {
+          "type": "array",
+          "description": "Why a snapshot is DEGRADED: release_drift codes that degrade it without blocking it (ADR-BCP-025 section 2.8): a drift whose readiness_effect in topology/v1 release-policy.yaml is DEGRADED, or a BLOCKED-effect drift on a dependency that is not mandatory or still has a usable binding on an unaffected instance. Visible, never blockers.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code"],
+            "properties": {
+              "code": { "type": "string", "description": "A release_drift code." },
               "capability_key": { "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey" },
               "detail": { "type": "string", "maxLength": 500 }
             }
@@ -47,14 +62,28 @@
         },
         "computed_at": { "type": "string", "format": "date-time" }
       },
-      "if": {
-        "properties": { "status": { "enum": ["BLOCKED", "NOT_READY"] } },
-        "required": ["status"]
-      },
-      "then": {
-        "required": ["blocking_reasons"],
-        "properties": { "blocking_reasons": { "minItems": 1 } }
-      }
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "enum": ["BLOCKED", "NOT_READY"] } },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["blocking_reasons"],
+            "properties": { "blocking_reasons": { "minItems": 1 } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "DEGRADED" } },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["degrading_reasons"],
+            "properties": { "degrading_reasons": { "minItems": 1 } }
+          }
+        }
+      ]
     }
   }
 }
