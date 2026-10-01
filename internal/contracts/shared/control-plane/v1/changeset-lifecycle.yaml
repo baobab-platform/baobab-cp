@@ -165,6 +165,56 @@ change_kinds:
     to_status: ACTIVE
     approval_scope: "mapping:approve"
     operations: [ACTIVATE_MAPPING, VERIFY_MAPPING_STATE]
+  # EA-02D. The only path from a registered (DRAFT) capability provider to
+  # ACTIVE: registration never activates a provider (EA-02C, capability/v1
+  # registration.schema.json). There is no direct activation route. The
+  # plan runs every plan_check, side-effect free, and records each failure
+  # as a blocker with its code, so a blocked plan cannot be approved. The
+  # approver holds provider:approve and is never the requester.
+  PROVIDER_ACTIVATION:
+    target: PROVIDER
+    changeset_type: MODIFY
+    from_status: [DRAFT]
+    to_status: ACTIVE
+    approval_scope: "provider:approve"
+    operations: [ACTIVATE_PROVIDER, VERIFY_PROVIDER_STATE]
+    plan_checks:
+      # The provider is declared by its engine, in that engine's
+      # .baobab/capability-provider.yaml (ADR-SHARED-017).
+      - check: PROVIDER_DECLARATION
+        blocker: PROVIDER_DECLARATION_MISSING
+      # At least one capability has IMPLEMENTED support; PARTIAL and
+      # planned support never count.
+      - check: CAPABILITY_SUPPORT
+        blocker: PROVIDER_SUPPORT_NOT_IMPLEMENTED
+      # Every contract major it supports is one its capability defines.
+      - check: CONTRACT_COMPATIBILITY
+        blocker: PROVIDER_CONTRACT_INCOMPATIBLE
+      # Only where topology/v1 release-policy.yaml approval
+      # certification_required is true for an environment it would serve
+      # (EA-09 records certification; ADR-BCP-025 amendment A3).
+      - check: CERTIFICATION
+        blocker: PROVIDER_NOT_CERTIFIED
+      # A simulated provider, or one whose declaration says
+      # production_permitted: false, never activates for an instance in the
+      # production environment.
+      - check: PRODUCTION_PERMITTED
+        blocker: PROVIDER_PRODUCTION_NOT_PERMITTED
+      # An APPROVED engine release of the provider's engine whose
+      # provider_support covers the provider's contracts (ADR-BCP-025).
+      - check: ENGINE_RELEASE
+        blocker: PROVIDER_NO_ELIGIBLE_RELEASE
+      # An engine instance of the provider's engine that can serve it.
+      - check: ENGINE_INSTANCE
+        blocker: PROVIDER_NO_ELIGIBLE_INSTANCE
+      # Its instances' and its own health are eligible under
+      # capability/v1 health-policy.yaml.
+      - check: HEALTH
+        blocker: PROVIDER_HEALTH_NOT_ELIGIBLE
+      # No provider migration that has not ended moves capabilities to or
+      # from it.
+      - check: MIGRATION_CONFLICTS
+        blocker: PROVIDER_MIGRATION_CONFLICT
 # Codes a changeset carries as blocking_reasons, or its plan as blockers;
 # each is registered in authorization/v1/reason-code-registry.yaml under
 # changeset_blocker.
@@ -172,3 +222,12 @@ blocking_codes:
   - CHANGESET_TARGET_NOT_FOUND
   - CHANGESET_TARGET_STATE_CONFLICT
   - CHANGESET_TARGET_LOCKED
+  - PROVIDER_DECLARATION_MISSING
+  - PROVIDER_SUPPORT_NOT_IMPLEMENTED
+  - PROVIDER_CONTRACT_INCOMPATIBLE
+  - PROVIDER_NOT_CERTIFIED
+  - PROVIDER_PRODUCTION_NOT_PERMITTED
+  - PROVIDER_NO_ELIGIBLE_RELEASE
+  - PROVIDER_NO_ELIGIBLE_INSTANCE
+  - PROVIDER_HEALTH_NOT_ELIGIBLE
+  - PROVIDER_MIGRATION_CONFLICT

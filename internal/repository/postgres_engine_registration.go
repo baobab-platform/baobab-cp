@@ -60,13 +60,25 @@ var ErrProviderEngineConflict = errors.New("provider is registered for another e
 // not define. Nothing is registered.
 var ErrRegistrationOutsideCatalogue = errors.New("engine registration is outside the canonical capability catalogue")
 
+// ErrRegistrationActivates: the registration asks for a provider lifecycle
+// other than DRAFT. Registration never activates a provider (EA-02C, Shared
+// capability/v1 registration.schema.json); a PROVIDER_ACTIVATION changeset
+// does (EA-02D). Nothing is registered.
+var ErrRegistrationActivates = errors.New("engine registration must register its provider as DRAFT")
+
+// registeredProviderLifecycle is the lifecycle every newly registered
+// provider starts in.
+const registeredProviderLifecycle = "DRAFT"
+
 // EngineRegistrar records engine registrations in the capability registry.
 type EngineRegistrar interface {
 	// RegisterEngine records the engine, the provider and what it supports,
 	// in one transaction. Every capability and contract major it names must
 	// already be in the catalogue projection (ErrRegistrationOutsideCatalogue);
-	// registration never creates or rewrites a capability. Re-registering
-	// converges.
+	// registration never creates or rewrites a capability. A new provider
+	// is registered DRAFT (ErrRegistrationActivates for anything else), and
+	// re-registering never changes an existing provider's lifecycle: only
+	// a governed change moves it. Re-registering converges.
 	RegisterEngine(ctx context.Context, reg EngineRegistrationRecord) error
 }
 
@@ -77,6 +89,9 @@ func (r *PostgresRepository) RegisterEngine(ctx context.Context, reg EngineRegis
 	// (ADR-SHARED-012); migration 000058 enforces the same grammar.
 	if !domain.ValidEngineID(reg.Repository) {
 		return fmt.Errorf("register engine %q: the repository must be an engine id such as baobab-trade", reg.Repository)
+	}
+	if reg.Provider.Lifecycle != registeredProviderLifecycle {
+		return fmt.Errorf("%w: %s asks for %q", ErrRegistrationActivates, reg.Provider.ProviderKey, reg.Provider.Lifecycle)
 	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -119,7 +134,7 @@ func (r *PostgresRepository) RegisterEngine(ctx context.Context, reg EngineRegis
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO capability.capability_provider (provider_id, provider_key, name, provider_type, engine_id, status, ownership, metadata)
 		VALUES ($1::uuid, $2, $3, $4, $5::uuid, $6, $7, $8::jsonb) ON CONFLICT (provider_key) DO NOTHING`,
-		domain.NewUUIDv7(), p.ProviderKey, p.Name, p.ProviderType, engineID, p.Lifecycle, p.Ownership, metadata); err != nil {
+		domain.NewUUIDv7(), p.ProviderKey, p.Name, p.ProviderType, engineID, registeredProviderLifecycle, p.Ownership, metadata); err != nil {
 		return fmt.Errorf("register provider %s: %w", p.ProviderKey, err)
 	}
 	// A registration without an invocation clears one registered earlier:
@@ -136,12 +151,14 @@ func (r *PostgresRepository) RegisterEngine(ctx context.Context, reg EngineRegis
 	if providerEngine != engineID {
 		return fmt.Errorf("%w: %s", ErrProviderEngineConflict, p.ProviderKey)
 	}
+	// The provider's lifecycle is never written here: an existing provider
+	// keeps the status its governed changes gave it (EA-02C).
 	if _, err := tx.Exec(ctx, `
-		UPDATE capability.capability_provider SET name = $2, provider_type = $3, status = $4, ownership = $5, metadata = $6::jsonb,
-			service_reference = $7, invocation_protocol = $8, version = version + 1, updated_at = now()
-		WHERE provider_id = $1::uuid AND (name, provider_type, status, COALESCE(ownership, ''), metadata, service_reference, invocation_protocol)
-			IS DISTINCT FROM ($2, $3, $4, $5, $6::jsonb, $7, $8)`,
-		providerID, p.Name, p.ProviderType, p.Lifecycle, p.Ownership, metadata, serviceReference, protocol); err != nil {
+		UPDATE capability.capability_provider SET name = $2, provider_type = $3, ownership = $4, metadata = $5::jsonb,
+			service_reference = $6, invocation_protocol = $7, version = version + 1, updated_at = now()
+		WHERE provider_id = $1::uuid AND (name, provider_type, COALESCE(ownership, ''), metadata, service_reference, invocation_protocol)
+			IS DISTINCT FROM ($2, $3, $4, $5::jsonb, $6, $7)`,
+		providerID, p.Name, p.ProviderType, p.Ownership, metadata, serviceReference, protocol); err != nil {
 		return fmt.Errorf("update provider %s: %w", p.ProviderKey, err)
 	}
 	for _, s := range reg.Support {

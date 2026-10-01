@@ -180,3 +180,17 @@ func TestActivationKinds(t *testing.T) {
 		}
 	}
 }
+
+// TestProviderActivationRefusedUntilImplemented: the pinned Shared
+// lifecycle defines PROVIDER_ACTIVATION (EA-02D), but this Control Plane
+// does not yet plan or apply it, so a request for it is refused as
+// invalid rather than drafted against a target it cannot act on.
+func TestProviderActivationRefusedUntilImplemented(t *testing.T) {
+	if Kinds()["PROVIDER_ACTIVATION"].Target != "PROVIDER" {
+		t.Fatal("the pinned lifecycle no longer defines PROVIDER_ACTIVATION on a PROVIDER target")
+	}
+	if _, err := Draft(CreateRequest{Title: "Activate", Reason: "Reviewed.", DesiredChange: DesiredChange{Kind: "PROVIDER_ACTIVATION"}},
+		"cs_0199a1b2c3d47e91", "prn_requester1", "API", "", 1, now); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("PROVIDER_ACTIVATION before it is implemented: %v", err)
+	}
+}

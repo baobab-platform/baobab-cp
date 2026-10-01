@@ -77,7 +77,7 @@ func TestRegisterEngineRequiresCatalogue(t *testing.T) {
 			Repository:   engine,
 			Capabilities: []capabilitydomain.Capability{capability},
 			Provider: EngineRegistrationProvider{ProviderKey: providerKey, Name: "Registration test", ProviderType: "BAOBAB_ENGINE",
-				EngineKey: "engine", Lifecycle: "ACTIVE", Ownership: engine},
+				EngineKey: "engine", Lifecycle: "DRAFT", Ownership: engine},
 			Support: []EngineRegistrationSupport{{CapabilityKey: capability.Key, ContractVersions: versions}},
 		}
 	}
@@ -123,5 +123,42 @@ func TestRegisterEngineRequiresCatalogue(t *testing.T) {
 	}
 	if n := count(`SELECT count(*) FROM capability.capability WHERE code = $1 AND name = 'Registration test'`, catalogued); n != 1 {
 		t.Fatal("registration rewrote a catalogue capability")
+	}
+
+	// Registration never activates (EA-02C): a new provider is DRAFT, a
+	// registration asking for another lifecycle is refused, and
+	// re-registering never changes an existing provider's lifecycle.
+	status := func() string {
+		t.Helper()
+		var s string
+		if err := admin.QueryRow(ctx, `SELECT status FROM capability.capability_provider WHERE provider_key = $1`, providerKey).Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	if got := status(); got != "DRAFT" {
+		t.Fatalf("a newly registered provider is %s, not DRAFT", got)
+	}
+	activating := registration(definition(catalogued), 1)
+	activating.Provider.Lifecycle = "ACTIVE"
+	if err := repo.RegisterEngine(ctx, activating); !errors.Is(err, ErrRegistrationActivates) {
+		t.Fatalf("a registration asking for ACTIVE: %v", err)
+	}
+	for _, governed := range []string{"ACTIVE", "SUSPENDED"} {
+		if _, err := admin.Exec(ctx, `UPDATE capability.capability_provider SET status = $2 WHERE provider_key = $1`, providerKey, governed); err != nil {
+			t.Fatal(err)
+		}
+		renamedAgain := registration(definition(catalogued), 1)
+		renamedAgain.Provider.Name = "Renamed " + governed
+		if err := repo.RegisterEngine(ctx, renamedAgain); err != nil {
+			t.Fatal(err)
+		}
+		if got := status(); got != governed {
+			t.Fatalf("re-registering moved a %s provider to %s", governed, got)
+		}
+		if n := count(`SELECT count(*) FROM capability.capability_provider WHERE provider_key = $1 AND name = $2`,
+			providerKey, "Renamed "+governed); n != 1 {
+			t.Fatal("re-registering no longer converges the provider's description")
+		}
 	}
 }
