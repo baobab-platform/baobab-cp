@@ -110,11 +110,21 @@ func TestProvisioningEvidenceConformsToShared(t *testing.T) {
 		t.Fatalf("drift: %+v", drift)
 	}
 
+	// ENGINE_INSTANCE_RELEASE drift is added per bound instance, carries its
+	// reason code, and is never safe to reconcile: the Control Plane does not deploy.
+	withRelease := provisioningDrift(c, nil).withReleaseDrift([]repository.ReleaseDrift{{EngineInstanceID: "ei_0199a1b2c3d47e8f", Reason: "REVOKED_RELEASE_RUNNING",
+		Severity: "CRITICAL", DetectedAt: at, ObservedState: "RELEASE", ObservedRelease: "erl_1", DesiredRelease: "erl_2"}})
+	if len(withRelease.Items) != 1 || withRelease.Items[0].ObjectType != "ENGINE_INSTANCE_RELEASE" || withRelease.Items[0].ReasonCode != "REVOKED_RELEASE_RUNNING" ||
+		withRelease.Items[0].SafeToReconcile || withRelease.Items[0].Resolution != "UNRESOLVED" || withRelease.Items[0].ObjectReference != "ei_0199a1b2c3d47e8f" {
+		t.Fatalf("release drift: %+v", withRelease)
+	}
+
 	dir := os.Getenv("SHARED_CONTRACTS_DIR")
 	if dir == "" {
 		return
 	}
 	for definition, value := range map[string]any{
+		"ProvisioningDrift#release":       withRelease,
 		"ProvisioningReadiness#not-ready": notReady, "ProvisioningReadiness#unknown": provisioningReadiness(c, nil),
 		"ProvisioningDrift#observed": drift, "ProvisioningDrift#unobserved": provisioningDrift(c, nil),
 	} {

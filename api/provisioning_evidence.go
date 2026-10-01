@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -8,6 +10,7 @@ import (
 
 	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/topology/release"
 )
 
 // The readiness and drift evidence of a provisioning, as control-plane/v1
@@ -68,6 +71,31 @@ type DriftRecord struct {
 	DetectedAt          time.Time  `json:"detected_at"`
 	ReconciledAt        *time.Time `json:"reconciled_at,omitempty"`
 	ReconciliationRunID string     `json:"reconciliation_run_id"`
+	// ReasonCode is required of ENGINE_INSTANCE_RELEASE drift: the
+	// topology/v1 releaseDriftReason (ADR-BCP-025 section 2.7).
+	ReasonCode string `json:"reason_code,omitempty"`
+}
+
+// withReleaseDrift adds the tenant's ENGINE_INSTANCE_RELEASE drift: one
+// record for each bound engine instance whose release drift is open (ADR-BCP-025
+// section 2.8, ADR-BCP-006 section 67 reverse impact). It is drift to
+// report, never to reconcile: the Control Plane does not deploy.
+func (d ProvisioningDrift) withReleaseDrift(open []repository.ReleaseDrift) ProvisioningDrift {
+	for _, o := range open {
+		sum := sha256.Sum256([]byte(d.TenantID + "|" + o.EngineInstanceID + "|" + o.Reason + "|" + o.DetectedAt.Format(time.RFC3339Nano)))
+		description := "release drift " + o.Reason + ": observed " + o.ObservedState
+		if o.ObservedRelease != "" {
+			description += " " + o.ObservedRelease
+		}
+		if o.DesiredRelease != "" {
+			description += ", desired " + o.DesiredRelease
+		}
+		d.Items = append(d.Items, DriftRecord{ID: "drift_" + hex.EncodeToString(sum[:])[:24], TenantID: d.TenantID,
+			ObjectType: release.DriftObjectType, ObjectReference: o.EngineInstanceID, DesiredStateVersion: d.DesiredStateVersion,
+			Description: truncate(description, 1000), SafeToReconcile: false, Resolution: "UNRESOLVED",
+			DetectedAt: o.DetectedAt, ReasonCode: o.Reason})
+	}
+	return d
 }
 
 // readinessCheckCodes is the registered code each readiness check reports

@@ -57,6 +57,9 @@ var errProvisioningNotFound = errors.New("tenant provisioning not found")
 type provisioningHandler struct {
 	tenants store.TenantStore
 	repo    ProvisioningRepository
+	// drift adds ENGINE_INSTANCE_RELEASE drift (ADR-BCP-025 gate ER-05); nil
+	// omits it.
+	releaseDrift repository.ReleaseDriftRepository
 }
 
 func (h provisioningHandler) readiness(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +85,16 @@ func (h provisioningHandler) drift(w http.ResponseWriter, r *http.Request) {
 		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "drift evidence could not be read", true)
 		return
 	}
-	writeJSON(w, http.StatusOK, provisioningDrift(c, snapshots))
+	out := provisioningDrift(c, snapshots)
+	if h.releaseDrift != nil {
+		open, err := h.releaseDrift.ListReleaseDrift(r.Context(), c.TenantID)
+		if err != nil {
+			problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "release drift could not be read", true)
+			return
+		}
+		out = out.withReleaseDrift(open)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // loadConverged fetches the {id}-path provisioning, by its tp_ id, and

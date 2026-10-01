@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -100,6 +101,12 @@ func (r *PostgresRepository) RecordDeploymentObservation(ctx context.Context, re
 	if err != nil {
 		return release.Observation{}, fmt.Errorf("record deployment observation: %w", err)
 	}
+	// Compare on every observation (section 2.7). The observation is
+	// already recorded; if the comparison fails the periodic sweep makes it
+	// again, so the reporter is not told its report failed.
+	if err := r.EvaluateReleaseDrift(ctx, req.EngineInstanceID, now); err != nil {
+		slog.Error("release drift evaluation after observation failed", "engine_instance_id", req.EngineInstanceID, "error", err)
+	}
 	return obs, nil
 }
 
@@ -182,20 +189,21 @@ func (r *PostgresRepository) GetObservedRelease(ctx context.Context, engineInsta
 		return release.ObservedRelease{}, err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // read-only
-	return observedReleaseOf(ctx, tx, engineInstanceID, now)
+	observed, _, err := observedReleaseOf(ctx, tx, engineInstanceID, now)
+	return observed, err
 }
 
 // observedReleaseOf derives one instance's observed release. It is also
 // what the drift sweep and the observation-time evaluation read (gate ER-05).
-func observedReleaseOf(ctx context.Context, q rowsQuerier, engineInstanceID string, now time.Time) (release.ObservedRelease, error) {
+func observedReleaseOf(ctx context.Context, q rowsQuerier, engineInstanceID string, now time.Time) (release.ObservedRelease, *release.Observation, error) {
 	var engineCode string
 	err := q.QueryRow(ctx, `SELECT e.code FROM topology.engine_instance ei JOIN topology.engine e ON e.engine_id = ei.engine_id
 		WHERE ei.engine_instance_key = $1`, engineInstanceID).Scan(&engineCode)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return release.ObservedRelease{}, ErrEngineInstanceNotFound
+		return release.ObservedRelease{}, nil, ErrEngineInstanceNotFound
 	}
 	if err != nil {
-		return release.ObservedRelease{}, fmt.Errorf("read engine instance: %w", err)
+		return release.ObservedRelease{}, nil, fmt.Errorf("read engine instance: %w", err)
 	}
 	// Only the newest observation can be current; an older one never stands
 	// in for an expired or future-dated newest (see release.CurrentObservation).
@@ -204,14 +212,14 @@ func observedReleaseOf(ctx context.Context, q rowsQuerier, engineInstanceID stri
 		ORDER BY observed_at DESC, ingestion_sequence DESC LIMIT 1`, engineInstanceID)
 	obs, err := scanObservation(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return release.Derive(engineInstanceID, engineCode, nil, nil, now), nil
+		return release.Derive(engineInstanceID, engineCode, nil, nil, now), nil, nil
 	}
 	if err != nil {
-		return release.ObservedRelease{}, fmt.Errorf("read current observation: %w", err)
+		return release.ObservedRelease{}, nil, fmt.Errorf("read current observation: %w", err)
 	}
 	current, ok := release.CurrentObservation([]release.Observation{obs}, now)
 	if !ok {
-		return release.Derive(engineInstanceID, engineCode, nil, nil, now), nil
+		return release.Derive(engineInstanceID, engineCode, nil, nil, now), nil, nil
 	}
 	digests := make([]string, 0, len(current.Artifacts))
 	for _, a := range current.Artifacts {
@@ -223,7 +231,7 @@ func observedReleaseOf(ctx context.Context, q rowsQuerier, engineInstanceID stri
 		JOIN topology.engine e ON e.engine_id = r.engine_id
 		WHERE a.digest = ANY($1)`, digests)
 	if err != nil {
-		return release.ObservedRelease{}, fmt.Errorf("resolve observed digests: %w", err)
+		return release.ObservedRelease{}, nil, fmt.Errorf("resolve observed digests: %w", err)
 	}
 	owners := map[string]release.Owner{}
 	for rows.Next() {
@@ -231,12 +239,12 @@ func observedReleaseOf(ctx context.Context, q rowsQuerier, engineInstanceID stri
 		var owner release.Owner
 		if err := rows.Scan(&digest, &owner.ReleaseID, &owner.EngineID); err != nil {
 			rows.Close()
-			return release.ObservedRelease{}, err
+			return release.ObservedRelease{}, nil, err
 		}
 		owners[digest] = owner
 	}
 	if err := rows.Err(); err != nil {
-		return release.ObservedRelease{}, err
+		return release.ObservedRelease{}, nil, err
 	}
-	return release.Derive(engineInstanceID, engineCode, &current, owners, now), nil
+	return release.Derive(engineInstanceID, engineCode, &current, owners, now), &current, nil
 }

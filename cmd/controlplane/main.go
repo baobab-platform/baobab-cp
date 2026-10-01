@@ -114,6 +114,28 @@ func main() {
 	// kept current by triggers plus a scheduled sweep. It confers no access.
 	groupDerivation := &svcorg.GroupDerivationWorker{Deriver: &svcorg.CorporateGroupDeriver{Orgs: resolverRepository}, Queue: resolverRepository}
 	go groupDerivation.Run(ctx, cfg.GroupDerivationInterval, cfg.GroupReconciliationInterval)
+	// ADR-BCP-025 gate ER-05: compare every instance's desired and observed
+	// release on a schedule too, so a silent reporter and a grace period that
+	// runs out are noticed without a new observation.
+	driftInterval, err := resolverrepo.ReleaseDriftSweepInterval()
+	if err != nil {
+		slog.Error("release drift policy unavailable", "error", err)
+		os.Exit(1)
+	}
+	go func() {
+		ticker := time.NewTicker(driftInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := resolverRepository.SweepReleaseDrift(ctx, time.Now().UTC()); err != nil {
+					slog.Error("release drift sweep incomplete", "error", err)
+				}
+			}
+		}
+	}()
 	// Applies approved provisioning plans as durable operations
 	// (ADR-SHARED-015). An executor that dies loses its lease and the
 	// operation is resumed by the next.
@@ -121,7 +143,7 @@ func main() {
 		Planner:  convergence.Planner{Registry: resolverRepository, Environment: cfg.Environment},
 		Pipeline: apply.StandardPipeline(provisioning.ZB02Dependencies{Tenants: db, Repo: resolverRepository, Provisioning: resolverRepository})}
 	go applyExecutor.Run(ctx, 2*time.Second)
-	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, OrganisationMappings: resolverRepository, Mappings: resolverRepository, Operations: resolverRepository, AdministrativeGrants: resolverRepository, ProviderMigrations: resolverRepository, EngineReleases: resolverRepository, DesiredReleases: resolverRepository, DeploymentObservations: resolverRepository, EngineMigrationTasks: resolverRepository, Changesets: resolverRepository, Markets: resolverRepository, Verification: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, MarketParticipations: resolverRepository, CapabilityResolutions: resolverRepository, OrganisationObservability: resolverRepository, PlatformAccounts: resolverRepository, Metrics: metrics.Default, Applications: applications, Classifications: classifications, Onboarding: &onboarding.Service{Repo: resolverRepository, Admissions: resolverRepository}, TenantBootstrapRegistration: cfg.TenantBootstrapRegistration, Environment: cfg.Environment}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, OrganisationMappings: resolverRepository, Mappings: resolverRepository, Operations: resolverRepository, AdministrativeGrants: resolverRepository, ProviderMigrations: resolverRepository, EngineReleases: resolverRepository, DesiredReleases: resolverRepository, DeploymentObservations: resolverRepository, ReleaseDrift: resolverRepository, EngineMigrationTasks: resolverRepository, Changesets: resolverRepository, Markets: resolverRepository, Verification: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, MarketParticipations: resolverRepository, CapabilityResolutions: resolverRepository, OrganisationObservability: resolverRepository, PlatformAccounts: resolverRepository, Metrics: metrics.Default, Applications: applications, Classifications: classifications, Onboarding: &onboarding.Service{Repo: resolverRepository, Admissions: resolverRepository}, TenantBootstrapRegistration: cfg.TenantBootstrapRegistration, Environment: cfg.Environment}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		slog.Info("control plane listening", "address", cfg.HTTPAddress)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
