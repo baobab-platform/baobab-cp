@@ -54,6 +54,12 @@ func (r *PostgresRepository) eventSource() string {
 // aggregateType/aggregateID/aggregateVersion identify the row per
 // messaging.outbox's own schema.
 func (r *PostgresRepository) insertOutboxEvent(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID string, aggregateVersion int64, env events.Envelope) error {
+	return insertOutbox(ctx, tx, aggregateType, aggregateID, aggregateVersion, env)
+}
+
+// insertOutbox is insertOutboxEvent for code that has a transaction but no
+// repository.
+func insertOutbox(ctx context.Context, tx pgx.Tx, aggregateType, aggregateID string, aggregateVersion int64, env events.Envelope) error {
 	payload, err := json.Marshal(env)
 	if err != nil {
 		return fmt.Errorf("marshal %s event: %w", env.Type, err)

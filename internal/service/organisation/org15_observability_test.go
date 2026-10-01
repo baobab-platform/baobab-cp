@@ -322,12 +322,30 @@ func TestOrganisationMetricsFollowTheSharedCatalogue(t *testing.T) {
 	}
 	adminCatalogue := administration.Defs["administrativeMetric"].Enum
 	adminLabels := administration.Defs["administrativeMetricLabel"].Enum
+	// ...and ADR-BCP-025 section 2.10's topology metrics, catalogued in
+	// Shared topology/v1 (no instance, release, digest or tenant label).
+	var topology struct {
+		Defs map[string]struct {
+			Enum []string `json:"enum"`
+		} `json:"$defs"`
+	}
+	topologyRaw, err := os.ReadFile(filepath.Join(dir, "contracts", "topology", "v1", "domain.schema.json"))
+	if err == nil {
+		err = json.Unmarshal(topologyRaw, &topology)
+	}
+	if err != nil {
+		t.Fatalf("topology/v1 metric catalogue: %v", err)
+	}
+	topologyCatalogue := topology.Defs["topologyMetric"].Enum
+	topologyLabels := topology.Defs["topologyMetricLabel"].Enum
 	for name := range names {
 		allowed := organisationLabels
 		switch {
 		case slices.Contains(catalogue, name):
 		case slices.Contains(adminCatalogue, name):
 			allowed = adminLabels
+		case slices.Contains(topologyCatalogue, name):
+			allowed = topologyLabels
 		default:
 			t.Errorf("exposed metric %s is not in a Shared catalogue", name)
 			continue

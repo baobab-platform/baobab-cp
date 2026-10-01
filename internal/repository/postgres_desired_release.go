@@ -126,18 +126,37 @@ func desiredReleaseChecks(ctx context.Context, tx pgx.Tx, instanceKey, releaseKe
 // setDesiredRelease points the instance at releaseKey ("" clears it) at the
 // expected desired-release version, records who set it, and reports whether
 // the instance was at that version.
-func setDesiredRelease(ctx context.Context, tx pgx.Tx, instanceKey, releaseKey string, expectedVersion int64, changesetID string,
+func setDesiredRelease(ctx context.Context, tx pgx.Tx, source, instanceKey, releaseKey string, expectedVersion int64, changesetID string,
 	now time.Time) (bool, error) {
-	res, err := tx.Exec(ctx, `UPDATE topology.engine_instance SET
+	// The row is locked at the version the plan was computed against, so the
+	// previous release named by the event is the one actually replaced.
+	var previous string
+	err := tx.QueryRow(ctx, `SELECT COALESCE(r.release_key, '') FROM topology.engine_instance ei
+		LEFT JOIN topology.engine_release r ON r.engine_release_id = ei.desired_release_id
+		WHERE ei.engine_instance_key = $1 AND ei.desired_release_version = $2 FOR UPDATE OF ei`, instanceKey, expectedVersion).Scan(&previous)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("lock desired release: %w", err)
+	}
+	var version int64
+	err = tx.QueryRow(ctx, `UPDATE topology.engine_instance SET
 			desired_release_id = (SELECT engine_release_id FROM topology.engine_release WHERE release_key = NULLIF($2, '')),
 			desired_release_version = desired_release_version + 1, desired_release_changeset_id = NULLIF($4, ''),
 			desired_release_updated_at = $5
-		WHERE engine_instance_key = $1 AND desired_release_version = $3`,
-		instanceKey, releaseKey, expectedVersion, changesetID, now)
+		WHERE engine_instance_key = $1 AND desired_release_version = $3 RETURNING desired_release_version`,
+		instanceKey, releaseKey, expectedVersion, changesetID, now).Scan(&version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
 	if err != nil {
 		return false, fmt.Errorf("set desired release: %w", err)
 	}
-	return res.RowsAffected() == 1, nil
+	if err := publishDesiredReleaseChanged(ctx, tx, source, instanceKey, previous, releaseKey, changesetID, version, now); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // ChangeEngineReleaseStatus deprecates or revokes a release (ADR-BCP-025
@@ -184,7 +203,7 @@ func (r *PostgresRepository) ChangeEngineReleaseStatus(ctx context.Context, rele
 
 	var moved []map[string]any
 	if req.TargetStatus == release.StatusRevoked {
-		if moved, err = disposeOfDesiringInstances(ctx, tx, releaseUUID, releaseID, req.DesiredReleaseDispositions, now); err != nil {
+		if moved, err = disposeOfDesiringInstances(ctx, tx, r.eventSource(), releaseUUID, releaseID, req.DesiredReleaseDispositions, now); err != nil {
 			return release.Release{}, err
 		}
 	} else if len(req.DesiredReleaseDispositions) > 0 {
@@ -198,6 +217,9 @@ func (r *PostgresRepository) ChangeEngineReleaseStatus(ctx context.Context, rele
 		"release_id": releaseID, "previous_status": status, "status": req.TargetStatus, "dispositions": moved}); err != nil {
 		return release.Release{}, err
 	}
+	if err := publishEngineReleaseStatusChanged(ctx, tx, r.eventSource(), releaseID, status, req.TargetStatus, now); err != nil {
+		return release.Release{}, err
+	}
 	changed, err := readEngineRelease(ctx, tx, releaseID)
 	if err != nil {
 		return release.Release{}, err
@@ -208,7 +230,7 @@ func (r *PostgresRepository) ChangeEngineReleaseStatus(ctx context.Context, rele
 // disposeOfDesiringInstances applies a revocation's dispositions: every
 // instance that desires the revoked release is covered, and every
 // disposition names such an instance.
-func disposeOfDesiringInstances(ctx context.Context, tx pgx.Tx, releaseUUID, releaseID string, dispositions []release.Disposition,
+func disposeOfDesiringInstances(ctx context.Context, tx pgx.Tx, source, releaseUUID, releaseID string, dispositions []release.Disposition,
 	now time.Time) ([]map[string]any, error) {
 	rows, err := tx.Query(ctx, `SELECT engine_instance_key, engine_id::text, COALESCE(environment, ''), desired_release_version
 		FROM topology.engine_instance WHERE desired_release_id = $1::uuid ORDER BY engine_instance_key FOR UPDATE`, releaseUUID)
@@ -283,7 +305,7 @@ func disposeOfDesiringInstances(ctx context.Context, tx pgx.Tx, releaseUUID, rel
 			}
 			replacement = d.ReplacementReleaseID
 		}
-		ok, err := setDesiredRelease(ctx, tx, key, replacement, instance.version, "", now)
+		ok, err := setDesiredRelease(ctx, tx, source, key, replacement, instance.version, "", now)
 		if err != nil {
 			return nil, err
 		}

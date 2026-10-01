@@ -298,4 +298,46 @@ func TestReleaseDrift(t *testing.T) {
 	if ended, err := repo.ListReleaseDrift(ctx, tenantBound); err != nil || len(ended) != 0 {
 		t.Fatalf("an ended binding must not count: %+v %v", ended, err)
 	}
+
+	// The topology gauges describe it, with only the labels and names
+	// Shared allows (topologyMetric, topologyMetricLabel).
+	families, err := TopologyMetricsCollector{Repo: repo, Now: func() time.Time { return at(58 * time.Minute) }}.Collect(ctx)
+	must(err)
+	schemaDir := os.Getenv("SHARED_CONTRACTS_DIR")
+	allowedNames, allowedLabels := map[string]bool{}, map[string]bool{}
+	if schemaDir != "" {
+		raw, err := os.ReadFile(schemaDir + "/contracts/topology/v1/domain.schema.json")
+		must(err)
+		var doc struct {
+			Defs map[string]struct {
+				Enum []string `json:"enum"`
+			} `json:"$defs"`
+		}
+		must(json.Unmarshal(raw, &doc))
+		for _, n := range doc.Defs["topologyMetric"].Enum {
+			allowedNames[n] = true
+		}
+		for _, l := range doc.Defs["topologyMetricLabel"].Enum {
+			allowedLabels[l] = true
+		}
+	}
+	drifting := 0.0
+	for _, f := range families {
+		if schemaDir != "" && !allowedNames[f.Name] {
+			t.Errorf("metric %s is not in Shared's topologyMetric", f.Name)
+		}
+		for _, sample := range f.Samples {
+			for label := range sample.Labels {
+				if schemaDir != "" && !allowedLabels[label] {
+					t.Errorf("%s carries label %s, which Shared does not allow", f.Name, label)
+				}
+			}
+			if f.Name == "engine_instance_release_drift_total" && sample.Labels["drift_reason"] == release.DriftUnknownArtifactRunning {
+				drifting = sample.Value
+			}
+		}
+	}
+	if len(families) != 4 || drifting < 1 {
+		t.Fatalf("topology metrics: %d families, %v instances drifting with an unrecorded artifact", len(families), drifting)
+	}
 }
