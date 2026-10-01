@@ -136,6 +136,9 @@ type Dependencies struct {
 	// ProviderMigrations backs the /v1/provider-migrations routes
 	// (ADR-BCP-006 Gate 8). Nil disables them.
 	ProviderMigrations repository.ProviderMigrationRepository
+	// EngineReleases backs the /v1/engine-releases routes (ADR-BCP-025
+	// gate ER-02); nil disables them.
+	EngineReleases repository.EngineReleaseRepository
 	// EngineMigrationTasks backs the workload /v1/engine-migration-tasks
 	// routes (ADR-SHARED-016 section 4). Nil disables them.
 	EngineMigrationTasks repository.EngineMigrationTaskRepository
@@ -365,6 +368,15 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/provider-migrations/{providerMigrationID}/plan", migrations.plan)
 		r.With(a.authorize(a.adminVerifier, "human", "provider-migration:approve"), a.requireAdminRole(nil, true)).Post("/v1/provider-migrations/{providerMigrationID}/approve", migrations.approve)
 		r.With(a.authorize(a.adminVerifier, "human", "provider-migration:execute"), a.requireAdminRole(nil, true)).Post("/v1/provider-migrations/{providerMigrationID}/advance", migrations.advance)
+	}
+	if dependencies.EngineReleases != nil {
+		// ADR-BCP-025 gate ER-02: release tooling records under its own
+		// workload scope, a platform administrator under topology:write;
+		// reading is topology:read.
+		releases := engineReleaseHandler{repo: dependencies.EngineReleases, identities: a.identities}
+		r.With(a.adminOrWorkload("topology:write", "engine-release:record")).Post("/v1/engine-releases", releases.record)
+		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/engine-releases", releases.list)
+		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/engine-releases/{releaseID}", releases.get)
 	}
 	if dependencies.PlatformAccounts != nil {
 		// ADR-BCP-018 ORG-07: the account lifecycle is canonical registry

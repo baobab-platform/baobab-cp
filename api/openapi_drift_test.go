@@ -61,6 +61,9 @@ func fullRouter(t *testing.T) chi.Routes {
 		ProviderMigrations: struct {
 			repository.ProviderMigrationRepository
 		}{},
+		EngineReleases: struct {
+			repository.EngineReleaseRepository
+		}{},
 		EngineMigrationTasks: struct {
 			repository.EngineMigrationTaskRepository
 		}{},

@@ -72,14 +72,37 @@ func certificationPolicy() (map[string]bool, error) {
 	return certificationRequired, certificationErr
 }
 
-// eligibleEngineRelease reports whether an APPROVED release of the engine
-// supports the provider's contracts, and why not when it does not. The
-// Control Plane records no engine releases until ADR-BCP-025 gate ER-02, so
-// no release can be shown eligible: the check fails closed rather than pass
-// unproven. ER-02 replaces this with a read of the recorded releases; tests
-// replace it to exercise the rest of the activation path.
-var eligibleEngineRelease = func(_ context.Context, _ pgx.Tx, engineCode, _ string) (string, bool, error) {
-	return fmt.Sprintf("No approved release of engine %s is recorded; engine releases are recorded from ADR-BCP-025 gate ER-02.", engineCode), false, nil
+// approvedReleaseCovering reports whether an APPROVED release of the
+// provider's engine supports every capability and contract major the
+// provider supports (ADR-BCP-025 sections 2.1.2, 2.4), and why not when
+// none does. Only APPROVED counts: a DEPRECATED release may not be newly
+// desired, so it cannot carry a new activation.
+func approvedReleaseCovering(ctx context.Context, tx pgx.Tx, engineCode, providerUUID string) (string, bool, error) {
+	var covering string
+	var approved int
+	err := tx.QueryRow(ctx, `
+		SELECT
+			(SELECT count(*) FROM topology.engine_release r WHERE r.engine_id = p.engine_id AND r.status = 'APPROVED'),
+			COALESCE((SELECT r.release_key FROM topology.engine_release r
+				WHERE r.engine_id = p.engine_id AND r.status = 'APPROVED' AND NOT EXISTS (
+					SELECT 1 FROM capability.provider_capability_support pcs
+					JOIN capability.capability c ON c.capability_id = pcs.capability_id
+					WHERE pcs.provider_id = p.provider_id AND NOT EXISTS (
+						SELECT 1 FROM topology.engine_release_provider_support s
+						WHERE s.engine_release_id = r.engine_release_id AND s.provider_key = p.provider_key
+							AND s.capability_key = c.code AND pcs.contract_versions <@ s.contract_versions))
+				ORDER BY r.recorded_at DESC, r.release_key DESC LIMIT 1), '')
+		FROM capability.capability_provider p WHERE p.provider_id = $1::uuid`, providerUUID).Scan(&approved, &covering)
+	if err != nil {
+		return "", false, fmt.Errorf("read approved engine releases: %w", err)
+	}
+	switch {
+	case covering != "":
+		return "", true, nil
+	case approved == 0:
+		return fmt.Sprintf("No approved release of engine %s is recorded.", engineCode), false, nil
+	}
+	return fmt.Sprintf("No approved release of engine %s supports every capability and contract major the provider supports.", engineCode), false, nil
 }
 
 type activationInstance struct {
@@ -198,7 +221,7 @@ func providerActivationChecks(ctx context.Context, tx pgx.Tx, providerUUID strin
 
 	// ENGINE_RELEASE: an APPROVED engine release whose provider support
 	// covers the provider's contracts (ADR-BCP-025).
-	if message, eligible, err := eligibleEngineRelease(ctx, tx, engineCode, providerUUID); err != nil {
+	if message, eligible, err := approvedReleaseCovering(ctx, tx, engineCode, providerUUID); err != nil {
 		return nil, err
 	} else if !eligible {
 		failures[checkEngineRelease] = message

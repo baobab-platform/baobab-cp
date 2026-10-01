@@ -344,6 +344,13 @@ permissions:
     delegable: false
     read_only: false
     description: "Advance an approved provider migration one transition at a time, and cancel or roll it back (ADR-SHARED-016 sections 2 and 5)."
+  - key: engine-release.record
+    domain: OPERATIONS
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Record an immutable engine release: its content-addressed artifacts, per-provider contract support and declaration digest (ADR-BCP-025 gate ER-02). Release tooling records under the engine-release:record workload scope; this permission covers an administrator doing so. Recording never approves, desires or deploys a release."
   - key: audit.view
     domain: AUDIT
     risk_class: MODERATE
