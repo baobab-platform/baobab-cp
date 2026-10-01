@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/baobab-platform/baobab-cp/internal/administration"
 )
 
 // Target is the authoritative state of the resource a changeset names
@@ -118,6 +120,10 @@ func Generate(in PlanInput) (Plan, error) {
 		case TargetInstance:
 			res.EngineInstanceID = c.DesiredChange.EngineInstanceID
 			res.DesiredReleaseID = c.DesiredChange.ReleaseID
+		case TargetAdminPrincipal:
+			res.GranteePrincipalID = c.DesiredChange.PrincipalID
+		case TargetAdminGrant:
+			res.SourceGrantID = c.DesiredChange.SourceGrantID
 		default:
 			res.TenantID = c.DesiredChange.TenantID
 		}
@@ -144,6 +150,8 @@ func Generate(in PlanInput) (Plan, error) {
 		p.ReadinessRequirements = append(p.ReadinessRequirements, Check{Check: check.Check, Description: description})
 	}
 	switch {
+	case kind.Target == TargetAdminPrincipal || kind.Target == TargetAdminGrant:
+		p.RiskClass, p.ImpactAnalysis, p.CompensationStrategy = grantChangeImpact(c.DesiredChange, kind.Target)
 	case kind.Target == TargetInstance:
 		p.RiskClass = "HIGH"
 		desired := "no release"
@@ -188,7 +196,9 @@ func Generate(in PlanInput) (Plan, error) {
 	if kind.Target != TargetTenant {
 		p.VerificationStrategy = fmt.Sprintf("Read the %s back and require status %s.", strings.ToLower(strings.ReplaceAll(kind.Target, "_", " ")), kind.ToStatus)
 	}
-	if kind.Changes != "" {
+	if kind.Target == TargetAdminPrincipal || kind.Target == TargetAdminGrant {
+		p.VerificationStrategy = "Read the created grant back and require it to carry the planned permission, scope, validity and approval."
+	} else if kind.Changes != "" {
 		p.VerificationStrategy = fmt.Sprintf("Read the %s back and require its %s to be the planned one.",
 			strings.ToLower(strings.ReplaceAll(kind.Target, "_", " ")), strings.ReplaceAll(kind.Changes, "_", " "))
 	}
@@ -239,6 +249,33 @@ func digestOf(v any) string {
 	}
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// grantChangeImpact is the risk class, impact analysis and compensation of
+// an administrative grant change. The risk is the permission's own, raised
+// where its scope makes it so (ADR-BCP-020 section 41); an unregistered
+// permission is planned HIGH and blocked by its plan check.
+func grantChangeImpact(d DesiredChange, target string) (string, ImpactAnalysis, string) {
+	risk := administration.RiskHigh
+	if p, ok := administration.MustDefaultCatalogue().Permission(d.Permission); ok && d.Scope != nil {
+		risk = administration.EffectiveRisk(p, *d.Scope)
+	}
+	class := string(risk)
+	if risk == administration.RiskModerate {
+		class = "MEDIUM"
+	}
+	scope := "an unspecified scope"
+	if d.Scope != nil {
+		scope = string(d.Scope.Level) + " scope"
+	}
+	summary := fmt.Sprintf("Grants %s over %s to principal %s.", d.Permission, scope, d.PrincipalID)
+	compensation := "Revoke the grant through its own lifecycle; the grant record is never amended."
+	if target == TargetAdminGrant {
+		summary = fmt.Sprintf("Delegates %s over %s from grant %s to principal %s.", d.Permission, scope, d.SourceGrantID, d.PrincipalID)
+		compensation = "Revoke the delegation, or its source grant, through the grant lifecycle."
+	}
+	return class, ImpactAnalysis{Summary: summary, ResourcesCreated: 1,
+		SecurityImpact: fmt.Sprintf("The principal gains %s-risk administrative authority once the grant is ACTIVE; it is compared in shadow only until enforcement is authorised.", strings.ToLower(class))}, compensation
 }
 
 func orUnknown(s string) string {

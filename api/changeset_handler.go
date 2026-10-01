@@ -74,6 +74,10 @@ func (h changesetHandler) fail(w http.ResponseWriter, r *http.Request, err error
 		problem(w, r, http.StatusForbidden, "MARKET_SELF_ACTIVATION", "a market is never activated by its creator or last editor", false)
 	case errors.Is(err, repository.ErrMappingSelfApproval):
 		problem(w, r, http.StatusForbidden, "MAPPING_SELF_APPROVAL", "a mapping is never activated by its creator", false)
+	case errors.Is(err, repository.ErrGrantSelfApproval):
+		problem(w, r, http.StatusForbidden, "SELF_APPROVAL_PROHIBITED", err.Error(), false)
+	case errors.Is(err, repository.ErrGrantSoDViolation):
+		problem(w, r, http.StatusForbidden, "SEPARATION_OF_DUTIES_VIOLATION", err.Error(), false)
 	case errors.Is(err, repository.ErrEngineReleaseSelfApproval):
 		problem(w, r, http.StatusForbidden, "RELEASE_SELF_APPROVAL", "an engine release is never approved by the principal who recorded it", false)
 	case errors.Is(err, repository.ErrRegistryMarketNotValidated), errors.Is(err, repository.ErrMappingLifecycleConflict):
@@ -117,6 +121,15 @@ func (h changesetHandler) create(w http.ResponseWriter, r *http.Request) {
 	var req changeset.CreateRequest
 	if !decodeRaw(w, r, changesetCreateSchema, raw, &req) {
 		return
+	}
+	// A kind that names a request_scope needs it as well as changeset:write:
+	// drafting a change to administrative authority is itself an
+	// administrative action (ADR-BCP-020 gate ADA-06).
+	if scope := changeset.Kinds()[req.DesiredChange.Kind].RequestScope; scope != "" {
+		if principal, _ := auth.PrincipalFromContext(r.Context()); !hasAnyScope(principal, scope) {
+			problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "requesting this change kind requires "+scope, false)
+			return
+		}
 	}
 	hash := sha256Hex(raw)
 	ctx := r.Context()
