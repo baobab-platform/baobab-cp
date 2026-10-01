@@ -61,6 +61,18 @@ type grantTransitionBody struct {
 	Reason  string                 `json:"reason"`
 }
 
+type grantReplaceBody struct {
+	Permission           string                     `json:"permission"`
+	Scope                administration.Scope       `json:"scope"`
+	GrantType            administration.GrantType   `json:"grant_type"`
+	ValidFrom            *time.Time                 `json:"valid_from,omitempty"`
+	ValidUntil           *time.Time                 `json:"valid_until,omitempty"`
+	DelegableDepth       int                        `json:"delegable_depth,omitempty"`
+	Conditions           *administration.Conditions `json:"conditions,omitempty"`
+	DependentDelegations string                     `json:"dependent_delegations"`
+	Reason               string                     `json:"reason"`
+}
+
 type grantDelegationBody struct {
 	PrincipalID    string               `json:"principal_id"`
 	Permission     string               `json:"permission"`
@@ -151,7 +163,7 @@ func (h grantAdminHandler) fail(w http.ResponseWriter, r *http.Request, err erro
 		switch refusal.Code {
 		case administration.CodeSelfApproval:
 			status = http.StatusForbidden
-		case administration.CodeApprovalRequired, administration.CodeTransitionInvalid:
+		case administration.CodeApprovalRequired, administration.CodeTransitionInvalid, administration.CodeReplacementInvalid:
 			status = http.StatusConflict
 		}
 		problem(w, r, status, refusal.Code, refusal.Detail, false)
@@ -360,4 +372,53 @@ func (h grantAdminHandler) delegate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeGrant(w, http.StatusCreated, created)
+}
+
+// replace atomically replaces a grant: the new grant is created and the old
+// one revoked, with its delegations, in one transaction (Shared
+// replaceAdministrativeGrant). It is not an amend. A replacement that adds
+// HIGH or CRITICAL authority is requested as a changeset instead.
+func (h grantAdminHandler) replace(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.grantIDParam(w, r)
+	if !ok {
+		return
+	}
+	key, ok := grantIdempotencyKey(w, r)
+	if !ok {
+		return
+	}
+	version, ok := revisionFromIfMatch(w, r)
+	if !ok {
+		return
+	}
+	var body grantReplaceBody
+	if !decodeGrantBody(w, r, &body) {
+		return
+	}
+	if body.DependentDelegations != "REVOKE" {
+		problem(w, r, http.StatusUnprocessableEntity, administration.CodeInvalidGrant, "dependent_delegations must be REVOKE", false)
+		return
+	}
+	callerID, actor, ok := h.caller(w, r)
+	if !ok {
+		return
+	}
+	request := administration.ReplaceRequest{Permission: body.Permission, Scope: body.Scope, GrantType: body.GrantType,
+		ValidFrom: body.ValidFrom, ValidUntil: body.ValidUntil, DelegableDepth: body.DelegableDepth, Conditions: body.Conditions, Reason: body.Reason}
+	now := h.clock()
+	result, err := h.grants.ReplaceAdministrativeGrant(r.Context(), actor, key, requestHash("replace", id, body, version), id, version, body.Reason, now,
+		func(old administration.Grant) (administration.Grant, error) {
+			return administration.PlanReplacement(h.catalogue, callerID, old, request, now)
+		})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	revoked := result.RevokedDelegations
+	if revoked == nil {
+		revoked = []string{}
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Location", "/v1/admin/grants/"+result.Replacement.GrantID)
+	writeJSON(w, http.StatusCreated, map[string]any{"replacement": result.Replacement, "superseded": result.Superseded, "revoked_delegations": revoked})
 }

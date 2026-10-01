@@ -265,3 +265,89 @@ func TestEffectiveRiskRaisesPlatformAdministration(t *testing.T) {
 		t.Error("a read-only permission is not raised")
 	}
 }
+
+func TestAddsAuthority(t *testing.T) {
+	end := now.Add(48 * time.Hour)
+	later := end.Add(time.Hour)
+	earlier := end.Add(-time.Hour)
+	base := tenantGrant("agr_old", "prn_jane", "tenant.suspend", "tn_acmeug")
+	base.GrantType, base.ValidUntil = TypeTimeBound, &end
+	same := func(edit func(*Grant)) Grant { g := base; g.GrantID = "agr_new"; edit(&g); return g }
+	for name, tc := range map[string]struct {
+		next Grant
+		adds bool
+	}{
+		"identical":              {same(func(*Grant) {}), false},
+		"an earlier end":         {same(func(g *Grant) { g.ValidUntil = &earlier }), false},
+		"a later end":            {same(func(g *Grant) { g.ValidUntil = &later }), true},
+		"no end at all":          {same(func(g *Grant) { g.GrantType, g.ValidUntil = TypeStanding, nil }), true},
+		"another permission":     {same(func(g *Grant) { g.Permission = "tenant.activate" }), true},
+		"another scope":          {same(func(g *Grant) { g.Scope = Scope{Level: LevelTenant, TenantID: "tn_other"} }), true},
+		"a narrower environment": {same(func(g *Grant) { g.Scope.Environment = "production" }), true}, // exact comparison until containment exists
+		"more delegation":        {same(func(g *Grant) { g.DelegableDepth = 1 }), true},
+	} {
+		if got := AddsAuthority(base, tc.next); got != tc.adds {
+			t.Errorf("%s: AddsAuthority = %v, want %v", name, got, tc.adds)
+		}
+	}
+	guarded := base
+	guarded.Conditions = &Conditions{MinimumACR: "urn:baobab:acr:mfa"}
+	weaker := same(func(g *Grant) {})
+	if !AddsAuthority(guarded, weaker) {
+		t.Error("dropping the assurance condition is a weaker grant")
+	}
+	kept := same(func(g *Grant) { g.Conditions = &Conditions{MinimumACR: "urn:baobab:acr:mfa"} })
+	if AddsAuthority(guarded, kept) {
+		t.Error("keeping the assurance condition added authority")
+	}
+}
+
+func TestPlanReplacement(t *testing.T) {
+	c := MustDefaultCatalogue()
+	end := now.Add(48 * time.Hour)
+	old := tenantGrant("agr_old", "prn_jane", "tenant.suspend", "tn_acmeug")
+	old.GrantType, old.ValidUntil = TypeTimeBound, &end
+	shorter := now.Add(24 * time.Hour)
+	q := ReplaceRequest{Permission: "tenant.suspend", Scope: old.Scope, GrantType: TypeTimeBound, ValidUntil: &shorter, Reason: "Shorten."}
+	g, err := PlanReplacement(c, "prn_ops", old, q, now)
+	if err != nil {
+		t.Fatalf("a non-escalating HIGH replacement was refused: %v", err)
+	}
+	if g.SupersedesGrantID != "agr_old" || g.PrincipalID != "prn_jane" || g.GrantedBy != "prn_ops" || g.Source != SourceDirect || g.Status != StatusActive {
+		t.Fatalf("unexpected replacement %+v", g)
+	}
+	// Adding HIGH authority is a changeset.
+	wider := q
+	long := end.Add(24 * time.Hour)
+	wider.ValidUntil = &long
+	_, err = PlanReplacement(c, "prn_ops", old, wider, now)
+	refusedWith(t, err, CodeApprovalRequired)
+	// LOW and MODERATE replacements are direct whatever they add.
+	view := tenantGrant("agr_view", "prn_jane", "tenant.view", "tn_acmeug")
+	if _, err := PlanReplacement(c, "prn_ops", view, ReplaceRequest{Permission: "tenant.view", Scope: Scope{Level: LevelTenant, TenantID: "tn_other"},
+		GrantType: TypeStanding, Reason: "Move."}, now); err != nil {
+		t.Fatalf("a LOW replacement was refused: %v", err)
+	}
+	// The holder never replaces their own grant.
+	_, err = PlanReplacement(c, "prn_jane", old, q, now)
+	refusedWith(t, err, CodeSelfApproval)
+	// Only a live DIRECT grant is replaceable.
+	for name, mutate := range map[string]func(*Grant){
+		"a delegation":        func(g *Grant) { g.Source, g.DelegatedFromGrantID, g.DelegationDepth = SourceDelegation, "agr_src", 1 },
+		"a revoked grant":     func(g *Grant) { g.Status = StatusRevoked },
+		"an expired grant":    func(g *Grant) { past := now.Add(-time.Hour); g.ValidUntil = &past },
+		"bootstrap authority": func(g *Grant) { g.Source = SourceBootstrap },
+	} {
+		bad := old
+		mutate(&bad)
+		_, err := PlanReplacement(c, "prn_ops", bad, q, now)
+		refusedWith(t, err, CodeReplacementInvalid)
+		_ = name
+	}
+	// A replacement takes effect at once: a later start would leave a gap.
+	future := now.Add(time.Hour)
+	later := q
+	later.ValidFrom = &future
+	_, err = PlanReplacement(c, "prn_ops", old, later, now)
+	refusedWith(t, err, CodeInvalidGrant)
+}

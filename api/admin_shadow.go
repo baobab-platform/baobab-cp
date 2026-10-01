@@ -35,6 +35,7 @@ var adminRoutePermissions = map[string]string{
 	"GET /v1/admin/grants":                                                          "administrator.view",
 	"POST /v1/admin/grants":                                                         "administrator.grant",
 	"GET /v1/admin/grants/{grantID}":                                                "administrator.view",
+	"POST /v1/admin/grants/{grantID}/replacements":                                  "administrator.grant",
 	"POST /v1/admin/grants/{grantID}/transitions":                                   "administrator.revoke",
 	"POST /v1/capabilities/explain":                                                 "support.diagnostics.view",
 	"POST /v1/canonical-entities":                                                   "organisation.manage",

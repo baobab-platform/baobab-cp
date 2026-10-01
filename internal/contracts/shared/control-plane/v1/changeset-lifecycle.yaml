@@ -323,9 +323,13 @@ change_kinds:
       - check: SOD_CONFLICT
         blocker: GRANT_SOD_CONFLICT
       # The grantee does not already hold a live grant of the same
-      # permission over the same scope.
+      # permission over the same scope (other than the one being replaced).
       - check: NOT_ALREADY_HELD
         blocker: GRANT_ALREADY_HELD
+      # Only with replaces_grant_id: the replaced grant is the grantee's own,
+      # live, DIRECT grant, and no other change is replacing it.
+      - check: REPLACED_GRANT_VALID
+        blocker: GRANT_REPLACED_GRANT_INVALID
   # ADR-BCP-020 sections 42-48 (gate ADA-06). The governed path to a
   # delegation the direct delegateAdministrativeGrant route refuses with
   # APPROVAL_REQUIRED. The target is the source grant and its version is the
@@ -385,3 +389,4 @@ blocking_codes:
   - GRANT_ALREADY_HELD
   - DELEGATION_REQUESTER_NOT_HOLDER
   - DELEGATION_EXCEEDS_SOURCE
+  - GRANT_REPLACED_GRANT_INVALID

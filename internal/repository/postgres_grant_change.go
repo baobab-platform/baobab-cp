@@ -86,6 +86,19 @@ func grantChangeFailures(ctx context.Context, tx pgx.Tx, c changeset.Changeset, 
 	if err != nil {
 		return nil, fmt.Errorf("read grantee grants: %w", err)
 	}
+	var replacedFailure string
+	if d.Kind == changeset.KindGrantIssuance && d.ReplacesGrantID != "" {
+		var rest []administration.Grant
+		for _, h := range held {
+			if h.GrantID != d.ReplacesGrantID {
+				rest = append(rest, h)
+			}
+		}
+		held = rest
+		if replacedFailure, err = replacedGrantFailure(ctx, tx, c, now); err != nil {
+			return nil, err
+		}
+	}
 	if d.Kind == changeset.KindGrantDelegation {
 		rowID, err := domain.ParseResourceID(grantIDPrefix, d.SourceGrantID)
 		if err != nil {
@@ -106,8 +119,47 @@ func grantChangeFailures(ctx context.Context, tx pgx.Tx, c changeset.Changeset, 
 			Request: delegationRequestOf(d, c.Reason), Requester: c.RequestedBy, Source: source, Chain: chain,
 			GranteeActive: granteeActive, Held: held, Now: now}), nil
 	}
-	return administration.IssuanceFailures(administration.IssuanceFacts{Catalogue: catalogue, SoD: sod,
-		Request: issueRequestOf(d), Requester: c.RequestedBy, GranteeActive: granteeActive, Held: held, Now: now}), nil
+	failures := administration.IssuanceFailures(administration.IssuanceFacts{Catalogue: catalogue, SoD: sod,
+		Request: issueRequestOf(d), Requester: c.RequestedBy, GranteeActive: granteeActive, Held: held, Now: now})
+	if replacedFailure != "" {
+		failures[administration.CheckReplacedGrantValid] = replacedFailure
+	}
+	return failures, nil
+}
+
+// replacedGrantFailure explains why the grant an issuance replaces cannot
+// be replaced, or "": it is the grantee's own live DIRECT grant and no other
+// open change is replacing it.
+func replacedGrantFailure(ctx context.Context, tx pgx.Tx, c changeset.Changeset, now time.Time) (string, error) {
+	d := c.DesiredChange
+	row, err := domain.ParseResourceID(grantIDPrefix, d.ReplacesGrantID)
+	if err != nil {
+		return "The grant to replace has a malformed id.", nil
+	}
+	old, err := queryGrant(ctx, tx, `SELECT `+grantColumns+` FROM policy.administrative_grant g WHERE g.grant_id = $1::uuid`, row)
+	if errors.Is(err, ErrGrantNotFound) {
+		return "The grant to replace does not exist.", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if old.PrincipalID != d.PrincipalID {
+		return "The grant to replace is not the grantee's.", nil
+	}
+	if !administration.Replaceable(old, now) {
+		return "Only a live DIRECT grant is replaced.", nil
+	}
+	var other string
+	err = tx.QueryRow(ctx, `SELECT changeset_id FROM changeset.changeset
+		WHERE changeset_id <> $1 AND desired_change->>'replaces_grant_id' = $2 AND state IN (`+openChangesetStates+`) LIMIT 1`,
+		c.ChangesetID, d.ReplacesGrantID).Scan(&other)
+	switch {
+	case err == nil:
+		return "Changeset " + other + " is already replacing that grant.", nil
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil
+	}
+	return "", err
 }
 
 // checkGrantChangeIndependence applies the separation-of-duties policies to
@@ -181,7 +233,19 @@ func (r *PostgresRepository) applyGrantChange(ctx context.Context, tx pgx.Tx, c 
 		}
 	}
 	g.GrantID = domain.NewResourceID(grantIDPrefix)
-	if err := insertGrant(ctx, tx, catalogue, g, actor); err != nil {
+	if d.Kind == changeset.KindGrantIssuance && d.ReplacesGrantID != "" {
+		oldRow, err := domain.ParseResourceID(grantIDPrefix, d.ReplacesGrantID)
+		if err != nil {
+			return "", "", false, ErrChangesetPlanStale
+		}
+		old, err := queryGrant(ctx, tx, `SELECT `+grantColumns+` FROM policy.administrative_grant g WHERE g.grant_id = $1::uuid FOR UPDATE`, oldRow)
+		if err != nil {
+			return "", "", false, ErrChangesetPlanStale
+		}
+		if _, err := supersedeInTx(ctx, tx, catalogue, actor, old, oldRow, g, c.Reason, now); err != nil {
+			return "", "", false, grantPlanError(err)
+		}
+	} else if err := insertGrant(ctx, tx, catalogue, g, actor); err != nil {
 		return "", "", false, err
 	}
 	created, err := queryGrant(ctx, tx, `SELECT `+grantColumns+` FROM policy.administrative_grant g WHERE g.grant_id = $1::uuid`,

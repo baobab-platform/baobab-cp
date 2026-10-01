@@ -1845,7 +1845,7 @@
         "scope",
         "grant_type"
       ],
-      "description": "Issue an AdministrativeGrant through the maker-checker path (ADR-BCP-020 sections 38-41, gate ADA-06): the governed route for authority the direct route refuses with APPROVAL_REQUIRED (HIGH and CRITICAL). A MODIFY changeset targeting the grantee principal; its scope is the grant's scope. Planning inspects, side-effect free, each check in changeset-lifecycle.yaml change_kinds.ADMINISTRATIVE_GRANT_ISSUANCE.plan_checks. The approver holds administrator:approve and is neither the requester nor the grantee (separation-of-duties.yaml). On apply the grant is created as a DIRECT grant granted by the requester, with the approval as its approval_reference.",
+      "description": "Issue an AdministrativeGrant through the maker-checker path (ADR-BCP-020 sections 38-41, gate ADA-06): the governed route for authority the direct route refuses with APPROVAL_REQUIRED (HIGH and CRITICAL). A MODIFY changeset targeting the grantee principal; its scope is the grant's scope. Planning inspects, side-effect free, each check in changeset-lifecycle.yaml change_kinds.ADMINISTRATIVE_GRANT_ISSUANCE.plan_checks. The approver holds administrator:approve and is neither the requester nor the grantee (separation-of-duties.yaml). On apply the grant is created as a DIRECT grant granted by the requester, with the approval as its approval_reference. With replaces_grant_id it is the governed path for a replacement that adds authority; a replacement that does not is made directly (replaceAdministrativeGrant).",
       "properties": {
         "kind": {
           "const": "ADMINISTRATIVE_GRANT_ISSUANCE"
@@ -1886,6 +1886,10 @@
               "maxLength": 128
             }
           }
+        },
+        "replaces_grant_id": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/administrativeGrantId",
+          "description": "Replace this grant rather than add to it: on apply the new grant is created and this one revoked, in one transaction, with its delegations (grant-administration.schema.json GrantReplaceRequest). It must be the grantee's own live DIRECT grant."
         }
       },
       "allOf": [

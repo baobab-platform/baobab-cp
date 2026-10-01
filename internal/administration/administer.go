@@ -23,12 +23,13 @@ func refuse(code, format string, a ...any) *Refusal {
 
 // Reason codes grant administration produces.
 const (
-	CodeInvalidGrant      = "INVALID_GRANT"
-	CodeSelfApproval      = "SELF_APPROVAL_PROHIBITED"
-	CodeApprovalRequired  = "APPROVAL_REQUIRED"
-	CodeDelegationInvalid = "DELEGATION_INVALID"
-	CodeTransitionInvalid = "GRANT_TRANSITION_INVALID"
-	CodeSoDViolation      = "SEPARATION_OF_DUTIES_VIOLATION"
+	CodeInvalidGrant       = "INVALID_GRANT"
+	CodeSelfApproval       = "SELF_APPROVAL_PROHIBITED"
+	CodeApprovalRequired   = "APPROVAL_REQUIRED"
+	CodeDelegationInvalid  = "DELEGATION_INVALID"
+	CodeTransitionInvalid  = "GRANT_TRANSITION_INVALID"
+	CodeSoDViolation       = "SEPARATION_OF_DUTIES_VIOLATION"
+	CodeReplacementInvalid = "GRANT_REPLACEMENT_INVALID"
 )
 
 const (
@@ -83,6 +84,23 @@ func PlanApprovedIssue(c *Catalogue, requester string, q IssueRequest, now time.
 }
 
 func planIssue(c *Catalogue, caller string, q IssueRequest, now time.Time, approvalID string) (Grant, error) {
+	g, err := buildIssue(c, caller, q, now)
+	if err != nil {
+		return Grant{}, err
+	}
+	if g.RiskClass.AtLeast(RiskHigh) {
+		if approvalID == "" {
+			return Grant{}, refuse(CodeApprovalRequired,
+				"%s is %s risk at %s scope: request it as an ADMINISTRATIVE_GRANT_ISSUANCE changeset so a second person approves it", q.Permission, g.RiskClass, q.Scope.Level)
+		}
+		g.ApprovalReference = approvalID
+	}
+	return g, nil
+}
+
+// buildIssue validates an issue request and builds the DIRECT grant it
+// would create, without judging whether its risk needs approval.
+func buildIssue(c *Catalogue, caller string, q IssueRequest, now time.Time) (Grant, error) {
 	if !principalID.MatchString(q.PrincipalID) {
 		return Grant{}, refuse(CodeInvalidGrant, "principal_id is not a canonical principal id")
 	}
@@ -103,10 +121,9 @@ func planIssue(c *Catalogue, caller string, q IssueRequest, now time.Time, appro
 	if from.Before(now.Add(-time.Minute)) {
 		return Grant{}, refuse(CodeInvalidGrant, "valid_from is in the past")
 	}
-	risk := EffectiveRisk(p, q.Scope)
 	g := Grant{
 		PrincipalID: q.PrincipalID, Permission: q.Permission, Scope: q.Scope, Conditions: q.Conditions,
-		GrantType: q.GrantType, Source: SourceDirect, DelegableDepth: q.DelegableDepth, RiskClass: risk,
+		GrantType: q.GrantType, Source: SourceDirect, DelegableDepth: q.DelegableDepth, RiskClass: EffectiveRisk(p, q.Scope),
 		ValidFrom: from, Status: StatusActive, GrantedBy: caller, Reason: q.Reason, CreatedAt: now, Version: 1,
 	}
 	if q.ValidUntil != nil {
@@ -118,13 +135,6 @@ func planIssue(c *Catalogue, caller string, q IssueRequest, now time.Time, appro
 	}
 	if err := g.Validate(c); err != nil {
 		return Grant{}, refuse(CodeInvalidGrant, "%v", err)
-	}
-	if risk.AtLeast(RiskHigh) {
-		if approvalID == "" {
-			return Grant{}, refuse(CodeApprovalRequired,
-				"%s is %s risk at %s scope: request it as an ADMINISTRATIVE_GRANT_ISSUANCE changeset so a second person approves it", q.Permission, risk, q.Scope.Level)
-		}
-		g.ApprovalReference = approvalID
 	}
 	return g, nil
 }
@@ -276,4 +286,75 @@ func ResourceOf(s Scope, environment string) Resource {
 		r.Environment = environment
 	}
 	return r
+}
+
+// Replaceable reports whether g can be replaced: a live DIRECT grant.
+// A delegation is revoked and delegated again, bootstrap authority lapses,
+// and a profile grant is replaced by changing its profile.
+func Replaceable(g Grant, now time.Time) bool {
+	return g.Source == SourceDirect && Live(g, now)
+}
+
+// AddsAuthority reports whether replacing old with next would give the
+// principal authority old did not: another permission, another scope (the
+// comparison is exact until scope containment is available), a later end,
+// more delegation, or a weaker assurance condition. A replacement that adds
+// none is no authority change and needs no second person, as a revoke does
+// not.
+func AddsAuthority(old, next Grant) bool {
+	switch {
+	case old.Permission != next.Permission, !sameScope(old.Scope, next.Scope):
+		return true
+	case next.DelegableDepth > old.DelegableDepth:
+		return true
+	case old.ValidUntil != nil && (next.ValidUntil == nil || next.ValidUntil.After(*old.ValidUntil)):
+		return true
+	}
+	if old.Conditions != nil && old.Conditions.MinimumACR != "" &&
+		(next.Conditions == nil || next.Conditions.MinimumACR != old.Conditions.MinimumACR) {
+		return true
+	}
+	return false
+}
+
+// ReplaceRequest is administration/v1 GrantReplaceRequest, decoded. The
+// replacement is for the replaced grant's own principal.
+type ReplaceRequest struct {
+	Permission     string
+	Scope          Scope
+	GrantType      GrantType
+	ValidFrom      *time.Time
+	ValidUntil     *time.Time
+	DelegableDepth int
+	Conditions     *Conditions
+	Reason         string
+}
+
+func (q ReplaceRequest) issue(principal string) IssueRequest {
+	return IssueRequest{PrincipalID: principal, Permission: q.Permission, Scope: q.Scope, GrantType: q.GrantType,
+		ValidFrom: q.ValidFrom, ValidUntil: q.ValidUntil, DelegableDepth: q.DelegableDepth, Conditions: q.Conditions, Reason: q.Reason}
+}
+
+// PlanReplacement builds the grant that replaces old, made directly. It is
+// refused when old is not replaceable, when the caller is its holder, when
+// the replacement would start later than now (a gap would lock the holder
+// out), or when it adds HIGH or CRITICAL authority, which is requested as
+// an ADMINISTRATIVE_GRANT_ISSUANCE changeset naming replaces_grant_id.
+func PlanReplacement(c *Catalogue, caller string, old Grant, q ReplaceRequest, now time.Time) (Grant, error) {
+	if !Replaceable(old, now) {
+		return Grant{}, refuse(CodeReplacementInvalid, "only a live DIRECT grant is replaced; revoke and delegate again, or let bootstrap authority lapse")
+	}
+	if q.ValidFrom != nil && q.ValidFrom.After(now) {
+		return Grant{}, refuse(CodeInvalidGrant, "a replacement takes effect at once: valid_from may not be later than now")
+	}
+	g, err := buildIssue(c, caller, q.issue(old.PrincipalID), now)
+	if err != nil {
+		return Grant{}, err
+	}
+	g.Status, g.SupersedesGrantID = StatusActive, old.GrantID
+	if g.RiskClass.AtLeast(RiskHigh) && AddsAuthority(old, g) {
+		return Grant{}, refuse(CodeApprovalRequired,
+			"the replacement adds %s-risk authority: request it as an ADMINISTRATIVE_GRANT_ISSUANCE changeset naming replaces_grant_id", g.RiskClass)
+	}
+	return g, nil
 }
