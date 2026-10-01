@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/topology/v1/domain.schema.json",
+  "title": "Baobab Topology Domain Vocabulary (ADR-BCP-025)",
+  "description": "Grammars and closed vocabularies for engine releases, artifact identity and deployment observation (ADR-BCP-025, gate ER-01). The identifiers the Control Plane mints (engineReleaseId, deploymentObservationId) live in control-plane/v1/domain.schema.json with the other topology identifiers (ADR-SHARED-012).\n\nControl Plane is the runtime authority. Shared is the contract authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "releaseVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "maxLength": 64,
+      "description": "The engine's semantic version, MAJOR.MINOR.PATCH with an optional pre-release (section 2.1). No build metadata: two builds of one version are one release or a conflict (RELEASE_VERSION_CONFLICT), never two releases. Never a mutable tag such as latest."
+    },
+    "releaseStatus": {
+      "type": "string",
+      "enum": ["CANDIDATE", "APPROVED", "DEPRECATED", "REVOKED"],
+      "description": "EngineRelease lifecycle (section 2.4, release-policy.yaml status_transitions). APPROVED means the release may be named as a desired release; it is not certification (amendment A3). REVOKED is terminal. A closed set, so it is safe as a bounded metric label."
+    },
+    "artifactType": {
+      "type": "string",
+      "enum": ["OCI_IMAGE"],
+      "description": "The kind of artifact (section 2.2). Other types are added by a Shared contract change only."
+    },
+    "artifactDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "The artifact's content digest: sha256: followed by 64 lowercase hex characters. This is the artifact's identity (section 2.2). A digest belongs to at most one release of one engine."
+    },
+    "artifactRepository": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)+$",
+      "maxLength": 255,
+      "description": "Where the artifact is published, e.g. ghcr.io/baobab-platform/baobab-trade. A location, never an identity: it carries no tag and no digest, and is never compared to decide which release is running."
+    },
+    "artifactPlatform": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+/[a-z0-9_]+(?:/[a-z0-9]+)?$",
+      "maxLength": 64,
+      "description": "OCI platform of one artifact in a multi-platform release, e.g. linux/amd64 or linux/arm64/v8."
+    },
+    "displayTag": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$",
+      "description": "A tag recorded for readability only (section 2.2). It is never compared, resolved or trusted."
+    },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "The full 40-hex git commit SHA a release was built from. Never a branch or tag name."
+    },
+    "declarationDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "sha256 over the exact bytes of the engine repository's .baobab/capability-provider.yaml at the release's source_revision (section 2.1.3, amendment A2)."
+    },
+    "contractMajorVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The canonical representation of a capability contract version: the contract's major version, a positive integer (section 2.1.1). Minor and patch versions are backward compatible by the capability contract rules, so they never decide compatibility. Stored values such as v1, 1 or 1.x.y normalise to 1; a value that cannot be normalised is a data defect, reported and never guessed. capability/v1 contract_versions and required_contract_version already use this form."
+    },
+    "deploymentRegion": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "maxLength": 63,
+      "description": "The deployment region an engine instance runs in, as the Control Plane records it for the instance, e.g. eu-west-1."
+    },
+    "observedReleaseState": {
+      "type": "string",
+      "enum": ["RELEASE", "UNKNOWN_ARTIFACT", "FOREIGN_ARTIFACT", "MIXED", "UNKNOWN"],
+      "description": "What the Control Plane derives from an instance's current observation (section 2.6). RELEASE: every observed digest belongs to one release of the instance's engine. UNKNOWN_ARTIFACT: a digest belongs to no recorded release. FOREIGN_ARTIFACT: a digest belongs to another engine's release. MIXED: the digests span several releases of the instance's engine. UNKNOWN: no current observation (none, expired or future-dated). A closed set, so it is safe as a bounded metric label."
+    },
+    "releaseDriftReason": {
+      "type": "string",
+      "enum": ["RELEASE_MISMATCH", "REVOKED_RELEASE_RUNNING", "UNKNOWN_ARTIFACT_RUNNING", "RELEASE_UNOBSERVED", "DEPLOYMENT_LOCATION_MISMATCH"],
+      "description": "Why an ENGINE_INSTANCE_RELEASE drift exists (section 2.7). Each is registered in the release_drift category of authorization/v1/reason-code-registry.yaml, and release-policy.yaml gives each its severity and grace period. A MIXED observation held past the rollout window is RELEASE_MISMATCH: the instance is not running its desired release. A closed set, so it is safe as a bounded metric label."
+    },
+    "engineReleaseReasonCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$",
+      "maxLength": 64,
+      "description": "A code registered in the engine_release category of authorization/v1/reason-code-registry.yaml: why the Control Plane refused to record a release, change its status, set a desired release or accept a deployment observation."
+    },
+    "topologyMetric": {
+      "type": "string",
+      "enum": [
+        "engine_instance_release_total",
+        "engine_instance_release_drift_total",
+        "deployment_observation_age_seconds",
+        "deployment_observation_rejected_total",
+        "engine_release_total"
+      ],
+      "description": "ADR-BCP-025 section 2.10 metric names, in Prometheus form. engine_instance_release_total counts instances by the status of their observed release (or the observed state when there is no single release); engine_instance_release_drift_total counts instances with open release drift by reason; deployment_observation_age_seconds is the age of each instance's current observation; deployment_observation_rejected_total counts refused observations; engine_release_total counts recorded releases by status."
+    },
+    "topologyMetricLabel": {
+      "type": "string",
+      "enum": ["release_status", "observed_state", "drift_reason", "environment", "reason_code"],
+      "description": "The only label names topology metrics may carry. Each takes values from a closed contract vocabulary: releaseStatus, observedReleaseState, releaseDriftReason, control-plane/v1 environment, and the engine_release reason codes. No digest, version, release, engine instance or tenant is ever a label (section 2.10)."
+    }
+  }
+}

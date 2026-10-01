@@ -3124,6 +3124,11 @@ export interface components {
         capabilityGrantId: string;
         /** @description Implementation-neutral capability identity in <domain>.<resource>.<action> form, e.g. "commerce.order.create". Must never contain a vendor name (medusa, idempiere, payload, haystack), a tenant name, or a region/country name. The key is stable across provider replacement: moving a capability from one provider to another never renames it. */
         capabilityKey: string;
+        /**
+         * @description Operational lifecycle of a Capability, CapabilityProvider or CapabilityBinding. Distinct from maturity: a capability can be maturity=SUPPORTED and lifecycle=SUSPENDED simultaneously.
+         * @enum {string}
+         */
+        capabilityLifecycle: "DRAFT" | "ACTIVE" | "SUSPENDED" | "DEPRECATED" | "RETIRED";
         capabilityProviderId: string;
         /** @description Provider identity in <engine-id>.<provider-name> form, e.g. "baobab-trade.medusa", "baobab-erp.idempiere", "baobab-payments.sandbox", "baobab-iam.ory". The first segment is the engine that owns the provider (control-plane/v1 engineId, ADR-SHARED-012), never a technology family; the second names the provider within that engine and is usually its implementationKey. One engine may own several providers, e.g. baobab-iam.keycloak and baobab-iam.ory (ADR-SHARED-017 SS8-9, SS23). */
         capabilityProviderKey: string;
@@ -3231,6 +3236,13 @@ export interface components {
                 /** @constant */
                 kind?: "MAPPING_ACTIVATION";
             };
+        } | {
+            /** @constant */
+            changeset_type?: "MODIFY";
+            desired_change?: {
+                /** @constant */
+                kind?: "PROVIDER_ACTIVATION";
+            };
         }));
         ChangesetCancelRequest: {
             reason: string;
@@ -3249,7 +3261,7 @@ export interface components {
          * @description Canonical changeset step operations. Extended additively as change kinds are added; each kind's operations are in changeset-lifecycle.yaml change_kinds.
          * @enum {string}
          */
-        changesetOperation: "SUSPEND_TENANT" | "REINSTATE_TENANT" | "VERIFY_TENANT_STATE" | "ACTIVATE_MARKET" | "VERIFY_MARKET_STATE" | "ACTIVATE_MAPPING" | "VERIFY_MAPPING_STATE";
+        changesetOperation: "SUSPEND_TENANT" | "REINSTATE_TENANT" | "VERIFY_TENANT_STATE" | "ACTIVATE_MARKET" | "VERIFY_MARKET_STATE" | "ACTIVATE_MAPPING" | "VERIFY_MAPPING_STATE" | "ACTIVATE_PROVIDER" | "VERIFY_PROVIDER_STATE";
         ChangesetPage: {
             items: components["schemas"]["Changeset"][];
             next_page_token?: string;
@@ -3260,7 +3272,7 @@ export interface components {
             changeset_type: components["schemas"]["changesetType"];
             desired_change: components["schemas"]["desiredChange"];
             steps?: components["schemas"]["changesetStep"][];
-        } & (components["schemas"]["ChangePlan"] & unknown & unknown & unknown & unknown);
+        } & (components["schemas"]["ChangePlan"] & unknown & unknown & unknown & unknown & unknown);
         /**
          * @description ADR-BCP-021 section 15. Transitions, commands and terminal states are in changeset-lifecycle.yaml. Distinct from the ExecutionOperation status, which is the operation's, never the changeset's.
          * @enum {string}
@@ -3270,16 +3282,17 @@ export interface components {
             operation?: components["schemas"]["changesetOperation"];
             resources: components["schemas"]["changesetStepResources"];
         } & WithRequired<components["schemas"]["planStep"], "resources">;
-        /** @description The one resource a step acts on and the statuses it moves between, in that resource's own lifecycle vocabulary. A step naming market_id is a market step (market status), one naming mapping_id a mapping step (mappingStatus); any other step is a tenant step, exactly as before market and mapping kinds existed (tenant lifecycleStatus). A step never names two resources. The Control Plane plans every step on the desired change's own resource; a plan whose step names another resource is never generated or applied. */
+        /** @description The one resource a step acts on and the statuses it moves between, in that resource's own lifecycle vocabulary. A step naming market_id is a market step (market status), one naming mapping_id a mapping step (mappingStatus), one naming provider_id a provider step (capability/v1 capabilityLifecycle); any other step is a tenant step, exactly as before market and mapping kinds existed (tenant lifecycleStatus). A step never names two resources. The Control Plane plans every step on the desired change's own resource; a plan whose step names another resource is never generated or applied. */
         changesetStepResources: {
             from_status?: string;
             mapping_id?: components["schemas"]["mappingId"];
             market_id?: components["schemas"]["marketId"];
-            /** @description The target's revision the plan was computed against, where the target is revisioned (markets and mappings). Applying refuses a target whose revision has moved (PLAN_STALE), as the direct route's If-Match does. */
+            provider_id?: components["schemas"]["capabilityProviderId"];
+            /** @description The target's revision the plan was computed against, where the target is revisioned (markets, mappings and providers). Applying refuses a target whose revision has moved (PLAN_STALE), as the direct route's If-Match does. */
             target_revision?: number;
             tenant_id?: components["schemas"]["tenantId"];
             to_status?: string;
-        } & (unknown & unknown & unknown);
+        } & (unknown & unknown & unknown & unknown);
         /**
          * @description Section 13. Derived by the Control Plane from the desired change's kind (changeset-lifecycle.yaml change_kinds), never supplied by the caller.
          * @enum {string}
@@ -3563,7 +3576,7 @@ export interface components {
             registration_identifiers?: components["schemas"]["applicantIdentifier"][];
         };
         /** @description What outcome is wanted, in canonical platform concepts, never provider commands (section 6). One kind per changeset; kinds are added additively. */
-        desiredChange: components["schemas"]["TenantSuspension"] | components["schemas"]["TenantReinstatement"] | components["schemas"]["MarketActivation"] | components["schemas"]["MappingActivation"];
+        desiredChange: components["schemas"]["TenantSuspension"] | components["schemas"]["TenantReinstatement"] | components["schemas"]["MarketActivation"] | components["schemas"]["MappingActivation"] | components["schemas"]["ProviderActivation"];
         /** @description The unbroken lineage ClientApplication -> AdmissionDecision -> TenantOnboardingRequest -> desired state. */
         desiredStateProvenance: {
             admission_decision_id: components["schemas"]["admissionDecisionId"];
@@ -3599,10 +3612,10 @@ export interface components {
         discrepancyStatus: "OPEN" | "UNDER_REVIEW" | "RESOLVED" | "ACCEPTED_EXCEPTION" | "FALSE_POSITIVE" | "SUPERSEDED";
         display_name: string;
         /**
-         * @description The class of object a Drift record compares desired vs. observed state for. Intentionally the set of objects Programme Gate P0's classification (phase-0-architecture-inventory-and-lock.md) identified as carrying desired/observed state, not an open-ended free-text field.
+         * @description The class of object a Drift record compares desired vs. observed state for. Intentionally the set of objects Programme Gate P0's classification (phase-0-architecture-inventory-and-lock.md) identified as carrying desired/observed state, not an open-ended free-text field. ENGINE_INSTANCE_RELEASE (ADR-BCP-025 section 2.7) compares an engine instance's desired release with the release it is observed running; its object_reference is the engine_instance_id, its reason_code a topology/v1 releaseDriftReason, and it is recorded for each tenant bound to the instance (ADR-BCP-006 section 67 reverse impact).
          * @enum {string}
          */
-        driftObjectType: "TENANT" | "LEGAL_ENTITY" | "DIGITAL_ESTATE" | "MARKET_PARTICIPATION" | "PRODUCT_SUBSCRIPTION" | "CAPABILITY_GRANT" | "CAPABILITY_BINDING" | "PROVIDER_CONFIGURATION" | "TRADE_LANE";
+        driftObjectType: "TENANT" | "LEGAL_ENTITY" | "DIGITAL_ESTATE" | "MARKET_PARTICIPATION" | "PRODUCT_SUBSCRIPTION" | "CAPABILITY_GRANT" | "CAPABILITY_BINDING" | "PROVIDER_CONFIGURATION" | "TRADE_LANE" | "ENGINE_INSTANCE_RELEASE";
         driftRecord: {
             /** @description Opaque content digest of the desired-state record compared, so two drift records can be checked for referring to the same comparison without re-fetching both sides. */
             desired_state_digest?: string;
@@ -3617,6 +3630,8 @@ export interface components {
             object_reference: string;
             object_type: components["schemas"]["driftObjectType"];
             observed_state_digest?: string;
+            /** @description Registered code saying why the object drifted. Required for ENGINE_INSTANCE_RELEASE, where it is a topology/v1 releaseDriftReason (ADR-BCP-025 section 2.7); optional for the other object types. */
+            reason_code?: string;
             /** Format: date-time */
             reconciled_at?: string | null;
             /** @description Opaque reference to the ReconciliationRun that resolved this drift, once resolution=RECONCILED. */
@@ -3625,7 +3640,7 @@ export interface components {
             /** @description Whether the reconciler may fix this drift automatically (Technical Specification SS43 "Safe to fix?") or whether it requires the BLOCKED path and human/operator remediation. */
             safe_to_reconcile?: boolean;
             tenant_id: components["schemas"]["tenantId"];
-        };
+        } & (unknown & unknown);
         /** @description Control Plane-minted opaque identifier for a Drift record (Technical Specification SS42-43). */
         driftRecordId: string;
         /**
@@ -5016,6 +5031,12 @@ export interface components {
             source?: string;
             tags?: string[];
         } | null;
+        /** @description Activate a DRAFT capability provider through a governed change (EA-02D). A MODIFY changeset. Registration never activates a provider (EA-02C); this is the only path from DRAFT to ACTIVE. Planning inspects, side-effect free, each check in changeset-lifecycle.yaml change_kinds.PROVIDER_ACTIVATION.plan_checks: the provider declaration, IMPLEMENTED capability support, contract compatibility, certification where release-policy.yaml requires it, production_permitted against the environments of its instances, an APPROVED engine release supporting its contracts, an eligible engine instance, health, and conflicting provider migrations. Any failed check is a plan blocker, so a blocked plan cannot be approved. The approver must hold provider:approve and is never the requester. */
+        ProviderActivation: {
+            /** @constant */
+            kind: "PROVIDER_ACTIVATION";
+            provider_id: components["schemas"]["capabilityProviderId"];
+        };
         /** @description The migration aggregate (section 119). Created in PLAN with its first plan. Advancing past PLAN is a controlled mutation (ADR-BCP-021): an approval binds to the plan digest, and stages execute as durable operations (ADR-BCP-022). Execution: one approval binds the plan, and each stage is an explicit advance (ADR-SHARED-016). */
         ProviderMigration: {
             /** @description The APPROVED decision on the current plan's digest, once approved (ADR-SHARED-016 section 1). Absent before approval and after a replan. */
@@ -5235,6 +5256,11 @@ export interface components {
             /** @description True when more findings exist than were returned. */
             truncated?: boolean;
         };
+        /**
+         * @description Why an ENGINE_INSTANCE_RELEASE drift exists (section 2.7). Each is registered in the release_drift category of authorization/v1/reason-code-registry.yaml, and release-policy.yaml gives each its severity and grace period. A MIXED observation held past the rollout window is RELEASE_MISMATCH: the instance is not running its desired release. A closed set, so it is safe as a bounded metric label.
+         * @enum {string}
+         */
+        releaseDriftReason: "RELEASE_MISMATCH" | "REVOKED_RELEASE_RUNNING" | "UNKNOWN_ARTIFACT_RUNNING" | "RELEASE_UNOBSERVED" | "DEPLOYMENT_LOCATION_MISMATCH";
         request: {
             product_id: components["schemas"]["productId"];
         };
