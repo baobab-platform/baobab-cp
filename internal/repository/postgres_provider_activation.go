@@ -47,33 +47,58 @@ type ReleaseApprovalPolicy struct {
 	CertificationRequired map[string]bool `yaml:"certification_required"`
 }
 
+// releasePolicyDocument is the part of topology/v1 release-policy.yaml the
+// Control Plane reads: approval requirements, which statuses may become and
+// be read as desired, and the status transitions (ADR-BCP-025 sections
+// 2.4-2.5).
+type releasePolicyDocument struct {
+	Approval     ReleaseApprovalPolicy `yaml:"approval"`
+	DesiredState struct {
+		MayBecomeDesired  []string `yaml:"may_become_desired"`
+		ReadableAsDesired []string `yaml:"readable_as_desired"`
+	} `yaml:"desired_state"`
+	StatusTransitions struct {
+		Transitions []struct {
+			Command string   `yaml:"command"`
+			From    []string `yaml:"from"`
+			To      string   `yaml:"to"`
+		} `yaml:"transitions"`
+	} `yaml:"status_transitions"`
+}
+
 var (
 	releasePolicyOnce sync.Once
-	releasePolicyDoc  ReleaseApprovalPolicy
+	releasePolicyDoc  releasePolicyDocument
 	releasePolicyErr  error
 )
 
-func releasePolicy() (ReleaseApprovalPolicy, error) {
+func loadReleasePolicy() (releasePolicyDocument, error) {
 	releasePolicyOnce.Do(func() {
 		raw, err := contracts.ReadEmbedded(releasePolicyPath)
 		if err != nil {
 			releasePolicyErr = err
 			return
 		}
-		var doc struct {
-			Approval ReleaseApprovalPolicy `yaml:"approval"`
-		}
+		var doc releasePolicyDocument
 		if err := yaml.Unmarshal(raw, &doc); err != nil {
 			releasePolicyErr = fmt.Errorf("parse %s: %w", releasePolicyPath, err)
 			return
 		}
-		if len(doc.Approval.CertificationRequired) == 0 || len(doc.Approval.ProvenanceRequired) == 0 {
-			releasePolicyErr = fmt.Errorf("%s names no approval.provenance_required or approval.certification_required", releasePolicyPath)
+		if len(doc.Approval.CertificationRequired) == 0 || len(doc.Approval.ProvenanceRequired) == 0 ||
+			len(doc.DesiredState.MayBecomeDesired) == 0 || len(doc.DesiredState.ReadableAsDesired) == 0 ||
+			len(doc.StatusTransitions.Transitions) == 0 {
+			releasePolicyErr = fmt.Errorf("%s lacks approval, desired_state or status_transitions", releasePolicyPath)
 			return
 		}
-		releasePolicyDoc = doc.Approval
+		releasePolicyDoc = doc
 	})
 	return releasePolicyDoc, releasePolicyErr
+}
+
+// releasePolicy is release-policy.yaml approval.
+func releasePolicy() (ReleaseApprovalPolicy, error) {
+	doc, err := loadReleasePolicy()
+	return doc.Approval, err
 }
 
 // certificationPolicy is release-policy.yaml approval.certification_required:

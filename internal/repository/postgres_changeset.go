@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -116,6 +117,9 @@ var targetQueries = map[string]string{
 	// A release is not revisioned: status is all that moves, only forward
 	// (release-policy.yaml status_transitions), so its revision is 1.
 	changeset.TargetRelease: `SELECT status, 1::bigint, '' FROM topology.engine_release WHERE release_key = $1`,
+	// An instance's revision for a desired-release change is its
+	// desired-release version (migration 000086).
+	changeset.TargetInstance: `SELECT status, desired_release_version, '' FROM topology.engine_instance WHERE engine_instance_key = $1`,
 }
 
 // TargetRevision is the current revision of the resource a desired change
@@ -279,6 +283,11 @@ func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool
 	}
 	if c.DesiredChange.TargetType() == changeset.TargetRelease {
 		if t.CheckFailures, err = engineReleaseApprovalChecks(ctx, tx, c.DesiredChange.ReleaseID, environment); err != nil {
+			return t, err
+		}
+	}
+	if c.DesiredChange.TargetType() == changeset.TargetInstance {
+		if t.DesiredReleaseID, t.CheckFailures, err = desiredReleaseChecks(ctx, tx, c.DesiredChange.EngineInstanceID, c.DesiredChange.ReleaseID); err != nil {
 			return t, err
 		}
 	}
@@ -660,7 +669,7 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 
 	total := len(plan.Steps)
 	result, _ := json.Marshal(map[string]string{"resource_type": "CHANGESET", "resource_id": c.ChangesetID,
-		"resource_state": c.State, "summary": fmt.Sprintf("%s %s is %s.", titleCase(kind.Target), c.DesiredChange.TargetID(), kind.ToStatus)})
+		"resource_state": c.State, "summary": outcomeSummary(kind, c.DesiredChange)})
 	op, err := scanOperation(tx.QueryRow(ctx, `
 		INSERT INTO operations.execution_operation (operation_id, operation_type, status, subject_type, subject_id, tenant_id,
 			plan_id, plan_digest, approval_id, requested_by, idempotency_key, request_hash, current_phase, completed_steps,
@@ -683,15 +692,15 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 	started, completed := now, now
 	if err := recordOutcome(ctx, tx, changeset.Outcome{ChangesetID: c.ChangesetID, OperationID: operationID, FinalState: c.State,
 		AppliedPlanDigest: plan.PlanDigest, StartedAt: &started, CompletedAt: &completed,
-		AffectedResources: []changeset.AffectedResource{{ResourceType: kind.Target, ResourceID: c.DesiredChange.TargetID(),
-			Before: target.Status, After: kind.ToStatus}},
+		AffectedResources: []changeset.AffectedResource{affectedResource(kind, c.DesiredChange, target)},
 		VerificationResult: &changeset.VerificationResult{Status: "PASSED", Checks: []changeset.VerificationCheck{
 			{Check: check, Passed: verified}}},
 		CorrelationID: c.CorrelationID, RecordedAt: now}); err != nil {
 		return operations.Operation{}, false, err
 	}
+	affected := affectedResource(kind, c.DesiredChange, target)
 	applied := map[string]any{"operation_id": operationID, "plan_digest": plan.PlanDigest, "approval_id": c.ApprovalID,
-		"target_type": kind.Target, "target_id": c.DesiredChange.TargetID(), "from": target.Status, "to": kind.ToStatus}
+		"target_type": kind.Target, "target_id": c.DesiredChange.TargetID(), "from": affected.Before, "to": affected.After}
 	if kind.Target == changeset.TargetTenant {
 		applied["tenant_id"] = c.DesiredChange.TenantID
 	}
@@ -788,6 +797,28 @@ func (r *PostgresRepository) applyToTarget(ctx context.Context, tx pgx.Tx, c cha
 			return "", "", false, err
 		}
 		return "", "ENGINE_RELEASE_STATUS_MATCHES", status == kind.ToStatus, nil
+	case changeset.TargetInstance:
+		// Only an instance still at the planned desired-release version, in
+		// a status the kind starts from, changes; anything else changed
+		// since the plan and makes it stale. The database refuses a release
+		// that is not APPROVED or is another engine's (migration 000086).
+		if !slices.Contains(kind.FromStatus, target.Status) {
+			return "", "", false, ErrChangesetPlanStale
+		}
+		ok, err := setDesiredRelease(ctx, tx, c.DesiredChange.EngineInstanceID, c.DesiredChange.ReleaseID, revision, c.ChangesetID, now)
+		if err != nil {
+			return "", "", false, err
+		}
+		if !ok {
+			return "", "", false, ErrChangesetPlanStale
+		}
+		var desired string
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(r.release_key, '') FROM topology.engine_instance ei
+			LEFT JOIN topology.engine_release r ON r.engine_release_id = ei.desired_release_id WHERE ei.engine_instance_key = $1`,
+			c.DesiredChange.EngineInstanceID).Scan(&desired); err != nil {
+			return "", "", false, err
+		}
+		return "", "DESIRED_RELEASE_MATCHES", desired == c.DesiredChange.ReleaseID, nil
 	}
 	res, err := tx.Exec(ctx, `UPDATE tenants SET desired_state = $2, observed_state = $2, revision = revision + 1, updated_at = $4
 		WHERE tenant_id = $1 AND revision = $3`, c.DesiredChange.TenantID, kind.ToStatus, revision, now)
@@ -808,7 +839,29 @@ func titleCase(s string) string {
 	if s == "" {
 		return s
 	}
+	s = strings.ReplaceAll(s, "_", " ")
 	return s[:1] + strings.ToLower(s[1:])
+}
+
+// affectedResource is what the applied change did to its target: its
+// status before and after, or for a desired-release change the desired
+// release before and after (absent when none).
+func affectedResource(kind changeset.Kind, d changeset.DesiredChange, target changeset.Target) changeset.AffectedResource {
+	if kind.Changes != "" {
+		return changeset.AffectedResource{ResourceType: kind.Target, ResourceID: d.TargetID(), Before: target.DesiredReleaseID, After: d.ReleaseID}
+	}
+	return changeset.AffectedResource{ResourceType: kind.Target, ResourceID: d.TargetID(), Before: target.Status, After: kind.ToStatus}
+}
+
+// outcomeSummary says in one sentence what the applied change did.
+func outcomeSummary(kind changeset.Kind, d changeset.DesiredChange) string {
+	if kind.Target == changeset.TargetInstance {
+		if d.ReleaseID == "" {
+			return fmt.Sprintf("Engine instance %s desires no release.", d.EngineInstanceID)
+		}
+		return fmt.Sprintf("Engine instance %s desires release %s.", d.EngineInstanceID, d.ReleaseID)
+	}
+	return fmt.Sprintf("%s %s is %s.", titleCase(kind.Target), d.TargetID(), kind.ToStatus)
 }
 
 // CancelChangeset cancels a changeset that has not started applying

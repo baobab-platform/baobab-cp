@@ -11,6 +11,7 @@
 package changeset
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -48,6 +49,7 @@ const (
 	KindMappingActivation   = "MAPPING_ACTIVATION"
 	KindProviderActivation  = "PROVIDER_ACTIVATION"
 	KindReleaseApproval     = "ENGINE_RELEASE_APPROVAL"
+	KindDesiredRelease      = "ENGINE_INSTANCE_DESIRED_RELEASE"
 )
 
 // Change kind targets.
@@ -57,6 +59,7 @@ const (
 	TargetMapping  = "MAPPING"
 	TargetProvider = "PROVIDER"
 	TargetRelease  = "ENGINE_RELEASE"
+	TargetInstance = "ENGINE_INSTANCE"
 )
 
 // Blocking codes (changeset_blocker).
@@ -79,17 +82,37 @@ const (
 	OpVerifyProvider    = "VERIFY_PROVIDER_STATE"
 	OpApproveRelease    = "APPROVE_ENGINE_RELEASE"
 	OpVerifyRelease     = "VERIFY_ENGINE_RELEASE_STATE"
+	OpSetDesired        = "SET_DESIRED_RELEASE"
+	OpVerifyDesired     = "VERIFY_DESIRED_RELEASE"
 )
 
 // DesiredChange is one of the desiredChange kinds. Exactly one of the
-// target identifiers is set, as the kind's schema branch requires.
+// target identifiers is set, as the kind's schema branch requires. An
+// ENGINE_INSTANCE_DESIRED_RELEASE names its engine instance and, in
+// ReleaseID, the release it desires; an empty ReleaseID clears the desired
+// release and is written as release_id null.
 type DesiredChange struct {
-	Kind       string `json:"kind"`
-	TenantID   string `json:"tenant_id,omitempty"`
-	MarketID   string `json:"market_id,omitempty"`
-	MappingID  string `json:"mapping_id,omitempty"`
-	ProviderID string `json:"provider_id,omitempty"`
-	ReleaseID  string `json:"release_id,omitempty"`
+	Kind             string `json:"kind"`
+	TenantID         string `json:"tenant_id,omitempty"`
+	MarketID         string `json:"market_id,omitempty"`
+	MappingID        string `json:"mapping_id,omitempty"`
+	ProviderID       string `json:"provider_id,omitempty"`
+	EngineInstanceID string `json:"engine_instance_id,omitempty"`
+	ReleaseID        string `json:"release_id,omitempty"`
+}
+
+// MarshalJSON writes release_id null for a desired-release change that
+// clears the desired release: the contract requires release_id on that
+// kind, as a release or null.
+func (d DesiredChange) MarshalJSON() ([]byte, error) {
+	type plain DesiredChange
+	if d.Kind != KindDesiredRelease || d.ReleaseID != "" {
+		return json.Marshal(plain(d))
+	}
+	return json.Marshal(struct {
+		plain
+		ReleaseID *string `json:"release_id"`
+	}{plain: plain(d)})
 }
 
 // TargetID is the identifier of the resource the change names.
@@ -103,12 +126,15 @@ func (d DesiredChange) TargetID() string {
 		return d.ProviderID
 	case TargetRelease:
 		return d.ReleaseID
+	case TargetInstance:
+		return d.EngineInstanceID
 	}
 	return d.TenantID
 }
 
 // TargetType is the resource type the change names (TENANT, MARKET,
-// MAPPING, PROVIDER or ENGINE_RELEASE), or "" for an unsupported kind.
+// MAPPING, PROVIDER, ENGINE_RELEASE or ENGINE_INSTANCE), or "" for an
+// unsupported kind.
 func (d DesiredChange) TargetType() string { return Kinds()[d.Kind].Target }
 
 // label names the target in findings and summaries.
@@ -122,6 +148,8 @@ func (d DesiredChange) label() string {
 		return "Provider " + d.ProviderID
 	case TargetRelease:
 		return "Engine release " + d.ReleaseID
+	case TargetInstance:
+		return "Engine instance " + d.EngineInstanceID
 	}
 	return "Tenant " + d.TenantID
 }
@@ -175,16 +203,32 @@ type Changeset struct {
 	Revision              int64                `json:"revision"`
 }
 
-// StepResources is changesetStepResources.
+// StepResources is changesetStepResources. An engine instance step names
+// the DesiredReleaseID it sets; empty clears it, written as null.
 type StepResources struct {
-	TenantID       string `json:"tenant_id,omitempty"`
-	MarketID       string `json:"market_id,omitempty"`
-	MappingID      string `json:"mapping_id,omitempty"`
-	ProviderID     string `json:"provider_id,omitempty"`
-	ReleaseID      string `json:"release_id,omitempty"`
-	FromStatus     string `json:"from_status,omitempty"`
-	ToStatus       string `json:"to_status,omitempty"`
-	TargetRevision int64  `json:"target_revision,omitempty"`
+	TenantID         string `json:"tenant_id,omitempty"`
+	MarketID         string `json:"market_id,omitempty"`
+	MappingID        string `json:"mapping_id,omitempty"`
+	ProviderID       string `json:"provider_id,omitempty"`
+	ReleaseID        string `json:"release_id,omitempty"`
+	EngineInstanceID string `json:"engine_instance_id,omitempty"`
+	DesiredReleaseID string `json:"desired_release_id,omitempty"`
+	FromStatus       string `json:"from_status,omitempty"`
+	ToStatus         string `json:"to_status,omitempty"`
+	TargetRevision   int64  `json:"target_revision,omitempty"`
+}
+
+// MarshalJSON writes desired_release_id null on an engine instance step
+// that clears the desired release.
+func (r StepResources) MarshalJSON() ([]byte, error) {
+	type plain StepResources
+	if r.EngineInstanceID == "" || r.DesiredReleaseID != "" {
+		return json.Marshal(plain(r))
+	}
+	return json.Marshal(struct {
+		plain
+		DesiredReleaseID *string `json:"desired_release_id"`
+	}{plain: plain(r)})
 }
 
 // Step is changesetStep.
@@ -290,25 +334,30 @@ func Draft(req CreateRequest, id, requester, source, correlationID string, baseR
 	scope := administration.Scope{Level: administration.LevelPlatform}
 	switch d := req.DesiredChange; kind.Target {
 	case TargetTenant:
-		if !domain.ValidTenantID(d.TenantID) || d.MarketID != "" || d.MappingID != "" || d.ProviderID != "" || d.ReleaseID != "" {
+		if !domain.ValidTenantID(d.TenantID) || d.MarketID != "" || d.MappingID != "" || d.ProviderID != "" || d.ReleaseID != "" || d.EngineInstanceID != "" {
 			return Changeset{}, fmt.Errorf("%w: tenant_id is not a Control Plane tenant identifier", ErrInvalid)
 		}
 		scope = administration.Scope{Level: administration.LevelTenant, TenantID: d.TenantID}
 	case TargetMarket:
-		if d.MarketID == "" || d.TenantID != "" || d.MappingID != "" || d.ProviderID != "" || d.ReleaseID != "" {
+		if d.MarketID == "" || d.TenantID != "" || d.MappingID != "" || d.ProviderID != "" || d.ReleaseID != "" || d.EngineInstanceID != "" {
 			return Changeset{}, fmt.Errorf("%w: a market activation names exactly its market_id", ErrInvalid)
 		}
 	case TargetMapping:
-		if !domain.ValidMappingID(d.MappingID) || d.TenantID != "" || d.MarketID != "" || d.ProviderID != "" || d.ReleaseID != "" {
+		if !domain.ValidMappingID(d.MappingID) || d.TenantID != "" || d.MarketID != "" || d.ProviderID != "" || d.ReleaseID != "" || d.EngineInstanceID != "" {
 			return Changeset{}, fmt.Errorf("%w: mapping_id is not a Control Plane mapping identifier", ErrInvalid)
 		}
 	case TargetProvider:
-		if !domain.ValidProviderID(d.ProviderID) || d.TenantID != "" || d.MarketID != "" || d.MappingID != "" || d.ReleaseID != "" {
+		if !domain.ValidProviderID(d.ProviderID) || d.TenantID != "" || d.MarketID != "" || d.MappingID != "" || d.ReleaseID != "" || d.EngineInstanceID != "" {
 			return Changeset{}, fmt.Errorf("%w: provider_id is not a canonical capability provider identifier", ErrInvalid)
 		}
 	case TargetRelease:
-		if !release.ValidID(d.ReleaseID) || d.TenantID != "" || d.MarketID != "" || d.MappingID != "" || d.ProviderID != "" {
+		if !release.ValidID(d.ReleaseID) || d.TenantID != "" || d.MarketID != "" || d.MappingID != "" || d.ProviderID != "" || d.EngineInstanceID != "" {
 			return Changeset{}, fmt.Errorf("%w: release_id is not an engine release identifier", ErrInvalid)
+		}
+	case TargetInstance:
+		if !domain.ValidEngineInstanceID(d.EngineInstanceID) || (d.ReleaseID != "" && !release.ValidID(d.ReleaseID)) ||
+			d.TenantID != "" || d.MarketID != "" || d.MappingID != "" || d.ProviderID != "" {
+			return Changeset{}, fmt.Errorf("%w: a desired release change names an engine instance and a release or none", ErrInvalid)
 		}
 	default:
 		return Changeset{}, fmt.Errorf("%w: change kind %q names no supported target", ErrInvalid, req.DesiredChange.Kind)

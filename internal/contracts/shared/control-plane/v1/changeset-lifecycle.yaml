@@ -130,7 +130,9 @@ triggers:
 # The change kinds this version supports: the target resource each acts on,
 # the changeset type it derives, the target status it requires and produces
 # (in that resource's own lifecycle vocabulary), and the canonical operations
-# its plan runs, in order. approval_scope, where set, is the scope the
+# its plan runs, in order. A kind that changes an attribute of its target
+# rather than its status names that attribute in changes instead of a
+# to_status, and its target keeps its status. approval_scope, where set, is the scope the
 # approver must also hold, so a changeset never grants authority the
 # resource's direct route would refuse (ADR-BCP-020, ADR-BCP-021 section 24).
 change_kinds:
@@ -245,6 +247,42 @@ change_kinds:
       # environment that requires it always blocks.
       - check: CERTIFICATION
         blocker: RELEASE_NOT_CERTIFIED
+  # ADR-BCP-025 section 2.5 (gate ER-03). The only way an engine
+  # instance's desired release is set or cleared, apart from a revocation
+  # that disposes of it (section 2.4). Only an APPROVED release becomes
+  # desired (release-policy.yaml desired_state.may_become_desired), of the
+  # instance's own engine, with the provenance and certification
+  # release-policy.yaml approval requires for the instance's environment.
+  # Clearing the desired release runs only DESIRED_RELEASE_CHANGES. The
+  # instance's revision is its desired-release version. The approver holds
+  # desired-release:approve and is never the requester. The Control Plane
+  # never deploys: infrastructure tooling reads the desired release.
+  ENGINE_INSTANCE_DESIRED_RELEASE:
+    target: ENGINE_INSTANCE
+    changeset_type: MODIFY
+    from_status: [PROVISIONING, ACTIVE, DRAINING, MAINTENANCE, FAILED]
+    changes: desired_release
+    approval_scope: "desired-release:approve"
+    operations: [SET_DESIRED_RELEASE, VERIFY_DESIRED_RELEASE]
+    plan_checks:
+      # The change names another release than the instance desires now.
+      - check: DESIRED_RELEASE_CHANGES
+        blocker: DESIRED_RELEASE_UNCHANGED
+      # The release is APPROVED.
+      - check: RELEASE_APPROVED
+        blocker: DESIRED_RELEASE_NOT_APPROVED
+      # The release belongs to the instance's engine.
+      - check: RELEASE_ENGINE
+        blocker: DESIRED_RELEASE_ENGINE_MISMATCH
+      # release-policy.yaml approval.provenance_required for the instance's
+      # environment.
+      - check: PROVENANCE
+        blocker: DESIRED_RELEASE_PROVENANCE_MISSING
+      # release-policy.yaml approval.certification_required for the
+      # instance's environment. EA-09 records certification; until it does,
+      # an environment that requires it always blocks.
+      - check: CERTIFICATION
+        blocker: DESIRED_RELEASE_NOT_CERTIFIED
 # Codes a changeset carries as blocking_reasons, or its plan as blockers;
 # each is registered in authorization/v1/reason-code-registry.yaml under
 # changeset_blocker.
@@ -264,3 +302,8 @@ blocking_codes:
   - RELEASE_SUPPORT_NOT_CATALOGUED
   - RELEASE_PROVENANCE_MISSING
   - RELEASE_NOT_CERTIFIED
+  - DESIRED_RELEASE_UNCHANGED
+  - DESIRED_RELEASE_NOT_APPROVED
+  - DESIRED_RELEASE_ENGINE_MISMATCH
+  - DESIRED_RELEASE_PROVENANCE_MISSING
+  - DESIRED_RELEASE_NOT_CERTIFIED

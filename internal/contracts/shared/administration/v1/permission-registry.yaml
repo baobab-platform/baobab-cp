@@ -344,6 +344,13 @@ permissions:
     delegable: false
     read_only: false
     description: "Advance an approved provider migration one transition at a time, and cancel or roll it back (ADR-SHARED-016 sections 2 and 5)."
+  - key: engine-release.change-status
+    domain: OPERATIONS
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Deprecate or revoke an engine release (ADR-BCP-025 section 2.4, gate ER-03). Revocation disposes of every engine instance that desires the release in the same transaction: each gets an APPROVED replacement of its engine or has its desired release cleared. Approval is never a status change: it is the ENGINE_RELEASE_APPROVAL changeset."
   - key: engine-release.record
     domain: OPERATIONS
     risk_class: HIGH

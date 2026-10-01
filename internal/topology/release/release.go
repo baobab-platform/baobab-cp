@@ -29,6 +29,18 @@ const (
 	ReasonDigestConflict         = "RELEASE_ARTIFACT_DIGEST_CONFLICT"
 	ReasonProviderNotOwned       = "RELEASE_PROVIDER_NOT_OWNED"
 	ReasonCapabilityNotCatalogue = "RELEASE_CAPABILITY_NOT_CATALOGUED"
+	ReasonTransitionInvalid      = "RELEASE_STATUS_TRANSITION_INVALID"
+	ReasonRevocationUncovered    = "RELEASE_REVOCATION_UNCOVERED"
+	ReasonNotApproved            = "RELEASE_NOT_APPROVED"
+	ReasonEngineMismatch         = "RELEASE_ENGINE_MISMATCH"
+	ReasonProvenanceRequired     = "RELEASE_PROVENANCE_REQUIRED"
+	ReasonDesiredUnavailable     = "ENGINE_INSTANCE_DESIRED_RELEASE_UNAVAILABLE"
+)
+
+// Revocation dispositions (desiredReleaseDisposition action).
+const (
+	DispositionReplace = "REPLACE"
+	DispositionClear   = "CLEAR"
 )
 
 var releaseIDPattern = regexp.MustCompile(`^erl_[a-z0-9]+$`)
@@ -174,4 +186,33 @@ func (r RecordRequest) ContentDigest() string {
 	}
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// Disposition is release.schema.json desiredReleaseDisposition: what a
+// revocation does to one engine instance that desires the revoked release.
+type Disposition struct {
+	EngineInstanceID     string `json:"engine_instance_id"`
+	Action               string `json:"action"`
+	ReplacementReleaseID string `json:"replacement_release_id,omitempty"`
+}
+
+// StatusChangeRequest is release.schema.json
+// EngineReleaseStatusChangeRequest: a deprecation or a revocation.
+type StatusChangeRequest struct {
+	TargetStatus               string        `json:"target_status"`
+	Reason                     string        `json:"reason"`
+	DesiredReleaseDispositions []Disposition `json:"desired_release_dispositions,omitempty"`
+}
+
+// DesiredRelease is release.schema.json EngineInstanceDesiredRelease: the
+// release an engine instance is desired to run, as infrastructure tooling
+// reads it (ADR-BCP-025 section 2.5).
+type DesiredRelease struct {
+	EngineInstanceID string    `json:"engine_instance_id"`
+	EngineID         string    `json:"engine_id"`
+	DesiredReleaseID *string   `json:"desired_release_id"`
+	DesiredRelease   *Release  `json:"desired_release,omitempty"`
+	ChangesetID      string    `json:"changeset_id,omitempty"`
+	Version          int64     `json:"version"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }

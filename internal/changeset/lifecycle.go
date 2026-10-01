@@ -23,7 +23,11 @@ type Kind struct {
 	ChangesetType string   `yaml:"changeset_type"`
 	FromStatus    []string `yaml:"from_status"`
 	ToStatus      string   `yaml:"to_status"`
-	Operations    []string `yaml:"operations"`
+	// Changes names the attribute a kind changes instead of its target's
+	// status (ENGINE_INSTANCE_DESIRED_RELEASE changes desired_release);
+	// such a kind has no ToStatus and its target keeps its status.
+	Changes    string   `yaml:"changes"`
+	Operations []string `yaml:"operations"`
 	// PlanChecks are the inspections a plan of this kind runs, in order;
 	// each failure is a blocker with the check's code (EA-02D).
 	PlanChecks []PlanCheck `yaml:"plan_checks"`

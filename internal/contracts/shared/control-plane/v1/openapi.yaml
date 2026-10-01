@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.23.0
+  version: 1.24.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -4533,6 +4533,100 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /engine-releases/{release_id}/status-changes:
+    parameters:
+      - $ref: "#/components/parameters/EngineReleaseId"
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: changeEngineReleaseStatus
+      summary: Deprecate or revoke an engine release
+      description: >-
+        Moves the release along release-policy.yaml status_transitions
+        (ADR-BCP-025 section 2.4, gate ER-03): APPROVED to DEPRECATED, or any
+        status but REVOKED to REVOKED, with the caller recorded as who
+        changed it and the reason. Approval is never a status change: it is
+        the ENGINE_RELEASE_APPROVAL changeset. A transition the release's
+        status does not allow is RELEASE_STATUS_TRANSITION_INVALID (409).
+        A DEPRECATED release stays desired where it is desired but may not
+        be newly desired. Revocation is one transaction: every engine
+        instance whose desired release is the revoked one must be named in
+        desired_release_dispositions, and is given an APPROVED replacement
+        of its own engine or has its desired release cleared. An instance
+        left uncovered is RELEASE_REVOCATION_UNCOVERED (422); a
+        disposition for an instance that does not desire the release is
+        VALIDATION_FAILED (422); a replacement that is not APPROVED is
+        RELEASE_NOT_APPROVED, of another engine RELEASE_ENGINE_MISMATCH,
+        and without the provenance the instance's environment requires
+        RELEASE_PROVENANCE_REQUIRED (422).
+      security:
+        - adminOidc: [topology:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../topology/v1/release.schema.json#/$defs/EngineReleaseStatusChangeRequest
+      responses:
+        "200":
+          description: The release in its new status
+          content:
+            application/json:
+              schema:
+                $ref: ../../topology/v1/release.schema.json#/$defs/EngineRelease
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /engine-instances/{engine_instance_id}/desired-release:
+    parameters:
+      - $ref: "#/components/parameters/EngineInstanceId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Topology]
+      operationId: getEngineInstanceDesiredRelease
+      summary: Read an engine instance's desired release
+      description: >-
+        The release the engine instance is desired to run (ADR-BCP-025
+        section 2.5, gate ER-03), with the release itself, for
+        infrastructure tooling to execute; the Control Plane never deploys.
+        desired_release_id is null when none is desired. A read never
+        returns a desired release that is not APPROVED or DEPRECATED
+        (release-policy.yaml desired_state.readable_as_desired): such a
+        pointer is refused as ENGINE_INSTANCE_DESIRED_RELEASE_UNAVAILABLE
+        (409), never returned. It changes only through the
+        ENGINE_INSTANCE_DESIRED_RELEASE changeset or a revocation's
+        disposition.
+      security:
+        - workloadOidc: [desired-release:read]
+        - adminOidc: [topology:read]
+      responses:
+        "200":
+          description: The desired release
+          content:
+            application/json:
+              schema:
+                $ref: ../../topology/v1/release.schema.json#/$defs/EngineInstanceDesiredRelease
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /engine-migration-tasks:
     parameters:
       - $ref: "#/components/parameters/CorrelationId"
@@ -4908,7 +5002,8 @@ paths:
         403), a MAPPING_ACTIVATION approver is not the mapping's creator
         (MAPPING_SELF_APPROVAL, 403) and an ENGINE_RELEASE_APPROVAL approver
         is not the principal who recorded the release
-        (RELEASE_SELF_APPROVAL, 403). A
+        (RELEASE_SELF_APPROVAL, 403). An ENGINE_INSTANCE_DESIRED_RELEASE
+        approver holds desired-release:approve. A
         decision naming another plan or digest is PLAN_DIGEST_MISMATCH (409);
         a stale plan is PLAN_STALE (409). The changeset's revision is
         required in If-Match.
@@ -5312,6 +5407,12 @@ components:
       schema:
         type: string
         pattern: '^"[1-9][0-9]*"$'
+    EngineInstanceId:
+      name: engine_instance_id
+      in: path
+      required: true
+      schema:
+        $ref: ./domain.schema.json#/$defs/engineInstanceId
     EngineReleaseId:
       name: release_id
       in: path

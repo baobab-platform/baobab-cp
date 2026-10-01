@@ -127,9 +127,11 @@ var adminRoutePermissions = map[string]string{
 	"POST /v1/provider-migrations/{providerMigrationID}/advance": "provider-migration.execute",
 	// ADR-BCP-025 gate ER-02: an administrator recording an engine release
 	// (release tooling records under its workload scope instead).
-	"POST /v1/engine-releases":            "engine-release.record",
-	"GET /v1/engine-releases":             "topology.view",
-	"GET /v1/engine-releases/{releaseID}": "topology.view",
+	"POST /v1/engine-releases":                                    "engine-release.record",
+	"GET /v1/engine-releases":                                     "topology.view",
+	"GET /v1/engine-releases/{releaseID}":                         "topology.view",
+	"POST /v1/engine-releases/{releaseID}/status-changes":         "engine-release.change-status",
+	"GET /v1/engine-instances/{engineInstanceID}/desired-release": "topology.view",
 	// Canonical mapping administration (ADR-SHARED-013): activation is the
 	// four-eyes, never-delegated mapping.approve.
 	"POST /v1/external-references":                      "mapping.manage",
