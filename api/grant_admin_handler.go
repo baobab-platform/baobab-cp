@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/baobab-platform/baobab-cp/internal/administration"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
@@ -372,7 +373,7 @@ func (h grantAdminHandler) delegate(w http.ResponseWriter, r *http.Request) {
 	decision := administration.Evaluate(administration.Request{
 		PrincipalID: callerID, PrincipalActive: true, Action: "administrator.delegate",
 		Resource: rel.ResolveResource(administration.ResourceOf(body.Scope, h.environment)), Now: h.clock(), Grants: grants, Sources: sources,
-		Relations: rel,
+		Relations: rel, Session: sessionOf(r),
 	})
 	if !decision.Allowed() {
 		code := "AUTHORIZATION_DENIED"
@@ -456,4 +457,15 @@ func (h grantAdminHandler) replace(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Location", "/v1/admin/grants/"+result.Replacement.GrantID)
 	writeJSON(w, http.StatusCreated, map[string]any{"replacement": result.Replacement, "superseded": result.Superseded, "revoked_delegations": revoked})
+}
+
+// sessionOf is the authentication assurance the request's verified token
+// asserts (ADR-BCP-020 section 72). A request without a verified principal
+// has an unknown assurance, which meets nothing above basic.
+func sessionOf(r *http.Request) administration.Session {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		return administration.Session{}
+	}
+	return administration.Session{ACR: principal.Assurance.ACR, AMR: principal.Assurance.AMR, AuthenticatedAt: principal.Assurance.AuthenticatedAt}
 }

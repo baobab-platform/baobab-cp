@@ -231,9 +231,10 @@ func (a *API) shadowGrants(ctx context.Context, r *http.Request, principal auth.
 	resource = rel.ResolveResource(resource)
 	decision := administration.Evaluate(administration.Request{
 		PrincipalID: caller.ID, PrincipalActive: true, Action: permission, Resource: resource, Relations: rel,
-		// The verified token carries no assurance claim the Control Plane
-		// reads yet, so a grant requiring step-up counts as step_up.
-		Now: now, Grants: grants, Sources: sources,
+		// The assurance the verified token asserts: a grant whose risk class
+		// or condition needs more counts as step_up (section 72).
+		Session: administration.Session{ACR: principal.Assurance.ACR, AMR: principal.Assurance.AMR, AuthenticatedAt: principal.Assurance.AuthenticatedAt},
+		Now:     now, Grants: grants, Sources: sources,
 	})
 	outcome := metrics.ShadowDeny
 	switch decision.Outcome {

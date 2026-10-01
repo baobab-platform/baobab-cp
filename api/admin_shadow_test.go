@@ -307,3 +307,35 @@ func (f marketsFake) UpdateRegistryMarket(context.Context, string, int64, []byte
 func (f marketsFake) ActivateRegistryMarket(context.Context, string, int64, string, string, time.Time, repository.AuditActor) (market.Market, error) {
 	return market.Market{}, errors.New("read only")
 }
+
+// TestShadowJudgesTheTokensAssurance: a HIGH grant is usable only on a
+// session that stepped up (ADR-BCP-020 section 72), and the shadow comparison
+// reports the difference as step_up rather than deny or allow.
+func TestShadowJudgesTheTokensAssurance(t *testing.T) {
+	ctx := context.Background()
+	identities := repository.NewInMemoryRepository()
+	p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "human", Status: "ACTIVE"}
+	mustNoError(t, identities.CreateIdentity(ctx, p))
+	mustNoError(t, identities.LinkExternalIdentity(ctx, domain.ExternalIdentity{ID: domain.NewExternalIdentityID(),
+		PrincipalID: p.ID, Issuer: testRealm, Subject: "stepper", Status: "ACTIVE"}))
+	grant := administration.Grant{GrantID: "agr_stepper01", PrincipalID: p.ID, Permission: "tenant.suspend",
+		Scope: administration.Scope{Level: administration.LevelTenant, TenantID: "ten_1"}, GrantType: administration.TypeStanding,
+		Source: administration.SourceDirect, RiskClass: administration.RiskHigh, ValidFrom: time.Now().Add(-time.Hour),
+		Status: administration.StatusActive, GrantedBy: "prn_platformops", Reason: "test", Version: 1}
+	a := &API{identities: identities, grants: grantsFake{p.ID: {grant}}}
+	route := routed(http.MethodPost, "/v1/tenants/{tenantID}/suspend", "/v1/tenants/ten_1/suspend", "", map[string]string{"tenantID": "ten_1"})
+	for name, c := range map[string]struct {
+		assurance auth.Assurance
+		want      string
+	}{
+		"password session":    {auth.Assurance{ACR: "1"}, metrics.ShadowStepUp},
+		"no assurance claims": {auth.Assurance{}, metrics.ShadowStepUp},
+		"unlisted acr":        {auth.Assurance{ACR: "urn:other"}, metrics.ShadowStepUp},
+		"OTP step-up":         {auth.Assurance{ACR: "2"}, metrics.ShadowAllow},
+	} {
+		principal := auth.Principal{Subject: "stepper", Issuer: testRealm, ActorType: "human", Assurance: c.assurance}
+		if outcome, comparable := a.shadowGrants(ctx, route, principal, "tenant.suspend"); outcome != c.want || !comparable {
+			t.Errorf("%s: %s comparable=%v, want %s", name, outcome, comparable, c.want)
+		}
+	}
+}
