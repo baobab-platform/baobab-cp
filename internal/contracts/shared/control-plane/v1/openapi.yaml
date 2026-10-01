@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.28.1
+  version: 1.29.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -4921,6 +4921,36 @@ paths:
             application/json:
               schema:
                 $ref: ../../administration/v1/grant.schema.json#/$defs/EffectiveAuthority
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/authority-migration/readiness:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Administration]
+      operationId: getAuthorityMigrationReadiness
+      summary: Readiness of each permission to move from roles to AdministrativeGrants
+      description: >-
+        The shadow comparison of the realm-role decision with the
+        AdministrativeGrant decision, per permission, against the enforcement
+        policy's exit criteria (ADR-BCP-020 section 144; roles-to-grants
+        decision). It is evidence for the owner's decision and enforces
+        nothing: a permission is ROLE_AUTHORITATIVE until the owner lists it
+        in the enforcement policy. While the criteria are not APPROVED no
+        permission is ready, and CRITICAL permissions are never ready.
+      security:
+        - adminOidc: [administrator:read]
+      responses:
+        "200":
+          description: Readiness per permission
+          content:
+            application/json:
+              schema:
+                $ref: ../../administration/v1/authority-migration.schema.json#/$defs/MigrationReadiness
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
