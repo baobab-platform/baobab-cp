@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.21.0
+  version: 1.22.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -42,7 +42,7 @@ tags:
   - name: Provisioning
     description: Tenant provisioning as desired-state convergence - plan, approve, apply, readiness and drift (ADR-SHARED-015).
   - name: Topology
-    description: Provider migration - discovery, planning and the migration aggregate (ADR-BCP-006 sections 44-58, 119-122).
+    description: Provider migration - discovery, planning and the migration aggregate (ADR-BCP-006 sections 44-58, 119-122) - and engine releases (ADR-BCP-025).
   - name: Markets
     description: The market registry - register, read, update and activate commercial markets (ADR-BCP-004 section 18).
   - name: Verification
@@ -4407,6 +4407,132 @@ paths:
           $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /engine-releases:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: recordEngineRelease
+      summary: Record an immutable engine release
+      description: >-
+        Records one version of one engine as CANDIDATE (ADR-BCP-025 section
+        2.1, gate ER-02). The Control Plane mints release_id and takes the
+        recorder from the verified caller. A release is immutable: recording
+        the same (engine_id, release_version) again with byte-identical
+        content is a replay and returns the recorded release (200); other
+        content is RELEASE_VERSION_CONFLICT (409). An artifact digest that
+        another release owns is RELEASE_ARTIFACT_DIGEST_CONFLICT (409). A
+        provider of another engine is RELEASE_PROVIDER_NOT_OWNED and an
+        uncatalogued capability or contract major
+        RELEASE_CAPABILITY_NOT_CATALOGUED (422). Recording never approves a
+        release, desires it or changes resolution.
+      security:
+        - workloadOidc: [engine-release:record]
+        - adminOidc: [topology:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../topology/v1/release.schema.json#/$defs/EngineReleaseRecordRequest
+      responses:
+        "200":
+          description: A replay of an already recorded release; nothing changed.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: ../../topology/v1/release.schema.json#/$defs/EngineRelease
+        "201":
+          description: Recorded as CANDIDATE.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: ../../topology/v1/release.schema.json#/$defs/EngineRelease
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    get:
+      tags: [Topology]
+      operationId: listEngineReleases
+      summary: List engine releases
+      description: >-
+        Recorded releases, newest first, optionally of one engine and in one
+        status (ADR-BCP-025 gate ER-02).
+      security:
+        - adminOidc: [topology:read]
+      parameters:
+        - name: engine_id
+          in: query
+          required: false
+          schema:
+            $ref: ./domain.schema.json#/$defs/engineId
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: ../../topology/v1/domain.schema.json#/$defs/releaseStatus
+        - name: page_token
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+      responses:
+        "200":
+          description: A page of releases
+          content:
+            application/json:
+              schema:
+                $ref: ../../topology/v1/release.schema.json#/$defs/EngineReleasePage
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /engine-releases/{release_id}:
+    parameters:
+      - $ref: "#/components/parameters/EngineReleaseId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Topology]
+      operationId: getEngineRelease
+      summary: Read one engine release
+      security:
+        - adminOidc: [topology:read]
+      responses:
+        "200":
+          description: The release
+          content:
+            application/json:
+              schema:
+                $ref: ../../topology/v1/release.schema.json#/$defs/EngineRelease
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /engine-migration-tasks:
     parameters:
       - $ref: "#/components/parameters/CorrelationId"
@@ -5184,6 +5310,12 @@ components:
       schema:
         type: string
         pattern: '^"[1-9][0-9]*"$'
+    EngineReleaseId:
+      name: release_id
+      in: path
+      required: true
+      schema:
+        $ref: ./domain.schema.json#/$defs/engineReleaseId
     ProviderMigrationId:
       name: provider_migration_id
       in: path

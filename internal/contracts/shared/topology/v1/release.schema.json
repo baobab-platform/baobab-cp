@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/topology/v1/release.schema.json",
+  "title": "Baobab EngineRelease (ADR-BCP-025)",
+  "description": "Definition library for EngineRelease, the Control Plane's immutable record of one version of one engine, its content-addressed artifacts, its per-provider contract support, and the desired release of an engine instance (ADR-BCP-025 sections 2.1-2.5, gate ER-01).\nValidate resources against fragment URIs (e.g. #/$defs/EngineRelease), not the document root.\n\nInvariants the Control Plane enforces beyond these shapes:\n  A release's engine_id, release_version, artifacts, provider_support, capability_provider_declaration_digest and source_revision never change; only status moves, with an audited reason (section 2.1 rule 1).\n  Recording an existing (engine_id, release_version) is accepted only as a byte-identical replay; different content is RELEASE_VERSION_CONFLICT (rule 2).\n  An artifact digest belongs to at most one release of one engine (rule 3).\n  Every provider_key belongs to the release's engine, every capability_key is catalogued, and provider_support equals the IMPLEMENTED support of the declaration the digest names (sections 2.1.2-2.1.3).\n  Only an APPROVED release may become an instance's desired release, and a desired-state read never returns a release that is not APPROVED or DEPRECATED (sections 2.4-2.5).\n\nControl Plane is the runtime authority. Shared is the contract authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "Artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One artifact of a release, identified by its content digest (section 2.2). A reference with a tag and no digest is refused (RELEASE_ARTIFACT_DIGEST_REQUIRED).",
+      "required": ["artifact_type", "repository", "digest"],
+      "properties": {
+        "artifact_type": { "$ref": "domain.schema.json#/$defs/artifactType" },
+        "repository": { "$ref": "domain.schema.json#/$defs/artifactRepository" },
+        "digest": { "$ref": "domain.schema.json#/$defs/artifactDigest" },
+        "platform": { "$ref": "domain.schema.json#/$defs/artifactPlatform" },
+        "display_tag": { "$ref": "domain.schema.json#/$defs/displayTag" }
+      }
+    },
+    "Provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A reference to a build provenance attestation, for example an in-toto or SLSA provenance statement (section 2.3). The Control Plane records and exposes it; it never verifies signatures itself.",
+      "required": ["attestation_uri", "attestation_digest", "builder_id"],
+      "properties": {
+        "attestation_uri": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^(?:https|oci)://",
+          "maxLength": 512,
+          "description": "Where the attestation can be fetched. Carries no credential."
+        },
+        "attestation_digest": {
+          "$ref": "domain.schema.json#/$defs/artifactDigest",
+          "description": "Content digest of the attestation document."
+        },
+        "builder_id": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 512,
+          "description": "The builder identity the attestation names, e.g. a reusable workflow URI."
+        }
+      }
+    },
+    "ProviderSupport": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One capability one provider in the release implements, and the contract majors it supports (section 2.1.2, amendment A1). Only IMPLEMENTED declared support is recorded; PARTIAL and planned capabilities never are.",
+      "required": ["provider_key", "capability_key", "contract_versions"],
+      "properties": {
+        "provider_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderKey",
+          "description": "<engine-id>.<provider-name>. Its engine segment must equal the release's engine_id."
+        },
+        "capability_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey",
+          "description": "Must be a capability in Shared's catalogue."
+        },
+        "contract_versions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "domain.schema.json#/$defs/contractMajorVersion" }
+        }
+      }
+    },
+    "EngineReleaseRecordRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What a caller submits to record a release. The Control Plane mints release_id, sets status CANDIDATE, and takes recorded_by from the authenticated principal; none of them is accepted here.",
+      "required": ["engine_id", "release_version", "artifacts", "provider_support", "capability_provider_declaration_digest", "source_revision", "reason"],
+      "properties": {
+        "engine_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineId" },
+        "release_version": { "$ref": "domain.schema.json#/$defs/releaseVersion" },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/Artifact" }
+        },
+        "provider_support": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/ProviderSupport" },
+          "description": "Empty only when the declaration at source_revision declares no IMPLEMENTED support."
+        },
+        "capability_provider_declaration_digest": { "$ref": "domain.schema.json#/$defs/declarationDigest" },
+        "source_revision": { "$ref": "domain.schema.json#/$defs/sourceRevision" },
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "reason": { "$ref": "#/$defs/auditReason" }
+      }
+    },
+    "EngineRelease": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "An immutable release of one engine (section 2.1).",
+      "required": ["release_id", "engine_id", "release_version", "artifacts", "provider_support", "capability_provider_declaration_digest", "source_revision", "status", "recorded_by", "recorded_at", "reason"],
+      "properties": {
+        "release_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineReleaseId" },
+        "engine_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineId" },
+        "release_version": { "$ref": "domain.schema.json#/$defs/releaseVersion" },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/Artifact" }
+        },
+        "provider_support": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/ProviderSupport" }
+        },
+        "capability_provider_declaration_digest": { "$ref": "domain.schema.json#/$defs/declarationDigest" },
+        "source_revision": { "$ref": "domain.schema.json#/$defs/sourceRevision" },
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "status": { "$ref": "domain.schema.json#/$defs/releaseStatus" },
+        "recorded_by": { "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId" },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "reason": { "$ref": "#/$defs/auditReason" },
+        "status_changed_by": { "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId" },
+        "status_changed_at": { "type": "string", "format": "date-time" },
+        "status_reason": { "$ref": "#/$defs/auditReason" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "CANDIDATE" } }, "required": ["status"] },
+          "then": { "not": { "anyOf": [{ "required": ["status_changed_at"] }, { "required": ["status_changed_by"] }, { "required": ["status_reason"] }] } },
+          "else": { "required": ["status_changed_by", "status_changed_at", "status_reason"] }
+        }
+      ]
+    },
+    "EngineReleaseStatusChangeRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Move a release along release-policy.yaml status_transitions. Revocation must say what happens to every instance whose desired release is the revoked one: each is given an APPROVED replacement of the same engine or has its desired release cleared, in the same transaction; revocation is refused while any such instance is uncovered (RELEASE_REVOCATION_UNCOVERED, section 2.4).",
+      "required": ["target_status", "reason"],
+      "properties": {
+        "target_status": {
+          "type": "string",
+          "enum": ["APPROVED", "DEPRECATED", "REVOKED"]
+        },
+        "reason": { "$ref": "#/$defs/auditReason" },
+        "desired_release_dispositions": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/desiredReleaseDisposition" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "target_status": { "const": "REVOKED" } }, "required": ["target_status"] },
+          "then": { "required": ["desired_release_dispositions"] },
+          "else": { "not": { "required": ["desired_release_dispositions"] } }
+        }
+      ]
+    },
+    "desiredReleaseDisposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What a revocation does to one instance that desires the revoked release.",
+      "required": ["engine_instance_id", "action"],
+      "properties": {
+        "engine_instance_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId" },
+        "action": { "type": "string", "enum": ["REPLACE", "CLEAR"] },
+        "replacement_release_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineReleaseId" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "action": { "const": "REPLACE" } }, "required": ["action"] },
+          "then": { "required": ["replacement_release_id"] },
+          "else": { "not": { "required": ["replacement_release_id"] } }
+        }
+      ]
+    },
+    "EngineInstanceDesiredRelease": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The release an engine instance is desired to run (section 2.5), as infrastructure tooling reads it. It changes only through a controlled change (ADR-BCP-021). desired_release_id is null when none is desired. The Control Plane never deploys anything: tooling reads this and executes it.",
+      "required": ["engine_instance_id", "engine_id", "desired_release_id", "version", "updated_at"],
+      "properties": {
+        "engine_instance_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId" },
+        "engine_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineId" },
+        "desired_release_id": {
+          "anyOf": [{ "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineReleaseId" }, { "type": "null" }]
+        },
+        "desired_release": {
+          "$ref": "#/$defs/EngineRelease",
+          "description": "The desired release itself, present whenever desired_release_id is set. Its status is always APPROVED or DEPRECATED: a read never returns a desired release in any other status."
+        },
+        "changeset_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/changesetId",
+          "description": "The controlled change that set the current desired release."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Increments on every change of desired release; a stale writer is refused."
+        },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "desired_release_id": { "type": "string" } }, "required": ["desired_release_id"] },
+          "then": {
+            "required": ["desired_release"],
+            "properties": {
+              "desired_release": {
+                "properties": { "status": { "enum": ["APPROVED", "DEPRECATED"] } }
+              }
+            }
+          },
+          "else": { "not": { "required": ["desired_release"] } }
+        }
+      ]
+    },
+    "EngineReleasePage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/EngineRelease" }
+        },
+        "next_cursor": { "type": ["string", "null"], "maxLength": 512 }
+      }
+    },
+    "auditReason": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 500,
+      "description": "Why the change was made, for the audit trail. Never a secret or personal data."
+    }
+  }
+}
