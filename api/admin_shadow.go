@@ -162,24 +162,34 @@ var adminRoutePermissions = map[string]string{
 // longer and never changes.
 const shadowBudget = 250 * time.Millisecond
 
-// shadowAdministrativeDecision evaluates the request against the caller's
+// adminVerdict is the administrative decision for one request: the legacy
+// role decision unless the owner's enforcement policy hands the permission to
+// AdministrativeGrants, in which case the grants decide.
+type adminVerdict struct {
+	Allowed bool
+	// Unavailable means the decision could not be made (a store failed under
+	// enforcement): the request is refused as retryable, never allowed.
+	Unavailable bool
+	// Code names a refusal when grants decided it; empty keeps the legacy
+	// wording.
+	Code string
+	// Enforced is true when grants, not roles, made this decision.
+	Enforced bool
+}
+
+// enforcementBudget bounds an enforced decision. Unlike the shadow
+// comparison it may not give up quietly: running out of time refuses the
+// request.
+const enforcementBudget = 2 * time.Second
+
+// decideAdministrative evaluates the request against the caller's
 // AdministrativeGrants beside the legacy role decision and records how they
-// compare (ADR-BCP-020 section 144). It never alters the legacy decision.
-func (a *API) shadowAdministrativeDecision(r *http.Request, principal auth.Principal, legacyAllowed bool) {
-	a.shadowDecision(r, principal, legacyAllowed, nil)
-}
-
-// shadowOperationDecision is the comparison for a durable-operation route,
-// which authorises inside its handler once it has loaded the operation: the
-// resource is the operation's tenant, which the route cannot name.
-func (a *API) shadowOperationDecision(r *http.Request, principal auth.Principal, legacyAllowed bool, tenantID string) {
-	a.shadowDecision(r, principal, legacyAllowed, &administration.Resource{Environment: a.environment, TenantID: tenantID})
-}
-
-func (a *API) shadowDecision(r *http.Request, principal auth.Principal, legacyAllowed bool, resource *administration.Resource) {
-	if a.grants == nil {
-		return
-	}
+// compare (ADR-BCP-020 section 144). Roles decide unless the enforcement
+// policy lists the permission for this resource; then the grants decide and
+// fail closed. A mapped route is judged once, so the evidence readiness
+// reports is evidence about the decision enforcement makes.
+func (a *API) decideAdministrative(r *http.Request, principal auth.Principal, legacyAllowed bool, known *administration.Resource) adminVerdict {
+	legacyVerdict := adminVerdict{Allowed: legacyAllowed}
 	legacy := metrics.ShadowDeny
 	if legacyAllowed {
 		legacy = metrics.ShadowAllow
@@ -187,17 +197,68 @@ func (a *API) shadowDecision(r *http.Request, principal auth.Principal, legacyAl
 	pattern := r.Method + " " + chi.RouteContext(r.Context()).RoutePattern()
 	permission, mapped := adminRoutePermissions[pattern]
 	if !mapped || permission == "" {
-		a.recordShadow(metrics.ShadowUnregisteredPermission, legacy, metrics.ShadowUnmapped, "", pattern)
-		return
+		if a.grants != nil {
+			a.recordShadow(metrics.ShadowUnregisteredPermission, legacy, metrics.ShadowUnmapped, "", pattern)
+		}
+		return legacyVerdict
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), shadowBudget)
+	listed := a.enforcement.Lists(permission)
+	if a.grants == nil {
+		if listed {
+			// Enforcement is configured but there is no grant store to
+			// enforce with: refuse rather than fall back to roles.
+			return adminVerdict{Unavailable: true, Enforced: true}
+		}
+		return legacyVerdict
+	}
+	budget := shadowBudget
+	if listed {
+		budget = enforcementBudget
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), budget)
 	defer cancel()
-	grants, comparable := a.shadowGrantsFor(ctx, r, principal, permission, resource)
-	if !comparable {
-		a.recordShadow(permission, legacy, grants, metrics.ShadowNotEvaluated, pattern)
-		return
+	ev := a.evaluateGrants(ctx, r, principal, permission, known)
+	if ev.Comparable {
+		a.recordShadow(permission, legacy, ev.Outcome, "", pattern)
+	} else {
+		a.recordShadow(permission, legacy, ev.Outcome, metrics.ShadowNotEvaluated, pattern)
 	}
-	a.recordShadow(permission, legacy, grants, "", pattern)
+	if !listed {
+		return legacyVerdict
+	}
+	if a.enforcement.Mode(permission, ev.Resource) != administration.ModeGrantsEnforced && ev.ResourceKnown {
+		return legacyVerdict
+	}
+	// Grants decide. Anything short of an allowing decision is a refusal.
+	verdict := adminVerdict{Enforced: true}
+	switch {
+	case !ev.Decided && ev.Outcome == metrics.ShadowUnresolved:
+		verdict.Code = "AUTHORIZATION_DENIED"
+	case !ev.Decided:
+		verdict.Unavailable = true
+	case ev.Decision.Allowed():
+		verdict.Allowed = true
+	case ev.Decision.Outcome == administration.OutcomeStepUpRequired:
+		verdict.Code = "AUTHENTICATION_ASSURANCE_INSUFFICIENT"
+	default:
+		verdict.Code = "AUTHORIZATION_DENIED"
+	}
+	result := "denied"
+	switch {
+	case verdict.Allowed:
+		result = "allowed"
+	case verdict.Unavailable:
+		result = "unavailable"
+	}
+	metrics.AdministrativeAuthorityEnforced.Add(1, permission, result)
+	return verdict
+}
+
+// shadowOperationDecision is the decision for a durable-operation route,
+// which authorises inside its handler once it has loaded the operation: the
+// resource is the operation's tenant, which the route cannot name.
+func (a *API) shadowOperationDecision(r *http.Request, principal auth.Principal, legacyAllowed bool, tenantID string) adminVerdict {
+	return a.decideAdministrative(r, principal, legacyAllowed, &administration.Resource{Environment: a.environment, TenantID: tenantID})
 }
 
 // shadowGrants returns the grants outcome and whether it can be compared
@@ -212,29 +273,66 @@ func (a *API) shadowGrants(ctx context.Context, r *http.Request, principal auth.
 // shadowGrantsFor is shadowGrants for a resource the caller already knows;
 // nil derives it from the route.
 func (a *API) shadowGrantsFor(ctx context.Context, r *http.Request, principal auth.Principal, permission string, known *administration.Resource) (string, bool) {
+	ev := a.evaluateGrants(ctx, r, principal, permission, known)
+	return ev.Outcome, ev.Comparable
+}
+
+// grantsEvaluation is what the caller's AdministrativeGrants say about one
+// request: the outcome in the shadow vocabulary, whether it can be compared
+// with the legacy role decision, the resource it was judged against and the
+// decision itself.
+type grantsEvaluation struct {
+	Outcome    string
+	Comparable bool
+	Resource   administration.Resource
+	Decision   administration.Decision
+	// ResourceKnown is false when the resource could not be derived, so a
+	// scoped enforcement entry cannot be matched and the request fails closed.
+	ResourceKnown bool
+	// Decided is true when the grants produced a decision. It is false when
+	// the caller is unresolved or a store failed: there is nothing to enforce
+	// and an enforced permission refuses the request.
+	Decided bool
+}
+
+// evaluateGrants judges the request against the caller's grants. It is the
+// one evaluation both the shadow comparison and enforcement rest on, so the
+// evidence readiness reports is evidence about the decision enforcement makes.
+func (a *API) evaluateGrants(ctx context.Context, r *http.Request, principal auth.Principal, permission string, known *administration.Resource) grantsEvaluation {
+	ev := grantsEvaluation{Comparable: true}
+	var resource administration.Resource
+	if known != nil {
+		resource = *known
+	} else {
+		var err error
+		if resource, err = a.shadowResource(ctx, r); err != nil {
+			ev.Outcome = metrics.ShadowError
+			return ev
+		}
+	}
+	ev.Resource, ev.ResourceKnown = resource, true
 	if a.identities == nil {
-		return metrics.ShadowError, true
+		ev.Outcome = metrics.ShadowError
+		return ev
 	}
 	caller, err := a.identities.ResolveIdentity(ctx, principal.Issuer, principal.Subject)
 	switch {
 	case errors.Is(err, repository.ErrIdentityNotFound):
-		return metrics.ShadowUnresolved, true
+		ev.Outcome = metrics.ShadowUnresolved
+		return ev
 	case err != nil:
 		// A store failure or the budget running out is not an absent
 		// principal: count it as an error, never as a comparison.
-		return metrics.ShadowError, true
+		ev.Outcome = metrics.ShadowError
+		return ev
 	case caller.Status != "ACTIVE":
-		return metrics.ShadowUnresolved, true
+		ev.Outcome = metrics.ShadowUnresolved
+		return ev
 	}
 	grants, sources, err := a.grants.AdministrativeGrantsOf(ctx, caller.ID)
 	if err != nil {
-		return metrics.ShadowError, true
-	}
-	var resource administration.Resource
-	if known != nil {
-		resource = *known
-	} else if resource, err = a.shadowResource(ctx, r); err != nil {
-		return metrics.ShadowError, true
+		ev.Outcome = metrics.ShadowError
+		return ev
 	}
 	now := time.Now().UTC()
 	// An organisation grant reaches a tenant through its effective
@@ -249,33 +347,38 @@ func (a *API) shadowGrantsFor(ctx context.Context, r *http.Request, principal au
 	}
 	rel, err := a.grants.EffectiveRelations(ctx, administration.TenantsOf(scopes...), now)
 	if err != nil {
-		return metrics.ShadowError, true
+		ev.Outcome = metrics.ShadowError
+		return ev
 	}
 	resource = rel.ResolveResource(resource)
-	decision := administration.Evaluate(administration.Request{
+	ev.Resource = resource
+	ev.Decision = administration.Evaluate(administration.Request{
 		PrincipalID: caller.ID, PrincipalActive: true, Action: permission, Resource: resource, Relations: rel,
 		// The assurance the verified token asserts: a grant whose risk class
 		// or condition needs more counts as step_up (section 72).
 		Session: administration.Session{ACR: principal.Assurance.ACR, AMR: principal.Assurance.AMR, AuthenticatedAt: principal.Assurance.AuthenticatedAt},
 		Now:     now, Grants: grants, Sources: sources,
 	})
-	outcome := metrics.ShadowDeny
-	switch decision.Outcome {
+	ev.Decided = true
+	ev.Outcome = metrics.ShadowDeny
+	switch ev.Decision.Outcome {
 	case administration.OutcomeAllow:
-		return metrics.ShadowAllow, true
+		ev.Outcome = metrics.ShadowAllow
+		return ev
 	case administration.OutcomeStepUpRequired:
-		outcome = metrics.ShadowStepUp
+		ev.Outcome = metrics.ShadowStepUp
 	case administration.OutcomeApprovalRequired:
-		outcome = metrics.ShadowApproval
+		ev.Outcome = metrics.ShadowApproval
 	case administration.OutcomeNotReady:
-		outcome = metrics.ShadowNotReady
+		ev.Outcome = metrics.ShadowNotReady
 	}
 	for _, g := range grants {
 		if g.Permission == permission && g.Status == administration.StatusActive && g.ValidAt(now) && !resource.Anchors(g.Scope.Level) {
-			return outcome, false
+			ev.Comparable = false
+			return ev
 		}
 	}
-	return outcome, true
+	return ev
 }
 
 // shadowResource is the resource a route acts on: identifiers from its own

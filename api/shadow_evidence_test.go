@@ -168,11 +168,12 @@ func TestOperationRoutesAreShadowed(t *testing.T) {
 	}
 	h := operationHandler{
 		tenantAdminOf: func(*http.Request, auth.Principal, string) adminAuthority { return adminDenied },
-		shadow: func(_ *http.Request, _ auth.Principal, allowed bool, tenant string) {
+		decide: func(_ *http.Request, _ auth.Principal, allowed bool, tenant string) adminVerdict {
 			seen = append(seen, struct {
 				allowed bool
 				tenant  string
 			}{allowed, tenant})
+			return adminVerdict{Allowed: allowed}
 		},
 	}
 	call := func(roles ...string) (adminAuthority, bool) {
