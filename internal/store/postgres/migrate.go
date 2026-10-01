@@ -115,6 +115,7 @@ var canonicalMigrationNames = []string{
 	"000078_provider_invocation.sql",
 	"000079_capability_resolution.sql",
 	"000080_capability_catalogue_projection.sql",
+	"000081_provider_activation_changeset.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

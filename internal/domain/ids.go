@@ -20,6 +20,7 @@ var (
 	mappingScopeIDPattern      = regexp.MustCompile(`^scope_[a-z0-9]+$`)
 	engineIDPattern            = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
 	engineInstanceIDPattern    = regexp.MustCompile(`^ei_[a-z0-9]+$`)
+	providerIDPattern          = regexp.MustCompile(`^provider_[a-z0-9]+$`)
 )
 
 // ValidEngineID reports whether v satisfies $defs.engineId: a registered
@@ -45,6 +46,31 @@ func EngineInstanceKey(id string) string {
 	}
 	var b strings.Builder
 	b.WriteString("ei_")
+	for _, r := range strings.ToLower(id) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// ValidProviderID reports whether v satisfies capability/v1
+// capabilityProviderId, the canonical "provider_" identifier.
+func ValidProviderID(v string) bool {
+	return len(v) >= 10 && len(v) <= 63 && providerIDPattern.MatchString(v)
+}
+
+// ProviderID is the canonical identifier of the capability provider whose
+// internal surrogate is id: "provider_" and id's lowercase letters and
+// digits. capability.capability_provider.canonical_provider_id (migration
+// 000081) derives the same value from the UUID. An id already in canonical
+// form is returned unchanged.
+func ProviderID(id string) string {
+	if ValidProviderID(id) {
+		return id
+	}
+	var b strings.Builder
+	b.WriteString("provider_")
 	for _, r := range strings.ToLower(id) {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
 			b.WriteRune(r)

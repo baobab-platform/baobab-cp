@@ -1,0 +1,99 @@
+# release-policy.yaml
+# The policy values ADR-BCP-025 leaves to Shared: the release lifecycle,
+# which releases desired state may name, what approval requires in each
+# environment, how deployment observations age, and how long an instance
+# may differ from its desired release before that is drift (sections
+# 2.3-2.7). The Control Plane reads these values; it never hard-codes them.
+#
+# Observation stays observation (section 2.8, amendment A4): nothing here
+# changes capability resolution. Excluding an instance from resolution on
+# its observed release is gate ER-06, which needs its own decision.
+
+policy_version: 1
+
+# EngineRelease lifecycle (section 2.4). Only status moves; everything else
+# about a release is immutable. REVOKED is terminal.
+status_transitions:
+  initial: CANDIDATE
+  terminal: [REVOKED]
+  transitions:
+    - command: approve
+      from: [CANDIDATE]
+      to: APPROVED
+    - command: deprecate
+      from: [APPROVED]
+      to: DEPRECATED
+    - command: revoke
+      from: [CANDIDATE, APPROVED, DEPRECATED]
+      to: REVOKED
+
+# Desired state (sections 2.4-2.5). Only an APPROVED release may become an
+# instance's desired release. A DEPRECATED release may still be desired by
+# an instance that already desired it, but may not be newly desired. A
+# desired-state read never returns a release outside readable_as_desired;
+# that second guard keeps a revoked release from ever reaching deployment
+# tooling. Revoking a desired release must move every instance that desires
+# it in the same transaction.
+desired_state:
+  may_become_desired: [APPROVED]
+  readable_as_desired: [APPROVED, DEPRECATED]
+  revocation_requires_disposition_of_every_desiring_instance: true
+
+# What approval (CANDIDATE -> APPROVED) requires, by control-plane/v1
+# environment. Approval is not certification (amendment A3):
+# certification_required stays false until EA-09 records
+# ProviderCapabilityCertification, and changing it is a policy change here.
+approval:
+  provenance_required:
+    local: false
+    development: false
+    staging: false
+    production: true
+  certification_required:
+    local: false
+    development: false
+    staging: false
+    production: false
+
+# DeploymentObservation ageing (section 2.6), as for health-policy.yaml.
+observation:
+  ttl_seconds:
+    minimum: 60
+    maximum: 3600
+  effective_state:
+    expired_observation: UNKNOWN
+    missing_observation: UNKNOWN
+    future_observation: UNKNOWN
+  # The current observation of an instance: the latest observed_at, then
+  # the highest Control Plane-assigned ingestion_sequence. Every replica
+  # and every rebuilt projection derives the same one.
+  current_observation_order:
+    - field: observed_at
+      direction: descending
+    - field: ingestion_sequence
+      direction: descending
+
+# Release drift (section 2.7), recorded as ENGINE_INSTANCE_RELEASE drift.
+# grace_seconds is how long the condition must hold before it is drift:
+# a rollout legitimately runs the previous or both releases for a while
+# (MIXED), and a newly desired instance is unobserved until its reporter
+# next reports. A MIXED observation held past its grace is
+# RELEASE_MISMATCH. Severities follow ADR-BCP-008 section 16.
+drift:
+  reasons:
+    RELEASE_MISMATCH:
+      grace_seconds: 1800
+      severity: DEGRADED
+    REVOKED_RELEASE_RUNNING:
+      grace_seconds: 0
+      severity: CRITICAL
+    UNKNOWN_ARTIFACT_RUNNING:
+      grace_seconds: 0
+      severity: CRITICAL
+    RELEASE_UNOBSERVED:
+      grace_seconds: 900
+      severity: WARNING
+    DEPLOYMENT_LOCATION_MISMATCH:
+      grace_seconds: 0
+      severity: CRITICAL
+  sweep_interval_seconds: 300

@@ -109,9 +109,10 @@ func (r *PostgresRepository) TenantRevision(ctx context.Context, tenantID string
 // targetQueries read a target's status, revision and owning tenant, by the
 // change kind's target type.
 var targetQueries = map[string]string{
-	changeset.TargetTenant:  `SELECT desired_state, revision, tenant_id FROM tenants WHERE tenant_id = $1`,
-	changeset.TargetMarket:  `SELECT status, revision, '' FROM market.registry WHERE market_id = $1`,
-	changeset.TargetMapping: `SELECT status, revision, tenant_id FROM mapping.mapping WHERE mapping_id = $1`,
+	changeset.TargetTenant:   `SELECT desired_state, revision, tenant_id FROM tenants WHERE tenant_id = $1`,
+	changeset.TargetMarket:   `SELECT status, revision, '' FROM market.registry WHERE market_id = $1`,
+	changeset.TargetMapping:  `SELECT status, revision, tenant_id FROM mapping.mapping WHERE mapping_id = $1`,
+	changeset.TargetProvider: `SELECT status, version, '' FROM capability.capability_provider WHERE canonical_provider_id = $1`,
 }
 
 // TargetRevision is the current revision of the resource a desired change
@@ -228,10 +229,11 @@ func lockChangeset(ctx context.Context, tx pgx.Tx, id string, expected int64) (c
 	return c, nil
 }
 
-// readTarget reads the tenant, market or mapping a changeset names,
-// locking it when lock is set, with the earlier open changesets that hold
-// its semantic lock.
-func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool) (changeset.Target, error) {
+// readTarget reads the tenant, market, mapping or provider a changeset
+// names, locking it when lock is set, with the earlier open changesets that
+// hold its semantic lock and, for a kind with plan checks, each check's
+// failure as of now.
+func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool, now time.Time) (changeset.Target, error) {
 	var t changeset.Target
 	query, ok := targetQueries[c.DesiredChange.TargetType()]
 	if !ok {
@@ -259,8 +261,20 @@ func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool
 	if err != nil {
 		return t, err
 	}
-	t.LockedBy, err = pgx.CollectRows(rows, pgx.RowTo[string])
-	return t, err
+	if t.LockedBy, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+		return t, err
+	}
+	if c.DesiredChange.TargetType() == changeset.TargetProvider {
+		var providerUUID string
+		if err := tx.QueryRow(ctx, `SELECT provider_id::text FROM capability.capability_provider WHERE canonical_provider_id = $1`,
+			c.DesiredChange.ProviderID).Scan(&providerUUID); err != nil {
+			return t, fmt.Errorf("read changeset provider: %w", err)
+		}
+		if t.CheckFailures, err = providerActivationChecks(ctx, tx, providerUUID, now); err != nil {
+			return t, err
+		}
+	}
+	return t, nil
 }
 
 // step applies one lifecycle transition, refusing an illegal one.
@@ -327,7 +341,7 @@ func (r *PostgresRepository) SubmitChangeset(ctx context.Context, id string, exp
 		c.DesiredChange.TargetType(), c.DesiredChange.TargetID()); err != nil {
 		return c, err
 	}
-	target, err := readTarget(ctx, tx, c, false)
+	target, err := readTarget(ctx, tx, c, false, now)
 	if err != nil {
 		return c, err
 	}
@@ -479,7 +493,7 @@ func (r *PostgresRepository) DecideChangeset(ctx context.Context, id string, exp
 		return changeset.Approval{}, ErrChangesetPlanMismatch
 	}
 	if req.Decision == changeset.DecisionApproved {
-		target, err := readTarget(ctx, tx, c, false)
+		target, err := readTarget(ctx, tx, c, false, now)
 		if err != nil {
 			return changeset.Approval{}, err
 		}
@@ -595,7 +609,7 @@ func (r *PostgresRepository) ApplyChangeset(ctx context.Context, id string, expe
 	if approvedDigest != plan.PlanDigest {
 		return operations.Operation{}, false, ErrChangesetPlanMismatch
 	}
-	target, err := readTarget(ctx, tx, c, true)
+	target, err := readTarget(ctx, tx, c, true, now)
 	if err != nil {
 		return operations.Operation{}, false, err
 	}
@@ -718,6 +732,23 @@ func (r *PostgresRepository) applyToTarget(ctx context.Context, tx pgx.Tx, c cha
 			return "", "", false, err
 		}
 		return updated.TenantID, "MAPPING_STATUS_MATCHES", status == kind.ToStatus, nil
+	case changeset.TargetProvider:
+		// Only a DRAFT provider at the planned version moves; anything else
+		// changed since the plan and makes it stale.
+		res, err := tx.Exec(ctx, `UPDATE capability.capability_provider SET status = $2, version = version + 1, updated_at = $4
+			WHERE canonical_provider_id = $1 AND version = $3 AND status = ANY($5)`,
+			c.DesiredChange.ProviderID, kind.ToStatus, revision, now, kind.FromStatus)
+		if err != nil {
+			return "", "", false, fmt.Errorf("activate provider: %w", err)
+		}
+		if res.RowsAffected() != 1 {
+			return "", "", false, ErrChangesetPlanStale
+		}
+		if err := tx.QueryRow(ctx, `SELECT status FROM capability.capability_provider WHERE canonical_provider_id = $1`,
+			c.DesiredChange.ProviderID).Scan(&status); err != nil {
+			return "", "", false, err
+		}
+		return "", "PROVIDER_STATUS_MATCHES", status == kind.ToStatus, nil
 	}
 	res, err := tx.Exec(ctx, `UPDATE tenants SET desired_state = $2, observed_state = $2, revision = revision + 1, updated_at = $4
 		WHERE tenant_id = $1 AND revision = $3`, c.DesiredChange.TenantID, kind.ToStatus, revision, now)
