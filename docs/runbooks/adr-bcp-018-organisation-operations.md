@@ -222,6 +222,7 @@ When `BILLING_ENGINE_URL` is set, the Control Plane projects every classified Pr
 | `BILLING_WORKLOAD_TOKEN_FILE` | required when the URL is set | The token of the `baobab-cp-workload` identity (Shared `identity/v1/workload-registry.yaml`) for audience `baobab-subscriptions`, with scopes `billing:manage` and `billing:read`. It is never a token of the Control Plane's browser or admin clients, which baobab-subscriptions refuses. |
 | `BILLING_SYNC_INTERVAL` | `30s` | The reconciliation pass interval. |
 | `BAOBAB_ENVIRONMENT` | unset = production | For engine registration, only `development`, `test`, `integration` and `sandbox` count as non-production. |
+| `WORKLOAD_REGISTRY_FILE` | required in production | A snapshot of Shared `identity/v1/workload-registry.yaml`. The Control Plane refuses to start in production without a valid one, and accepts a workload token only for a workload that is `ACTIVE` in it. Optional elsewhere (lifecycle is then not enforced). Reconcile every `ACTIVE` entry against the deployed identity provider before first use; do not weaken enforcement to make an entry pass. |
 
 `product.billing_projection_sync` shows where each subscription stands:
 

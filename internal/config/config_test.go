@@ -12,6 +12,9 @@ func validConfigEnv(t *testing.T) {
 	t.Setenv("ADMIN_OIDC_ISSUER", "http://127.0.0.1:5556")
 	t.Setenv("WORKLOAD_OIDC_AUDIENCE", "baobab-control-plane")
 	t.Setenv("WORKLOAD_OIDC_ISSUER", "http://127.0.0.1:5557")
+	// Not production: a production Control Plane also requires
+	// WORKLOAD_REGISTRY_FILE.
+	t.Setenv("BAOBAB_ENVIRONMENT", "development")
 }
 
 func TestLoadDefaultsPlatformContextTTL(t *testing.T) {
@@ -53,6 +56,7 @@ func TestLoadRequiresSecureOIDCIssuer(t *testing.T) {
 	t.Setenv("ADMIN_OIDC_ISSUER", "http://identity.example.com")
 	t.Setenv("WORKLOAD_OIDC_AUDIENCE", "baobab-control-plane")
 	t.Setenv("WORKLOAD_OIDC_ISSUER", "https://workload-identity.example.com")
+	t.Setenv("BAOBAB_ENVIRONMENT", "development")
 	if _, err := Load(); err == nil {
 		t.Fatal("insecure remote issuer was accepted")
 	}
@@ -63,5 +67,32 @@ func TestLoadRequiresSecureOIDCIssuer(t *testing.T) {
 	t.Setenv("WORKLOAD_OIDC_ISSUER", "http://workload-identity.example.com")
 	if _, err := Load(); err == nil {
 		t.Fatal("insecure workload issuer was accepted")
+	}
+}
+
+// TestProductionRequiresTheWorkloadRegistry: production is every environment
+// not named non-production, including unset, and it does not start without
+// the canonical workload registry. Outside production the file is optional.
+func TestProductionRequiresTheWorkloadRegistry(t *testing.T) {
+	for _, environment := range []string{"", "production", "staging", "Production "} {
+		validConfigEnv(t)
+		t.Setenv("BAOBAB_ENVIRONMENT", environment)
+		if _, err := Load(); err == nil {
+			t.Fatalf("environment %q started without WORKLOAD_REGISTRY_FILE", environment)
+		}
+		t.Setenv("WORKLOAD_REGISTRY_FILE", "/etc/baobab/workload-registry.yaml")
+		cfg, err := Load()
+		if err != nil || !cfg.Production() || cfg.WorkloadRegistryFile != "/etc/baobab/workload-registry.yaml" {
+			t.Fatalf("environment %q with a registry file: %+v %v", environment, cfg, err)
+		}
+		t.Setenv("WORKLOAD_REGISTRY_FILE", "")
+	}
+	for _, environment := range []string{"development", "test", "integration", "sandbox"} {
+		validConfigEnv(t)
+		t.Setenv("BAOBAB_ENVIRONMENT", environment)
+		cfg, err := Load()
+		if err != nil || cfg.Production() {
+			t.Fatalf("environment %q must start without a registry and not be production: %+v %v", environment, cfg, err)
+		}
 	}
 }
