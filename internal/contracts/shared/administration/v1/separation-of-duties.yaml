@@ -36,13 +36,21 @@ policies:
   - id: sod-critical-grant-bounded
     description: >-
       A CRITICAL grant is never STANDING and lasts at most
-      maximum_duration_days (section 40: risk may influence duration). This
-      matches the bootstrap bound of sections 128-129. A proposed default,
-      pending owner confirmation.
+      maximum_duration_hours (section 40: risk may influence duration).
+      CRITICAL authority is requested when the need arises, approved, and
+      expires by itself: it is not carried dormant. Extending beyond the
+      maximum is a new approval (a new change), never a renewal in place.
+      jit_target_hours is the duration a JUST_IN_TIME CRITICAL grant should
+      aim for, shorter where the operation can naturally bound it; it is
+      guidance to requesters and approvers, not a limit. HIGH grants are
+      controlled by their own policies and do not inherit this bound.
+      Owner decision, 2026-10-01 (the 30-day bootstrap bound was not the
+      right analogue: bootstrap is exceptional initial authority).
     applies_to:
       change_kinds: [ADMINISTRATIVE_GRANT_ISSUANCE]
     risk_threshold: CRITICAL
     allowed_grant_types: [TIME_BOUND, JUST_IN_TIME]
-    maximum_duration_days: 30
+    maximum_duration_hours: 24
+    jit_target_hours: 1
     status: ACTIVE
 conflicting_permissions: []

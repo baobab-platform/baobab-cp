@@ -20,6 +20,10 @@ type AdministrativeGrantReader interface {
 	// AdministrativeGrantsOf returns every grant of the principal, in any
 	// state, and every grant their delegations rest on, by grant id.
 	AdministrativeGrantsOf(ctx context.Context, principalID string) ([]administration.Grant, map[string]administration.Grant, error)
+	// EffectiveRelations returns the canonical relations authority is judged
+	// with for the tenants: the organisations with an effective
+	// TenantOrganisationMapping to each at the time (ADR-BCP-018 section 50).
+	EffectiveRelations(ctx context.Context, tenantIDs []string, at time.Time) (administration.Relations, error)
 }
 
 var _ AdministrativeGrantReader = (*PostgresRepository)(nil)
@@ -229,4 +233,33 @@ func scanGrant(row pgx.CollectableRow) (administration.Grant, error) {
 		*t = t.UTC()
 	}
 	return g, nil
+}
+
+// EffectiveRelations implements AdministrativeGrantReader. A mapping is
+// effective by domain.TenantOrganisationMapping.InEffect, the definition
+// attestation uses, applied here rather than restated in SQL.
+func (r *PostgresRepository) EffectiveRelations(ctx context.Context, tenantIDs []string, at time.Time) (administration.Relations, error) {
+	rel := administration.Relations{TenantOrganisations: map[string][]string{}}
+	if len(tenantIDs) == 0 {
+		return rel, nil
+	}
+	if r == nil || r.pool == nil {
+		return rel, errors.New("repository is not initialized")
+	}
+	rows, err := r.pool.Query(ctx, `SELECT tenant_id, organisation_id::text, status, effective_from, effective_to
+		FROM registry.tenant_organisation_mapping WHERE tenant_id = ANY($1) AND status <> 'ENDED'`, tenantIDs)
+	if err != nil {
+		return rel, fmt.Errorf("load tenant organisation mappings: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var m domain.TenantOrganisationMapping
+		if err := rows.Scan(&m.TenantID, &m.OrganisationID, &m.Status, &m.EffectiveFrom, &m.EffectiveTo); err != nil {
+			return rel, err
+		}
+		if m.InEffect(at) {
+			rel.TenantOrganisations[m.TenantID] = append(rel.TenantOrganisations[m.TenantID], m.OrganisationID)
+		}
+	}
+	return rel, rows.Err()
 }

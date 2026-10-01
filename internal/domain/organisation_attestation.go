@@ -39,8 +39,7 @@ func AttestOrganisation(entity CanonicalEntity, tenantID string, mappings []Tena
 		return ErrOrganisationNotActive
 	}
 	for _, m := range mappings {
-		if m.TenantID == tenantID && m.OrganisationID == entity.ID &&
-			m.Status == RelationshipStatusActive && inWindow(at, m.EffectiveFrom, m.EffectiveTo) {
+		if m.TenantID == tenantID && m.OrganisationID == entity.ID && m.InEffect(at) {
 			return nil
 		}
 	}

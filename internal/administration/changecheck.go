@@ -123,6 +123,7 @@ type DelegationFacts struct {
 	Chain         map[string]Grant
 	GranteeActive bool
 	Held          []Grant
+	Relations     Relations
 	Now           time.Time
 }
 
@@ -138,7 +139,7 @@ func DelegationFailures(f DelegationFacts) map[string]string {
 	}
 	if f.Source.PrincipalID != f.Requester {
 		failed[CheckRequesterHolds] = "The requester does not hold the source grant."
-	} else if _, err := planDelegation(f.Catalogue, f.Requester, f.Source, f.Chain, q, f.Now, "plan"); err != nil {
+	} else if _, err := planDelegation(f.Catalogue, f.Requester, f.Source, f.Chain, q, f.Now, f.Relations, "plan"); err != nil {
 		var r *Refusal
 		if errors.As(err, &r) && r.Code != CodeSelfApproval && r.Code != CodeApprovalRequired {
 			failed[CheckWithinSource] = r.Detail + "."

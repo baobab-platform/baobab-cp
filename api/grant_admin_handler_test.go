@@ -23,9 +23,10 @@ import (
 // administration.TransitionTarget, versions are checked, and a delegation
 // is planned against the stored source.
 type grantAdminFake struct {
-	grants map[string]administration.Grant
-	order  []string
-	keys   map[string]string
+	relations administration.Relations
+	grants    map[string]administration.Grant
+	order     []string
+	keys      map[string]string
 }
 
 func newGrantAdminFake() *grantAdminFake {
@@ -45,6 +46,10 @@ func (f *grantAdminFake) AdministrativeGrantsOf(_ context.Context, principalID s
 		}
 	}
 	return out, f.grants, nil
+}
+
+func (f *grantAdminFake) EffectiveRelations(context.Context, []string, time.Time) (administration.Relations, error) {
+	return f.relations, nil
 }
 
 func (f *grantAdminFake) GetAdministrativeGrant(_ context.Context, id string) (administration.Grant, error) {

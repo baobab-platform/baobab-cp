@@ -196,12 +196,12 @@ func TestAdministrativeGrantChangesets(t *testing.T) {
 	blocked("an unregistered permission", "GRANT_PERMISSION_NOT_GRANTABLE", maker, notRegistered)
 	longCritical := standing
 	longCritical.GrantType = administration.TypeTimeBound
-	far := now.Add(60 * 24 * time.Hour)
+	far := now.Add(25 * time.Hour)
 	longCritical.ValidUntil = &far
 	blocked("a CRITICAL grant beyond its bound", "GRANT_VALIDITY_INVALID", maker, longCritical)
 	boundedCritical := longCritical
 	boundedCritical.PrincipalID = bounded
-	short := now.Add(10 * 24 * time.Hour)
+	short := now.Add(23 * time.Hour)
 	boundedCritical.ValidUntil = &short
 	if out := submit(maker, draft(maker, boundedCritical)); out.State != changeset.StateAwaitingApproval || out.RiskClass != "CRITICAL" {
 		t.Fatalf("a bounded CRITICAL grant must reach approval as CRITICAL: %+v", out)
@@ -263,7 +263,7 @@ func TestAdministrativeGrantChangesets(t *testing.T) {
 		dg.ApprovalReference != dapproval.ApprovalID || dg.DelegationDepth != 1 {
 		t.Fatalf("unexpected delegation %+v", dg)
 	}
-	if !administration.Usable(dg, sources, now) {
+	if !administration.Usable(dg, sources, now, administration.Relations{}) {
 		t.Fatal("an approved delegation must be usable by the evaluator")
 	}
 	_ = dapproval

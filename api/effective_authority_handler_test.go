@@ -19,6 +19,10 @@ import (
 
 type grantsFake map[string][]administration.Grant
 
+func (f grantsFake) EffectiveRelations(context.Context, []string, time.Time) (administration.Relations, error) {
+	return administration.Relations{}, nil
+}
+
 func (f grantsFake) AdministrativeGrantsOf(_ context.Context, principalID string) ([]administration.Grant, map[string]administration.Grant, error) {
 	return f[principalID], nil, nil
 }
