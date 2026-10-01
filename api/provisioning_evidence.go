@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/baobab-platform/baobab-cp/internal/provisioning"
 	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/topology/release"
@@ -34,9 +35,14 @@ type ReadinessSnapshot struct {
 	ID              string           `json:"readiness_snapshot_id"`
 	TenantID        string           `json:"tenant_id"`
 	Level           string           `json:"level"`
+	ObjectReference string           `json:"object_reference,omitempty"`
 	Status          string           `json:"status"`
 	BlockingReasons []BlockingReason `json:"blocking_reasons"`
-	ComputedAt      time.Time        `json:"computed_at"`
+	// DegradingReasons are release_drift codes that degrade the snapshot
+	// without blocking it (ADR-BCP-025 section 2.8).
+	DegradingReasons      []BlockingReason `json:"degrading_reasons,omitempty"`
+	ContributingSnapshots []string         `json:"contributing_snapshots,omitempty"`
+	ComputedAt            time.Time        `json:"computed_at"`
 }
 
 // BlockingReason is a registered reason code (authorization/v1
@@ -132,6 +138,11 @@ func provisioningReadiness(c repository.ConvergedProvisioning, snapshots []provi
 		Status: readinessVerdict(latest), BlockingReasons: []BlockingReason{}, ComputedAt: latest.EvaluatedAt}
 	if !latest.OverallReady {
 		for _, check := range latest.Checks {
+			// The release-drift check's codes come from live drift (see
+			// withReleaseReadiness), not from the stored reason.
+			if check.CheckKey == provisioning.ReleaseReadinessCheckKey {
+				continue
+			}
 			if code, known := readinessCheckCodes[check.CheckKey]; known && check.Status != "PASS" {
 				snapshot.BlockingReasons = append(snapshot.BlockingReasons, BlockingReason{Code: code, Detail: truncate(check.Reason, 500)})
 			}
@@ -144,6 +155,58 @@ func provisioningReadiness(c repository.ConvergedProvisioning, snapshots []provi
 	evaluated := latest.EvaluatedAt
 	out.Status, out.EvaluatedAt, out.Snapshots = snapshot.Status, &evaluated, []ReadinessSnapshot{snapshot}
 	return out
+}
+
+// withReleaseReadiness overlays the readiness consequence of live release
+// drift (ADR-BCP-025 section 2.8) on an evaluated verdict. The persisted
+// snapshot records the moment of evaluation; drift arises later, so the view
+// is derived from both. An unevaluated readiness stays UNKNOWN.
+//
+// Each affected capability gets a CAPABILITY snapshot, and the tenant
+// snapshot derives from them: BLOCKED only through a mandatory capability
+// all of whose usable bindings are affected by a BLOCKED-effect drift,
+// DEGRADED otherwise. The release_drift codes are readiness consequences, not
+// resolution denials: capability resolution is unchanged (ER-06 is not
+// accepted), so a tenant can be BLOCKED while its capabilities still resolve.
+func (p ProvisioningReadiness) withReleaseReadiness(drift release.TenantReleaseReadiness, now time.Time) ProvisioningReadiness {
+	if p.Status == "UNKNOWN" || len(p.Snapshots) == 0 || drift.Effect == "" {
+		return p
+	}
+	tenant := p.Snapshots[0]
+	var contributing []ReadinessSnapshot
+	for _, c := range drift.Capabilities {
+		sum := sha256.Sum256([]byte(p.TenantID + "|" + c.CapabilityKey + "|" + c.Effect + "|" + now.Format(time.RFC3339Nano)))
+		snapshot := ReadinessSnapshot{ID: "ready_" + hex.EncodeToString(sum[:])[:24], TenantID: p.TenantID, Level: "CAPABILITY",
+			ObjectReference: c.CapabilityKey, Status: c.Effect, BlockingReasons: []BlockingReason{}, ComputedAt: now}
+		for _, f := range c.Findings {
+			reason := BlockingReason{Code: f.Reason, Detail: truncate("engine instances "+strings.Join(f.EngineInstanceIDs, ", "), 500)}
+			if c.Effect == release.EffectBlocked {
+				snapshot.BlockingReasons = append(snapshot.BlockingReasons, reason)
+			} else {
+				snapshot.DegradingReasons = append(snapshot.DegradingReasons, reason)
+			}
+		}
+		contributing = append(contributing, snapshot)
+		tenant.ContributingSnapshots = append(tenant.ContributingSnapshots, snapshot.ID)
+		for _, r := range snapshot.BlockingReasons {
+			tenant.BlockingReasons = append(tenant.BlockingReasons, BlockingReason{Code: r.Code, Detail: truncate(c.CapabilityKey+": "+r.Detail, 500)})
+		}
+		for _, r := range snapshot.DegradingReasons {
+			tenant.DegradingReasons = append(tenant.DegradingReasons, BlockingReason{Code: r.Code, Detail: truncate(c.CapabilityKey+": "+r.Detail, 500)})
+		}
+	}
+	switch {
+	case drift.Effect == release.EffectBlocked:
+		tenant.Status = "BLOCKED"
+	case tenant.Status == "READY":
+		tenant.Status = "DEGRADED"
+	}
+	tenant.ComputedAt = now
+	p.Status = tenant.Status
+	evaluated := now
+	p.EvaluatedAt = &evaluated
+	p.Snapshots = append([]ReadinessSnapshot{tenant}, contributing...)
+	return p
 }
 
 // readinessVerdict is the readiness status an evaluation records.

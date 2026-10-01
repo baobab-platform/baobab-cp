@@ -293,6 +293,64 @@ func TestReleaseDrift(t *testing.T) {
 	if other, err := repo.ListReleaseDrift(ctx, tenantOther); err != nil || len(other) != 0 {
 		t.Fatalf("an unbound tenant must see no drift: %+v %v", other, err)
 	}
+	// Readiness (ADR-BCP-025 section 2.8). The instance runs an unrecorded
+	// artifact: a BLOCKED-effect drift. The capability is not yet a mandatory
+	// dependency of anything the tenant subscribes to, so it only degrades.
+	readinessAt := time.Now().UTC()
+	assertReadiness := func(label, wantEffect, wantCapabilityEffect string) {
+		t.Helper()
+		got, err := repo.TenantReleaseReadiness(ctx, tenantBound, readinessAt)
+		must(err)
+		if got.Effect != wantEffect {
+			t.Fatalf("%s: tenant effect %q, want %q (%+v)", label, got.Effect, wantEffect, got)
+		}
+		if wantCapabilityEffect != "" && (len(got.Capabilities) != 1 || got.Capabilities[0].Effect != wantCapabilityEffect ||
+			got.Capabilities[0].CapabilityKey != capabilityKey || got.Capabilities[0].Findings[0].Reason != release.DriftUnknownArtifactRunning) {
+			t.Fatalf("%s: capabilities %+v, want one %s %s", label, got.Capabilities, wantCapabilityEffect, capabilityKey)
+		}
+	}
+	assertReadiness("optional dependency", release.EffectDegraded, release.EffectDegraded)
+	if other, err := repo.TenantReleaseReadiness(ctx, tenantOther, readinessAt); err != nil || other.Effect != "" {
+		t.Fatalf("another tenant must be unaffected: %+v %v", other, err)
+	}
+	// Make the capability a MANDATORY member of the composition of a product
+	// the tenant is subscribed to: the sole binding is affected, so it blocks.
+	product, composition := "drift"+suffix, "drift-composition-"+suffix
+	var compositionID string
+	must(admin.QueryRow(ctx, `INSERT INTO capability.capability_composition(composition_key, composition_type, version, lifecycle)
+		VALUES ($1, 'PRODUCT', '1.0.0', 'ACTIVE') RETURNING composition_id::text`, composition).Scan(&compositionID))
+	_, err = admin.Exec(ctx, `INSERT INTO capability.capability_composition_member(composition_id, capability_key, criticality) VALUES ($1::uuid, $2, 'MANDATORY')`, compositionID, capabilityKey)
+	must(err)
+	_, err = admin.Exec(ctx, `INSERT INTO product.product(product_id, name, status) VALUES ($1, $1, 'ACTIVE')`, product)
+	must(err)
+	var versionID string
+	must(admin.QueryRow(ctx, `INSERT INTO product.product_version(product_id, version, composition_key, status) VALUES ($1, '1.0.0', $2, 'ACTIVE') RETURNING product_version_id::text`, product, composition).Scan(&versionID))
+	_, err = admin.Exec(ctx, `INSERT INTO product.product_subscription(tenant_id, product_id, product_version_id, status, effective_from) VALUES ($1, $2, $3::uuid, 'ACTIVE', now() - interval '1 day')`, tenantBound, product, versionID)
+	must(err)
+	cleanupReadiness := func() {
+		admin.Exec(ctx, `DELETE FROM product.product_subscription WHERE tenant_id = $1`, tenantBound)
+		admin.Exec(ctx, `DELETE FROM product.product_version WHERE product_id = $1`, product)
+		admin.Exec(ctx, `DELETE FROM product.product WHERE product_id = $1`, product)
+		admin.Exec(ctx, `DELETE FROM capability.capability_composition WHERE composition_key = $1`, composition)
+	}
+	t.Cleanup(cleanupReadiness)
+	assertReadiness("mandatory dependency, sole binding", release.EffectBlocked, release.EffectBlocked)
+	// A second, unaffected usable binding keeps the capability served: it degrades.
+	var spare, spareID string
+	must(admin.QueryRow(ctx, `INSERT INTO topology.engine_instance(engine_id, region, environment, status)
+		VALUES ($1::uuid, 'af-south-1', 'staging', 'ACTIVE') RETURNING engine_instance_key, engine_instance_id::text`, engineID).Scan(&spare, &spareID))
+	instances = append(instances, spare)
+	_, err = admin.Exec(ctx, `INSERT INTO capability.capability_binding(capability_id, engine_instance_id, scope_id, binding_mode, status, contract_version, effective_from, provider_id, priority)
+		VALUES ($1::uuid, $2::uuid, $3::uuid, 'FALLBACK', 'ACTIVE', '1', now() - interval '1 day', $4::uuid, 200)`, capabilityID, spareID, scopeID, providerID)
+	must(err)
+	assertReadiness("mandatory dependency with an unaffected binding", release.EffectDegraded, release.EffectDegraded)
+	// A shadow or migration binding is not a usable alternative.
+	_, err = admin.Exec(ctx, `UPDATE capability.capability_binding SET binding_mode = 'SHADOW' WHERE engine_instance_id = $1::uuid`, spareID)
+	must(err)
+	assertReadiness("a shadow binding is not an alternative", release.EffectBlocked, release.EffectBlocked)
+	_, err = admin.Exec(ctx, `DELETE FROM capability.capability_binding WHERE engine_instance_id = $1::uuid`, spareID)
+	must(err)
+
 	_, err = admin.Exec(ctx, `UPDATE capability.capability_binding SET effective_to = now() - interval '1 hour' WHERE engine_instance_id = $1::uuid`, instanceID)
 	must(err)
 	if ended, err := repo.ListReleaseDrift(ctx, tenantBound); err != nil || len(ended) != 0 {

@@ -14,6 +14,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/provisioning"
 	provisioningdomain "github.com/baobab-platform/baobab-cp/internal/provisioning/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/topology/release"
 	"gopkg.in/yaml.v3"
 )
 
@@ -108,6 +109,43 @@ func TestProvisioningEvidenceConformsToShared(t *testing.T) {
 	if len(drift.Items) != 3 || drift.Items[0].ObjectType != "CAPABILITY_GRANT" || drift.Items[0].Resolution != "UNRESOLVED" ||
 		drift.Items[1].Resolution != "BLOCKED" || drift.Items[1].ObjectType != "TRADE_LANE" || drift.Items[2].Resolution != "RECONCILED" {
 		t.Fatalf("drift: %+v", drift)
+	}
+
+	// Release drift reaches readiness (ADR-BCP-025 section 2.8): BLOCKED only
+	// through a blocked mandatory capability, DEGRADED otherwise, never on an
+	// unevaluated readiness, and a CAPABILITY snapshot per affected capability
+	// that the tenant snapshot derives from.
+	readyView := provisioningReadiness(c, snapshot(true))
+	nowAt := at.Add(time.Hour)
+	blockedDrift := release.Aggregate([]release.CapabilityReadiness{{CapabilityKey: "commerce.order.manage", Mandatory: true, Effect: release.EffectBlocked,
+		Findings: []release.ReadinessFinding{{Reason: "REVOKED_RELEASE_RUNNING", EngineInstanceIDs: []string{"ei_0199a1b2c3d47e8f"}}}}})
+	degradedDrift := release.Aggregate([]release.CapabilityReadiness{{CapabilityKey: "commerce.order.manage", Mandatory: true, Effect: release.EffectDegraded,
+		Findings: []release.ReadinessFinding{{Reason: "RELEASE_UNOBSERVED", EngineInstanceIDs: []string{"ei_0199a1b2c3d47e8f"}}}}})
+	blockedView := readyView.withReleaseReadiness(blockedDrift, nowAt)
+	if blockedView.Status != "BLOCKED" || len(blockedView.Snapshots) != 2 || blockedView.Snapshots[0].Level != "TENANT" ||
+		blockedView.Snapshots[0].Status != "BLOCKED" || blockedView.Snapshots[0].BlockingReasons[0].Code != "REVOKED_RELEASE_RUNNING" ||
+		blockedView.Snapshots[1].Level != "CAPABILITY" || blockedView.Snapshots[1].ObjectReference != "commerce.order.manage" ||
+		blockedView.Snapshots[0].ContributingSnapshots[0] != blockedView.Snapshots[1].ID {
+		t.Fatalf("blocked by release drift: %+v", blockedView)
+	}
+	degradedView := readyView.withReleaseReadiness(degradedDrift, nowAt)
+	if degradedView.Status != "DEGRADED" || len(degradedView.Snapshots[0].BlockingReasons) != 0 ||
+		degradedView.Snapshots[0].DegradingReasons[0].Code != "RELEASE_UNOBSERVED" {
+		t.Fatalf("degraded by release drift: %+v", degradedView)
+	}
+	if view := notReady.withReleaseReadiness(degradedDrift, nowAt); view.Status != "NOT_READY" || len(view.Snapshots[0].BlockingReasons) != 2 ||
+		len(view.Snapshots[0].DegradingReasons) != 1 {
+		t.Fatalf("a not-ready tenant stays not ready and shows what degrades it: %+v", view)
+	}
+	if view := notReady.withReleaseReadiness(blockedDrift, nowAt); view.Status != "BLOCKED" {
+		t.Fatalf("blocking drift outranks not ready: %+v", view)
+	}
+	unevaluated := provisioningReadiness(c, nil)
+	if view := unevaluated.withReleaseReadiness(blockedDrift, nowAt); view.Status != "UNKNOWN" || len(view.Snapshots) != 0 {
+		t.Fatalf("an unevaluated readiness stays UNKNOWN: %+v", view)
+	}
+	if view := readyView.withReleaseReadiness(release.TenantReleaseReadiness{}, nowAt); view.Status != "READY" || len(view.Snapshots) != 1 {
+		t.Fatalf("no drift changes nothing: %+v", view)
 	}
 
 	// ENGINE_INSTANCE_RELEASE drift is added per bound instance, carries its

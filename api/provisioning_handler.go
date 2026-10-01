@@ -31,6 +31,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/provisioning"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
@@ -60,6 +61,8 @@ type provisioningHandler struct {
 	// drift adds ENGINE_INSTANCE_RELEASE drift (ADR-BCP-025 gate ER-05); nil
 	// omits it.
 	releaseDrift repository.ReleaseDriftRepository
+	// releaseReadiness overlays release drift on readiness (ER-05); nil omits it.
+	releaseReadiness repository.ReleaseReadinessRepository
 }
 
 func (h provisioningHandler) readiness(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +75,17 @@ func (h provisioningHandler) readiness(w http.ResponseWriter, r *http.Request) {
 		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "readiness evidence could not be read", true)
 		return
 	}
-	writeJSON(w, http.StatusOK, provisioningReadiness(c, snapshots))
+	out := provisioningReadiness(c, snapshots)
+	if h.releaseReadiness != nil {
+		now := time.Now().UTC()
+		drift, err := h.releaseReadiness.TenantReleaseReadiness(r.Context(), c.TenantID, now)
+		if err != nil {
+			problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "release readiness could not be read", true)
+			return
+		}
+		out = out.withReleaseReadiness(drift, now)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (h provisioningHandler) drift(w http.ResponseWriter, r *http.Request) {

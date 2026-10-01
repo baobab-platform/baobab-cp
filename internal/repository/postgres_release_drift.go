@@ -71,7 +71,7 @@ func releaseDriftPolicy() (release.DriftPolicy, error) {
 	}
 	policy := release.DriftPolicy{}
 	for reason, rule := range doc.Drift.Reasons {
-		policy[reason] = release.DriftRule{Grace: time.Duration(rule.GraceSeconds) * time.Second, Severity: rule.Severity}
+		policy[reason] = release.DriftRule{Grace: time.Duration(rule.GraceSeconds) * time.Second, Severity: rule.Severity, ReadinessEffect: rule.ReadinessEffect}
 	}
 	return policy, nil
 }
@@ -295,4 +295,88 @@ func (r *PostgresRepository) ListReleaseDrift(ctx context.Context, tenantID stri
 		d.DetectedAt, d.Severity = d.DetectedAt.UTC(), policy[d.Reason].Severity
 		return d, nil
 	})
+}
+
+// ReleaseReadinessRepository judges a tenant's readiness by the release drift
+// of the instances behind its capabilities (ADR-BCP-025 section 2.8).
+type ReleaseReadinessRepository interface {
+	// TenantReleaseReadiness is the readiness consequence of open release
+	// drift for a tenant. Drift blocks only through a mandatory dependency
+	// whose every usable binding is affected, and degrades otherwise; it is
+	// reported, never acted on (resolution is unchanged, ER-06 is not accepted).
+	TenantReleaseReadiness(ctx context.Context, tenantID string, now time.Time) (release.TenantReleaseReadiness, error)
+}
+
+var _ ReleaseReadinessRepository = (*PostgresRepository)(nil)
+
+func (r *PostgresRepository) TenantReleaseReadiness(ctx context.Context, tenantID string, now time.Time) (release.TenantReleaseReadiness, error) {
+	policy, err := releaseDriftPolicy()
+	if err != nil {
+		return release.TenantReleaseReadiness{}, err
+	}
+	// Mandatory capabilities: MANDATORY members, unconditioned, of the
+	// ACTIVE composition of each product the tenant is subscribed to now.
+	rows, err := r.pool.Query(ctx, `
+		WITH subscribed AS (
+			SELECT DISTINCT pv.composition_key
+			FROM product.product_subscription s JOIN product.product_version pv ON pv.product_version_id = s.product_version_id
+			WHERE s.tenant_id = $1 AND s.status = 'ACTIVE' AND s.effective_from <= $2 AND (s.effective_to IS NULL OR s.effective_to > $2)),
+		latest AS (
+			SELECT DISTINCT ON (c.composition_key) c.composition_id
+			FROM capability.capability_composition c
+			WHERE c.composition_key IN (SELECT composition_key FROM subscribed) AND c.lifecycle = 'ACTIVE'
+			ORDER BY c.composition_key, string_to_array(c.version, '.')::int[] DESC)
+		SELECT DISTINCT m.capability_key FROM capability.capability_composition_member m
+		WHERE m.composition_id IN (SELECT composition_id FROM latest) AND m.criticality = 'MANDATORY'
+			AND COALESCE(m.activation_condition, '') = ''`, tenantID, now)
+	if err != nil {
+		return release.TenantReleaseReadiness{}, fmt.Errorf("list mandatory capabilities: %w", err)
+	}
+	mandatory := map[string]bool{}
+	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return release.TenantReleaseReadiness{}, err
+	}
+	for _, k := range keys {
+		mandatory[k] = true
+	}
+	// The tenant's usable bindings: ACTIVE, in date, serving (not a
+	// migration source or target, a shadow or a disabled binding).
+	rows, err = r.pool.Query(ctx, `SELECT cap.code, ei.engine_instance_key, COALESCE(d.reason_code, '')
+		FROM capability.capability_binding b
+		JOIN capability.capability_scope s ON s.scope_id = b.scope_id
+		JOIN capability.capability cap ON cap.capability_id = b.capability_id
+		JOIN topology.engine_instance ei ON ei.engine_instance_id = b.engine_instance_id
+		LEFT JOIN topology.engine_instance_release_drift d ON d.engine_instance_key = ei.engine_instance_key AND d.opened_at IS NOT NULL
+		WHERE s.tenant_id = $1 AND b.status = 'ACTIVE' AND b.effective_from <= $2 AND (b.effective_to IS NULL OR b.effective_to > $2)
+			AND b.binding_mode IN ('PRIMARY', 'SECONDARY', 'FALLBACK', 'READ_ONLY')
+		ORDER BY cap.code, ei.engine_instance_key`, tenantID, now)
+	if err != nil {
+		return release.TenantReleaseReadiness{}, fmt.Errorf("list tenant bindings: %w", err)
+	}
+	defer rows.Close()
+	byCapability := map[string][]release.BoundInstance{}
+	var order []string
+	for rows.Next() {
+		var capability, instance, reason string
+		if err := rows.Scan(&capability, &instance, &reason); err != nil {
+			return release.TenantReleaseReadiness{}, err
+		}
+		if _, seen := byCapability[capability]; !seen {
+			order = append(order, capability)
+		}
+		bound := release.BoundInstance{EngineInstanceID: instance, DriftReason: reason}
+		if reason != "" {
+			bound.DriftEffect = policy[reason].ReadinessEffect
+		}
+		byCapability[capability] = append(byCapability[capability], bound)
+	}
+	if err := rows.Err(); err != nil {
+		return release.TenantReleaseReadiness{}, err
+	}
+	capabilities := make([]release.CapabilityReadiness, 0, len(order))
+	for _, capability := range order {
+		capabilities = append(capabilities, release.ReleaseReadinessOf(capability, mandatory[capability], byCapability[capability]))
+	}
+	return release.Aggregate(capabilities), nil
 }

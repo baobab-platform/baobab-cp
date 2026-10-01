@@ -76,6 +76,20 @@ observation:
       direction: descending
 
 # Release drift (section 2.7), recorded as ENGINE_INSTANCE_RELEASE drift.
+# readiness_effect is what open drift of that reason does to the readiness of
+# the tenants that depend on the instance (ADR-BCP-008: every drift class says
+# whether it blocks). It is deliberately separate from severity, so a later
+# change of severity never silently changes availability policy:
+#   BLOCKED   -- the reason is a readiness blocker where the instance serves
+#                a mandatory dependency (a capability whose every usable binding
+#                is affected); a release_drift code, never a resolution denial.
+#   DEGRADED  -- visible in readiness (degrading_reasons), never a blocker.
+# A BLOCKED reason blocks only through a mandatory dependency all of whose usable
+# bindings are affected; on an optional dependency, or one with an unaffected
+# usable binding, it degrades instead.
+# Readiness consequence is not routing eligibility: capability resolution is
+# unchanged (gate ER-06 is not accepted, amendment A4), so a tenant may be
+# BLOCKED while resolution keeps working.
 # grace_seconds is how long the condition must hold before it is drift:
 # a rollout legitimately runs the previous or both releases for a while
 # (MIXED), and a newly desired instance is unobserved until its reporter
@@ -86,16 +100,21 @@ drift:
     RELEASE_MISMATCH:
       grace_seconds: 1800
       severity: DEGRADED
+      readiness_effect: DEGRADED
     REVOKED_RELEASE_RUNNING:
       grace_seconds: 0
       severity: CRITICAL
+      readiness_effect: BLOCKED
     UNKNOWN_ARTIFACT_RUNNING:
       grace_seconds: 0
       severity: CRITICAL
+      readiness_effect: BLOCKED
     RELEASE_UNOBSERVED:
       grace_seconds: 900
       severity: WARNING
+      readiness_effect: DEGRADED
     DEPLOYMENT_LOCATION_MISMATCH:
       grace_seconds: 0
       severity: CRITICAL
+      readiness_effect: BLOCKED
   sweep_interval_seconds: 300
