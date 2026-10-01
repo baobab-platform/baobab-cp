@@ -29,3 +29,10 @@ const (
 var AdministrativeAuthorityShadow = Default.NewCounterVec("administrative_authority_shadow_total",
 	"Legacy role decisions compared with AdministrativeGrant decisions, by permission and agreement.",
 	"permission", "legacy", "grants", "agreement")
+
+// AdministrativeAuthorityEnforced counts decisions made by AdministrativeGrants
+// instead of roles, for the permissions the owner's enforcement policy lists
+// (ADR-BCP-020 section 143). Empty while no permission is enforced.
+var AdministrativeAuthorityEnforced = Default.NewCounterVec("administrative_authority_enforced_total",
+	"Administrative requests decided by AdministrativeGrants under the enforcement policy, by permission and result.",
+	"permission", "result")

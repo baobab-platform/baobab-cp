@@ -171,6 +171,10 @@ type Dependencies struct {
 	// decision at once, without a release. It can only return authority to
 	// roles; it can never enforce anything.
 	EnforcementRollback []string
+	// enforcement replaces the decision built from Shared's policy. Unexported:
+	// only tests in this package may set it; a deployment cannot choose what
+	// grants decide.
+	enforcement *administration.Enforcement
 	// WorkloadRegistry backs request-time enforcement of ADR-0007 §45's
 	// workload lifecycle status (Gate ZB-03.10, closing the gap
 	// docs/reconciliation/gate-zb03-authority-contract-freeze.md §7 named):
@@ -231,6 +235,9 @@ func New(dependencies Dependencies) http.Handler {
 		panic(err)
 	}
 	a.enforcement = administration.NewEnforcement(enforcementPolicy, catalogue, dependencies.EnforcementRollback)
+	if dependencies.enforcement != nil {
+		a.enforcement = dependencies.enforcement
+	}
 	if a.evidence = newShadowRecorder(dependencies.ShadowEvidence); a.evidence != nil {
 		go a.evidence.run(shadowFlushInterval)
 	}
@@ -313,7 +320,7 @@ func New(dependencies Dependencies) http.Handler {
 		// Platform administrators read every operation; a tenant
 		// administrator reads those of its own tenants (the handler decides
 		// once it knows the operation's tenant).
-		ops := operationHandler{repo: dependencies.Operations, tenantAdminOf: a.tenantAdminOf, shadow: a.shadowOperationDecision}
+		ops := operationHandler{repo: dependencies.Operations, tenantAdminOf: a.tenantAdminOf, decide: a.shadowOperationDecision}
 		r.With(a.authorize(a.adminVerifier, "human", "operation:read")).Get("/v1/admin/operations/{operationID}", ops.get)
 	}
 	if dependencies.Mappings != nil {
@@ -560,7 +567,7 @@ func New(dependencies Dependencies) http.Handler {
 		// Retrying or cancelling execution is an operation command; the
 		// handler admits the operation's readers (tenant administrators of
 		// its tenant, platform administrators).
-		commands := operationCommands{read: operationHandler{tenantAdminOf: a.tenantAdminOf, shadow: a.shadowOperationDecision}, plans: plans}
+		commands := operationCommands{read: operationHandler{tenantAdminOf: a.tenantAdminOf, decide: a.shadowOperationDecision}, plans: plans}
 		r.With(a.authorize(a.adminVerifier, "human", "operation:control")).Post("/v1/admin/operations/{operationID}/retry", commands.retry)
 		r.With(a.authorize(a.adminVerifier, "human", "operation:control")).Post("/v1/admin/operations/{operationID}/cancel", commands.cancel)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/readiness", prov.readiness)
@@ -734,10 +741,20 @@ func (g adminGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			allowed = true
 		}
 	}
-	// The legacy decision stands; grants are only compared with it.
-	a.shadowAdministrativeDecision(r, principal, allowed)
-	if !allowed {
-		problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
+	// The role decision stands unless the owner's enforcement policy hands
+	// this permission to AdministrativeGrants; either way the grants are
+	// compared with it (ADR-BCP-020 sections 143-144).
+	verdict := a.decideAdministrative(r, principal, allowed, nil)
+	if verdict.Unavailable {
+		problem(w, r, http.StatusServiceUnavailable, "AUTH_VERIFIER_UNAVAILABLE", "authorization is temporarily unavailable", true)
+		return
+	}
+	if !verdict.Allowed {
+		code := verdict.Code
+		if code == "" {
+			code = "AUTHORIZATION_DENIED"
+		}
+		problem(w, r, http.StatusForbidden, code, "the authenticated principal lacks required authority", false)
 		return
 	}
 	g.next.ServeHTTP(w, r)

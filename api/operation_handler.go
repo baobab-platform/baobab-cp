@@ -18,9 +18,11 @@ import (
 type operationHandler struct {
 	repo          repository.OperationRepository
 	tenantAdminOf func(*http.Request, auth.Principal, string) adminAuthority
-	// shadow compares the role decision with AdministrativeGrants for the
-	// operation's tenant (ADR-BCP-020 section 144). Nil disables it.
-	shadow func(r *http.Request, p auth.Principal, legacyAllowed bool, tenantID string)
+	// decide compares the role decision with AdministrativeGrants for the
+	// operation's tenant and, for a permission the owner's enforcement policy
+	// lists, lets the grants decide (ADR-BCP-020 sections 143-144). Nil keeps
+	// the role decision alone.
+	decide func(r *http.Request, p auth.Principal, legacyAllowed bool, tenantID string) adminVerdict
 }
 
 // authorised: platform administrators read every operation, a tenant
@@ -41,8 +43,18 @@ func (h operationHandler) authorised(r *http.Request, op operations.Operation) (
 		allowed = authority == adminAllowed
 	}
 	// An unavailable role decision is no decision to compare with.
-	if h.shadow != nil && authority != adminUnavailable {
-		h.shadow(r, principal, allowed, op.TenantID)
+	if h.decide != nil && authority != adminUnavailable {
+		verdict := h.decide(r, principal, allowed, op.TenantID)
+		if verdict.Unavailable {
+			return adminUnavailable, false
+		}
+		if verdict.Enforced {
+			authority = adminDenied
+			if verdict.Allowed {
+				authority = adminAllowed
+			}
+		}
+		allowed = verdict.Allowed
 	}
 	return authority, allowed
 }

@@ -31,7 +31,7 @@
         "grant_type": { "$ref": "domain.schema.json#/$defs/grantType" },
         "valid_from": { "type": "string", "format": "date-time" },
         "valid_until": { "type": "string", "format": "date-time" },
-        "delegable_depth": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "delegable_depth": { "type": "integer", "minimum": 0, "maximum": 2 },
         "risk_class": { "$ref": "domain.schema.json#/$defs/riskClass" },
         "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
         "reviewed_by": {

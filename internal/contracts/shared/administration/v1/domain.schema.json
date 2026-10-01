@@ -137,9 +137,10 @@
     "administrativeMetric": {
       "type": "string",
       "enum": [
-        "administrative_authority_shadow_total"
+        "administrative_authority_shadow_total",
+        "administrative_authority_enforced_total"
       ],
-      "description": "Administrative authority metrics, exposed in Prometheus form. administrative_authority_shadow_total counts role-guarded administrative requests by how the legacy role decision compared with the AdministrativeGrant decision (ADR-BCP-020 section 144); it never changes a decision."
+      "description": "Administrative authority metrics, exposed in Prometheus form. administrative_authority_shadow_total counts role-guarded administrative requests by how the legacy role decision compared with the AdministrativeGrant decision (ADR-BCP-020 section 144); it never changes a decision. administrative_authority_enforced_total counts requests decided by AdministrativeGrants instead of roles for the permissions enforcement-policy.yaml lists, by permission and result; it stays empty while no permission is enforced."
     },
     "administrativeMetricLabel": {
       "type": "string",
@@ -147,9 +148,10 @@
         "permission",
         "legacy",
         "grants",
-        "agreement"
+        "agreement",
+        "result"
       ],
-      "description": "The only label names administrative metrics may carry. permission takes a key of permission-registry.yaml or unregistered; legacy, grants and agreement take shadowLegacyOutcome, shadowGrantsOutcome and shadowAgreement values."
+      "description": "The only label names administrative metrics may carry. permission takes a key of permission-registry.yaml or unregistered; legacy, grants and agreement take shadowLegacyOutcome, shadowGrantsOutcome and shadowAgreement values; result takes allowed, denied or unavailable."
     },
     "shadowLegacyOutcome": {
       "type": "string",
