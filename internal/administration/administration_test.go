@@ -169,7 +169,7 @@ func TestEvaluateDeniesByDefault(t *testing.T) {
 		t.Errorf("an unmet assurance condition must ask for step-up: %+v", d)
 	}
 	if d := Evaluate(Request{PrincipalActive: true, PrincipalID: jane, Action: "tenant.view", Resource: Resource{TenantID: "tn_ug"}, Now: now,
-		SessionACRs: []string{"urn:baobab:acr:mfa"}, Grants: []Grant{stepUp}}); !d.Allowed() {
+		Session: Session{ACR: "2"}, Grants: []Grant{stepUp}}); !d.Allowed() {
 		t.Errorf("a met assurance condition must allow: %+v", d)
 	}
 }

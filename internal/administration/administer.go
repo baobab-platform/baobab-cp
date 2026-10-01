@@ -114,6 +114,12 @@ func buildIssue(c *Catalogue, caller string, q IssueRequest, now time.Time) (Gra
 	if strings.TrimSpace(q.Reason) == "" || len(q.Reason) > 1000 {
 		return Grant{}, refuse(CodeInvalidGrant, "reason is required and at most 1000 characters")
 	}
+	// An assurance condition names a level of the ladder (section 72); one
+	// the ladder does not list could never be met, so it is refused here
+	// rather than issued as a grant nobody can use.
+	if q.Conditions != nil && q.Conditions.MinimumACR != "" && !MustDefaultAssurance().KnownLevel(q.Conditions.MinimumACR) {
+		return Grant{}, refuse(CodeInvalidGrant, "conditions.minimum_acr %q is not a level of the assurance policy", q.Conditions.MinimumACR)
+	}
 	from := now
 	if q.ValidFrom != nil {
 		from = q.ValidFrom.UTC()
@@ -316,8 +322,28 @@ func AddsAuthority(old, next Grant, rel Relations) bool {
 	case old.ValidUntil != nil && (next.ValidUntil == nil || next.ValidUntil.After(*old.ValidUntil)):
 		return true
 	}
-	if old.Conditions != nil && old.Conditions.MinimumACR != "" &&
-		(next.Conditions == nil || next.Conditions.MinimumACR != old.Conditions.MinimumACR) {
+	return weakerAssurance(old, next)
+}
+
+// weakerAssurance reports whether next may be used with less assurance than
+// old: a lower level, a looser freshness bound, or no phishing-resistant
+// method where old demanded one. The comparison is of what each grant
+// effectively requires (assurance-policy.yaml), so the same condition spelt
+// differently is not a change. A level the ladder does not list is not
+// comparable and counts as weaker.
+func weakerAssurance(old, next Grant) bool {
+	p := MustDefaultAssurance()
+	o, n := p.Required(old), p.Required(next)
+	ol, oknown := p.level(o.MinimumACR)
+	nl, nknown := p.level(n.MinimumACR)
+	switch {
+	case !oknown || !nknown:
+		return o.MinimumACR != n.MinimumACR
+	case nl.Rank < ol.Rank:
+		return true
+	case o.PhishingResistantRequired && !n.PhishingResistantRequired:
+		return true
+	case o.MaxAuthenticationAge > 0 && (n.MaxAuthenticationAge == 0 || n.MaxAuthenticationAge > o.MaxAuthenticationAge):
 		return true
 	}
 	return false

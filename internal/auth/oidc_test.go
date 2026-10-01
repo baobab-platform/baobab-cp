@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -225,5 +227,55 @@ func TestOIDCVerifierExtractsConfiguredClientRoles(t *testing.T) {
 	}
 	if !principal.HasClientRole("onboarding-requester") || principal.HasClientRole("onboarding-authoriser") {
 		t.Fatalf("client roles = %#v, want only the configured client's onboarding-requester", principal.ClientRoles)
+	}
+}
+
+func TestOIDCVerifierReadsAuthenticationAssurance(t *testing.T) {
+	issuer := newTestIssuer(t)
+	verifier, err := NewOIDCVerifier(context.Background(), issuer.server.URL, "baobab-control-plane")
+	if err != nil {
+		t.Fatal(err)
+	}
+	authTime := time.Now().Add(-2 * time.Minute).Unix()
+	principal, err := verifier.Verify(context.Background(), issuer.token(t, map[string]any{
+		"acr": "2", "amr": []string{"pwd", "otp"}, "auth_time": authTime,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := principal.Assurance
+	if a.ACR != "2" || len(a.AMR) != 2 || a.AMR[1] != "otp" || a.AuthenticatedAt.Unix() != authTime {
+		t.Fatalf("assurance not read: %#v", a)
+	}
+	// A token without the claims has an unknown assurance, not a default one.
+	bare, err := verifier.Verify(context.Background(), issuer.token(t, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bare.Assurance.ACR != "" || len(bare.Assurance.AMR) != 0 || !bare.Assurance.AuthenticatedAt.IsZero() {
+		t.Fatalf("a token without assurance claims must carry none: %#v", bare.Assurance)
+	}
+}
+
+func TestOIDCVerifierRejectsMalformedAssurance(t *testing.T) {
+	issuer := newTestIssuer(t)
+	verifier, err := NewOIDCVerifier(context.Background(), issuer.server.URL, "baobab-control-plane")
+	if err != nil {
+		t.Fatal(err)
+	}
+	long := strings.Repeat("a", 129)
+	many := make([]string, 17)
+	for i := range many {
+		many[i] = "pwd"
+	}
+	for name, claims := range map[string]map[string]any{
+		"oversized acr":      {"acr": long},
+		"too many amr":       {"amr": many},
+		"empty amr value":    {"amr": []string{""}},
+		"negative auth_time": {"auth_time": -5},
+	} {
+		if _, err := verifier.Verify(context.Background(), issuer.token(t, claims)); !errors.Is(err, ErrInvalidToken) {
+			t.Errorf("%s: want ErrInvalidToken, got %v", name, err)
+		}
 	}
 }

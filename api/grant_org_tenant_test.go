@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/administration"
+	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
@@ -43,7 +44,8 @@ func TestOrganisationGrantDelegatesAMappedTenantOverHTTP(t *testing.T) {
 	seed("agr_orgdeleg", "administrator.delegate", 0, administration.RiskHigh)
 
 	handler := New(Dependencies{Store: &fakeStore{}, AdminVerifier: tokenVerifier{"jane": {Subject: "jane", Issuer: testRealm, ActorType: "human",
-		TokenID: "t-jane", Scopes: map[string]struct{}{"administrator:write": {}}, Roles: map[string]struct{}{}}},
+		TokenID: "t-jane", Scopes: map[string]struct{}{"administrator:write": {}}, Roles: map[string]struct{}{},
+		Assurance: auth.Assurance{ACR: "2", AuthenticatedAt: now}}},
 		Identities: identities, AdministrativeGrants: store, AdministrativeGrantAdmin: store})
 	delegate := func(tenant string) *httptest.ResponseRecorder {
 		raw, _ := json.Marshal(map[string]any{"principal_id": ids["bob"], "permission": "tenant.view",

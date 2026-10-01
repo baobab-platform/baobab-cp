@@ -291,13 +291,17 @@ func TestAddsAuthority(t *testing.T) {
 			t.Errorf("%s: AddsAuthority = %v, want %v", name, got, tc.adds)
 		}
 	}
+	// What a grant requires is its condition or its risk class's, whichever
+	// is stricter; dropping a condition only weakens a grant when the risk
+	// class does not already demand as much.
 	guarded := base
+	guarded.RiskClass = RiskLow
 	guarded.Conditions = &Conditions{MinimumACR: "urn:baobab:acr:mfa"}
-	weaker := same(func(g *Grant) {})
+	weaker := same(func(g *Grant) { g.RiskClass = RiskLow })
 	if !AddsAuthority(guarded, weaker, Relations{}) {
 		t.Error("dropping the assurance condition is a weaker grant")
 	}
-	kept := same(func(g *Grant) { g.Conditions = &Conditions{MinimumACR: "urn:baobab:acr:mfa"} })
+	kept := same(func(g *Grant) { g.RiskClass = RiskLow; g.Conditions = &Conditions{MinimumACR: "urn:baobab:acr:mfa"} })
 	if AddsAuthority(guarded, kept, Relations{}) {
 		t.Error("keeping the assurance condition added authority")
 	}

@@ -123,9 +123,11 @@ type Request struct {
 	Action          string
 	Resource        Resource
 	Now             time.Time
-	// SessionACRs are the authentication assurances the caller's session
-	// holds; a grant with a minimum_acr needs one of them to equal it.
-	SessionACRs []string
+	// Session is the caller's authentication assurance as the verified
+	// token asserts it. Each grant needs the strictest of its own
+	// minimum_acr and its risk class's requirement (assurance-policy.yaml);
+	// the zero Session is an unknown assurance and meets nothing above basic.
+	Session Session
 	// Grants are the principal's grants, in any state.
 	Grants []Grant
 	// Sources resolves delegation provenance: every grant a DELEGATION
@@ -189,8 +191,9 @@ func Evaluate(q Request) Decision {
 		return deny(reason)
 	}
 	var matched []string
+	policy := MustDefaultAssurance()
 	for _, g := range eligible {
-		if g.Conditions == nil || g.Conditions.MinimumACR == "" || slices.Contains(q.SessionACRs, g.Conditions.MinimumACR) {
+		if policy.Met(policy.Required(g), q.Session, q.Now) {
 			matched = append(matched, g.GrantID)
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -50,6 +51,22 @@ type Principal struct {
 	// "onboarding-requester". Empty unless the verifier was built
 	// WithClientRoles.
 	ClientRoles map[string]struct{}
+	// Assurance is how this token's holder authenticated, as the verified
+	// token asserts it (ADR-BCP-020 section 72). Descriptive only: it lets a
+	// grant's assurance condition be judged, and is never itself authority
+	// (section 74). Zero when the token carries none.
+	Assurance Assurance
+}
+
+// Assurance is the authentication assurance a verified token asserts
+// (identity/v1 AuthenticationAssurance): the acr and amr claims and the
+// auth_time of the authentication event. Keycloak sets acr from the level a
+// flow reached and auth_time on every (re)authentication, so a step-up moves
+// AuthenticatedAt forward. It emits no amr unless a mapper is configured.
+type Assurance struct {
+	ACR             string
+	AMR             []string
+	AuthenticatedAt time.Time
 }
 
 func (p Principal) HasScope(scope string) bool { _, ok := p.Scopes[scope]; return ok }
@@ -94,15 +111,18 @@ func NewOIDCVerifier(ctx context.Context, issuer, audience string) (*OIDCVerifie
 }
 
 type claims struct {
-	Subject     string `json:"sub"`
-	Scope       string `json:"scope"`
-	ActorType   string `json:"actor_type"`
-	TenantID    string `json:"tenant_id"`
-	ClientID    string `json:"azp"`
-	TokenID     string `json:"jti"`
-	IssuedAt    int64  `json:"iat"`
-	NotBefore   int64  `json:"nbf"`
-	ExpiresAt   int64  `json:"exp"`
+	Subject     string   `json:"sub"`
+	Scope       string   `json:"scope"`
+	ActorType   string   `json:"actor_type"`
+	TenantID    string   `json:"tenant_id"`
+	ClientID    string   `json:"azp"`
+	TokenID     string   `json:"jti"`
+	IssuedAt    int64    `json:"iat"`
+	NotBefore   int64    `json:"nbf"`
+	ExpiresAt   int64    `json:"exp"`
+	ACR         string   `json:"acr"`
+	AMR         []string `json:"amr"`
+	AuthTime    int64    `json:"auth_time"`
 	RealmAccess struct {
 		Roles []string `json:"roles"`
 	} `json:"realm_access"`
@@ -137,6 +157,10 @@ func (v *OIDCVerifier) Verify(ctx context.Context, raw string) (Principal, error
 	if c.NotBefore != 0 && time.Unix(c.NotBefore, 0).After(now.Add(ClockSkew)) {
 		return Principal{}, fmt.Errorf("%w: token is not active", ErrInvalidToken)
 	}
+	assurance, err := assuranceOf(c)
+	if err != nil {
+		return Principal{}, err
+	}
 	scopes := make(map[string]struct{})
 	for _, scope := range strings.Fields(c.Scope) {
 		if _, protocol := protocolScopes[scope]; protocol {
@@ -166,5 +190,27 @@ func (v *OIDCVerifier) Verify(ctx context.Context, raw string) (Principal, error
 	// ultimately keyed by (issuer, subject), not subject alone. token.Issuer
 	// comes from the verified ID token (checked against the configured
 	// provider during v.verifier.Verify above), not from an unverified claim.
-	return Principal{Subject: c.Subject, Issuer: token.Issuer, ActorType: c.ActorType, TenantID: c.TenantID, ClientID: c.ClientID, TokenID: c.TokenID, Scopes: scopes, Roles: roles, ClientRoles: clientRoles}, nil
+	return Principal{Subject: c.Subject, Issuer: token.Issuer, ActorType: c.ActorType, TenantID: c.TenantID, ClientID: c.ClientID, TokenID: c.TokenID, Scopes: scopes, Roles: roles, ClientRoles: clientRoles, Assurance: assurance}, nil
+}
+
+// maximumAssuranceValues bounds the amr list a token may carry.
+const maximumAssuranceValues = 16
+
+// assuranceOf reads the assurance claims. They are optional (a workload token
+// has none) but bounded: an oversized or malformed claim invalidates the
+// token rather than being silently truncated.
+func assuranceOf(c claims) (Assurance, error) {
+	if len(c.ACR) > 128 || len(c.AMR) > maximumAssuranceValues || c.AuthTime < 0 {
+		return Assurance{}, fmt.Errorf("%w: assurance claims are invalid", ErrInvalidToken)
+	}
+	for _, method := range c.AMR {
+		if method == "" || len(method) > 64 {
+			return Assurance{}, fmt.Errorf("%w: assurance claims are invalid", ErrInvalidToken)
+		}
+	}
+	a := Assurance{ACR: c.ACR, AMR: slices.Clone(c.AMR)}
+	if c.AuthTime > 0 {
+		a.AuthenticatedAt = time.Unix(c.AuthTime, 0).UTC()
+	}
+	return a, nil
 }

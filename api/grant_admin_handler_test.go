@@ -196,7 +196,7 @@ func TestGrantAdministrationAPI(t *testing.T) {
 
 	principal := func(subject string, roles bool, scopes ...string) auth.Principal {
 		p := auth.Principal{Subject: subject, Issuer: testRealm, ActorType: "human", TokenID: "t-" + subject,
-			Scopes: map[string]struct{}{}, Roles: map[string]struct{}{}}
+			Scopes: map[string]struct{}{}, Roles: map[string]struct{}{}, Assurance: auth.Assurance{ACR: "2", AuthenticatedAt: time.Now()}}
 		if roles {
 			p.Roles[RolePlatformAdmin] = struct{}{}
 		}
@@ -210,8 +210,13 @@ func TestGrantAdministrationAPI(t *testing.T) {
 		"opsreadonly": principal("ops", true, "administrator:read"),
 		"norole":      principal("ops", false, "administrator:read", "administrator:write"),
 		"jane":        principal("jane", false, "administrator:write"),
-		"bob":         principal("bob", false, "administrator:write"),
-		"dormant":     principal("dormant", true, "administrator:read", "administrator:write"),
+		"janepassword": func() auth.Principal {
+			p := principal("jane", false, "administrator:write")
+			p.Assurance = auth.Assurance{ACR: "1", AuthenticatedAt: time.Now()}
+			return p
+		}(),
+		"bob":     principal("bob", false, "administrator:write"),
+		"dormant": principal("dormant", true, "administrator:read", "administrator:write"),
 	}, Identities: identities, AdministrativeGrants: store, AdministrativeGrantAdmin: store})
 
 	var counter int
@@ -367,6 +372,10 @@ func TestGrantAdministrationAPI(t *testing.T) {
 	}
 	dpath := "/v1/admin/grants/agr_janesource/delegations"
 	expect(call("bob", http.MethodPost, dpath, delegation(ids["ops"]), nil), http.StatusForbidden, "NO_ADMINISTRATIVE_GRANT")
+	// administrator.delegate is HIGH risk: a password session is asked to
+	// step up (section 72) even though the grant is usable, and the step-up
+	// session is not (section 74: assurance proves nothing without a grant).
+	expect(call("janepassword", http.MethodPost, dpath, delegation(ids["ops"]), nil), http.StatusForbidden, "AUTHENTICATION_ASSURANCE_INSUFFICIENT")
 	expect(call("jane", http.MethodPost, dpath, delegation(ids["jane"]), nil), http.StatusForbidden, "SELF_APPROVAL_PROHIBITED")
 	expect(call("jane", http.MethodPost, dpath, delegation(ids["dormant"]), nil), http.StatusUnprocessableEntity, "PRINCIPAL_INACTIVE")
 	wide := delegation(ids["bob"])

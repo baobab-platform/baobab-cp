@@ -98,6 +98,7 @@ contracts:
   - contracts/administration/v1/profile-registry.yaml
   - contracts/administration/v1/lifecycle.yaml
   - contracts/administration/v1/separation-of-duties.yaml
+  - contracts/administration/v1/assurance-policy.yaml
   - contracts/subscriptions/v1/domain.schema.json
   - contracts/subscriptions/v1/billing.schema.json
   - contracts/subscriptions/v1/events.schema.json
