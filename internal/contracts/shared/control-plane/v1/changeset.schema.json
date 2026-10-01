@@ -1011,8 +1011,10 @@
           "enum": [
             "TENANT",
             "MARKET",
-            "MAPPING"
-          ]
+            "MAPPING",
+            "PROVIDER"
+          ],
+          "description": "The kind of resource changed: every change kind's target (changeset-lifecycle.yaml change_kinds target)."
         },
         "resource_id": {
           "type": "string",

@@ -45,13 +45,15 @@ const (
 	KindTenantReinstatement = "TENANT_REINSTATEMENT"
 	KindMarketActivation    = "MARKET_ACTIVATION"
 	KindMappingActivation   = "MAPPING_ACTIVATION"
+	KindProviderActivation  = "PROVIDER_ACTIVATION"
 )
 
 // Change kind targets.
 const (
-	TargetTenant  = "TENANT"
-	TargetMarket  = "MARKET"
-	TargetMapping = "MAPPING"
+	TargetTenant   = "TENANT"
+	TargetMarket   = "MARKET"
+	TargetMapping  = "MAPPING"
+	TargetProvider = "PROVIDER"
 )
 
 // Blocking codes (changeset_blocker).
@@ -70,15 +72,18 @@ const (
 	OpVerifyMarketState = "VERIFY_MARKET_STATE"
 	OpActivateMapping   = "ACTIVATE_MAPPING"
 	OpVerifyMapping     = "VERIFY_MAPPING_STATE"
+	OpActivateProvider  = "ACTIVATE_PROVIDER"
+	OpVerifyProvider    = "VERIFY_PROVIDER_STATE"
 )
 
 // DesiredChange is one of the desiredChange kinds. Exactly one of the
 // target identifiers is set, as the kind's schema branch requires.
 type DesiredChange struct {
-	Kind      string `json:"kind"`
-	TenantID  string `json:"tenant_id,omitempty"`
-	MarketID  string `json:"market_id,omitempty"`
-	MappingID string `json:"mapping_id,omitempty"`
+	Kind       string `json:"kind"`
+	TenantID   string `json:"tenant_id,omitempty"`
+	MarketID   string `json:"market_id,omitempty"`
+	MappingID  string `json:"mapping_id,omitempty"`
+	ProviderID string `json:"provider_id,omitempty"`
 }
 
 // TargetID is the identifier of the resource the change names.
@@ -88,12 +93,14 @@ func (d DesiredChange) TargetID() string {
 		return d.MarketID
 	case TargetMapping:
 		return d.MappingID
+	case TargetProvider:
+		return d.ProviderID
 	}
 	return d.TenantID
 }
 
-// TargetType is the resource type the change names (TENANT, MARKET or
-// MAPPING), or "" for an unsupported kind.
+// TargetType is the resource type the change names (TENANT, MARKET,
+// MAPPING or PROVIDER), or "" for an unsupported kind.
 func (d DesiredChange) TargetType() string { return Kinds()[d.Kind].Target }
 
 // label names the target in findings and summaries.
@@ -103,6 +110,8 @@ func (d DesiredChange) label() string {
 		return "Market " + d.MarketID
 	case TargetMapping:
 		return "Mapping " + d.MappingID
+	case TargetProvider:
+		return "Provider " + d.ProviderID
 	}
 	return "Tenant " + d.TenantID
 }
@@ -161,6 +170,7 @@ type StepResources struct {
 	TenantID       string `json:"tenant_id,omitempty"`
 	MarketID       string `json:"market_id,omitempty"`
 	MappingID      string `json:"mapping_id,omitempty"`
+	ProviderID     string `json:"provider_id,omitempty"`
 	FromStatus     string `json:"from_status,omitempty"`
 	ToStatus       string `json:"to_status,omitempty"`
 	TargetRevision int64  `json:"target_revision,omitempty"`
@@ -269,17 +279,21 @@ func Draft(req CreateRequest, id, requester, source, correlationID string, baseR
 	scope := administration.Scope{Level: administration.LevelPlatform}
 	switch d := req.DesiredChange; kind.Target {
 	case TargetTenant:
-		if !domain.ValidTenantID(d.TenantID) || d.MarketID != "" || d.MappingID != "" {
+		if !domain.ValidTenantID(d.TenantID) || d.MarketID != "" || d.MappingID != "" || d.ProviderID != "" {
 			return Changeset{}, fmt.Errorf("%w: tenant_id is not a Control Plane tenant identifier", ErrInvalid)
 		}
 		scope = administration.Scope{Level: administration.LevelTenant, TenantID: d.TenantID}
 	case TargetMarket:
-		if d.MarketID == "" || d.TenantID != "" || d.MappingID != "" {
+		if d.MarketID == "" || d.TenantID != "" || d.MappingID != "" || d.ProviderID != "" {
 			return Changeset{}, fmt.Errorf("%w: a market activation names exactly its market_id", ErrInvalid)
 		}
 	case TargetMapping:
-		if !domain.ValidMappingID(d.MappingID) || d.TenantID != "" || d.MarketID != "" {
+		if !domain.ValidMappingID(d.MappingID) || d.TenantID != "" || d.MarketID != "" || d.ProviderID != "" {
 			return Changeset{}, fmt.Errorf("%w: mapping_id is not a Control Plane mapping identifier", ErrInvalid)
+		}
+	case TargetProvider:
+		if !domain.ValidProviderID(d.ProviderID) || d.TenantID != "" || d.MarketID != "" || d.MappingID != "" {
+			return Changeset{}, fmt.Errorf("%w: provider_id is not a canonical capability provider identifier", ErrInvalid)
 		}
 	default:
 		return Changeset{}, fmt.Errorf("%w: change kind %q names no supported target", ErrInvalid, req.DesiredChange.Kind)

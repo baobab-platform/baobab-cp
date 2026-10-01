@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/changeset"
 	"github.com/baobab-platform/baobab-cp/internal/contracttest"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
@@ -321,5 +322,88 @@ func TestMappingActivationChangeset(t *testing.T) {
 	mustNoError(t, admin.QueryRow(ctx, `SELECT status, COALESCE(approved_by, '') FROM mapping.mapping WHERE mapping_id = $1`, id).Scan(&status, &approvedBy))
 	if status != "ACTIVE" || approvedBy != "approver-"+short {
 		t.Fatalf("mapping after apply: %s approved by %q", status, approvedBy)
+	}
+}
+
+// TestProviderActivationChangeset drives PROVIDER_ACTIVATION (EA-02D)
+// through the routes: a registered DRAFT provider is named by its
+// canonical provider_ id, its plan reports every plan check, and without a
+// recorded engine release (ADR-BCP-025 ER-02) the plan is BLOCKED by that
+// check. Approving needs provider:approve as well as changeset:approve.
+// The repository test covers the approved, applied path.
+func TestProviderActivationChangeset(t *testing.T) {
+	ctx, admin, repo := activationDatabase(t)
+	short := strings.ReplaceAll(domain.NewUUIDv7(), "-", "")[20:]
+	engine := "baobab-apiactivation" + short
+	providerKey, capabilityKey := engine+".engine", "test.apiactivation"+short+".perform"
+	var canonical string
+	cleanup := func() {
+		cleanupChangesets(ctx, admin, func() []string { return []string{canonical} })
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, providerKey)
+		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
+		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
+		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
+	}
+	cleanup()
+	t.Cleanup(cleanup)
+	definition := capabilitydomain.Capability{Key: capabilityKey, Name: "API activation test", DomainKey: "test",
+		Lifecycle: capabilitydomain.CapabilityLifecycleActive, Maturity: capabilitydomain.CapabilityMaturitySupported}
+	_, err := repo.SyncCapabilityCatalogue(ctx, []repository.CatalogueCapability{{Capability: definition, ContractVersions: []int{1},
+		DataClassification: "INTERNAL", Owner: engine, Source: "fixtures/api-activation-test", Digest: "sha256:" + strings.Repeat("4", 64)}})
+	mustNoError(t, err)
+	mustNoError(t, repo.RegisterEngine(ctx, repository.EngineRegistrationRecord{Repository: engine,
+		Capabilities: []capabilitydomain.Capability{definition},
+		Provider: repository.EngineRegistrationProvider{ProviderKey: providerKey, Name: "API activation test", ProviderType: "BAOBAB_ENGINE",
+			EngineKey: "engine", Lifecycle: "DRAFT", Ownership: engine},
+		Support: []repository.EngineRegistrationSupport{{CapabilityKey: capabilityKey, ContractVersions: []int{1}}}}))
+	var engineID string
+	mustNoError(t, admin.QueryRow(ctx, `SELECT canonical_provider_id, engine_id::text FROM capability.capability_provider WHERE provider_key = $1`,
+		providerKey).Scan(&canonical, &engineID))
+	_, err = admin.Exec(ctx, `INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status)
+		VALUES ($1, $2, 'af-south-1', 'staging', 'ACTIVE')`, domain.NewUUIDv7(), engineID)
+	mustNoError(t, err)
+
+	identities := repository.NewInMemoryRepository()
+	principal := func(subject string, scopes ...string) auth.Principal {
+		p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "human", Status: "ACTIVE"}
+		mustNoError(t, identities.CreateIdentity(ctx, p))
+		mustNoError(t, identities.LinkExternalIdentity(ctx, domain.ExternalIdentity{ID: domain.NewExternalIdentityID(),
+			PrincipalID: p.ID, Issuer: testRealm, Subject: subject + "-" + short, Status: "ACTIVE"}))
+		set := map[string]struct{}{}
+		for _, s := range scopes {
+			set[s] = struct{}{}
+		}
+		return auth.Principal{Subject: subject + "-" + short, Issuer: testRealm, ActorType: "human", TokenID: "pa-" + subject, Scopes: set,
+			Roles: map[string]struct{}{RolePlatformAdmin: {}}}
+	}
+	h := activationHarness{t: t, dir: contracttest.SharedDir(t), handler: New(Dependencies{Store: &fakeStore{}, Identities: identities,
+		Changesets: repo, Operations: repo, AdminVerifier: tokenVerifier{
+			"approver":   principal("approver", "changeset:read", "changeset:approve"),
+			"provider":   principal("provider", "provider:approve", "changeset:read", "changeset:approve"),
+			"requester":  principal("requester", "changeset:read", "changeset:write", "operation:read"),
+			"uuid-asker": principal("uuid-asker", "changeset:read", "changeset:write"),
+		}})}
+
+	// Only the canonical identifier names a provider.
+	uuid := h.call(http.MethodPost, "/v1/admin/changesets", "uuid-asker", map[string]string{"Idempotency-Key": "provider-uuid-" + short},
+		map[string]any{"title": "Activate", "reason": "Reviewed.", "desired_change": map[string]any{"kind": "PROVIDER_ACTIVATION", "provider_id": engineID}})
+	if uuid.Code != http.StatusBadRequest && uuid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("a UUID provider id: %d %s", uuid.Code, uuid.Body.String())
+	}
+
+	c, submitted := h.submitted("requester", "provider-activation-"+short, map[string]any{"kind": "PROVIDER_ACTIVATION", "provider_id": canonical})
+	if c.State != changeset.StateBlocked || c.ChangesetType != "MODIFY" || len(c.BlockingReasons) != 1 ||
+		c.BlockingReasons[0].Code != "PROVIDER_NO_ELIGIBLE_RELEASE" {
+		t.Fatalf("submitted: %+v", c)
+	}
+	plan := h.call(http.MethodGet, "/v1/admin/changesets/"+c.ChangesetID+"/plan", "requester", nil, nil)
+	h.expect(plan, http.StatusOK, `"ENGINE_RELEASE"`, "plan")
+	h.conforms("changeset.schema.json", "ChangesetPlan", plan)
+	h.expect(h.decide(c, submitted, "approver"), http.StatusForbidden, "provider:approve", "an approver without provider:approve")
+	h.expect(h.decide(c, submitted, "provider"), http.StatusConflict, "", "approving a blocked plan")
+	var status string
+	mustNoError(t, admin.QueryRow(ctx, `SELECT status FROM capability.capability_provider WHERE provider_key = $1`, providerKey).Scan(&status))
+	if status != "DRAFT" {
+		t.Fatalf("a blocked activation changed the provider to %s", status)
 	}
 }

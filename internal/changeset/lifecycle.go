@@ -24,6 +24,16 @@ type Kind struct {
 	FromStatus    []string `yaml:"from_status"`
 	ToStatus      string   `yaml:"to_status"`
 	Operations    []string `yaml:"operations"`
+	// PlanChecks are the inspections a plan of this kind runs, in order;
+	// each failure is a blocker with the check's code (EA-02D).
+	PlanChecks []PlanCheck `yaml:"plan_checks"`
+}
+
+// PlanCheck is one plan_checks entry: what is inspected and the
+// changeset_blocker code a failure records.
+type PlanCheck struct {
+	Check   string `yaml:"check"`
+	Blocker string `yaml:"blocker"`
 }
 
 type lifecycleDocument struct {

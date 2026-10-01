@@ -11,7 +11,7 @@ import (
 )
 
 // Target is the authoritative state of the resource a changeset names
-// (a tenant, market or mapping), read when it is planned.
+// (a tenant, market, mapping or provider), read when it is planned.
 type Target struct {
 	Found    bool
 	Status   string
@@ -22,6 +22,10 @@ type Target struct {
 	// LockedBy names the other changesets that have not ended and have
 	// been submitted against the same target (section 66).
 	LockedBy []string
+	// CheckFailures holds, for a kind with plan_checks, each failed check's
+	// explanation keyed by its check name. A check absent from it passed.
+	// The repository inspects authoritative state; planning only reports.
+	CheckFailures map[string]string
 }
 
 // PlanInput identifies the plan to generate.
@@ -64,6 +68,13 @@ func Validate(c Changeset, t Target) Validation {
 					Message: fmt.Sprintf("Changeset %s already changes %s.", other, strings.ToLower(c.DesiredChange.label()[:1])+c.DesiredChange.label()[1:])})
 			}
 		}
+		// Every plan check runs; each failure is its own blocker, so a
+		// blocked plan says everything that stands in the way at once.
+		for _, check := range kind.PlanChecks {
+			if message, failed := t.CheckFailures[check.Check]; failed {
+				v.Blockers = append(v.Blockers, Finding{Code: check.Blocker, Message: message})
+			}
+		}
 	}
 	return v
 }
@@ -96,6 +107,8 @@ func Generate(in PlanInput) (Plan, error) {
 			res.MarketID = c.DesiredChange.MarketID
 		case TargetMapping:
 			res.MappingID = c.DesiredChange.MappingID
+		case TargetProvider:
+			res.ProviderID = c.DesiredChange.ProviderID
 		default:
 			res.TenantID = c.DesiredChange.TenantID
 		}
@@ -114,7 +127,19 @@ func Generate(in PlanInput) (Plan, error) {
 		p.Steps = append(p.Steps, Step{StepID: id, Operation: op, DependsOn: deps, Resources: res})
 		previous = id
 	}
+	for _, check := range kind.PlanChecks {
+		description := "Passed."
+		if message, failed := in.Target.CheckFailures[check.Check]; failed {
+			description = "Failed: " + message
+		}
+		p.ReadinessRequirements = append(p.ReadinessRequirements, Check{Check: check.Check, Description: description})
+	}
 	switch {
+	case kind.Target == TargetProvider:
+		p.RiskClass = "HIGH"
+		p.ImpactAnalysis = ImpactAnalysis{Summary: fmt.Sprintf("Activates capability provider %s at revision %d: capability bindings may then name it.", c.DesiredChange.ProviderID, in.Target.Revision),
+			ResourcesChanged: 1, AvailabilityImpact: "None until a binding names the provider; resolution may then route to it."}
+		p.CompensationStrategy = "Suspend the provider through its own lifecycle; nothing irreversible is planned."
 	case kind.Target == TargetMarket:
 		p.RiskClass = "MEDIUM"
 		p.ImpactAnalysis = ImpactAnalysis{Summary: fmt.Sprintf("Activates market %s at revision %d: it becomes eligible for tenant placement.", c.DesiredChange.MarketID, in.Target.Revision),
