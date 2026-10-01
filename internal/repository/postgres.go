@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -1015,6 +1016,23 @@ const bindingProviderCheck = "capability_binding_active_provider_check"
 // the binding's contract major.
 var ErrBindingContractUnsupported = errors.New("the binding's provider does not support its contract version")
 
+// ErrBindingContractVersionInvalid: a binding's contract version must be a
+// capability contract major (ADR-BCP-025 section 2.1.1).
+var ErrBindingContractVersionInvalid = errors.New("the binding's contract_version is not a contract major")
+
+var contractVersionPattern = regexp.MustCompile(`^v?0*([1-9][0-9]{0,8})(\.[0-9]+(\.[0-9]+)?)?$`)
+
+// CanonicalContractVersion is the major a binding stores for a contract
+// version: "v1", "1" and "1.x.y" are all "1", as migration 000085 stored
+// every existing binding. Anything else is refused, never guessed.
+func CanonicalContractVersion(v string) (string, error) {
+	m := contractVersionPattern.FindStringSubmatch(strings.ToLower(strings.TrimSpace(v)))
+	if m == nil {
+		return "", fmt.Errorf("%w: %q", ErrBindingContractVersionInvalid, v)
+	}
+	return m[1], nil
+}
+
 // providerSupportsContract checks that providerID supports capabilityKey at
 // contractVersion's major.
 func (r *PostgresRepository) providerSupportsContract(ctx context.Context, providerID, capabilityKey, contractVersion string) error {
@@ -1056,6 +1074,11 @@ func (r *PostgresRepository) CreateBinding(ctx context.Context, binding resolver
 	if binding.CapabilityKey == "" || binding.EngineID == "" || binding.EngineInstanceID == "" || binding.ScopeID == "" {
 		return errors.New("capability, engine, engine instance, and scope are required")
 	}
+	contractVersion, err := CanonicalContractVersion(binding.ContractVersion)
+	if err != nil {
+		return err
+	}
+	binding.ContractVersion = contractVersion
 	// The binding's provider: the one it names, which must be eligible, or
 	// else the engine's only eligible provider for the capability.
 	var providers []string
@@ -1088,7 +1111,7 @@ func (r *PostgresRepository) CreateBinding(ctx context.Context, binding resolver
 	// This previously lower-cased status only, which silently defeated that
 	// constraint for every binding created through this path: see
 	// docs/adr/ADR-0005-bcp-db-001-conformance-gap.md.
-	_, err := r.pool.Exec(ctx, `
+	_, err = r.pool.Exec(ctx, `
 		INSERT INTO capability.capability_binding(capability_id, engine_instance_id, scope_id, binding_mode, priority, status, contract_version, effective_from, provider_id)
 		SELECT c.capability_id, ei.engine_instance_id, $4::uuid, UPPER($5), $6, UPPER($7), $8, now(), $9::uuid
 		FROM capability.capability c JOIN topology.engine_instance ei ON ei.engine_instance_id=$3::uuid AND ei.engine_id=$2::uuid
@@ -1100,6 +1123,11 @@ func (r *PostgresRepository) SaveBinding(ctx context.Context, binding resolver.C
 	if r == nil || r.pool == nil {
 		return errors.New("repository is not initialized")
 	}
+	contractVersion, err := CanonicalContractVersion(binding.ContractVersion)
+	if err != nil {
+		return err
+	}
+	binding.ContractVersion = contractVersion
 	if strings.EqualFold(binding.Status, "ACTIVE") {
 		// A binding without a provider is refused by
 		// capability_binding_active_provider_check below.

@@ -216,7 +216,18 @@ func bindingIdentityMatches(b resolver.CapabilityBinding, d DesiredCapabilityBin
 		b.EngineInstanceID == d.EngineInstanceID &&
 		b.ScopeID == d.ScopeID &&
 		b.BindingMode == d.BindingMode &&
-		b.ContractVersion == d.ContractVersion
+		sameContractMajor(b.ContractVersion, d.ContractVersion)
+}
+
+// sameContractMajor compares contract versions as the majors a binding
+// stores (ADR-BCP-025 section 2.1.1): "v1" desired matches "1" stored.
+func sameContractMajor(a, b string) bool {
+	ma, errA := repository.CanonicalContractVersion(a)
+	mb, errB := repository.CanonicalContractVersion(b)
+	if errA != nil || errB != nil {
+		return a == b
+	}
+	return ma == mb
 }
 
 func effectiveAt(from, fallback time.Time) time.Time {

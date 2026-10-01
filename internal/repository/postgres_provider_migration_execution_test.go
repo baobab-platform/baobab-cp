@@ -111,8 +111,8 @@ func TestProviderMigrationExecution(t *testing.T) {
 			($5::uuid, $6, 'UG', 'af-south-1', 'production')`, scopeA, tenantA, scopeB, tenantB, scopeC, tenantC)
 	exec(`INSERT INTO capability.capability_binding (id, capability_id, engine_instance_id, scope_id, binding_mode, status,
 		contract_version, effective_from, provider_id)
-		VALUES ($1::uuid, $3::uuid, $4::uuid, $5::uuid, 'PRIMARY', 'ACTIVE', 'v1', now() - interval '1 day', $7::uuid),
-			($2::uuid, $3::uuid, $4::uuid, $6::uuid, 'PRIMARY', 'ACTIVE', 'v1', now() - interval '1 day', $7::uuid)`,
+		VALUES ($1::uuid, $3::uuid, $4::uuid, $5::uuid, 'PRIMARY', 'ACTIVE', '1', now() - interval '1 day', $7::uuid),
+			($2::uuid, $3::uuid, $4::uuid, $6::uuid, 'PRIMARY', 'ACTIVE', '1', now() - interval '1 day', $7::uuid)`,
 		bindingA, bindingB, capability, sourceInstance, scopeA, scopeB, sourceProvider)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	if err := repo.RecordHealthObservation(ctx, health.Observation{Subject: health.Subject{EngineInstanceID: targetInstance},
@@ -306,7 +306,7 @@ func TestProviderMigrationExecution(t *testing.T) {
 	}
 	exec(`INSERT INTO capability.capability_binding (id, capability_id, engine_instance_id, scope_id, binding_mode, status,
 		contract_version, effective_from, provider_id)
-		VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'PRIMARY', 'ACTIVE', 'v1', now() - interval '1 hour', $5::uuid)`,
+		VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'PRIMARY', 'ACTIVE', '1', now() - interval '1 hour', $5::uuid)`,
 		bindingC, capability, sourceInstance, scopeC, sourceProvider)
 	if _, err := advanceKeyed(m.ProviderMigrationID, migration.TransitionPrepare, "adv-"+domain.NewUUIDv7()); !errors.Is(err, ErrProviderMigrationPlanStale) {
 		t.Fatalf("a plan made stale outside the migration: %v", err)

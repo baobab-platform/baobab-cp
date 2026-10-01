@@ -94,7 +94,7 @@ func TestProviderMigrationStore(t *testing.T) {
 			VALUES ($1::uuid, $2, 'KE', 'af-south-1', 'production')`, []any{scope, tenant}},
 		{`INSERT INTO capability.capability_binding (id, capability_id, engine_instance_id, scope_id, binding_mode, status,
 			contract_version, effective_from, provider_id)
-			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'PRIMARY', 'ACTIVE', 'v1', now() - interval '1 day', $5::uuid)`,
+			VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'PRIMARY', 'ACTIVE', '1', now() - interval '1 day', $5::uuid)`,
 			[]any{binding, capability, sourceInstance, scope, sourceProvider}},
 	} {
 		if _, err := admin.Exec(ctx, stmt.sql, stmt.args...); err != nil {
