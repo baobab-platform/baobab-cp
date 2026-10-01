@@ -47,6 +47,29 @@ type Config struct {
 	// TenantBootstrapRegistration enables the migration-only bootstrap
 	// registration route (ADR-BCP-017 sections 22-24). Off by default.
 	TenantBootstrapRegistration bool
+	// WorkloadRegistryFile is a local snapshot of Shared's
+	// contracts/identity/v1/workload-registry.yaml (WORKLOAD_REGISTRY_FILE).
+	// Shared owns workload identity and lifecycle, so a production Control
+	// Plane requires it and starts only with a valid one: a workload that is
+	// not ACTIVE has no runtime authority, and an absent registry never
+	// means "everyone is ACTIVE". Outside production it is optional and,
+	// when absent, workload lifecycle is not enforced (docs/adr ADR-0007 §45).
+	WorkloadRegistryFile string
+}
+
+// nonProductionEnvironments are the environments that are not production;
+// anything else, including unset, is production (see Environment).
+var nonProductionEnvironments = []string{"development", "test", "integration", "sandbox"}
+
+// Production reports whether the deployment is production: any environment
+// not named as non-production, including unset.
+func (c Config) Production() bool {
+	for _, e := range nonProductionEnvironments {
+		if c.Environment == e {
+			return false
+		}
+	}
+	return true
 }
 
 func Load() (Config, error) {
@@ -68,6 +91,10 @@ func Load() (Config, error) {
 	}
 	c.PlatformContextTTL = ttl
 	c.Environment = strings.ToLower(strings.TrimSpace(os.Getenv("BAOBAB_ENVIRONMENT")))
+	c.WorkloadRegistryFile = strings.TrimSpace(os.Getenv("WORKLOAD_REGISTRY_FILE"))
+	if c.Production() && c.WorkloadRegistryFile == "" {
+		return Config{}, errors.New("WORKLOAD_REGISTRY_FILE is required in production: the Control Plane enforces the canonical workload registry and fails closed without it")
+	}
 	if raw := strings.TrimSpace(os.Getenv("BILLING_ENGINE_URL")); raw != "" {
 		engine, err := url.Parse(raw)
 		if err != nil || engine.Host == "" || (engine.Scheme != "https" && !localIssuer(engine)) {

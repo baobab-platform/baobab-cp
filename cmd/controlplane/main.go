@@ -143,7 +143,23 @@ func main() {
 		Planner:  convergence.Planner{Registry: resolverRepository, Environment: cfg.Environment},
 		Pipeline: apply.StandardPipeline(provisioning.ZB02Dependencies{Tenants: db, Repo: resolverRepository, Provisioning: resolverRepository})}
 	go applyExecutor.Run(ctx, 2*time.Second)
-	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, OrganisationMappings: resolverRepository, Mappings: resolverRepository, Operations: resolverRepository, AdministrativeGrants: resolverRepository, ProviderMigrations: resolverRepository, EngineReleases: resolverRepository, DesiredReleases: resolverRepository, DeploymentObservations: resolverRepository, ReleaseDrift: resolverRepository, EngineMigrationTasks: resolverRepository, Changesets: resolverRepository, Markets: resolverRepository, Verification: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, MarketParticipations: resolverRepository, CapabilityResolutions: resolverRepository, OrganisationObservability: resolverRepository, PlatformAccounts: resolverRepository, Metrics: metrics.Default, Applications: applications, Classifications: classifications, Onboarding: &onboarding.Service{Repo: resolverRepository, Admissions: resolverRepository}, TenantBootstrapRegistration: cfg.TenantBootstrapRegistration, Environment: cfg.Environment}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	// The canonical workload registry is production authority (Shared
+	// workload-registry.yaml): a workload that is not ACTIVE has no runtime
+	// authority. Config requires the file in production; a file that cannot
+	// be loaded is fatal, never "enforcement off".
+	var workloadRegistry auth.WorkloadRegistry
+	if cfg.WorkloadRegistryFile != "" {
+		registry, err := auth.LoadWorkloadRegistryFile(cfg.WorkloadRegistryFile)
+		if err != nil {
+			slog.Error("workload registry unavailable", "error", err)
+			os.Exit(1)
+		}
+		workloadRegistry = registry
+		slog.Info("workload registry loaded", "file", cfg.WorkloadRegistryFile)
+	} else {
+		slog.Warn("workload registry not configured; workload lifecycle is not enforced (non-production only)", "environment", cfg.Environment)
+	}
+	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, OrganisationMappings: resolverRepository, Mappings: resolverRepository, Operations: resolverRepository, AdministrativeGrants: resolverRepository, ProviderMigrations: resolverRepository, EngineReleases: resolverRepository, DesiredReleases: resolverRepository, DeploymentObservations: resolverRepository, ReleaseDrift: resolverRepository, WorkloadRegistry: workloadRegistry, EngineMigrationTasks: resolverRepository, Changesets: resolverRepository, Markets: resolverRepository, Verification: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, MarketParticipations: resolverRepository, CapabilityResolutions: resolverRepository, OrganisationObservability: resolverRepository, PlatformAccounts: resolverRepository, Metrics: metrics.Default, Applications: applications, Classifications: classifications, Onboarding: &onboarding.Service{Repo: resolverRepository, Admissions: resolverRepository}, TenantBootstrapRegistration: cfg.TenantBootstrapRegistration, Environment: cfg.Environment}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		slog.Info("control plane listening", "address", cfg.HTTPAddress)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

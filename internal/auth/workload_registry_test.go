@@ -119,3 +119,59 @@ workloads:
 		}
 	}
 }
+
+// TestWorkloadRegistryLoaderFailsClosed: a snapshot that is empty, not YAML,
+// missing, or names a status outside the lifecycle is refused at startup,
+// never loaded as "nobody is ACTIVE" or "nothing is enforced".
+func TestWorkloadRegistryLoaderFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	for name, path := range map[string]string{
+		"missing":        filepath.Join(dir, "absent.yaml"),
+		"not yaml":       write("garbage.yaml", "workloads: [unterminated"),
+		"empty":          write("empty.yaml", "workloads: {}\n"),
+		"no section":     write("none.yaml", "schema: {name: x}\n"),
+		"unknown status": write("status.yaml", "workloads:\n  a:\n    status: ENABLED\n"),
+		"no status":      write("nostatus.yaml", "workloads:\n  a:\n    environment: production\n"),
+	} {
+		if registry, err := LoadWorkloadRegistryFile(path); err == nil {
+			t.Fatalf("%s: loaded %+v", name, registry)
+		}
+	}
+}
+
+// TestSharedWorkloadRegistryLifecycle loads the canonical registry from the
+// Shared checkout under test and checks what production would enforce: the
+// six ACTIVE entries are active, the two deliberately PROVISIONED identities
+// and the new production reporter are not, and loading the registry promotes
+// nothing. Skipped without SHARED_CONTRACTS_DIR.
+func TestSharedWorkloadRegistryLifecycle(t *testing.T) {
+	dir := os.Getenv("SHARED_CONTRACTS_DIR")
+	if dir == "" {
+		t.Skip("SHARED_CONTRACTS_DIR not set; skipping baobab-platform/shared contract-compatibility test")
+	}
+	registry, err := LoadWorkloadRegistryFile(filepath.Join(dir, "contracts", "identity", "v1", "workload-registry.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"baobab-cms-workload", "baobab-erp-workload", "baobab-pulse-workload", "baobab-trade-workload", "thamani-backend", "zuribeans-backend"} {
+		if !registry.IsActive(id) {
+			t.Errorf("%s is ACTIVE in Shared and must be accepted", id)
+		}
+	}
+	for _, id := range []string{"baobab-cp-workload", "baobab-subscriptions-workload", "unknown-workload"} {
+		if registry.IsActive(id) {
+			t.Errorf("%s must have no runtime authority", id)
+		}
+	}
+	// The production reporter, if registered, is not a reporter until ACTIVE.
+	if _, ok := registry.Reporter("baobab-deployment-controller-production"); ok && !registry.IsActive("baobab-deployment-controller-production") {
+		t.Error("a non-ACTIVE deployment controller must not be a reporter")
+	}
+}

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -124,6 +125,19 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 	var parsed workloadRegistryFile
 	if err := yaml.Unmarshal(data, &parsed); err != nil {
 		return nil, fmt.Errorf("parse workload registry file: %w", err)
+	}
+	// An empty registry would reject every workload, and an unreadable
+	// status would silently mean "not ACTIVE": either is a broken snapshot,
+	// refused at startup rather than served.
+	if len(parsed.Workloads) == 0 {
+		return nil, errors.New("workload registry file declares no workloads")
+	}
+	for clientID, entry := range parsed.Workloads {
+		switch entry.Status {
+		case "PROVISIONED", "ACTIVE", "SUSPENDED", "REVOKED", "RETIRED":
+		default:
+			return nil, fmt.Errorf("workload registry: %s has unknown status %q", clientID, entry.Status)
+		}
 	}
 	active := make(map[string]bool, len(parsed.Workloads))
 	reporters := map[string]ReporterScope{}
