@@ -213,6 +213,12 @@
         },
         {
           "$ref": "#/$defs/DesiredReleaseChange"
+        },
+        {
+          "$ref": "#/$defs/AdministrativeGrantIssuance"
+        },
+        {
+          "$ref": "#/$defs/AdministrativeGrantDelegation"
         }
       ]
     },
@@ -584,6 +590,34 @@
                   "const": "MODIFY"
                 }
               }
+            },
+            {
+              "properties": {
+                "desired_change": {
+                  "properties": {
+                    "kind": {
+                      "const": "ADMINISTRATIVE_GRANT_ISSUANCE"
+                    }
+                  }
+                },
+                "changeset_type": {
+                  "const": "MODIFY"
+                }
+              }
+            },
+            {
+              "properties": {
+                "desired_change": {
+                  "properties": {
+                    "kind": {
+                      "const": "ADMINISTRATIVE_GRANT_DELEGATION"
+                    }
+                  }
+                },
+                "changeset_type": {
+                  "const": "MODIFY"
+                }
+              }
             }
           ],
           "description": "The type is the one the change kind derives."
@@ -624,14 +658,17 @@
         "APPROVE_ENGINE_RELEASE",
         "VERIFY_ENGINE_RELEASE_STATE",
         "SET_DESIRED_RELEASE",
-        "VERIFY_DESIRED_RELEASE"
+        "VERIFY_DESIRED_RELEASE",
+        "ISSUE_ADMINISTRATIVE_GRANT",
+        "DELEGATE_ADMINISTRATIVE_GRANT",
+        "VERIFY_ADMINISTRATIVE_GRANT"
       ],
       "description": "Canonical changeset step operations. Extended additively as change kinds are added; each kind's operations are in changeset-lifecycle.yaml change_kinds."
     },
     "changesetStepResources": {
       "type": "object",
       "additionalProperties": false,
-      "description": "The one resource a step acts on and the statuses it moves between, in that resource's own lifecycle vocabulary. A step naming market_id is a market step (market status), one naming mapping_id a mapping step (mappingStatus), one naming provider_id a provider step (capability/v1 capabilityLifecycle), one naming release_id an engine release step (topology/v1 releaseStatus), one naming engine_instance_id an engine instance step (engineInstanceStatus), which may also name the desired_release_id it sets (null to clear); any other step is a tenant step, exactly as before market and mapping kinds existed (tenant lifecycleStatus). A step never names two resources. The Control Plane plans every step on the desired change's own resource; a plan whose step names another resource is never generated or applied.",
+      "description": "The one resource a step acts on and the statuses it moves between, in that resource's own lifecycle vocabulary. A step naming market_id is a market step (market status), one naming mapping_id a mapping step (mappingStatus), one naming provider_id a provider step (capability/v1 capabilityLifecycle), one naming release_id an engine release step (topology/v1 releaseStatus), one naming engine_instance_id an engine instance step (engineInstanceStatus), which may also name the desired_release_id it sets (null to clear); any other step is a tenant step, exactly as before market and mapping kinds existed (tenant lifecycleStatus). A step never names two resources. The Control Plane plans every step on the desired change's own resource; a plan whose step names another resource is never generated or applied. A step naming grantee_principal_id is an administrative grant issuance step (identity/v1 principal status); one naming source_grant_id is a delegation step (administration/v1 grantStatus); neither moves a status.",
       "properties": {
         "tenant_id": {
           "$ref": "domain.schema.json#/$defs/tenantId"
@@ -672,6 +709,14 @@
           "type": "integer",
           "minimum": 1,
           "description": "The target's revision the plan was computed against, where the target is revisioned (markets, mappings and providers; an engine release is not revisioned, and its plan records revision 1; an engine instance's revision is its desired-release version). Applying refuses a target whose revision has moved (PLAN_STALE), as the direct route's If-Match does."
+        },
+        "grantee_principal_id": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId",
+          "description": "An administrative grant issuance step's target: the principal the grant is for."
+        },
+        "source_grant_id": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/administrativeGrantId",
+          "description": "An administrative grant delegation step's target: the grant being delegated from. Its version is target_revision."
         }
       },
       "allOf": [
@@ -707,6 +752,16 @@
                 {
                   "required": [
                     "engine_instance_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "grantee_principal_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "source_grant_id"
                   ]
                 }
               ]
@@ -754,6 +809,16 @@
                   "required": [
                     "engine_instance_id"
                   ]
+                },
+                {
+                  "required": [
+                    "grantee_principal_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "source_grant_id"
+                  ]
                 }
               ]
             },
@@ -799,6 +864,16 @@
                 {
                   "required": [
                     "engine_instance_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "grantee_principal_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "source_grant_id"
                   ]
                 }
               ]
@@ -846,6 +921,16 @@
                   "required": [
                     "engine_instance_id"
                   ]
+                },
+                {
+                  "required": [
+                    "grantee_principal_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "source_grant_id"
+                  ]
                 }
               ]
             },
@@ -892,6 +977,16 @@
                   "required": [
                     "release_id"
                   ]
+                },
+                {
+                  "required": [
+                    "grantee_principal_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "source_grant_id"
+                  ]
                 }
               ]
             },
@@ -933,6 +1028,16 @@
                   "required": [
                     "engine_instance_id"
                   ]
+                },
+                {
+                  "required": [
+                    "grantee_principal_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "source_grant_id"
+                  ]
                 }
               ]
             }
@@ -958,6 +1063,118 @@
             "required": [
               "engine_instance_id"
             ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "grantee_principal_id"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "market_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "mapping_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "provider_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "release_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "engine_instance_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "source_grant_id"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "from_status": {
+                "$ref": "#/$defs/administrativePrincipalStatus"
+              },
+              "to_status": {
+                "$ref": "#/$defs/administrativePrincipalStatus"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "source_grant_id"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "market_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "mapping_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "provider_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "release_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "engine_instance_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "grantee_principal_id"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "from_status": {
+                "$ref": "../../administration/v1/domain.schema.json#/$defs/grantStatus"
+              },
+              "to_status": {
+                "$ref": "../../administration/v1/domain.schema.json#/$defs/grantStatus"
+              }
+            }
           }
         }
       ]
@@ -1316,6 +1533,106 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "desired_change": {
+                "properties": {
+                  "kind": {
+                    "const": "ADMINISTRATIVE_GRANT_ISSUANCE"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "changeset_type": {
+                "const": "MODIFY"
+              },
+              "steps": {
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "ISSUE_ADMINISTRATIVE_GRANT"
+                      },
+                      "resources": {
+                        "required": [
+                          "grantee_principal_id"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "VERIFY_ADMINISTRATIVE_GRANT"
+                      },
+                      "resources": {
+                        "required": [
+                          "grantee_principal_id"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "desired_change": {
+                "properties": {
+                  "kind": {
+                    "const": "ADMINISTRATIVE_GRANT_DELEGATION"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "changeset_type": {
+                "const": "MODIFY"
+              },
+              "steps": {
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "DELEGATE_ADMINISTRATIVE_GRANT"
+                      },
+                      "resources": {
+                        "required": [
+                          "source_grant_id"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "operation": {
+                        "const": "VERIFY_ADMINISTRATIVE_GRANT"
+                      },
+                      "resources": {
+                        "required": [
+                          "source_grant_id"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
         }
       ],
       "required": [
@@ -1360,7 +1677,9 @@
             "MAPPING",
             "PROVIDER",
             "ENGINE_RELEASE",
-            "ENGINE_INSTANCE"
+            "ENGINE_INSTANCE",
+            "ADMINISTRATIVE_PRINCIPAL",
+            "ADMINISTRATIVE_GRANT"
           ],
           "description": "The kind of resource changed: every change kind's target (changeset-lifecycle.yaml change_kinds target)."
         },
@@ -1515,6 +1834,145 @@
           }
         }
       ]
+    },
+    "AdministrativeGrantIssuance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "principal_id",
+        "permission",
+        "scope",
+        "grant_type"
+      ],
+      "description": "Issue an AdministrativeGrant through the maker-checker path (ADR-BCP-020 sections 38-41, gate ADA-06): the governed route for authority the direct route refuses with APPROVAL_REQUIRED (HIGH and CRITICAL). A MODIFY changeset targeting the grantee principal; its scope is the grant's scope. Planning inspects, side-effect free, each check in changeset-lifecycle.yaml change_kinds.ADMINISTRATIVE_GRANT_ISSUANCE.plan_checks. The approver holds administrator:approve and is neither the requester nor the grantee (separation-of-duties.yaml). On apply the grant is created as a DIRECT grant granted by the requester, with the approval as its approval_reference.",
+      "properties": {
+        "kind": {
+          "const": "ADMINISTRATIVE_GRANT_ISSUANCE"
+        },
+        "principal_id": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId"
+        },
+        "permission": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/administrativePermissionKey"
+        },
+        "scope": {
+          "$ref": "../../administration/v1/scope.schema.json#/$defs/AdministrativeScope"
+        },
+        "grant_type": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/grantType"
+        },
+        "valid_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "delegable_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 0
+        },
+        "conditions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minimum_acr": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "grant_type": {
+                "enum": [
+                  "TIME_BOUND",
+                  "JUST_IN_TIME"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "valid_until"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "grant_type": {
+                "const": "STANDING"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "valid_until"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "AdministrativeGrantDelegation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source_grant_id",
+        "principal_id",
+        "permission",
+        "scope",
+        "valid_until"
+      ],
+      "description": "Delegate part of a grant's authority through the maker-checker path (ADR-BCP-020 sections 42-48, gate ADA-06), for HIGH and CRITICAL permissions the direct delegations route refuses with APPROVAL_REQUIRED. A MODIFY changeset targeting the source grant, whose version is the plan's base revision, so a source that changes after planning makes the plan stale. The requester is the source grant's holder. Plan checks are changeset-lifecycle.yaml change_kinds.ADMINISTRATIVE_GRANT_DELEGATION.plan_checks. The approver holds administrator:approve and is neither the requester nor the delegate.",
+      "properties": {
+        "kind": {
+          "const": "ADMINISTRATIVE_GRANT_DELEGATION"
+        },
+        "source_grant_id": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/administrativeGrantId"
+        },
+        "principal_id": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId"
+        },
+        "permission": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/administrativePermissionKey"
+        },
+        "scope": {
+          "$ref": "../../administration/v1/scope.schema.json#/$defs/AdministrativeScope"
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "delegable_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        }
+      }
+    },
+    "administrativePrincipalStatus": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "SUSPENDED",
+        "DISABLED",
+        "ARCHIVED"
+      ],
+      "description": "A principal's lifecycle status, as identity/v1 principal.schema.json states it. Restated here because that schema's $id is not in this contract family; a validator keeps the two equal."
     }
   }
 }

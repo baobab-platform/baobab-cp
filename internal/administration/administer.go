@@ -28,6 +28,7 @@ const (
 	CodeApprovalRequired  = "APPROVAL_REQUIRED"
 	CodeDelegationInvalid = "DELEGATION_INVALID"
 	CodeTransitionInvalid = "GRANT_TRANSITION_INVALID"
+	CodeSoDViolation      = "SEPARATION_OF_DUTIES_VIOLATION"
 )
 
 const (
@@ -63,6 +64,25 @@ func EffectiveRisk(p Permission, scope Scope) RiskClass {
 // second person through the maker-checker path (section 38), which does not
 // exist yet (ADA-06), so they are refused rather than issued unreviewed.
 func PlanIssue(c *Catalogue, caller string, q IssueRequest, now time.Time) (Grant, error) {
+	return planIssue(c, caller, q, now, "")
+}
+
+// PlanApprovedIssue is PlanIssue for authority a second principal has
+// approved through an ADMINISTRATIVE_GRANT_ISSUANCE changeset: it skips only
+// the approval gate and records the approval as the grant's
+// approval_reference. A start that has passed since planning begins now;
+// authority is never backdated.
+func PlanApprovedIssue(c *Catalogue, requester string, q IssueRequest, now time.Time, approvalID string) (Grant, error) {
+	if approvalID == "" {
+		return Grant{}, refuse(CodeApprovalRequired, "an approved issue names its approval")
+	}
+	if q.ValidFrom != nil && q.ValidFrom.Before(now) {
+		q.ValidFrom = nil
+	}
+	return planIssue(c, requester, q, now, approvalID)
+}
+
+func planIssue(c *Catalogue, caller string, q IssueRequest, now time.Time, approvalID string) (Grant, error) {
 	if !principalID.MatchString(q.PrincipalID) {
 		return Grant{}, refuse(CodeInvalidGrant, "principal_id is not a canonical principal id")
 	}
@@ -100,8 +120,11 @@ func PlanIssue(c *Catalogue, caller string, q IssueRequest, now time.Time) (Gran
 		return Grant{}, refuse(CodeInvalidGrant, "%v", err)
 	}
 	if risk.AtLeast(RiskHigh) {
-		return Grant{}, refuse(CodeApprovalRequired,
-			"%s is %s risk at %s scope: request it as a Changeset so a second person approves it", q.Permission, risk, q.Scope.Level)
+		if approvalID == "" {
+			return Grant{}, refuse(CodeApprovalRequired,
+				"%s is %s risk at %s scope: request it as an ADMINISTRATIVE_GRANT_ISSUANCE changeset so a second person approves it", q.Permission, risk, q.Scope.Level)
+		}
+		g.ApprovalReference = approvalID
 	}
 	return g, nil
 }
@@ -123,6 +146,19 @@ type DelegationRequest struct {
 // no other); the delegation may not outlive the source or allow more hops
 // than the source has left; and a principal never delegates to themselves.
 func PlanDelegation(c *Catalogue, caller string, source Grant, sources map[string]Grant, q DelegationRequest, now time.Time) (Grant, error) {
+	return planDelegation(c, caller, source, sources, q, now, "")
+}
+
+// PlanApprovedDelegation is PlanDelegation for a delegation approved through
+// an ADMINISTRATIVE_GRANT_DELEGATION changeset.
+func PlanApprovedDelegation(c *Catalogue, delegator string, source Grant, sources map[string]Grant, q DelegationRequest, now time.Time, approvalID string) (Grant, error) {
+	if approvalID == "" {
+		return Grant{}, refuse(CodeApprovalRequired, "an approved delegation names its approval")
+	}
+	return planDelegation(c, delegator, source, sources, q, now, approvalID)
+}
+
+func planDelegation(c *Catalogue, caller string, source Grant, sources map[string]Grant, q DelegationRequest, now time.Time, approvalID string) (Grant, error) {
 	if source.PrincipalID != caller {
 		return Grant{}, refuse(CodeDelegationInvalid, "a principal delegates only grants they hold")
 	}
@@ -174,8 +210,11 @@ func PlanDelegation(c *Catalogue, caller string, source Grant, sources map[strin
 	// Delegating HIGH or CRITICAL authority is an authority change a second
 	// person approves (section 38), like issuing it.
 	if g.RiskClass.AtLeast(RiskHigh) {
-		return Grant{}, refuse(CodeApprovalRequired,
-			"delegating %s (%s risk) needs a second person's approval through the maker-checker path", q.Permission, g.RiskClass)
+		if approvalID == "" {
+			return Grant{}, refuse(CodeApprovalRequired,
+				"delegating %s (%s risk) is requested as an ADMINISTRATIVE_GRANT_DELEGATION changeset so a second person approves it", q.Permission, g.RiskClass)
+		}
+		g.ApprovalReference = approvalID
 	}
 	return g, nil
 }

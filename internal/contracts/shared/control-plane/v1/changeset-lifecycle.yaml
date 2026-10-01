@@ -135,6 +135,9 @@ triggers:
 # to_status, and its target keeps its status. approval_scope, where set, is the scope the
 # approver must also hold, so a changeset never grants authority the
 # resource's direct route would refuse (ADR-BCP-020, ADR-BCP-021 section 24).
+# request_scope, where set, is the scope the requester must also hold to
+# draft a changeset of that kind: changing administrative authority is itself
+# an administrative action (ADR-BCP-020 gate ADA-06).
 change_kinds:
   TENANT_SUSPENSION:
     target: TENANT
@@ -283,6 +286,73 @@ change_kinds:
       # an environment that requires it always blocks.
       - check: CERTIFICATION
         blocker: DESIRED_RELEASE_NOT_CERTIFIED
+  # ADR-BCP-020 sections 38-41 (gate ADA-06). The governed path to
+  # authority the direct issueAdministrativeGrant route refuses with
+  # APPROVAL_REQUIRED: a HIGH or CRITICAL grant. The target is the grantee
+  # principal, so two open issuance changesets for one principal are
+  # serialised (ADR-BCP-021 section 66). The approver holds
+  # administrator:approve and is neither the requester nor the grantee
+  # (administration/v1 separation-of-duties.yaml). On apply the grant is
+  # created as a DIRECT grant granted by the requester, with the approval as
+  # its approval_reference; the grant record is never amended afterwards.
+  ADMINISTRATIVE_GRANT_ISSUANCE:
+    target: ADMINISTRATIVE_PRINCIPAL
+    changeset_type: MODIFY
+    from_status: [ACTIVE]
+    changes: administrative_authority
+    request_scope: "administrator:write"
+    approval_scope: "administrator:approve"
+    operations: [ISSUE_ADMINISTRATIVE_GRANT, VERIFY_ADMINISTRATIVE_GRANT]
+    plan_checks:
+      # The grantee is an ACTIVE principal.
+      - check: GRANTEE_ACTIVE
+        blocker: GRANT_GRANTEE_NOT_ACTIVE
+      # The requester is not the grantee (section 39).
+      - check: REQUESTER_NOT_GRANTEE
+        blocker: GRANT_REQUESTER_IS_GRANTEE
+      # The permission is registered, grantable at the scope's level, and
+      # the scope names exactly its level's anchors.
+      - check: PERMISSION_GRANTABLE
+        blocker: GRANT_PERMISSION_NOT_GRANTABLE
+      # The validity window is well formed, starts no earlier than now, and
+      # meets every separation-of-duties policy bound for the grant's risk.
+      - check: VALIDITY_WINDOW
+        blocker: GRANT_VALIDITY_INVALID
+      # The grantee holds no live grant that conflicts with the permission
+      # under a separation-of-duties policy.
+      - check: SOD_CONFLICT
+        blocker: GRANT_SOD_CONFLICT
+      # The grantee does not already hold a live grant of the same
+      # permission over the same scope.
+      - check: NOT_ALREADY_HELD
+        blocker: GRANT_ALREADY_HELD
+  # ADR-BCP-020 sections 42-48 (gate ADA-06). The governed path to a
+  # delegation the direct delegateAdministrativeGrant route refuses with
+  # APPROVAL_REQUIRED. The target is the source grant and its version is the
+  # plan's base revision, so a source that changes after planning makes the
+  # plan stale. The requester is the source grant's holder.
+  ADMINISTRATIVE_GRANT_DELEGATION:
+    target: ADMINISTRATIVE_GRANT
+    changeset_type: MODIFY
+    from_status: [ACTIVE]
+    changes: administrative_authority
+    request_scope: "administrator:write"
+    approval_scope: "administrator:approve"
+    operations: [DELEGATE_ADMINISTRATIVE_GRANT, VERIFY_ADMINISTRATIVE_GRANT]
+    plan_checks:
+      - check: GRANTEE_ACTIVE
+        blocker: GRANT_GRANTEE_NOT_ACTIVE
+      - check: REQUESTER_NOT_GRANTEE
+        blocker: GRANT_REQUESTER_IS_GRANTEE
+      # The requester holds the source grant.
+      - check: REQUESTER_HOLDS_SOURCE
+        blocker: DELEGATION_REQUESTER_NOT_HOLDER
+      # Permission, scope, end and depth stay within the source grant, the
+      # permission is delegable, and the source is usable now.
+      - check: WITHIN_SOURCE
+        blocker: DELEGATION_EXCEEDS_SOURCE
+      - check: SOD_CONFLICT
+        blocker: GRANT_SOD_CONFLICT
 # Codes a changeset carries as blocking_reasons, or its plan as blockers;
 # each is registered in authorization/v1/reason-code-registry.yaml under
 # changeset_blocker.
@@ -307,3 +377,11 @@ blocking_codes:
   - DESIRED_RELEASE_ENGINE_MISMATCH
   - DESIRED_RELEASE_PROVENANCE_MISSING
   - DESIRED_RELEASE_NOT_CERTIFIED
+  - GRANT_GRANTEE_NOT_ACTIVE
+  - GRANT_REQUESTER_IS_GRANTEE
+  - GRANT_PERMISSION_NOT_GRANTABLE
+  - GRANT_VALIDITY_INVALID
+  - GRANT_SOD_CONFLICT
+  - GRANT_ALREADY_HELD
+  - DELEGATION_REQUESTER_NOT_HOLDER
+  - DELEGATION_EXCEEDS_SOURCE

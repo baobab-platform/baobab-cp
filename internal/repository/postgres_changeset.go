@@ -120,6 +120,10 @@ var targetQueries = map[string]string{
 	// An instance's revision for a desired-release change is its
 	// desired-release version (migration 000086).
 	changeset.TargetInstance: `SELECT status, desired_release_version, '' FROM topology.engine_instance WHERE engine_instance_key = $1`,
+	// A grant change targets the principal a grant is issued to (never
+	// revisioned, so 1) or the grant a delegation rests on (its version).
+	changeset.TargetAdminPrincipal: `SELECT status, 1::bigint, '' FROM identity.principal WHERE principal_id = $1::uuid`,
+	changeset.TargetAdminGrant:     `SELECT status, version, '' FROM policy.administrative_grant WHERE grant_id = $1::uuid`,
 }
 
 // TargetRevision is the current revision of the resource a desired change
@@ -133,7 +137,11 @@ func (r *PostgresRepository) TargetRevision(ctx context.Context, d changeset.Des
 		revision       int64
 		status, tenant string
 	)
-	err := r.pool.QueryRow(ctx, query, d.TargetID()).Scan(&status, &revision, &tenant)
+	arg, wellFormed := targetArg(d)
+	if !wellFormed {
+		return 0, false, nil
+	}
+	err := r.pool.QueryRow(ctx, query, arg).Scan(&status, &revision, &tenant)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, false, nil
 	}
@@ -249,7 +257,11 @@ func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool
 	if lock {
 		query += ` FOR UPDATE`
 	}
-	err := tx.QueryRow(ctx, query, c.DesiredChange.TargetID()).Scan(&t.Status, &t.Revision, &t.TenantID)
+	arg, wellFormed := targetArg(c.DesiredChange)
+	if !wellFormed {
+		return t, nil
+	}
+	err := tx.QueryRow(ctx, query, arg).Scan(&t.Status, &t.Revision, &t.TenantID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return t, nil
@@ -283,6 +295,11 @@ func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool
 	}
 	if c.DesiredChange.TargetType() == changeset.TargetRelease {
 		if t.CheckFailures, err = engineReleaseApprovalChecks(ctx, tx, c.DesiredChange.ReleaseID, environment); err != nil {
+			return t, err
+		}
+	}
+	if tt := c.DesiredChange.TargetType(); tt == changeset.TargetAdminPrincipal || tt == changeset.TargetAdminGrant {
+		if t.CheckFailures, err = grantChangeFailures(ctx, tx, c, now); err != nil {
 			return t, err
 		}
 	}
@@ -480,6 +497,8 @@ func checkTargetMakerChecker(ctx context.Context, tx pgx.Tx, c changeset.Changes
 		if is(creator) {
 			return fmt.Errorf("%w: %s", ErrMappingSelfApproval, c.DesiredChange.MappingID)
 		}
+	case changeset.TargetAdminPrincipal, changeset.TargetAdminGrant:
+		return checkGrantChangeIndependence(c, approver)
 	case changeset.TargetRelease:
 		var recorder string
 		err := tx.QueryRow(ctx, `SELECT recorded_by FROM topology.engine_release WHERE release_key = $1`, c.DesiredChange.ReleaseID).Scan(&recorder)
@@ -808,6 +827,8 @@ func (r *PostgresRepository) applyToTarget(ctx context.Context, tx pgx.Tx, c cha
 			return "", "", false, err
 		}
 		return "", "ENGINE_RELEASE_STATUS_MATCHES", status == kind.ToStatus, nil
+	case changeset.TargetAdminPrincipal, changeset.TargetAdminGrant:
+		return r.applyGrantChange(ctx, tx, c, plan, approver, now, actor)
 	case changeset.TargetInstance:
 		// Only an instance still at the planned desired-release version, in
 		// a status the kind starts from, changes; anything else changed
@@ -858,6 +879,9 @@ func titleCase(s string) string {
 // status before and after, or for a desired-release change the desired
 // release before and after (absent when none).
 func affectedResource(kind changeset.Kind, d changeset.DesiredChange, target changeset.Target) changeset.AffectedResource {
+	if kind.Target == changeset.TargetAdminPrincipal || kind.Target == changeset.TargetAdminGrant {
+		return changeset.AffectedResource{ResourceType: kind.Target, ResourceID: d.TargetID(), Before: target.Status, After: target.Status}
+	}
 	if kind.Changes != "" {
 		return changeset.AffectedResource{ResourceType: kind.Target, ResourceID: d.TargetID(), Before: target.DesiredReleaseID, After: d.ReleaseID}
 	}
@@ -866,6 +890,12 @@ func affectedResource(kind changeset.Kind, d changeset.DesiredChange, target cha
 
 // outcomeSummary says in one sentence what the applied change did.
 func outcomeSummary(kind changeset.Kind, d changeset.DesiredChange) string {
+	switch kind.Target {
+	case changeset.TargetAdminPrincipal:
+		return fmt.Sprintf("Principal %s was granted %s.", d.PrincipalID, d.Permission)
+	case changeset.TargetAdminGrant:
+		return fmt.Sprintf("Principal %s was delegated %s from grant %s.", d.PrincipalID, d.Permission, d.SourceGrantID)
+	}
 	if kind.Target == changeset.TargetInstance {
 		if d.ReleaseID == "" {
 			return fmt.Sprintf("Engine instance %s desires no release.", d.EngineInstanceID)

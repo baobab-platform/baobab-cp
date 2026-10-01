@@ -18,8 +18,11 @@ const lifecyclePath = "control-plane/v1/changeset-lifecycle.yaml"
 // from and produces, its canonical operations in order, and the scope an
 // approver must additionally hold, if any.
 type Kind struct {
-	Target        string   `yaml:"target"`
-	ApprovalScope string   `yaml:"approval_scope"`
+	Target        string `yaml:"target"`
+	ApprovalScope string `yaml:"approval_scope"`
+	// RequestScope is the scope a requester must also hold to draft a
+	// changeset of this kind (ADR-BCP-020 gate ADA-06).
+	RequestScope  string   `yaml:"request_scope"`
 	ChangesetType string   `yaml:"changeset_type"`
 	FromStatus    []string `yaml:"from_status"`
 	ToStatus      string   `yaml:"to_status"`

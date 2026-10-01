@@ -50,6 +50,8 @@ const (
 	KindProviderActivation  = "PROVIDER_ACTIVATION"
 	KindReleaseApproval     = "ENGINE_RELEASE_APPROVAL"
 	KindDesiredRelease      = "ENGINE_INSTANCE_DESIRED_RELEASE"
+	KindGrantIssuance       = administration.KindIssuance
+	KindGrantDelegation     = administration.KindDelegation
 )
 
 // Change kind targets.
@@ -60,6 +62,10 @@ const (
 	TargetProvider = "PROVIDER"
 	TargetRelease  = "ENGINE_RELEASE"
 	TargetInstance = "ENGINE_INSTANCE"
+	// TargetAdminPrincipal is the grantee of a grant issuance; TargetAdminGrant
+	// the source grant of a delegation.
+	TargetAdminPrincipal = "ADMINISTRATIVE_PRINCIPAL"
+	TargetAdminGrant     = "ADMINISTRATIVE_GRANT"
 )
 
 // Blocking codes (changeset_blocker).
@@ -84,6 +90,9 @@ const (
 	OpVerifyRelease     = "VERIFY_ENGINE_RELEASE_STATE"
 	OpSetDesired        = "SET_DESIRED_RELEASE"
 	OpVerifyDesired     = "VERIFY_DESIRED_RELEASE"
+	OpIssueGrant        = "ISSUE_ADMINISTRATIVE_GRANT"
+	OpDelegateGrant     = "DELEGATE_ADMINISTRATIVE_GRANT"
+	OpVerifyGrant       = "VERIFY_ADMINISTRATIVE_GRANT"
 )
 
 // DesiredChange is one of the desiredChange kinds. Exactly one of the
@@ -99,6 +108,18 @@ type DesiredChange struct {
 	ProviderID       string `json:"provider_id,omitempty"`
 	EngineInstanceID string `json:"engine_instance_id,omitempty"`
 	ReleaseID        string `json:"release_id,omitempty"`
+	// Administrative grant changes (ADMINISTRATIVE_GRANT_ISSUANCE and
+	// ADMINISTRATIVE_GRANT_DELEGATION): the grantee or delegate, the
+	// authority wanted and, for a delegation, the grant it rests on.
+	PrincipalID    string                     `json:"principal_id,omitempty"`
+	Permission     string                     `json:"permission,omitempty"`
+	Scope          *administration.Scope      `json:"scope,omitempty"`
+	GrantType      administration.GrantType   `json:"grant_type,omitempty"`
+	ValidFrom      *time.Time                 `json:"valid_from,omitempty"`
+	ValidUntil     *time.Time                 `json:"valid_until,omitempty"`
+	DelegableDepth int                        `json:"delegable_depth,omitempty"`
+	Conditions     *administration.Conditions `json:"conditions,omitempty"`
+	SourceGrantID  string                     `json:"source_grant_id,omitempty"`
 }
 
 // MarshalJSON writes release_id null for a desired-release change that
@@ -128,6 +149,10 @@ func (d DesiredChange) TargetID() string {
 		return d.ReleaseID
 	case TargetInstance:
 		return d.EngineInstanceID
+	case TargetAdminPrincipal:
+		return d.PrincipalID
+	case TargetAdminGrant:
+		return d.SourceGrantID
 	}
 	return d.TenantID
 }
@@ -150,6 +175,10 @@ func (d DesiredChange) label() string {
 		return "Engine release " + d.ReleaseID
 	case TargetInstance:
 		return "Engine instance " + d.EngineInstanceID
+	case TargetAdminPrincipal:
+		return "Principal " + d.PrincipalID
+	case TargetAdminGrant:
+		return "Grant " + d.SourceGrantID
 	}
 	return "Tenant " + d.TenantID
 }
@@ -213,9 +242,13 @@ type StepResources struct {
 	ReleaseID        string `json:"release_id,omitempty"`
 	EngineInstanceID string `json:"engine_instance_id,omitempty"`
 	DesiredReleaseID string `json:"desired_release_id,omitempty"`
-	FromStatus       string `json:"from_status,omitempty"`
-	ToStatus         string `json:"to_status,omitempty"`
-	TargetRevision   int64  `json:"target_revision,omitempty"`
+	// GranteePrincipalID is a grant issuance step's target; SourceGrantID a
+	// delegation step's.
+	GranteePrincipalID string `json:"grantee_principal_id,omitempty"`
+	SourceGrantID      string `json:"source_grant_id,omitempty"`
+	FromStatus         string `json:"from_status,omitempty"`
+	ToStatus           string `json:"to_status,omitempty"`
+	TargetRevision     int64  `json:"target_revision,omitempty"`
 }
 
 // MarshalJSON writes desired_release_id null on an engine instance step
@@ -359,6 +392,12 @@ func Draft(req CreateRequest, id, requester, source, correlationID string, baseR
 			d.TenantID != "" || d.MarketID != "" || d.MappingID != "" || d.ProviderID != "" {
 			return Changeset{}, fmt.Errorf("%w: a desired release change names an engine instance and a release or none", ErrInvalid)
 		}
+	case TargetAdminPrincipal, TargetAdminGrant:
+		sc, err := grantChangeScope(req.DesiredChange, kind.Target)
+		if err != nil {
+			return Changeset{}, err
+		}
+		scope = sc
 	default:
 		return Changeset{}, fmt.Errorf("%w: change kind %q names no supported target", ErrInvalid, req.DesiredChange.Kind)
 	}
@@ -370,6 +409,28 @@ func Draft(req CreateRequest, id, requester, source, correlationID string, baseR
 		RequestedAt: now, TargetScope: scope,
 		BaseRevision: baseRevision, DesiredChange: req.DesiredChange, State: StateDraft, CorrelationID: correlationID,
 		CreatedAt: now, UpdatedAt: now, Revision: 1}, nil
+}
+
+// grantChangeScope validates the shape of an administrative grant change and
+// returns its target scope: the scope of the authority it concerns. Whether
+// the authority is grantable is a plan check, not a shape error.
+func grantChangeScope(d DesiredChange, target string) (administration.Scope, error) {
+	if d.TenantID != "" || d.MarketID != "" || d.MappingID != "" || d.ProviderID != "" || d.ReleaseID != "" || d.EngineInstanceID != "" {
+		return administration.Scope{}, fmt.Errorf("%w: a grant change names no tenant, market, mapping, provider, release or instance", ErrInvalid)
+	}
+	if !domain.IsUUID(d.PrincipalID) || d.Permission == "" || d.Scope == nil {
+		return administration.Scope{}, fmt.Errorf("%w: a grant change names a principal, a permission and a scope", ErrInvalid)
+	}
+	if target == TargetAdminGrant && (d.SourceGrantID == "" || d.GrantType != "") {
+		return administration.Scope{}, fmt.Errorf("%w: a delegation names its source_grant_id and no grant_type", ErrInvalid)
+	}
+	if target == TargetAdminPrincipal && (d.SourceGrantID != "" || d.GrantType == "") {
+		return administration.Scope{}, fmt.Errorf("%w: an issuance names its grant_type and no source_grant_id", ErrInvalid)
+	}
+	if err := d.Scope.Validate(); err != nil {
+		return administration.Scope{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	return *d.Scope, nil
 }
 
 // Approval outcomes (approvalOutcome).

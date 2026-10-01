@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/administration"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 )
 
@@ -261,5 +262,75 @@ func TestProviderActivation(t *testing.T) {
 	}
 	if active := Validate(c, Target{Found: true, Status: "ACTIVE", Revision: 3}); len(active.Blockers) != 1 || active.Blockers[0].Code != BlockTargetStateConflict {
 		t.Fatalf("from ACTIVE: %+v", active)
+	}
+}
+
+// Administrative grant changes (ADR-BCP-020 gate ADA-06): the draft takes
+// the grant's scope as its target scope, the plan carries the permission's
+// risk and acts on the grantee or the source grant alone, and a malformed
+// shape is refused at drafting.
+func TestAdministrativeGrantChangeKinds(t *testing.T) {
+	now := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	until := now.Add(48 * time.Hour)
+	scope := administration.Scope{Level: administration.LevelTenant, TenantID: "tn_acmeug"}
+	grantee := "2f1c5c3e-8f0e-4a55-9a3b-5d7f9a1b2c3d"
+	issue := DesiredChange{Kind: KindGrantIssuance, PrincipalID: grantee, Permission: "tenant.suspend", Scope: &scope,
+		GrantType: administration.TypeTimeBound, ValidUntil: &until}
+	c, err := Draft(CreateRequest{Title: "Grant", Reason: "Cover.", DesiredChange: issue}, "cs_issue", "prn_maker", "API", "", 1, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ChangesetType != "MODIFY" || c.TargetScope.TenantID != "tn_acmeug" || c.DesiredChange.TargetType() != TargetAdminPrincipal ||
+		c.DesiredChange.TargetID() != grantee {
+		t.Fatalf("unexpected draft %+v", c)
+	}
+	plan, err := Generate(PlanInput{Changeset: c, Target: Target{Found: true, Status: "ACTIVE", Revision: 1}, PlanID: "plan_1", PlanVersion: 1, Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.RiskClass != "HIGH" || len(plan.Steps) != 2 || plan.Steps[0].Operation != OpIssueGrant ||
+		plan.Steps[0].Resources.GranteePrincipalID != grantee || plan.Steps[1].Operation != OpVerifyGrant || len(plan.Blockers) != 0 {
+		t.Fatalf("unexpected plan %+v", plan)
+	}
+	again, _ := Generate(PlanInput{Changeset: c, Target: Target{Found: true, Status: "ACTIVE", Revision: 1}, PlanID: "plan_1", PlanVersion: 1, Now: now})
+	if again.PlanDigest != plan.PlanDigest {
+		t.Fatal("planning the same change twice produced two digests")
+	}
+	critical := issue
+	platform := administration.Scope{Level: administration.LevelPlatform}
+	critical.Permission, critical.Scope = "administrator.grant", &platform
+	cc, _ := Draft(CreateRequest{Title: "Grant", Reason: "Cover.", DesiredChange: critical}, "cs_crit", "prn_maker", "API", "", 1, now)
+	if p, _ := Generate(PlanInput{Changeset: cc, Target: Target{Found: true, Status: "ACTIVE", Revision: 1}, PlanID: "plan_2", PlanVersion: 1, Now: now}); p.RiskClass != "CRITICAL" {
+		t.Fatalf("administrator.grant at PLATFORM planned %s", p.RiskClass)
+	}
+	// A principal that is not active blocks through the kind's status vocabulary.
+	if v := Validate(c, Target{Found: true, Status: "SUSPENDED", Revision: 1}); len(v.Blockers) == 0 {
+		t.Fatal("a suspended grantee did not block")
+	}
+	source := DesiredChange{Kind: KindGrantDelegation, SourceGrantID: "agr_01k9src0001", PrincipalID: grantee, Permission: "tenant.suspend", Scope: &scope, ValidUntil: &until}
+	d, err := Draft(CreateRequest{Title: "Delegate", Reason: "Cover.", DesiredChange: source}, "cs_deleg", "prn_maker", "API", "", 3, now)
+	if err != nil || d.DesiredChange.TargetType() != TargetAdminGrant || d.DesiredChange.TargetID() != "agr_01k9src0001" {
+		t.Fatalf("delegation draft: %+v %v", d, err)
+	}
+	dp, _ := Generate(PlanInput{Changeset: d, Target: Target{Found: true, Status: "ACTIVE", Revision: 3}, PlanID: "plan_3", PlanVersion: 1, Now: now})
+	if dp.Steps[0].Operation != OpDelegateGrant || dp.Steps[0].Resources.SourceGrantID != "agr_01k9src0001" || dp.Steps[0].Resources.TargetRevision != 3 {
+		t.Fatalf("unexpected delegation plan %+v", dp.Steps)
+	}
+	for name, bad := range map[string]DesiredChange{
+		"issuance without a scope":       {Kind: KindGrantIssuance, PrincipalID: grantee, Permission: "tenant.suspend", GrantType: administration.TypeStanding},
+		"issuance naming a source grant": {Kind: KindGrantIssuance, PrincipalID: grantee, Permission: "tenant.suspend", Scope: &scope, GrantType: administration.TypeStanding, SourceGrantID: "agr_x1234567"},
+		"delegation without a source":    {Kind: KindGrantDelegation, PrincipalID: grantee, Permission: "tenant.suspend", Scope: &scope},
+		"an email as the principal":      {Kind: KindGrantIssuance, PrincipalID: "jane@acme.example", Permission: "tenant.suspend", Scope: &scope, GrantType: administration.TypeStanding},
+		"a malformed scope":              {Kind: KindGrantIssuance, PrincipalID: grantee, Permission: "tenant.suspend", Scope: &administration.Scope{Level: administration.LevelTenant}, GrantType: administration.TypeStanding},
+	} {
+		if _, err := Draft(CreateRequest{Title: "x", Reason: "y", DesiredChange: bad}, "cs_bad", "prn_maker", "API", "", 1, now); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s was accepted: %v", name, err)
+		}
+	}
+	for _, kind := range []string{KindGrantIssuance, KindGrantDelegation} {
+		spec := Kinds()[kind]
+		if spec.RequestScope != "administrator:write" || spec.ApprovalScope != "administrator:approve" {
+			t.Errorf("%s request/approval scopes are %q/%q", kind, spec.RequestScope, spec.ApprovalScope)
+		}
 	}
 }
