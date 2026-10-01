@@ -373,6 +373,18 @@ func TestGrantAdministrationAPI(t *testing.T) {
 	if d := validateGrant(made); d.Source != administration.SourceDelegation || d.DelegatedFromGrantID != "agr_janesource" || d.GrantedBy != ids["jane"] {
 		t.Fatalf("unexpected delegation %+v", d)
 	}
+	// A provably narrower scope (here one environment) is delegable, and the
+	// delegation keeps it. A scope the source does not contain is not.
+	inProduction := delegation(ids["ops"])
+	inProduction["scope"] = map[string]any{"level": "TENANT", "tenant_id": "tn_acmeug", "environment": "production"}
+	narrowed := call("jane", http.MethodPost, dpath, inProduction, nil)
+	expect(narrowed, http.StatusCreated, "")
+	if d := validateGrant(narrowed); d.Scope.Environment != "production" || d.DelegatedFromGrantID != "agr_janesource" {
+		t.Fatalf("the narrower delegation lost its scope: %+v", d)
+	}
+	elsewhere := delegation(ids["ops"])
+	elsewhere["scope"] = map[string]any{"level": "TENANT", "tenant_id": "tn_other"}
+	expect(call("jane", http.MethodPost, dpath, elsewhere, nil), http.StatusForbidden, "SCOPE_MISMATCH")
 	// Bob's delegation cannot be delegated further: the source allowed one hop.
 	bobsPath := "/v1/admin/grants/" + validateGrant(made).GrantID + "/delegations"
 	expect(call("bob", http.MethodPost, bobsPath, delegation(ids["ops"]), nil), http.StatusForbidden, "NO_ADMINISTRATIVE_GRANT")

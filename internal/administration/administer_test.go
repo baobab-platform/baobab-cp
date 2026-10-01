@@ -127,7 +127,7 @@ func TestPlanDelegationNeverExceedsTheSource(t *testing.T) {
 		"to oneself":              {"prn_jane", func(q *DelegationRequest) { q.PrincipalID = "prn_jane" }, CodeSelfApproval},
 		"another permission":      {"prn_jane", func(q *DelegationRequest) { q.Permission = "tenant.suspend" }, CodeDelegationInvalid},
 		"a wider scope":           {"prn_jane", func(q *DelegationRequest) { q.Scope = Scope{Level: LevelPlatform} }, CodeDelegationInvalid},
-		"a narrower scope":        {"prn_jane", func(q *DelegationRequest) { q.Scope.Environment = "production" }, CodeDelegationInvalid},
+		"an unrelated tenant":     {"prn_jane", func(q *DelegationRequest) { q.Scope = Scope{Level: LevelTenant, TenantID: "tn_other"} }, CodeDelegationInvalid},
 		"beyond the source's end": {"prn_jane", func(q *DelegationRequest) { q.ValidUntil = end.Add(time.Hour) }, CodeDelegationInvalid},
 		"more hops than are left": {"prn_jane", func(q *DelegationRequest) { q.DelegableDepth = 2 }, CodeDelegationInvalid},
 		"already ended":           {"prn_jane", func(q *DelegationRequest) { q.ValidUntil = now.Add(-time.Minute) }, CodeInvalidGrant},
@@ -283,7 +283,8 @@ func TestAddsAuthority(t *testing.T) {
 		"no end at all":          {same(func(g *Grant) { g.GrantType, g.ValidUntil = TypeStanding, nil }), true},
 		"another permission":     {same(func(g *Grant) { g.Permission = "tenant.activate" }), true},
 		"another scope":          {same(func(g *Grant) { g.Scope = Scope{Level: LevelTenant, TenantID: "tn_other"} }), true},
-		"a narrower environment": {same(func(g *Grant) { g.Scope.Environment = "production" }), true}, // exact comparison until containment exists
+		"a narrower environment": {same(func(g *Grant) { g.Scope.Environment = "production" }), false},
+		"a wider environment":    {func() Grant { g := same(func(*Grant) {}); return g }(), false},
 		"more delegation":        {same(func(g *Grant) { g.DelegableDepth = 1 }), true},
 	} {
 		if got := AddsAuthority(base, tc.next); got != tc.adds {

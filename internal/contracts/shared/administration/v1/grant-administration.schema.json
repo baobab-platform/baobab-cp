@@ -106,7 +106,7 @@
         "dependent_delegations": {
           "type": "string",
           "enum": ["REVOKE"],
-          "description": "What happens to grants delegated from the replaced grant. REVOKE ends them with it, as revoking would (section 47); the response lists them so they can be delegated again. A delegation rests on its source's exact permission and scope, so re-pointing is not offered; other values may be added."
+          "description": "What happens to grants delegated from the replaced grant. REVOKE ends them with it, as revoking would (section 47); the response lists them so they can be delegated again. A delegation rests on its source's permission and a scope within it, which a replacement may change, so re-pointing is not offered; other values may be added."
         },
         "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
       },

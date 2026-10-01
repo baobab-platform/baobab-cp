@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.28.0
+  version: 1.28.1
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -5160,7 +5160,7 @@ paths:
         replacement that adds authority at HIGH or CRITICAL risk is refused
         with APPROVAL_REQUIRED (409) and is requested as an
         ADMINISTRATIVE_GRANT_ISSUANCE changeset naming replaces_grant_id. A
-        replacement that adds none (same permission and scope, no later end,
+        replacement that adds none (same permission, a scope within the old one, no later end,
         no more delegation, no weaker condition) is made directly, as a
         revoke is. Grants delegated from the replaced grant are handled as
         dependent_delegations states and listed in the response. A stale
@@ -5232,8 +5232,11 @@ paths:
         (422). Delegating to oneself is SELF_APPROVAL_PROHIBITED (403).
         Delegating a HIGH or CRITICAL permission is refused with
         APPROVAL_REQUIRED (409): it is requested as an
-        ADMINISTRATIVE_GRANT_DELEGATION changeset, like issuing one (ADA-06). A delegation carries the source grant's scope
-        exactly.
+        ADMINISTRATIVE_GRANT_DELEGATION changeset, like issuing one (ADA-06). The
+        delegation's scope is the source grant's or one provably within it
+        (administration/v1 README, "Scope containment"); where containment
+        cannot be proven the delegation is refused with DELEGATION_INVALID
+        (422), never widened.
       security:
         - adminOidc: [administrator:write]
       parameters:

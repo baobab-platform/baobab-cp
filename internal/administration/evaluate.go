@@ -212,7 +212,7 @@ func ineligibility(g Grant, now time.Time, sources map[string]Grant, hops int) s
 	}
 	source, ok := sources[g.DelegatedFromGrantID]
 	if !ok || hops >= 3 || g.GrantedBy != source.PrincipalID || source.Permission != g.Permission ||
-		!sameScope(source.Scope, g.Scope) || g.DelegationDepth != source.DelegationDepth+1 ||
+		!Contains(source.Scope, g.Scope) || g.DelegationDepth != source.DelegationDepth+1 ||
 		source.DelegableDepth < 1 || g.DelegableDepth > source.DelegableDepth-1 ||
 		(source.ValidUntil != nil && (g.ValidUntil == nil || g.ValidUntil.After(*source.ValidUntil))) {
 		return "DELEGATION_INVALID"
