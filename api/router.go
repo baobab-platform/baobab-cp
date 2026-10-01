@@ -163,6 +163,14 @@ type Dependencies struct {
 	// AdministrativeGrantAdmin backs the /v1/admin/grants routes, the
 	// grant administration API (ADR-BCP-020 gate ADA-05). Nil disables them.
 	AdministrativeGrantAdmin repository.AdministrativeGrantAdministrator
+	// ShadowEvidence keeps the roles-versus-grants comparison and backs
+	// GET /v1/admin/authority-migration/readiness (ADR-BCP-020 section 144).
+	// Nil keeps only the Prometheus counter and disables the route.
+	ShadowEvidence repository.ShadowEvidenceRepository
+	// EnforcementRollback lists permissions (or "*") returned to the role
+	// decision at once, without a release. It can only return authority to
+	// roles; it can never enforce anything.
+	EnforcementRollback []string
 	// WorkloadRegistry backs request-time enforcement of ADR-0007 §45's
 	// workload lifecycle status (Gate ZB-03.10, closing the gap
 	// docs/reconciliation/gate-zb03-authority-contract-freeze.md §7 named):
@@ -201,12 +209,31 @@ type API struct {
 	// verification resolves the organisation a verification route acts
 	// on, for shadow evaluation.
 	verification repository.VerificationRepository
+	// evidence keeps the shadow comparison beyond a restart; nil keeps only
+	// the Prometheus counter.
+	evidence *shadowRecorder
+	// enforcement decides, per permission, whether roles or grants decide.
+	// Roles are authoritative unless the owner's enforcement policy says
+	// otherwise.
+	enforcement *administration.Enforcement
 }
 
 func New(dependencies Dependencies) http.Handler {
 	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships,
 		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration,
 		grants: dependencies.AdministrativeGrants, environment: dependencies.Environment, platformAccounts: dependencies.PlatformAccounts, markets: dependencies.Markets, verification: dependencies.Verification}
+	catalogue, err := administration.DefaultCatalogue()
+	if err != nil {
+		panic(err)
+	}
+	enforcementPolicy, err := administration.DefaultEnforcementPolicy()
+	if err != nil {
+		panic(err)
+	}
+	a.enforcement = administration.NewEnforcement(enforcementPolicy, catalogue, dependencies.EnforcementRollback)
+	if a.evidence = newShadowRecorder(dependencies.ShadowEvidence); a.evidence != nil {
+		go a.evidence.run(shadowFlushInterval)
+	}
 	// ADR-BCP-004 §52: shared by every handler that builds a trusted
 	// Context, so the tenant/legal-entity fail-closed stages apply
 	// uniformly to /v1/resolve and /v1/platform-context/resolve alike.
@@ -258,16 +285,19 @@ func New(dependencies Dependencies) http.Handler {
 		authority := effectiveAuthorityHandler{identities: dependencies.Identities, grants: dependencies.AdministrativeGrants}
 		r.With(a.authorize(a.adminVerifier, "human", "authority:self")).Get("/v1/admin/effective-authority", authority.get)
 	}
+	if dependencies.ShadowEvidence != nil {
+		// Readiness of each permission to move from roles to grants: evidence
+		// for the owner's decision, enforcing nothing.
+		migration := authorityMigrationHandler{store: dependencies.ShadowEvidence, recorder: a.evidence, policy: enforcementPolicy,
+			catalogue: catalogue, enforcement: a.enforcement, clock: func() time.Time { return time.Now().UTC() }}
+		r.With(a.authorize(a.adminVerifier, "human", "administrator:read"), a.requireAdminRole(nil, true)).Get("/v1/admin/authority-migration/readiness", migration.get)
+	}
 	if dependencies.AdministrativeGrantAdmin != nil && dependencies.Identities != nil {
 		// Grant administration (ADR-BCP-020 gate ADA-05). Roles stay
 		// authoritative for everything but delegation: the platform
 		// administrator role guards the routes while the comparison with the
 		// caller's own grants is shadowed. Delegation has no legacy role and
 		// is decided by the caller's grants alone.
-		catalogue, err := administration.DefaultCatalogue()
-		if err != nil {
-			panic(err)
-		}
 		admin := grantAdminHandler{identities: dependencies.Identities, grants: dependencies.AdministrativeGrantAdmin,
 			catalogue: catalogue, environment: dependencies.Environment}
 		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "administrator:read"), a.requireAdminRole(nil, true)}
@@ -283,7 +313,7 @@ func New(dependencies Dependencies) http.Handler {
 		// Platform administrators read every operation; a tenant
 		// administrator reads those of its own tenants (the handler decides
 		// once it knows the operation's tenant).
-		ops := operationHandler{repo: dependencies.Operations, tenantAdminOf: a.tenantAdminOf}
+		ops := operationHandler{repo: dependencies.Operations, tenantAdminOf: a.tenantAdminOf, shadow: a.shadowOperationDecision}
 		r.With(a.authorize(a.adminVerifier, "human", "operation:read")).Get("/v1/admin/operations/{operationID}", ops.get)
 	}
 	if dependencies.Mappings != nil {
@@ -530,7 +560,7 @@ func New(dependencies Dependencies) http.Handler {
 		// Retrying or cancelling execution is an operation command; the
 		// handler admits the operation's readers (tenant administrators of
 		// its tenant, platform administrators).
-		commands := operationCommands{read: operationHandler{tenantAdminOf: a.tenantAdminOf}, plans: plans}
+		commands := operationCommands{read: operationHandler{tenantAdminOf: a.tenantAdminOf, shadow: a.shadowOperationDecision}, plans: plans}
 		r.With(a.authorize(a.adminVerifier, "human", "operation:control")).Post("/v1/admin/operations/{operationID}/retry", commands.retry)
 		r.With(a.authorize(a.adminVerifier, "human", "operation:control")).Post("/v1/admin/operations/{operationID}/cancel", commands.cancel)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/readiness", prov.readiness)

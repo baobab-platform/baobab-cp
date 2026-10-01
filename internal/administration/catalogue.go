@@ -12,6 +12,7 @@ package administration
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"sync"
 
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
@@ -48,6 +49,16 @@ type Catalogue struct {
 func (c *Catalogue) Permission(key string) (Permission, bool) {
 	p, ok := c.permissions[key]
 	return p, ok
+}
+
+// Permissions lists every registered permission, ordered by key.
+func (c *Catalogue) Permissions() []Permission {
+	out := make([]Permission, 0, len(c.permissions))
+	for _, p := range c.permissions {
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
 }
 
 // Profile looks up a registered profile.

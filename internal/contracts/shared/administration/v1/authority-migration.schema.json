@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/administration/v1/authority-migration.schema.json",
+  "title": "Roles-to-grants migration: the reviewed population and the readiness evidence",
+  "description": "The two documents the migration from realm roles to AdministrativeGrants runs on (ADR-BCP-020 sections 143-144; roles-to-grants decision, rulings 3 and 4). A ReviewedPopulation is the list Platform Security / Control Plane Governance reviews and approves: it is the only source of the administrator population, and IAM role holders are evidence in it, never the source. MigrationReadiness is what the Control Plane reports about the shadow comparison of roles and grants, per permission, against the enforcement policy's exit criteria. Neither document issues a grant or flips enforcement. A definition library: validate against the fragments.",
+  "$defs": {
+    "ReviewedAdministrator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal_id", "current_roles", "permission", "scope", "grant_type", "valid_from", "risk_class", "reason", "reviewed_by", "reviewed_at"],
+      "properties": {
+        "principal_id": {
+          "$ref": "domain.schema.json#/$defs/principalId",
+          "description": "The canonical Control Plane principal. Never an IAM subject or an email address."
+        },
+        "current_roles": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 16,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "description": "The realm roles the person holds today, as IAM evidence. They justify the proposal; they never expand to permissions by themselves."
+        },
+        "permission": { "$ref": "domain.schema.json#/$defs/administrativePermissionKey" },
+        "scope": { "$ref": "scope.schema.json#/$defs/AdministrativeScope" },
+        "organisation_attestation_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Reference to the tenant or organisation attestation. Required when the scope names a tenant or an organisation (ruling 3)."
+        },
+        "grant_type": { "$ref": "domain.schema.json#/$defs/grantType" },
+        "valid_from": { "type": "string", "format": "date-time" },
+        "valid_until": { "type": "string", "format": "date-time" },
+        "delegable_depth": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "risk_class": { "$ref": "domain.schema.json#/$defs/riskClass" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "reviewed_by": {
+          "$ref": "domain.schema.json#/$defs/principalId",
+          "description": "The reviewer who vouches for this record. Never the grantee."
+        },
+        "reviewed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ReviewedPopulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["population_id", "version", "status", "prepared_at", "administrators"],
+      "properties": {
+        "population_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$" },
+        "version": { "type": "integer", "minimum": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["DRAFT", "UNDER_REVIEW", "APPROVED"],
+          "description": "Only an APPROVED population is turned into grant requests, and only by the owner's act. The approval is recorded in approved_by."
+        },
+        "prepared_at": { "type": "string", "format": "date-time" },
+        "approved_by": {
+          "$ref": "domain.schema.json#/$defs/principalId",
+          "description": "The Platform Architecture / Security owner. Required when status is APPROVED."
+        },
+        "approved_at": { "type": "string", "format": "date-time" },
+        "administrators": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2000,
+          "items": { "$ref": "#/$defs/ReviewedAdministrator" }
+        }
+      },
+      "if": { "properties": { "status": { "const": "APPROVED" } }, "required": ["status"] },
+      "then": { "required": ["approved_by", "approved_at"] }
+    },
+    "ReadinessBlocker": {
+      "type": "string",
+      "enum": [
+        "CRITERIA_NOT_APPROVED",
+        "NOT_OBSERVED",
+        "INSUFFICIENT_OBSERVATION_PERIOD",
+        "INSUFFICIENT_DECISIONS",
+        "GRANTS_BROADER",
+        "GRANTS_NARROWER",
+        "NOT_EVALUATED",
+        "UNRESOLVED_OR_ERROR",
+        "CRITICAL_PROHIBITED"
+      ],
+      "description": "Why a permission is not ready to enforce. CRITICAL_PROHIBITED is never cleared by evidence: it lifts only when the enforcement policy lifts it."
+    },
+    "PermissionReadiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["permission", "risk_class", "wave", "enforcement", "decisions", "agree", "grants_broader", "grants_narrower", "not_evaluated", "unresolved_or_error", "observed_days", "ready", "blockers"],
+      "properties": {
+        "permission": { "$ref": "domain.schema.json#/$defs/administrativePermissionKey" },
+        "risk_class": { "$ref": "domain.schema.json#/$defs/riskClass" },
+        "wave": { "type": "integer", "minimum": 1, "maximum": 4, "description": "The enforcement order: 1 LOW, 2 MODERATE, 3 HIGH, 4 CRITICAL (ruling 4)." },
+        "enforcement": { "type": "string", "enum": ["ROLE_AUTHORITATIVE", "GRANTS_ENFORCED"] },
+        "decisions": { "type": "integer", "minimum": 0 },
+        "agree": { "type": "integer", "minimum": 0 },
+        "grants_broader": { "type": "integer", "minimum": 0 },
+        "grants_narrower": { "type": "integer", "minimum": 0 },
+        "not_evaluated": { "type": "integer", "minimum": 0 },
+        "unresolved_or_error": { "type": "integer", "minimum": 0 },
+        "observed_days": { "type": "integer", "minimum": 0, "description": "Distinct UTC days with at least one comparison." },
+        "first_observed_at": { "type": "string", "format": "date-time" },
+        "last_observed_at": { "type": "string", "format": "date-time" },
+        "ready": { "type": "boolean", "description": "True only when no blocker applies. Readiness is evidence for the owner's decision; it never enforces anything." },
+        "blockers": { "type": "array", "items": { "$ref": "#/$defs/ReadinessBlocker" }, "uniqueItems": true }
+      }
+    },
+    "MigrationReadiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generated_at", "criteria_status", "criteria", "permissions"],
+      "properties": {
+        "generated_at": { "type": "string", "format": "date-time" },
+        "criteria_status": { "type": "string", "enum": ["DRAFT", "PROPOSED", "APPROVED"], "description": "The status of the enforcement policy's exit criteria. Nothing is ready while they are not APPROVED." },
+        "criteria": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum_observation_days", "minimum_decisions", "maximum_grants_narrower", "maximum_not_evaluated", "maximum_unresolved_or_error"],
+          "properties": {
+            "minimum_observation_days": { "type": "integer", "minimum": 1 },
+            "minimum_decisions": { "type": "integer", "minimum": 1 },
+            "maximum_grants_narrower": { "type": "integer", "minimum": 0 },
+            "maximum_not_evaluated": { "type": "integer", "minimum": 0 },
+            "maximum_unresolved_or_error": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "permissions": { "type": "array", "items": { "$ref": "#/$defs/PermissionReadiness" } }
+      }
+    }
+  }
+}

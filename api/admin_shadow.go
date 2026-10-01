@@ -115,6 +115,10 @@ var adminRoutePermissions = map[string]string{
 	"GET /v1/markets/{marketID}":                                 "market.view",
 	"PATCH /v1/markets/{marketID}":                               "market.request",
 	"POST /v1/markets/{marketID}/activate":                       "market.activate",
+	"GET /v1/admin/authority-migration/readiness":                "administrator.view",
+	"GET /v1/admin/operations/{operationID}":                     "operation.view",
+	"POST /v1/admin/operations/{operationID}/retry":              "operation.control",
+	"POST /v1/admin/operations/{operationID}/cancel":             "operation.control",
 	"POST /v1/admin/changesets":                                  "changeset.submit",
 	"GET /v1/admin/changesets":                                   "changeset.review",
 	"GET /v1/admin/changesets/{changesetID}":                     "changeset.review",
@@ -162,6 +166,17 @@ const shadowBudget = 250 * time.Millisecond
 // AdministrativeGrants beside the legacy role decision and records how they
 // compare (ADR-BCP-020 section 144). It never alters the legacy decision.
 func (a *API) shadowAdministrativeDecision(r *http.Request, principal auth.Principal, legacyAllowed bool) {
+	a.shadowDecision(r, principal, legacyAllowed, nil)
+}
+
+// shadowOperationDecision is the comparison for a durable-operation route,
+// which authorises inside its handler once it has loaded the operation: the
+// resource is the operation's tenant, which the route cannot name.
+func (a *API) shadowOperationDecision(r *http.Request, principal auth.Principal, legacyAllowed bool, tenantID string) {
+	a.shadowDecision(r, principal, legacyAllowed, &administration.Resource{Environment: a.environment, TenantID: tenantID})
+}
+
+func (a *API) shadowDecision(r *http.Request, principal auth.Principal, legacyAllowed bool, resource *administration.Resource) {
 	if a.grants == nil {
 		return
 	}
@@ -177,7 +192,7 @@ func (a *API) shadowAdministrativeDecision(r *http.Request, principal auth.Princ
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), shadowBudget)
 	defer cancel()
-	grants, comparable := a.shadowGrants(ctx, r, principal, permission)
+	grants, comparable := a.shadowGrantsFor(ctx, r, principal, permission, resource)
 	if !comparable {
 		a.recordShadow(permission, legacy, grants, metrics.ShadowNotEvaluated, pattern)
 		return
@@ -191,6 +206,12 @@ func (a *API) shadowAdministrativeDecision(r *http.Request, principal auth.Princ
 // not anchored at: the route names its target only indirectly, so the grant
 // may well cover it, and counting grants_narrower would be false evidence.
 func (a *API) shadowGrants(ctx context.Context, r *http.Request, principal auth.Principal, permission string) (string, bool) {
+	return a.shadowGrantsFor(ctx, r, principal, permission, nil)
+}
+
+// shadowGrantsFor is shadowGrants for a resource the caller already knows;
+// nil derives it from the route.
+func (a *API) shadowGrantsFor(ctx context.Context, r *http.Request, principal auth.Principal, permission string, known *administration.Resource) (string, bool) {
 	if a.identities == nil {
 		return metrics.ShadowError, true
 	}
@@ -209,8 +230,10 @@ func (a *API) shadowGrants(ctx context.Context, r *http.Request, principal auth.
 	if err != nil {
 		return metrics.ShadowError, true
 	}
-	resource, err := a.shadowResource(ctx, r)
-	if err != nil {
+	var resource administration.Resource
+	if known != nil {
+		resource = *known
+	} else if resource, err = a.shadowResource(ctx, r); err != nil {
 		return metrics.ShadowError, true
 	}
 	now := time.Now().UTC()
@@ -390,6 +413,7 @@ func (a *API) recordShadow(permission, legacy, grants, agreement, pattern string
 		agreement = metrics.ShadowGrantsNarrower
 	}
 	metrics.AdministrativeAuthorityShadow.Add(1, permission, legacy, grants, agreement)
+	a.evidence.add(permission, legacy, grants, agreement, time.Now())
 	if agreement == metrics.ShadowGrantsBroader {
 		// Never expected: grants must be equal to or narrower than the
 		// roles they replace. Loud, but the response is unchanged.

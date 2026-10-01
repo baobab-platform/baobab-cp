@@ -1,0 +1,67 @@
+# ADR-BCP-020 sections 143-144 (roles-to-grants decision, rulings 1, 4 and 5):
+# when an AdministrativeGrant may replace the realm-role decision for a
+# permission.
+#
+# Shared owns the policy; the Control Plane reads it and reports readiness
+# against it (GET /admin/authority-migration/readiness). EVERY permission is
+# ROLE_AUTHORITATIVE unless it is listed in enforced below. Listing one is
+# the owner's act, made in a reviewed Shared change that names the approver
+# and the evidence; nothing in this file or in the Control Plane flips a
+# permission by itself, and a green build is not that decision.
+#
+# Rules:
+#   - Per permission first, then per applicable tenant/environment scope.
+#     There is no platform-wide switch (ruling 4).
+#   - Order: low-risk reads and views, then moderate mutations, then high-risk
+#     mutations, CRITICAL last (waves below). A permission is never enforced
+#     before its wave's predecessors have been reviewed.
+#   - A permission rolls back to the role decision on its own: remove its
+#     entry here, or set the Control Plane's emergency rollback list
+#     (ADMINISTRATIVE_ENFORCEMENT_ROLLBACK) for an immediate return without a
+#     release. The emergency list can only return authority to roles; it can
+#     never enforce anything.
+#   - Enforcement fails closed: an enforced permission is allowed only when
+#     the caller's grants allow it. An error or an unresolved caller is a
+#     refusal, not a fallback to roles.
+#   - CRITICAL permissions are never enforced here until critical.enforcement
+#     is lifted by the owner, which requires every item in lift_requires.
+version: 1
+# The exit criteria are the owner's to approve. While status is not APPROVED
+# the Control Plane reports nothing as ready. The numbers are proposals.
+criteria:
+  status: PROPOSED
+  minimum_observation_days: 14
+  minimum_decisions: 100
+  # grants_broader (grants would allow what roles denied) is always zero:
+  # grants must be equal to or narrower than the roles they replace
+  # (section 144). It is not a tunable.
+  maximum_grants_narrower: 0
+  maximum_not_evaluated: 0
+  maximum_unresolved_or_error: 0
+waves:
+  - wave: 1
+    risk_class: LOW
+  - wave: 2
+    risk_class: MODERATE
+  - wave: 3
+    risk_class: HIGH
+  - wave: 4
+    risk_class: CRITICAL
+critical:
+  enforcement: PROHIBITED
+  lift_requires:
+    - maker_checker
+    - step_up_evidence
+    - independent_approver
+    - grant_lifecycle_administration
+    - audit
+    - rollback
+# Permissions whose decision is made by AdministrativeGrants. Each entry:
+#   permission    a registered permission, never CRITICAL
+#   scope         optional: environments and/or tenants it applies to; absent
+#                 means every request for the permission
+#   approved_by   the Platform Architecture / Security owner (a principal id)
+#   approved_at   when
+#   evidence_ref  the readiness report (and review) the decision rests on
+# Empty: no permission is enforced. This is the state after this change.
+enforced: []

@@ -47,6 +47,11 @@ type Config struct {
 	// TenantBootstrapRegistration enables the migration-only bootstrap
 	// registration route (ADR-BCP-017 sections 22-24). Off by default.
 	TenantBootstrapRegistration bool
+	// EnforcementRollback (ADMINISTRATIVE_ENFORCEMENT_ROLLBACK, comma-
+	// separated permission keys, or "*") returns permissions to the role
+	// decision at once, without a release. It can only return authority to
+	// roles; the enforcement policy in Shared is the only way to enforce.
+	EnforcementRollback []string
 	// WorkloadRegistryFile is a local snapshot of Shared's
 	// contracts/identity/v1/workload-registry.yaml (WORKLOAD_REGISTRY_FILE).
 	// Shared owns workload identity and lifecycle, so a production Control
@@ -92,6 +97,11 @@ func Load() (Config, error) {
 	c.PlatformContextTTL = ttl
 	c.Environment = strings.ToLower(strings.TrimSpace(os.Getenv("BAOBAB_ENVIRONMENT")))
 	c.WorkloadRegistryFile = strings.TrimSpace(os.Getenv("WORKLOAD_REGISTRY_FILE"))
+	for _, key := range strings.Split(os.Getenv("ADMINISTRATIVE_ENFORCEMENT_ROLLBACK"), ",") {
+		if key = strings.TrimSpace(key); key != "" {
+			c.EnforcementRollback = append(c.EnforcementRollback, key)
+		}
+	}
 	if c.Production() && c.WorkloadRegistryFile == "" {
 		return Config{}, errors.New("WORKLOAD_REGISTRY_FILE is required in production: the Control Plane enforces the canonical workload registry and fails closed without it")
 	}
