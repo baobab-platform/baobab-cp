@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/topology/v1/deployment-observation.schema.json",
+  "title": "Baobab DeploymentObservation (ADR-BCP-025)",
+  "description": "Definition library for DeploymentObservation, a time-bounded report of what is actually running on one engine instance, and the observed release the Control Plane derives from it (ADR-BCP-025 section 2.6, gate ER-01). It follows the HealthObservation pattern (capability/v1 health.schema.json).\nValidate resources against fragment URIs (e.g. #/$defs/DeploymentObservation), not the document root.\n\nInvariants the Control Plane enforces beyond these shapes:\n  Observations come from infrastructure tooling registered for the instance's environment and region, authenticated by workload identity with the deployment:observe scope; never from the engine describing itself (section 2.9). An observation outside the reporter's registration is refused, never stored.\n  Observations are append-only. recorded_at and ingestion_sequence are assigned by the Control Plane, never by the reporter.\n  The current observation is the one with the latest observed_at; at equal observed_at the higher ingestion_sequence wins, so every replica derives the same one (release-policy.yaml current_observation).\n  An expired, missing or future-dated observation means UNKNOWN.\n\nControl Plane is the runtime authority. Shared is the contract authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "ObservedArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One artifact digest observed running. Only the digest identifies it; no tag or repository is accepted.",
+      "required": ["digest"],
+      "properties": {
+        "digest": { "$ref": "domain.schema.json#/$defs/artifactDigest" },
+        "platform": { "$ref": "domain.schema.json#/$defs/artifactPlatform" }
+      }
+    },
+    "DeploymentObservationSubmission": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What a registered reporter submits. The Control Plane mints observation_id, assigns recorded_at and ingestion_sequence, and takes source from the authenticated workload; none of them is accepted here. expires_at must be later than observed_at, within release-policy.yaml observation.ttl_seconds.",
+      "required": ["engine_instance_id", "artifacts", "environment", "region", "observed_at", "expires_at"],
+      "properties": {
+        "engine_instance_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId" },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/ObservedArtifact" }
+        },
+        "environment": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/environment" },
+        "region": { "$ref": "domain.schema.json#/$defs/deploymentRegion" },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the reporter observed the instance, not when it was recorded."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "After this instant the observation says nothing, and the observed release is UNKNOWN until a newer observation arrives."
+        }
+      }
+    },
+    "DeploymentObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One accepted observation (section 2.6). environment and region are what the reporter saw; a mismatch with the instance's own is DEPLOYMENT_LOCATION_MISMATCH drift, never an update to the instance.",
+      "required": ["observation_id", "engine_instance_id", "artifacts", "environment", "region", "observed_at", "expires_at", "recorded_at", "ingestion_sequence", "source"],
+      "properties": {
+        "observation_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/deploymentObservationId" },
+        "engine_instance_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId" },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/ObservedArtifact" }
+        },
+        "environment": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/environment" },
+        "region": { "$ref": "domain.schema.json#/$defs/deploymentRegion" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the Control Plane accepted the observation."
+        },
+        "ingestion_sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Monotonically increasing across all accepted observations; the tie-breaker for equal observed_at."
+        },
+        "source": {
+          "$ref": "../../administration/v1/domain.schema.json#/$defs/principalId",
+          "description": "The reporting workload's canonical principal (section 2.9)."
+        }
+      }
+    },
+    "ObservedRelease": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The release an engine instance is observed running, derived from its current observation (section 2.6). release_id is set only for RELEASE; release_ids lists the releases a MIXED observation spans; observation_id is absent only for UNKNOWN because there is no current observation.",
+      "required": ["engine_instance_id", "state", "evaluated_at"],
+      "properties": {
+        "engine_instance_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId" },
+        "state": { "$ref": "domain.schema.json#/$defs/observedReleaseState" },
+        "release_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineReleaseId" },
+        "release_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineReleaseId" }
+        },
+        "observation_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/deploymentObservationId" },
+        "evaluated_at": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "RELEASE" } }, "required": ["state"] },
+          "then": { "required": ["release_id", "observation_id"] },
+          "else": { "not": { "required": ["release_id"] } }
+        },
+        {
+          "if": { "properties": { "state": { "const": "MIXED" } }, "required": ["state"] },
+          "then": { "required": ["release_ids", "observation_id"] },
+          "else": { "not": { "required": ["release_ids"] } }
+        },
+        {
+          "if": { "properties": { "state": { "enum": ["UNKNOWN_ARTIFACT", "FOREIGN_ARTIFACT"] } }, "required": ["state"] },
+          "then": { "required": ["observation_id"] }
+        },
+        {
+          "if": { "properties": { "state": { "const": "UNKNOWN" } }, "required": ["state"] },
+          "then": { "not": { "required": ["observation_id"] } }
+        }
+      ]
+    },
+    "DeploymentObservationPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/DeploymentObservation" }
+        },
+        "next_cursor": { "type": ["string", "null"], "maxLength": 512 }
+      }
+    }
+  }
+}
