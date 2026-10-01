@@ -43,6 +43,7 @@ contracts:
   - contracts/topology/v1/release-policy.yaml
   - contracts/topology/v1/release.schema.json
   - contracts/topology/v1/deployment-observation.schema.json
+  - contracts/topology/v1/events.schema.json
   - contracts/control-plane/v1/provisioning-desired-state.schema.json
   - contracts/control-plane/v1/change-plan.schema.json
   - contracts/control-plane/v1/provisioning-plan.schema.json

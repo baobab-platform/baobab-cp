@@ -57,6 +57,13 @@ type releasePolicyDocument struct {
 		MayBecomeDesired  []string `yaml:"may_become_desired"`
 		ReadableAsDesired []string `yaml:"readable_as_desired"`
 	} `yaml:"desired_state"`
+	Drift struct {
+		Reasons map[string]struct {
+			GraceSeconds int    `yaml:"grace_seconds"`
+			Severity     string `yaml:"severity"`
+		} `yaml:"reasons"`
+		SweepIntervalSeconds int `yaml:"sweep_interval_seconds"`
+	} `yaml:"drift"`
 	Observation struct {
 		TTLSeconds struct {
 			Minimum int `yaml:"minimum"`
@@ -93,8 +100,9 @@ func loadReleasePolicy() (releasePolicyDocument, error) {
 		if len(doc.Approval.CertificationRequired) == 0 || len(doc.Approval.ProvenanceRequired) == 0 ||
 			len(doc.DesiredState.MayBecomeDesired) == 0 || len(doc.DesiredState.ReadableAsDesired) == 0 ||
 			len(doc.StatusTransitions.Transitions) == 0 ||
-			doc.Observation.TTLSeconds.Minimum < 1 || doc.Observation.TTLSeconds.Maximum < doc.Observation.TTLSeconds.Minimum {
-			releasePolicyErr = fmt.Errorf("%s lacks approval, desired_state, status_transitions or observation.ttl_seconds", releasePolicyPath)
+			doc.Observation.TTLSeconds.Minimum < 1 || doc.Observation.TTLSeconds.Maximum < doc.Observation.TTLSeconds.Minimum ||
+			len(doc.Drift.Reasons) == 0 || doc.Drift.SweepIntervalSeconds < 1 {
+			releasePolicyErr = fmt.Errorf("%s lacks approval, desired_state, status_transitions, observation.ttl_seconds or drift", releasePolicyPath)
 			return
 		}
 		releasePolicyDoc = doc

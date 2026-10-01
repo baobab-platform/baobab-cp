@@ -139,6 +139,9 @@ type Dependencies struct {
 	// EngineReleases backs the /v1/engine-releases routes (ADR-BCP-025
 	// gate ER-02); nil disables them.
 	EngineReleases repository.EngineReleaseRepository
+	// ReleaseDrift adds ENGINE_INSTANCE_RELEASE drift to a tenant's
+	// provisioning drift (ADR-BCP-025 gate ER-05). Nil omits it.
+	ReleaseDrift repository.ReleaseDriftRepository
 	// DeploymentObservations backs deployment observation intake and reads
 	// (ADR-BCP-025 gate ER-04). Intake needs WorkloadRegistry to implement
 	// auth.ReporterRegistry; without it every observation is refused.
@@ -483,7 +486,7 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.workloadVerifier, "workload", "metrics:read")).Method(http.MethodGet, "/metrics", dependencies.Metrics.Handler())
 	}
 	if dependencies.Provisioning != nil {
-		prov := provisioningHandler{tenants: dependencies.Store, repo: dependencies.Provisioning}
+		prov := provisioningHandler{tenants: dependencies.Store, repo: dependencies.Provisioning, releaseDrift: dependencies.ReleaseDrift}
 		plans := convergenceHandler{repo: dependencies.Provisioning, identities: dependencies.Identities, environment: dependencies.Environment}
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/provisioning", plans.create)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}/provisioning", plans.list)
