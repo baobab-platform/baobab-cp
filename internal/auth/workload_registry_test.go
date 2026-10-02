@@ -175,3 +175,46 @@ func TestSharedWorkloadRegistryLifecycle(t *testing.T) {
 		t.Error("a non-ACTIVE deployment controller must not be a reporter")
 	}
 }
+
+// A validator needs all three: ACTIVE, the context:validate scope, and a
+// registered audience. Any one missing validates nothing.
+func TestValidatesAudiencesRequiresStatusScopeAndAudience(t *testing.T) {
+	registry, err := LoadWorkloadRegistryFile(writeTestRegistry(t, `
+workloads:
+  erp-ok:
+    status: ACTIVE
+    allowed_scopes: ["context:validate", "context:resolve"]
+    validates_audiences: ["baobab-erp", "baobab-erp-batch"]
+  erp-no-scope:
+    status: ACTIVE
+    allowed_scopes: ["context:resolve"]
+    validates_audiences: ["baobab-erp"]
+  erp-no-audience:
+    status: ACTIVE
+    allowed_scopes: ["context:validate"]
+  erp-suspended:
+    status: SUSPENDED
+    allowed_scopes: ["context:validate"]
+    validates_audiences: ["baobab-erp"]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := registry.ValidatesAudiences("erp-ok"); len(got) != 2 || got[0] != "baobab-erp" || got[1] != "baobab-erp-batch" {
+		t.Fatalf("erp-ok: %v", got)
+	}
+	for _, client := range []string{"erp-no-scope", "erp-no-audience", "erp-suspended", "unknown-client", ""} {
+		if got := registry.ValidatesAudiences(client); len(got) != 0 {
+			t.Fatalf("%q must validate nothing, got %v", client, got)
+		}
+	}
+	// The caller cannot widen the registered list through the returned slice.
+	registry.ValidatesAudiences("erp-ok")[0] = "baobab-control-plane"
+	if registry.ValidatesAudiences("erp-ok")[0] != "baobab-erp" {
+		t.Fatal("the registered audiences were mutated through a returned slice")
+	}
+	var nilRegistry *StaticWorkloadRegistry
+	if got := nilRegistry.ValidatesAudiences("erp-ok"); got != nil {
+		t.Fatalf("nil registry: %v", got)
+	}
+}

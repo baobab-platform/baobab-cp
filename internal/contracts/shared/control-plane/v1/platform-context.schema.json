@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.baobab-platform.com/control-plane/v1/platform-context.schema.json",
   "title": "Platform context resolution",
-  "description": "POST /v1/platform-context/resolve resolves and persists the trusted PlatformContext a workload redeems by context_id in capability resolution (capability/v1 resolution.schema.json). POST /v1/resolve is the deprecated composed resolution that predates the context_id flow (ADR-BCP-004 section 52, ADR-BCP-016, ADR-BCP-018 ORG-10, ADR-BCP-024).",
+  "description": "POST /v1/platform-context/resolve resolves and persists the trusted PlatformContext a workload redeems by context_id in capability resolution (capability/v1 resolution.schema.json). POST /v1/platform-context/validate lets a resource server ask whether a stored context belongs to the actual caller it authenticated (context-authority-for-workloads.md). POST /v1/resolve is the deprecated composed resolution that predates the context_id flow (ADR-BCP-004 section 52, ADR-BCP-016, ADR-BCP-018 ORG-10, ADR-BCP-024).",
   "$defs": {
     "organisationKind": {
       "type": "string",
@@ -62,7 +62,7 @@
       "properties": {
         "context_id": {
           "$ref": "domain.schema.json#/$defs/uuid",
-          "description": "The persisted context a capability resolution redeems. It is bound to its tenant: another tenant's workload redeeming it is TENANT_CONTEXT_MISMATCH."
+          "description": "The persisted context a capability resolution redeems. It is bound to the principal that resolved it (Context.PrincipalID): only that principal's own tokens can consume it, and another principal's attempt is indistinguishable from an unknown or expired context (CONTEXT_NOT_FOUND, 404). It is not a bearer credential."
         },
         "tenant_id": {
           "$ref": "domain.schema.json#/$defs/tenantId"
@@ -74,7 +74,7 @@
         "expires_at": {
           "type": "string",
           "format": "date-time",
-          "description": "When the Control Plane bounds context lifetime (ADR-BCP-004 section 72). Absent means unbounded."
+          "description": "When the Control Plane bounds context lifetime (ADR-BCP-004 section 72). Absent means unbounded; an unbounded context is never valid cross-service authority (PlatformContextValidation requires expires_at)."
         },
         "country_code": {
           "$ref": "#/$defs/countryCode",
@@ -111,7 +111,40 @@
         ]
       }
     },
-    "ComposedResolutionRequest": {
+  "PlatformContextValidateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_id", "subject_token"],
+      "description": "Asks the Control Plane whether a stored context belongs to the actual caller of a resource server. The request names the context and carries the caller's own access token as cryptographic evidence; it carries no principal, subject, client or audience assertion, because the Control Plane derives all of those from the verified tokens and the registered validator relationship (workload-registry validates_audiences), never from the request.",
+      "properties": {
+        "context_id": {
+          "$ref": "domain.schema.json#/$defs/uuid"
+        },
+        "subject_token": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 8192,
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+          "writeOnly": true,
+          "description": "The access token that arrived at the resource server (a compact JWT). Accepted only in this POST body over the validator's authenticated call; the Control Plane verifies it independently (issuer, signature, expiry, workload actor, and an audience equal to one the authenticated validator is registered to validate). It is never persisted, never logged and never placed in a trace, an error or an audit payload; audit records only the validator principal, the resolved subject principal, context_id, tenant_id, the decision and reason, and the correlation id."
+        }
+      }
+    },
+    "PlatformContextValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_id", "tenant_id", "resolved_at", "expires_at"],
+      "description": "Only the trusted facts a resource server needs. expires_at is required because a context that crosses a service boundary as authority must be bounded. legal_entity_id is deliberately absent: Context.LegalEntityID is the tenant's single registered legal entity, a degenerate derivation rather than an authoritative selection, and it is not added for a consumer's convenience.",
+      "properties": {
+        "context_id": { "$ref": "domain.schema.json#/$defs/uuid" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "resolved_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "market_id": { "$ref": "market.schema.json#/$defs/marketId" },
+        "organisation_id": { "$ref": "domain.schema.json#/$defs/canonicalEntityId" }
+      }
+    },
+      "ComposedResolutionRequest": {
       "type": "object",
       "additionalProperties": false,
       "required": [

@@ -12,8 +12,9 @@ import (
 // up to 50 capabilities for one context, each decided and recorded on its
 // own (a batch has no atomicity across its members).
 type CapabilityResolveBatchHandler struct {
-	Contexts repository.ContextRepository
-	Service  service.CapabilityResolutionService
+	Contexts   repository.ContextRepository
+	Identities repository.IdentityRepository
+	Service    service.CapabilityResolutionService
 }
 
 type batchResolutionRequest struct {
@@ -37,7 +38,7 @@ func (h CapabilityResolveBatchHandler) Resolve(w http.ResponseWriter, r *http.Re
 	if !decodeRaw(w, r, batchResolutionRequestSchema, raw, &req) {
 		return
 	}
-	trusted, ok := redeemContext(w, r, h.Contexts, req.ContextID)
+	trusted, ok := redeemContext(w, r, h.Contexts, h.Identities, req.ContextID)
 	if !ok {
 		return
 	}

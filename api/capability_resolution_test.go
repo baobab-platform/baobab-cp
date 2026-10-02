@@ -102,9 +102,27 @@ func newResolutionStore() *resolutionStore {
 	}
 }
 
+const resolutionIssuer = "https://iam.test/realms/baobab"
+
+// resolutionIdentity registers a workload's canonical principal and returns
+// its id, as the first context resolution would.
+func resolutionIdentity(t *testing.T, repo *repository.Repository, subject string) string {
+	t.Helper()
+	p, err := service.IdentityService{Repository: repo, Provision: service.WorkloadOnlyProvisioningPolicy}.Resolve(context.Background(), resolutionIssuer, subject, "workload")
+	if err != nil {
+		t.Fatalf("register %s: %v", subject, err)
+	}
+	return p.ID
+}
+
 func seedResolutionContext(t *testing.T, repo *repository.Repository, id, tenantID, country string) {
 	t.Helper()
-	c := domain.Context{ID: id, PrincipalID: "principal-abc", TenantID: tenantID, CountryCode: country, CorrelationID: "correlation-123",
+	seedResolutionContextFor(t, repo, id, resolutionIdentity(t, repo, "baobab-trade"), tenantID, country)
+}
+
+func seedResolutionContextFor(t *testing.T, repo *repository.Repository, id, principalID, tenantID, country string) {
+	t.Helper()
+	c := domain.Context{ID: id, PrincipalID: principalID, TenantID: tenantID, CountryCode: country, CorrelationID: "correlation-123",
 		ResolvedAt: time.Now().UTC(), Provenance: map[string]domain.ContextSource{"tenant_id": {Source: "verified_token", TrustLevel: domain.TrustVerified}}}
 	if country != "" {
 		c.MarketID, c.CurrencyCode = "mkt_contractug", "UGX"
@@ -122,7 +140,7 @@ func TestCapabilityResolutionConformsToCapabilityV1(t *testing.T) {
 	dir := contracttest.SharedDir(t)
 	resolutionSchema := contracttest.CompileSchema(t, dir, "capability/v1/resolution.schema.json#/$defs/resolution")
 	batchSchema := contracttest.CompileSchema(t, dir, "capability/v1/resolution.schema.json#/$defs/batchResolution")
-	principal := auth.Principal{Subject: "baobab-trade", ActorType: "workload", TenantID: resolutionTenant, ClientID: "baobab-trade",
+	principal := auth.Principal{Subject: "baobab-trade", Issuer: resolutionIssuer, ActorType: "workload", TenantID: resolutionTenant, ClientID: "baobab-trade",
 		TokenID: "token-resolution", Scopes: map[string]struct{}{"context:resolve": {}}}
 	contexts := repository.NewInMemoryRepository()
 	seedResolutionContext(t, contexts, resolutionContext, resolutionTenant, "UG")
@@ -158,7 +176,7 @@ func TestCapabilityResolutionConformsToCapabilityV1(t *testing.T) {
 	}
 	resolve := func(store *resolutionStore, body map[string]any) decision {
 		t.Helper()
-		w := post(CapabilityResolveHandler{Contexts: contexts, Service: service.CapabilityResolutionService{Store: store}}.Resolve,
+		w := post(CapabilityResolveHandler{Contexts: contexts, Identities: contexts, Service: service.CapabilityResolutionService{Store: store}}.Resolve,
 			"/v1/capabilities/resolve", body)
 		if w.Code != http.StatusOK {
 			t.Fatalf("resolve: %d %s", w.Code, w.Body.String())
@@ -234,7 +252,7 @@ func TestCapabilityResolutionConformsToCapabilityV1(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			s := newResolutionStore()
-			w := post(CapabilityResolveHandler{Contexts: contexts, Service: service.CapabilityResolutionService{Store: s}}.Resolve, "/v1/capabilities/resolve", tc.body)
+			w := post(CapabilityResolveHandler{Contexts: contexts, Identities: contexts, Service: service.CapabilityResolutionService{Store: s}}.Resolve, "/v1/capabilities/resolve", tc.body)
 			if w.Code != tc.status || !bytes.Contains(w.Body.Bytes(), []byte(tc.code)) || len(s.recorded) != 0 {
 				t.Fatalf("got %d %s (recorded %d)", w.Code, w.Body.String(), len(s.recorded))
 			}
@@ -243,7 +261,7 @@ func TestCapabilityResolutionConformsToCapabilityV1(t *testing.T) {
 
 	// A batch decides each capability on its own and records each.
 	store = newResolutionStore()
-	w := post(CapabilityResolveBatchHandler{Contexts: contexts, Service: service.CapabilityResolutionService{Store: store}}.Resolve,
+	w := post(CapabilityResolveBatchHandler{Contexts: contexts, Identities: contexts, Service: service.CapabilityResolutionService{Store: store}}.Resolve,
 		"/v1/capabilities/resolve-batch", map[string]any{"context_id": resolutionContext,
 			"capabilities": []string{resolutionKey, "commerce.order.cancel"}, "correlation_id": "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a98"})
 	if w.Code != http.StatusOK {

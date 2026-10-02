@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.32.0
+  version: 1.33.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -192,9 +192,12 @@ paths:
       operationId: resolveCapability
       summary: Resolve one capability for a resolved PlatformContext
       description: >-
-        Redeems a context_id from resolvePlatformContext (bound to the caller's
-        tenant: another tenant's context is TENANT_CONTEXT_MISMATCH, 403; an
-        unknown or expired one is CONTEXT_NOT_FOUND, 404) and decides the
+        Redeems a context_id from resolvePlatformContext. The context is bound
+        to the principal that resolved it: the authenticated caller's canonical
+        principal must equal the context's, and a context another principal
+        resolved is indistinguishable from an unknown or expired one
+        (CONTEXT_NOT_FOUND, 404). A token tenant_id that differs from the
+        context's tenant is TENANT_CONTEXT_MISMATCH (403). It decides the
         capability as capability/v1 resolution.schema.json. A non-RESOLVED
         decision is a normal 200 carrying a capability_resolution_denial
         reason_code: DENIED for CAPABILITY_UNKNOWN, GRANT_NOT_FOUND,
@@ -318,6 +321,67 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /platform-context/validate:
+    post:
+      operationId: validatePlatformContext
+      summary: Validate a stored PlatformContext presented by another authenticated workload
+      description: >-
+        A resource server asks whether a stored context belongs to the actual
+        caller it authenticated, and receives the trusted facts it may act on
+        (docs/architecture/context-authority-for-workloads.md). Two pieces of
+        authenticated evidence are required: the VALIDATOR, authenticated by
+        the bearer token and holding context:validate, and the SUBJECT, proved
+        by subject_token in the body, which the Control Plane verifies
+        independently of the validator (issuer, signature, expiry, workload
+        actor, and an audience equal to one the authenticated validator is
+        registered to validate in workload-registry.yaml validates_audiences;
+        the request cannot choose the audience, and no list of the
+        validator's own audiences is consulted). It resolves the subject
+        token's issuer, subject and actor type to a canonical principal and
+        requires it to equal Context.PrincipalID. The caller never states a
+        principal. The context must carry expires_at: an unbounded context is
+        never cross-service authority. A context that does not exist, has
+        expired, is unbounded, or belongs to another principal is
+        CONTEXT_NOT_FOUND (404) and these cases are indistinguishable. A
+        subject token tenant_id that differs from the context tenant is
+        TENANT_CONTEXT_MISMATCH (403) and a tenant that is no longer ACTIVE is
+        TENANT_NOT_ACTIVE (403). This is not token exchange: no token is
+        issued. subject_token is a bearer token, accepted only in this POST
+        body over the authenticated call, never persisted, never logged and
+        never placed in a trace, an error or an audit payload; audit records
+        the validator principal, the resolved subject principal, context_id,
+        tenant_id, the decision and reason, and the correlation id.
+      security:
+        - workloadOidc: [context:validate]
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/Traceparent"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./platform-context.schema.json#/$defs/PlatformContextValidateRequest
+      responses:
+        "200":
+          description: >-
+            The context belongs to the subject. Only the trusted facts a
+            resource server needs; expires_at is always present and
+            legal_entity_id is deliberately absent.
+          content:
+            application/json:
+              schema:
+                $ref: ./platform-context.schema.json#/$defs/PlatformContextValidation
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
   /resolve:
@@ -754,9 +818,12 @@ paths:
         section 17.3, ADR-SHARED-014). Follows the context tenant's ACTIVE
         CANONICAL_TO_EXTERNAL, BIDIRECTIONAL or SOURCE_TO_TARGET Mappings in
         effect whose scope the context matches, ranked by scope specificity,
-        then resolution priority, then confidence (section 23). An unknown or
-        expired context is CONTEXT_NOT_FOUND (404) and another tenant's
-        context is TENANT_CONTEXT_MISMATCH (403). No match is
+        then resolution priority, then confidence (section 23). The context is
+        bound to the principal that resolved it: the authenticated caller's
+        canonical principal must equal the context's, and a context another
+        principal resolved is indistinguishable from an unknown or expired one
+        (CONTEXT_NOT_FOUND, 404). A token tenant_id that differs from the
+        context's tenant is TENANT_CONTEXT_MISMATCH (403). No match is
         MAPPING_NOT_FOUND (404); equally authoritative matches are
         MAPPING_AMBIGUOUS (409) and resolve to nothing.
       security:

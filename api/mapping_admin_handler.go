@@ -28,6 +28,9 @@ type mappingHandler struct {
 	repo repository.MappingAdminRepository
 	// contexts redeems the stored contexts resolveMapping resolves in.
 	contexts repository.ContextRepository
+	// identities is the read-only canonical-principal lookup the context
+	// ownership rule needs.
+	identities repository.IdentityRepository
 }
 
 // --- wire types -----------------------------------------------------------
@@ -726,6 +729,15 @@ func (h mappingHandler) resolveMapping(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "context lookup failed", true)
+		return
+	}
+	owned, err := callerOwnsContext(r.Context(), h.identities, principal, trusted)
+	if err != nil {
+		problem(w, r, http.StatusServiceUnavailable, "CONTEXT_STORE_UNAVAILABLE", "context lookup failed", true)
+		return
+	}
+	if !owned {
+		problem(w, r, http.StatusNotFound, "CONTEXT_NOT_FOUND", "the referenced context_id does not exist or has expired", false)
 		return
 	}
 	if _, ok := resolveWorkloadTenant(principal.TenantID, trusted.TenantID); !ok {

@@ -185,6 +185,12 @@ type Dependencies struct {
 	// auth.LoadWorkloadRegistryFile), the same nil-disables-the-feature
 	// shape every other optional dependency in this struct already uses.
 	WorkloadRegistry auth.WorkloadRegistry
+	// SubjectVerifiers verifies the subject token POST /v1/platform-context/
+	// validate receives, against an audience the authenticated validator is
+	// registered for (WorkloadRegistry must also implement
+	// auth.ValidatorRegistry). Nil leaves the route unregistered: without
+	// both, no context can be validated.
+	SubjectVerifiers auth.SubjectVerifiers
 }
 type API struct {
 	store            store.TenantStore
@@ -272,8 +278,13 @@ func New(dependencies Dependencies) http.Handler {
 	// (which are the pre-existing, differently-shaped endpoints above): see
 	// PlatformContextHandler's doc comment for why.
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/platform-context/resolve", PlatformContextHandler{ContextResolution: contextResolution, Contexts: dependencies.Contexts, TTL: dependencies.PlatformContextTTL}.Resolve)
-	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: dependencies.Contexts, Service: capabilityResolution}.Resolve)
-	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve-batch", CapabilityResolveBatchHandler{Contexts: dependencies.Contexts, Service: capabilityResolution}.Resolve)
+	if validators, ok := dependencies.WorkloadRegistry.(auth.ValidatorRegistry); ok && dependencies.SubjectVerifiers != nil && dependencies.Contexts != nil && dependencies.Identities != nil {
+		validation := ContextValidationHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Validators: validators,
+			Subjects: dependencies.SubjectVerifiers, Tenants: dependencies.Store}
+		r.With(a.authorize(a.workloadVerifier, "workload", auth.ContextValidateScope)).Post("/v1/platform-context/validate", validation.Validate)
+	}
+	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
+	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve-batch", CapabilityResolveBatchHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
 	// Privileged diagnostics (ADR-BCP-004 §77, ADR-BCP-003 §80): admin-only,
 	// distinct scope from the workload resolve endpoints above -- see
 	// CapabilityExplainHandler's doc comment for why it deliberately is not
@@ -324,7 +335,7 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "operation:read")).Get("/v1/admin/operations/{operationID}", ops.get)
 	}
 	if dependencies.Mappings != nil {
-		mappings := mappingHandler{repo: dependencies.Mappings, contexts: dependencies.Contexts}
+		mappings := mappingHandler{repo: dependencies.Mappings, contexts: dependencies.Contexts, identities: dependencies.Identities}
 		write := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "mapping:write"), a.requireAdminRole(nil, true)}
 		approve := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "mapping:approve"), a.requireAdminRole(nil, true)}
 		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)}
