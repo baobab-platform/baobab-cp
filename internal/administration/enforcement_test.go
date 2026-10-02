@@ -32,8 +32,15 @@ func TestShippedPolicyEnforcesNothing(t *testing.T) {
 	if len(policy.Enforced) != 0 {
 		t.Fatalf("the shipped policy enforces %d permissions; none is authorised", len(policy.Enforced))
 	}
-	if policy.Criteria.Status == "APPROVED" || policy.Critical.Enforcement != "PROHIBITED" {
-		t.Fatalf("the owner has not approved the criteria or lifted CRITICAL: %+v", policy.Criteria)
+	// The architecture owner approved the criteria on 2026-10-02 with exactly
+	// these values, and CRITICAL enforcement stays prohibited. Approving the
+	// criteria enforces nothing.
+	want := EnforcementCriteria{Status: "APPROVED", MinimumObservationDays: 14, MinimumDecisions: 100}
+	if policy.Criteria != want {
+		t.Fatalf("the approved criteria changed: %+v, want %+v", policy.Criteria, want)
+	}
+	if policy.Critical.Enforcement != "PROHIBITED" {
+		t.Fatalf("CRITICAL enforcement is prohibited until the owner lifts it: %q", policy.Critical.Enforcement)
 	}
 	e := NewEnforcement(policy, MustDefaultCatalogue(), nil)
 	for _, p := range MustDefaultCatalogue().Permissions() {

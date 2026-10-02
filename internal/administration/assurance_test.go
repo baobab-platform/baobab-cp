@@ -153,3 +153,41 @@ func TestWeakerAssuranceIsComparedByWhatIsRequired(t *testing.T) {
 		}
 	}
 }
+
+// TestStepUpIsRawLoa3WithWebAuthnEvidence: the architecture owner's ruling of
+// 2026-10-02. acr 3 is necessary and never sufficient: the CRITICAL
+// requirement also needs a fresh authentication and an amr containing
+// webauthn, so acr 3 with TOTP, or a passkey that is merely enrolled, does not
+// meet it.
+func TestStepUpIsRawLoa3WithWebAuthnEvidence(t *testing.T) {
+	p := MustDefaultAssurance()
+	now := time.Now()
+	critical := p.Required(assuranceGrant(RiskCritical, ""))
+	if critical.MinimumACR != "urn:baobab:acr:step-up" || critical.MaxAuthenticationAge != 300 || !critical.PhishingResistantRequired {
+		t.Fatalf("CRITICAL needs fresh phishing-resistant step-up: %+v", critical)
+	}
+	fresh := now.Add(-2 * time.Minute)
+	for name, c := range map[string]struct {
+		s    Session
+		want bool
+	}{
+		"acr 3, webauthn, fresh":            {Session{ACR: "3", AMR: []string{"pwd", "webauthn"}, AuthenticatedAt: fresh}, true},
+		"acr 3, webauthn, step-up fresh":    {Session{ACR: "3", AMR: []string{"webauthn"}, AuthenticatedAt: now.Add(-time.Hour), StepUpAt: fresh}, true},
+		"acr 3 with TOTP":                   {Session{ACR: "3", AMR: []string{"pwd", "otp"}, AuthenticatedAt: fresh}, false},
+		"acr 3, no amr at all":              {Session{ACR: "3", AuthenticatedAt: fresh}, false},
+		"acr 3, hardware key is not listed": {Session{ACR: "3", AMR: []string{"hwk"}, AuthenticatedAt: fresh}, false},
+		"acr 3, webauthn, stale":            {Session{ACR: "3", AMR: []string{"webauthn"}, AuthenticatedAt: now.Add(-6 * time.Minute)}, false},
+		"acr 3, webauthn, no time":          {Session{ACR: "3", AMR: []string{"webauthn"}}, false},
+		"acr 2 (OTP) with webauthn claimed": {Session{ACR: "2", AMR: []string{"webauthn"}, AuthenticatedAt: fresh}, false},
+		"the alias is not relied on":        {Session{ACR: "platinum", AMR: []string{"webauthn"}, AuthenticatedAt: fresh}, false},
+	} {
+		if got := p.Met(critical, c.s, now); got != c.want {
+			t.Errorf("%s: met = %v, want %v", name, got, c.want)
+		}
+	}
+	// A level-3 session also satisfies the lower rungs.
+	high := p.Required(assuranceGrant(RiskHigh, ""))
+	if !p.Met(high, Session{ACR: "3", AMR: []string{"webauthn"}, AuthenticatedAt: fresh}, now) {
+		t.Error("a step-up session meets a HIGH grant's MFA requirement")
+	}
+}

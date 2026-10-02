@@ -27,9 +27,18 @@
 #     is lifted by the owner, which requires every item in lift_requires.
 version: 1
 # The exit criteria are the owner's to approve. While status is not APPROVED
-# the Control Plane reports nothing as ready. The numbers are proposals.
+# the Control Plane reports nothing as ready. APPROVED by the architecture
+# owner on 2026-10-02 with exactly these values (roles-to-grants decision,
+# ruling "exit criteria"). The values are deliberately strict:
+#   - minimum_observation_days counts UTC days on which decisions were
+#     actually observed, not calendar days since deployment;
+#   - there is no low-volume waiver: a permission that cannot reach
+#     minimum_decisions stays ROLE_AUTHORITATIVE longer;
+#   - maximum_grants_narrower is 0 because there is not yet a contract for
+#     recording an individually reviewed, intentional narrowing.
+# Approving the criteria enforces nothing: `enforced` below is still empty.
 criteria:
-  status: PROPOSED
+  status: APPROVED
   minimum_observation_days: 14
   minimum_decisions: 100
   # grants_broader (grants would allow what roles denied) is always zero:
