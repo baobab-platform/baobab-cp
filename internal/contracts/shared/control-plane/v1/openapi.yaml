@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.31.0
+  version: 1.32.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -3855,7 +3855,8 @@ paths:
         state and the approved plan disagree, the plan's ERP steps resolve to
         conflicting engine instances, the isolation requirement is missing, the
         plan is not approved, stale or withdrawn, or the legal entity is not
-        VERIFIED. Control Plane never repairs a disagreement. isolation_requirement
+        VERIFIED. The projection carries the exact approved-plan tuple (plan_id, plan_version, plan_digest) that an
+        ERP provisioning request names in control_plane_authority. Control Plane never repairs a disagreement. isolation_requirement
         comes from the frozen desired state, capabilities only from the approved
         plan's ERP steps (deduplicated, sorted), never from the live registry.
       security:

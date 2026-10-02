@@ -70,6 +70,8 @@
       "required": [
         "tenant_id",
         "tenant_provisioning_id",
+        "plan_id",
+        "plan_version",
         "plan_digest",
         "legal_entity",
         "markets",
@@ -80,13 +82,20 @@
         "issued_at",
         "expires_at"
       ],
-      "description": "What Control Plane has decided for one legal entity of one approved tenant provisioning. It is read-only, derived, and bound to the approved plan by plan_digest; ERP validates it against its own request and fails closed on any mismatch (request is not authority).",
+      "description": "What Control Plane has decided for one legal entity of one approved tenant provisioning. It is read-only, derived, and bound to the approved plan by the exact tuple plan_id, plan_version and plan_digest, the same tuple an ERP provisioning request names in control_plane_authority (erp/v1 provisioning-request.schema.json); ERP validates it against its own request and fails closed on any mismatch (request is not authority).",
       "properties": {
         "tenant_id": {
           "$ref": "domain.schema.json#/$defs/tenantId"
         },
         "tenant_provisioning_id": {
           "$ref": "domain.schema.json#/$defs/tenantProvisioningId"
+        },
+        "plan_id": {
+          "$ref": "domain.schema.json#/$defs/provisioningPlanId"
+        },
+        "plan_version": {
+          "type": "integer",
+          "minimum": 1
         },
         "plan_digest": {
           "$ref": "domain.schema.json#/$defs/planDigest"
