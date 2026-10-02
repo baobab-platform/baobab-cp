@@ -125,8 +125,9 @@ func TestReadinessRouteReportsEvidenceAndEnforcesNothing(t *testing.T) {
 	if w := get("norole"); w.Code != http.StatusForbidden {
 		t.Errorf("the role is necessary: %d", w.Code)
 	}
-	// Plenty of clean evidence still reports nothing ready: the criteria are
-	// not approved, and CRITICAL is prohibited.
+	// The criteria are approved. Clean evidence makes a permission READY, which
+	// is evidence for the owner's decision and enforces nothing; CRITICAL is
+	// never ready; a permission nobody has exercised is not ready.
 	now := time.Now()
 	for _, key := range []string{"tenant.view", "tenant.decommission"} {
 		first := now.AddDate(0, 0, -30)
@@ -140,16 +141,32 @@ func TestReadinessRouteReportsEvidenceAndEnforcesNothing(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.CriteriaStatus == "APPROVED" || len(report.Permissions) < 50 {
+	if report.CriteriaStatus != "APPROVED" || len(report.Permissions) < 50 {
 		t.Fatalf("unexpected report header: %s, %d permissions", report.CriteriaStatus, len(report.Permissions))
 	}
+	ready := 0
 	for _, p := range report.Permissions {
-		if p.Ready || p.Enforcement != administration.ModeRoleAuthoritative || len(p.Blockers) == 0 {
-			t.Fatalf("nothing is ready or enforced while the criteria are not approved: %+v", p)
+		if p.Enforcement != administration.ModeRoleAuthoritative {
+			t.Fatalf("nothing is enforced: %+v", p)
 		}
-		if p.Permission == "tenant.decommission" && p.Wave != 4 {
-			t.Fatalf("CRITICAL is the last wave: %+v", p)
+		switch {
+		case p.Permission == "tenant.view":
+			if !p.Ready || len(p.Blockers) != 0 {
+				t.Fatalf("clean evidence under approved criteria is ready: %+v", p)
+			}
+		case p.Permission == "tenant.decommission":
+			if p.Ready || p.Wave != 4 || len(p.Blockers) != 1 || p.Blockers[0] != administration.BlockerCriticalProhibited {
+				t.Fatalf("CRITICAL is the last wave and never ready: %+v", p)
+			}
+		case p.Ready:
+			t.Fatalf("a permission with no evidence must not be ready: %+v", p)
 		}
+		if p.Ready {
+			ready++
+		}
+	}
+	if ready != 1 {
+		t.Fatalf("exactly the permission with clean evidence is ready, got %d", ready)
 	}
 	if dir := os.Getenv("SHARED_CONTRACTS_DIR"); dir != "" {
 		var raw map[string]any

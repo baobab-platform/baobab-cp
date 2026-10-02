@@ -153,3 +153,61 @@ func TestWeakerAssuranceIsComparedByWhatIsRequired(t *testing.T) {
 		}
 	}
 }
+
+// TestStepUpIsRawLoa3AndPhishingResistanceIsIssuerEvidence: the architecture
+// owner's rulings of 2026-10-02. LoA 3 has exactly one meaning at the issuer (a
+// WebAuthn flow with user verification), so a trusted acr 3 is itself the
+// evidence; a trusted amr naming webauthn or hwk is an alternative form. The
+// CRITICAL requirement stays fresh within 300 seconds. An enrolled passkey that
+// was not used for the current step-up produces neither form.
+func TestStepUpIsRawLoa3AndPhishingResistanceIsIssuerEvidence(t *testing.T) {
+	p := MustDefaultAssurance()
+	now := time.Now()
+	critical := p.Required(assuranceGrant(RiskCritical, ""))
+	if critical.MinimumACR != "urn:baobab:acr:step-up" || critical.MaxAuthenticationAge != 300 || !critical.PhishingResistantRequired {
+		t.Fatalf("CRITICAL needs fresh phishing-resistant step-up: %+v", critical)
+	}
+	fresh := now.Add(-2 * time.Minute)
+	for name, c := range map[string]struct {
+		s    Session
+		want bool
+	}{
+		"acr 3, fresh (no amr needed)":      {Session{ACR: "3", AuthenticatedAt: fresh}, true},
+		"acr 3 with amr webauthn, fresh":    {Session{ACR: "3", AMR: []string{"pwd", "webauthn"}, AuthenticatedAt: fresh}, true},
+		"acr 3, step-up fresh, login old":   {Session{ACR: "3", AuthenticatedAt: now.Add(-time.Hour), StepUpAt: fresh}, true},
+		"acr 3, stale":                      {Session{ACR: "3", AuthenticatedAt: now.Add(-6 * time.Minute)}, false},
+		"acr 3, authenticated in future":    {Session{ACR: "3", AuthenticatedAt: now.Add(time.Minute)}, false},
+		"acr 3, no authentication time":     {Session{ACR: "3"}, false},
+		"acr 2 (OTP) with webauthn amr":     {Session{ACR: "2", AMR: []string{"webauthn"}, AuthenticatedAt: fresh}, false},
+		"acr 2 (gold) alone":                {Session{ACR: "gold", AuthenticatedAt: fresh}, false},
+		"an enrolled passkey is not enough": {Session{ACR: "1", AMR: []string{"pwd"}, AuthenticatedAt: fresh}, false},
+		"the alias is not relied on":        {Session{ACR: "platinum", AuthenticatedAt: fresh}, false},
+		"no assurance claims":               {Session{}, false},
+	} {
+		if got := p.Met(critical, c.s, now); got != c.want {
+			t.Errorf("%s: met = %v, want %v", name, got, c.want)
+		}
+	}
+	// A requirement below step-up that still demands phishing resistance accepts
+	// either form: the trusted acr, or the trusted amr.
+	resistantMFA := AssuranceRequirement{MinimumACR: "urn:baobab:acr:mfa", PhishingResistantRequired: true}
+	for name, c := range map[string]struct {
+		s    Session
+		want bool
+	}{
+		"acr 3":              {Session{ACR: "3"}, true},
+		"gold with webauthn": {Session{ACR: "2", AMR: []string{"webauthn"}}, true},
+		"gold with hwk":      {Session{ACR: "2", AMR: []string{"hwk"}}, true},
+		"gold with otp":      {Session{ACR: "2", AMR: []string{"otp"}}, false},
+		"gold with no amr":   {Session{ACR: "2"}, false},
+		"password with webauthn amr but below mfa": {Session{ACR: "1", AMR: []string{"webauthn"}}, false},
+	} {
+		if got := p.Met(resistantMFA, c.s, now); got != c.want {
+			t.Errorf("phishing-resistant MFA, %s: met = %v, want %v", name, got, c.want)
+		}
+	}
+	// A level-3 session also satisfies the lower rungs.
+	if !p.Met(p.Required(assuranceGrant(RiskHigh, "")), Session{ACR: "3", AuthenticatedAt: fresh}, now) {
+		t.Error("a step-up session meets a HIGH grant's MFA requirement")
+	}
+}

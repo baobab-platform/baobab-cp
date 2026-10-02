@@ -34,9 +34,16 @@ type AssuranceRequirement struct {
 // sections 72-74). Baobab IAM owns how assurance is produced; this is how a
 // grant's use is judged against it.
 type AssurancePolicy struct {
-	Levels                   []AssuranceLevel       `yaml:"levels"`
-	PhishingResistantMethods []string               `yaml:"phishing_resistant_methods"`
-	Requirements             []AssuranceRequirement `yaml:"requirements"`
+	Levels []AssuranceLevel `yaml:"levels"`
+	// PhishingResistantEvidence is how phishing resistance is proven: a
+	// trusted acr of the phishing-resistant level, or a trusted amr naming a
+	// phishing-resistant method. Either is issuer-authenticated evidence of
+	// the current authentication; an enrolled-but-unused passkey is neither.
+	PhishingResistantEvidence struct {
+		AcceptedRawACRValues []string `yaml:"accepted_raw_acr_values"`
+		AcceptedAMRValues    []string `yaml:"accepted_amr_values"`
+	} `yaml:"phishing_resistant_evidence"`
+	Requirements []AssuranceRequirement `yaml:"requirements"`
 }
 
 // Session is the authentication assurance of the caller's session as the
@@ -86,6 +93,9 @@ func MustDefaultAssurance() *AssurancePolicy {
 func (p *AssurancePolicy) check() error {
 	if len(p.Levels) == 0 {
 		return fmt.Errorf("%s declares no levels", assurancePath)
+	}
+	if len(p.PhishingResistantEvidence.AcceptedRawACRValues) == 0 && len(p.PhishingResistantEvidence.AcceptedAMRValues) == 0 {
+		return fmt.Errorf("%s declares no phishing-resistant evidence", assurancePath)
 	}
 	for _, risk := range []RiskClass{RiskLow, RiskModerate, RiskHigh, RiskCritical} {
 		if _, ok := p.requirementFor(risk); !ok {
@@ -139,6 +149,23 @@ func (p *AssurancePolicy) rank(s Session) int {
 	return -1
 }
 
+// phishingResistant reports whether the session carries issuer-authenticated
+// phishing-resistant evidence: a trusted phishing-resistant acr, or a trusted
+// amr naming a phishing-resistant method. The acr form is only as strong as
+// the issuer's flow for that level; the policy states what that flow is.
+func (p *AssurancePolicy) phishingResistant(s Session) bool {
+	ev := p.PhishingResistantEvidence
+	if s.ACR != "" && slices.Contains(ev.AcceptedRawACRValues, s.ACR) {
+		return true
+	}
+	for _, m := range s.AMR {
+		if slices.Contains(ev.AcceptedAMRValues, m) {
+			return true
+		}
+	}
+	return false
+}
+
 // Required is the assurance a grant needs: the strictest of its own
 // conditions.minimum_acr and its risk class's requirement. A grant naming a
 // level the ladder does not list needs an unmeetable one, never none.
@@ -179,14 +206,8 @@ func (p *AssurancePolicy) Met(req AssuranceRequirement, s Session, now time.Time
 			return false
 		}
 	}
-	if req.PhishingResistantRequired {
-		resistant := false
-		for _, m := range s.AMR {
-			resistant = resistant || slices.Contains(p.PhishingResistantMethods, m)
-		}
-		if !resistant {
-			return false
-		}
+	if req.PhishingResistantRequired && !p.phishingResistant(s) {
+		return false
 	}
 	return true
 }

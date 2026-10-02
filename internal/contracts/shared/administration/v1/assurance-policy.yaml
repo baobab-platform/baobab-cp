@@ -5,10 +5,11 @@
 # reads the session's assurance from the verified token and evaluates them
 # (administration.Evaluate). Baobab IAM owns the mechanism that produces the
 # assurance (section 72): the raw_acr_values below are what IAM's realm
-# issues today (realm attribute acr.loa.map {silver: 1, gold: 2}; the
-# "Baobab - Step-Up" flow at loa-condition-level 2 with loa-max-age 300 is
-# the only flow that sets a level; Keycloak emits no amr by default) and are
-# the one place this file depends on IAM. Changing IAM's vocabulary is a
+# issues or has been ruled to issue (realm attribute acr.loa.map {silver: 1,
+# gold: 2}; the "Baobab - Step-Up" flow at loa-condition-level 2 with
+# loa-max-age 300 sets gold; level 3 is the passkey step-up; Keycloak emits no
+# amr unless its native mapper is configured; this policy does not depend on it)
+# and are the one place this file depends on IAM. Changing IAM's vocabulary is a
 # change to this file first.
 #
 # Assurance is never permission (section 74): meeting a requirement lets a
@@ -28,8 +29,10 @@
 #   4. When the requirement sets max_authentication_age_seconds, the session's
 #      latest authentication (step_up_at, else auth_time) is no older and no
 #      later than now (a future time is not fresh).
-#   5. When phishing_resistant_required, at least one amr value is in
-#      phishing_resistant_methods.
+#   5. When phishing_resistant_required, the session carries issuer-authenticated
+#      phishing-resistant evidence: its acr is in accepted_raw_acr_values, or at
+#      least one amr value is in accepted_amr_values. The requirement itself is
+#      never dropped to cope with an implementation limit.
 #   6. The effective requirement is the strictest of the grant's own
 #      minimum_acr and the requirement for the grant's risk class.
 version: 1
@@ -54,12 +57,27 @@ levels:
   - name: urn:baobab:acr:step-up
     rank: 2
     description: >-
-      Phishing-resistant step-up. IAM issues no such level yet, so nothing
-      meets it: a requirement at this level is unmet until IAM adds a flow
-      and this file lists the acr it emits.
-    issuable: false
-    raw_acr_values: []
-phishing_resistant_methods: [hwk, webauthn]
+      Phishing-resistant step-up: the person performed a WebAuthn/passkey
+      authentication with user verification for the current step-up (ADR-IAM-0024
+      BAOBAB-A3). Raw Keycloak LoA 3 is the normative acr (architecture owner,
+      2026-10-02). LoA 3 has exactly one security meaning: IAM's LoA-3 flow
+      requires WebAuthn with user verification and has no OTP-only or
+      password-only alternative, and IAM's CI proves no weaker flow can emit it,
+      so a token from the trusted issuer carrying acr 3 is itself the evidence
+      that the phishing-resistant context was achieved. Nothing depends on a
+      human-readable alias such as "platinum". The level is paired with
+      freshness (the CRITICAL requirement), never used alone as a standing
+      state.
+    issuable: true
+    raw_acr_values: ["3"]
+# How phishing resistance is proven (the architecture owner, 2026-10-02). Either
+# form is issuer-authenticated evidence: a trusted acr of the phishing-resistant
+# level, or a trusted amr naming a phishing-resistant method. Provider neutral:
+# a future provider maps its own evidence to the same canonical level. An enrolled
+# passkey that was not used for the current step-up is neither.
+phishing_resistant_evidence:
+  accepted_raw_acr_values: ["3"]
+  accepted_amr_values: [webauthn, hwk]
 requirements:
   # ADR-BCP-020 section 72: ordinary use needs a normal session, privileged
   # configuration needs MFA, critical configuration needs phishing-resistant
