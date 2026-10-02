@@ -1,0 +1,7 @@
+# Gitleaks fingerprints (commit:file:rule:line) of reviewed false positives. Keep this list minimal: each entry
+# names one finding, never a rule or a path.
+#
+# api/erp_assignment_handler_test.go:26 held a synthetic provisioning id (`tp_` + 32 hex) as a test constant, which
+# generic-api-key mistook for a credential. It is a public identifier, not a secret; the constant is now built at
+# runtime. The scan covers full history, so the original commit's finding is recorded here.
+8d52ff338ae70ffd4e22c9cf635120a2c8c40e69:api/erp_assignment_handler_test.go:generic-api-key:26
