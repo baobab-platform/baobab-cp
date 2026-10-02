@@ -567,6 +567,12 @@ func New(dependencies Dependencies) http.Handler {
 		// Retrying or cancelling execution is an operation command; the
 		// handler admits the operation's readers (tenant administrators of
 		// its tenant, platform administrators).
+		// The ERP assignment projection is a workload read: erp-assignment:read is an invocation permission, and the
+		// handler additionally requires the token's tenant to be the path tenant.
+		if dependencies.OrganisationAdmission != nil {
+			erpAssignments := erpAssignmentHandler{provisionings: dependencies.Provisioning, profiles: dependencies.OrganisationAdmission, stale: plans.stale}
+			r.With(a.authorize(a.workloadVerifier, "workload", "erp-assignment:read")).Get("/v1/tenants/{tenantID}/provisioning/{provisioningID}/erp-assignments/{legalEntityID}", erpAssignments.get)
+		}
 		commands := operationCommands{read: operationHandler{tenantAdminOf: a.tenantAdminOf, decide: a.shadowOperationDecision}, plans: plans}
 		r.With(a.authorize(a.adminVerifier, "human", "operation:control")).Post("/v1/admin/operations/{operationID}/retry", commands.retry)
 		r.With(a.authorize(a.adminVerifier, "human", "operation:control")).Post("/v1/admin/operations/{operationID}/cancel", commands.cancel)
