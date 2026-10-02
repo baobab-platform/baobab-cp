@@ -80,6 +80,8 @@ type erpAssignmentMarket struct {
 type erpAssignmentResponse struct {
 	TenantID             string                   `json:"tenant_id"`
 	TenantProvisioningID string                   `json:"tenant_provisioning_id"`
+	PlanID               string                   `json:"plan_id"`
+	PlanVersion          int                      `json:"plan_version"`
 	PlanDigest           string                   `json:"plan_digest"`
 	LegalEntity          erpAssignmentLegalEntity `json:"legal_entity"`
 	Markets              []erpAssignmentMarket    `json:"markets"`
@@ -166,7 +168,7 @@ func (h erpAssignmentHandler) get(w http.ResponseWriter, r *http.Request) {
 		identifiers = []domain.OrganisationIdentifier{}
 	}
 	out := erpAssignmentResponse{
-		TenantID: tenantID, TenantProvisioningID: c.Key, PlanDigest: c.Plan.PlanDigest,
+		TenantID: tenantID, TenantProvisioningID: c.Key, PlanID: c.Plan.PlanID, PlanVersion: c.Plan.PlanVersion, PlanDigest: c.Plan.PlanDigest,
 		LegalEntity: erpAssignmentLegalEntity{LegalEntityID: profile.LegalEntityID, LegalName: profile.LegalName,
 			JurisdictionCode: profile.JurisdictionOfIncorporation, RegistrationIdentifiers: identifiers,
 			VerificationState: string(profile.VerificationState)},
@@ -218,7 +220,8 @@ func (h erpAssignmentHandler) executable(ctx context.Context, c repository.Conve
 		return "the provisioning has no plan"
 	case c.Decision == nil || c.Decision.Decision != "APPROVED":
 		return "the current plan has no APPROVED decision"
-	case c.Decision.PlanID != c.Plan.PlanID || c.Decision.PlanDigest != c.Plan.PlanDigest:
+	case c.Decision.PlanID != c.Plan.PlanID || c.Decision.PlanVersion != c.Plan.PlanVersion || c.Decision.PlanDigest != c.Plan.PlanDigest:
+		// An approval binds the exact id, version and digest together (ADR-BCP-021); the projection names that tuple.
 		return "the approval is for another plan than the current one"
 	case desired.Tenant.TenantID != c.TenantID || c.Plan.TenantID != c.TenantID:
 		return "the desired state and the plan name another tenant"

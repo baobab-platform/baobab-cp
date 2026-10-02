@@ -25,6 +25,7 @@ const (
 	erpUUID      = "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b"
 	erpLegal     = "ZURIBEANS-ZA"
 	erpInstance  = "ei_0199a1b2c3d47e8f"
+	erpPlanID    = "plan_0199a1b2c3d47e8f"
 	erpDigestHex = "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
 )
 
@@ -74,7 +75,7 @@ func erpStep(id, op, engine, instance, capability string) convergence.Step {
 // newErpSources is an approved, executable, consistent provisioning of two legal entities.
 func newErpSources() *erpSources {
 	plan := &convergence.Plan{
-		PlanID: "plan_1", PlanVersion: 1, PlanDigest: erpDigestHex, TenantProvisioningID: erpKey, TenantID: erpTenant,
+		PlanID: erpPlanID, PlanVersion: 3, PlanDigest: erpDigestHex, TenantProvisioningID: erpKey, TenantID: erpTenant,
 		DesiredStateDigest: "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 		Steps: []convergence.Step{
 			erpStep("grant", convergence.OpCreateCapabilityGrant, "", "", "finance.order-consequence.process"),
@@ -88,7 +89,7 @@ func newErpSources() *erpSources {
 	return &erpSources{
 		c: repository.ConvergedProvisioning{ID: erpUUID, Key: erpKey, TenantID: erpTenant, State: "PLANNED",
 			DesiredStateVersion: 1, DesiredStateDigest: plan.DesiredStateDigest, Plan: plan,
-			Decision: &repository.PlanDecision{Decision: "APPROVED", PlanID: "plan_1", PlanDigest: erpDigestHex}},
+			Decision: &repository.PlanDecision{Decision: "APPROVED", PlanID: erpPlanID, PlanVersion: 3, PlanDigest: erpDigestHex}},
 		desired: convergence.DesiredState{
 			Tenant: convergence.DesiredTenant{TenantID: erpTenant, DisplayName: "Zuribeans"}, LegalEntities: []string{erpLegal, "ZURIBEANS-UG"},
 			MarketParticipation:  []convergence.DesiredMarket{{Market: "ZA", Activities: []string{"SELLING", "IMPORTING"}}},
@@ -135,7 +136,7 @@ func TestErpAssignmentProjectsOnlyContractFacts(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got["tenant_id"] != erpTenant || got["tenant_provisioning_id"] != erpKey || got["plan_digest"] != erpDigestHex ||
+	if got["tenant_id"] != erpTenant || got["tenant_provisioning_id"] != erpKey || got["plan_id"] != erpPlanID || got["plan_version"] != float64(3) || got["plan_digest"] != erpDigestHex ||
 		got["engine_id"] != "baobab-erp" || got["engine_instance_id"] != erpInstance || got["isolation_requirement"] != "row_level_security" {
 		t.Errorf("unexpected projection: %v", got)
 	}
@@ -219,7 +220,9 @@ func TestErpAssignmentConflictsAreNeverRepaired(t *testing.T) {
 		"plan has no decision":                 {func(s *erpSources) { s.c.Decision = nil }, false},
 		"plan was rejected":                    {func(s *erpSources) { s.c.Decision.Decision = "REJECTED" }, false},
 		"approval is for another digest":       {func(s *erpSources) { s.c.Decision.PlanDigest = "sha256:" + strings.Repeat("c", 64) }, false},
-		"approval is for another plan":         {func(s *erpSources) { s.c.Decision.PlanID = "plan_2" }, false},
+		"approval is for another plan":         {func(s *erpSources) { s.c.Decision.PlanID = "plan_0199a1b2c3d47e90" }, false},
+		"approval is for an older version":     {func(s *erpSources) { s.c.Decision.PlanVersion = 2 }, false},
+		"approval is for a newer version":      {func(s *erpSources) { s.c.Decision.PlanVersion = 4 }, false},
 		"provisioning was withdrawn":           {func(s *erpSources) { s.c.State = "CANCELLED" }, false},
 		"provisioning has no plan":             {func(s *erpSources) { s.c.Plan = nil }, false},
 		"plan is stale":                        {func(*erpSources) {}, true},
