@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.29.0
+  version: 1.31.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -3826,6 +3826,57 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/erp-assignments/{legal_entity_id}:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+      - $ref: "#/components/parameters/TenantProvisioningId"
+      - $ref: "#/components/parameters/LegalEntityId"
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Provisioning]
+      operationId: getTenantProvisioningErpAssignment
+      summary: Read the ERP assignment projection of one legal entity
+      description: >-
+        The narrow projection of an APPROVED provisioning plan that an ERP
+        workload needs to provision one legal entity (erp-assignment.schema.json):
+        the legal entity's verified profile, the tenant's markets and the
+        resolved topology (engine, engine instance, the capability keys bound
+        to it) and the isolation requirement the plan was made under. It
+        carries no registry identifiers (Control Plane's UUIDs for bindings
+        and isolation profiles are internal), no native ERP placement and no
+        accounting configuration. It answers only what Control Plane has already
+        determined ERP is assigned for this legal entity in this provisioning
+        execution; it is not a planning API. The erp-assignment:read scope
+        grants no authority over a resource. 403: the token lacks the scope, or
+        its tenant_id is absent or differs from the path tenant_id. 404: the
+        provisioning does not exist for that tenant, or the legal entity is not
+        part of it. 409: the sources disagree or are not executable, namely no
+        ERP assignment can be derived for the legal entity, the frozen desired
+        state and the approved plan disagree, the plan's ERP steps resolve to
+        conflicting engine instances, the isolation requirement is missing, the
+        plan is not approved, stale or withdrawn, or the legal entity is not
+        VERIFIED. Control Plane never repairs a disagreement. isolation_requirement
+        comes from the frozen desired state, capabilities only from the approved
+        plan's ERP steps (deduplicated, sorted), never from the live registry.
+      security:
+        - workloadOidc: [erp-assignment:read]
+      responses:
+        "200":
+          description: The ERP assignment projection
+          content:
+            application/json:
+              schema:
+                $ref: ./erp-assignment.schema.json#/$defs/ErpAssignment
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /tenants/{tenant_id}/provisioning/{tenant_provisioning_id}/plan:
     parameters:
       - $ref: "#/components/parameters/TenantId"
@@ -5829,6 +5880,12 @@ components:
       required: true
       schema:
         $ref: ./domain.schema.json#/$defs/externalReferenceId
+    LegalEntityId:
+      name: legal_entity_id
+      in: path
+      required: true
+      schema:
+        $ref: ./domain.schema.json#/$defs/canonicalLegalEntityId
     TenantProvisioningId:
       name: tenant_provisioning_id
       in: path
