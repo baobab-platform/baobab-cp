@@ -38,14 +38,6 @@ jobs:
       # internal/contracttest's tests validate this repository's payloads
       # against the same schemas it declares a dependency on - not
       # whatever baobab-platform/shared's default branch happens to contain today.
-      - name: Require read-only Shared checkout credential
-        env:
-          SHARED_READ_TOKEN: ${{ secrets.SHARED_READ_TOKEN }}
-        run: |
-          if [[ -z "$SHARED_READ_TOKEN" ]]; then
-            echo "::error::Provision SHARED_READ_TOKEN with contents:read on baobab-platform/shared."
-            exit 1
-          fi
       - name: Read immutable shared-contract pin
         id: pin
         run: echo "commit=$(grep -m1 'commit:' contracts.lock.yaml | awk '{print $2}')" >> "$GITHUB_OUTPUT"
@@ -53,7 +45,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: baobab-platform/shared
-          token: ${{ secrets.SHARED_READ_TOKEN }}
+          token: ${{ secrets.SHARED_READ_TOKEN || github.token }}
           persist-credentials: false
           ref: ${{ steps.pin.outputs.commit }}
           path: .shared-contracts

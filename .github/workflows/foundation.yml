@@ -16,11 +16,11 @@ permissions:
 
 jobs:
   foundation:
-    uses: baobab-platform/shared/.github/workflows/foundation-repository-gates.yml@e9d049bd15eaa354e3c0bc8278563fe404e93e81
+    uses: baobab-platform/shared/.github/workflows/foundation-repository-gates.yml@e78aa1d88ea6142897d902dac8cd48c4b2ad5131
     secrets:
       SHARED_READ_TOKEN: ${{ secrets.SHARED_READ_TOKEN }}
     with:
-      foundation_ref: "e9d049bd15eaa354e3c0bc8278563fe404e93e81"
+      foundation_ref: "e78aa1d88ea6142897d902dac8cd48c4b2ad5131"
       # Private repository without GHAS: portable Trivy and native audits run.
       # GitHub dependency-graph review is unavailable (ADR-0020).
       dependency_review_enabled: false
