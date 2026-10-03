@@ -11,7 +11,7 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
-    "lint": "eslint --max-warnings=0 .",
+    "lint": "node --test scripts/next-root-dirs.test.mjs && eslint --max-warnings=0 .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "generate:cp-client": "node scripts/generate-cp-client.mjs",
