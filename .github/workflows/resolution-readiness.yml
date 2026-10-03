@@ -28,12 +28,22 @@ jobs:
       SHARED_CONTRACTS_DIR: ${{ github.workspace }}/.shared-contracts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Require read-only Shared checkout credential
+        env:
+          SHARED_READ_TOKEN: ${{ secrets.SHARED_READ_TOKEN }}
+        run: |
+          if [[ -z "$SHARED_READ_TOKEN" ]]; then
+            echo "::error::Provision SHARED_READ_TOKEN with contents:read on baobab-platform/shared."
+            exit 1
+          fi
       - name: Read immutable shared-contract pin
         id: pin
         run: echo "commit=$(grep -m1 'commit:' contracts.lock.yaml | awk '{print $2}')" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: baobab-platform/shared
+          token: ${{ secrets.SHARED_READ_TOKEN }}
+          persist-credentials: false
           ref: ${{ steps.pin.outputs.commit }}
           path: .shared-contracts
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
