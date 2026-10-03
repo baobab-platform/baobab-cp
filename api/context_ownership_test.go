@@ -82,17 +82,29 @@ func TestBatchResolutionIsBoundToTheResolvingPrincipal(t *testing.T) {
 	seedResolutionContext(t, contexts, resolutionContext, resolutionTenant, "UG")
 	resolutionIdentity(t, contexts, "baobab-other")
 	h := CapabilityResolveBatchHandler{Contexts: contexts, Identities: contexts, Service: service.CapabilityResolutionService{Store: newResolutionStore()}}.Resolve
-	call := func(subject, id string) int {
+	call := func(subject, id, tenant string) *httptest.ResponseRecorder {
 		raw, _ := json.Marshal(map[string]any{"context_id": id, "capabilities": []string{resolutionKey}, "correlation_id": "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a98"})
-		p := auth.Principal{Subject: subject, Issuer: resolutionIssuer, ActorType: "workload", TokenID: "t", Scopes: map[string]struct{}{"context:resolve": {}}}
+		p := auth.Principal{Subject: subject, Issuer: resolutionIssuer, ActorType: "workload", TenantID: tenant, TokenID: "t", Scopes: map[string]struct{}{"context:resolve": {}}}
 		w := httptest.NewRecorder()
 		h(w, httptest.NewRequest(http.MethodPost, "/v1/capabilities/resolve-batch", bytes.NewReader(raw)).WithContext(auth.WithPrincipal(context.Background(), p)))
-		return w.Code
+		return w
 	}
-	if got := call("baobab-trade", resolutionContext); got != http.StatusOK {
-		t.Fatalf("owner: %d", got)
+	if got := call("baobab-trade", resolutionContext, ""); got.Code != http.StatusOK {
+		t.Fatalf("owner: %d %s", got.Code, got.Body.String())
 	}
-	if got := call("baobab-other", resolutionContext); got != http.StatusNotFound {
-		t.Fatalf("another registered workload must see 404, got %d", got)
+	foreign := call("baobab-other", resolutionContext, "")
+	unknown := call("baobab-other", "00000000-0000-4000-8000-0000000000ff", "")
+	if foreign.Code != http.StatusNotFound || unknown.Code != http.StatusNotFound || foreign.Body.String() != unknown.Body.String() {
+		t.Fatalf("another principal's context must be indistinguishable from unknown: %d %s / %d %s",
+			foreign.Code, foreign.Body.String(), unknown.Code, unknown.Body.String())
+	}
+	mismatch := call("baobab-trade", resolutionContext, "tn_elsewhere")
+	code, _ := problemOf(t, mismatch)
+	if mismatch.Code != http.StatusForbidden || code != "TENANT_CONTEXT_MISMATCH" {
+		t.Fatalf("owner with mismatched tenant: %d %s", mismatch.Code, mismatch.Body.String())
+	}
+	probe := call("baobab-other", resolutionContext, "tn_elsewhere")
+	if probe.Code != http.StatusNotFound || probe.Body.String() != unknown.Body.String() {
+		t.Fatalf("foreign context with tenant claim: %d %s", probe.Code, probe.Body.String())
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
@@ -17,7 +18,7 @@ import (
 var platformContextValidateSchema = contracts.MustSchema("control-plane/v1/platform-context.schema.json#/$defs/PlatformContextValidateRequest")
 
 // ContextValidationHandler is POST /v1/platform-context/validate (Shared
-// control-plane/v1 1.33.0; docs/architecture/context-authority-for-workloads.md
+// control-plane/v1 1.33.1; docs/architecture/context-authority-for-workloads.md
 // in baobab-platform/shared).
 //
 // A resource server (the VALIDATOR, authenticated by the bearer token and
@@ -98,7 +99,7 @@ func (h ContextValidationHandler) Validate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var req validateRequest
-	if err := json.Unmarshal(raw, &req); err != nil {
+	if err := json.Unmarshal(raw, &req); err != nil || strings.TrimSpace(req.SubjectToken) == "" {
 		problem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", "the request body is not a valid context validation request", false)
 		return
 	}

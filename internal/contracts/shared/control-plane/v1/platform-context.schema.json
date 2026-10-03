@@ -124,9 +124,8 @@
           "type": "string",
           "minLength": 16,
           "maxLength": 8192,
-          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
           "writeOnly": true,
-          "description": "The access token that arrived at the resource server (a compact JWT). Accepted only in this POST body over the validator's authenticated call; the Control Plane verifies it independently (issuer, signature, expiry, workload actor, and an audience equal to one the authenticated validator is registered to validate). It is never persisted, never logged and never placed in a trace, an error or an audit payload; audit records only the validator principal, the resolved subject principal, context_id, tenant_id, the decision and reason, and the correlation id."
+          "description": "The access token that arrived at the resource server. Accepted only in this POST body over the validator's authenticated call; the Control Plane verifies it independently using the configured token profile (local cryptographic verification or trusted token introspection, including issuer, expiry, workload actor, and an audience equal to one the authenticated validator is registered to validate). It is never persisted, never logged and never placed in a trace, an error or an audit payload; audit records only the validator principal, the resolved subject principal, context_id, tenant_id, the decision and reason, and the correlation id."
         }
       }
     },

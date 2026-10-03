@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.33.0
+  version: 1.33.1
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -245,7 +245,12 @@ paths:
       description: >-
         As resolveCapability for each capability, decided independently: a
         batch has no atomicity across its members, and each decision is
-        recorded under its own resolution_id.
+        recorded under its own resolution_id. The context is bound to the
+        principal that resolved it: the authenticated caller's canonical
+        principal must equal the context's, and a context another principal
+        resolved is indistinguishable from an unknown or expired one
+        (CONTEXT_NOT_FOUND, 404). A token tenant_id that differs from the
+        context's tenant is TENANT_CONTEXT_MISMATCH (403).
       security:
         - workloadOidc: [context:resolve]
       parameters:

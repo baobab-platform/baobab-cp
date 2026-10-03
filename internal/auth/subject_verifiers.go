@@ -12,10 +12,14 @@ import (
 // Plane, so the Control Plane's request verifier cannot check it.
 type SubjectVerifiers interface {
 	// For returns a verifier that accepts only tokens addressed to audience.
+	// Token serialization is adapter-specific: local cryptographic verification
+	// and trusted introspection implement the same interface (ADR-IAM-0020/0021).
 	For(ctx context.Context, audience string) (TokenVerifier, error)
 }
 
-// AudienceVerifiers builds one OIDC verifier per audience on first use and
+// AudienceVerifiers is the initial locally verifiable JWT adapter; it does
+// not constrain the canonical subject_token contract to JWT serialization.
+// It builds one OIDC verifier per audience on first use and
 // keeps it. A discovery failure is not cached, so a transient outage heals.
 type AudienceVerifiers struct {
 	Issuer string

@@ -218,3 +218,34 @@ workloads:
 		t.Fatalf("nil registry: %v", got)
 	}
 }
+
+// A shared API audience does not force independently revocable components
+// to share one workload identity (ADR-0007).
+func TestValidatorsCanShareAnExplicitlyRegisteredAudience(t *testing.T) {
+	registry, err := LoadWorkloadRegistryFile(writeTestRegistry(t, `
+workloads:
+  erp-api:
+    status: ACTIVE
+    allowed_scopes: ["context:validate"]
+    validates_audiences: ["baobab-erp"]
+  erp-worker:
+    status: ACTIVE
+    allowed_scopes: ["context:validate"]
+    validates_audiences: ["baobab-erp"]
+  erp-revoked:
+    status: REVOKED
+    allowed_scopes: ["context:validate"]
+    validates_audiences: ["baobab-erp"]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, client := range []string{"erp-api", "erp-worker"} {
+		if got := registry.ValidatesAudiences(client); len(got) != 1 || got[0] != "baobab-erp" {
+			t.Fatalf("%s: %v", client, got)
+		}
+	}
+	if got := registry.ValidatesAudiences("erp-revoked"); len(got) != 0 {
+		t.Fatalf("revoked validator: %v", got)
+	}
+}

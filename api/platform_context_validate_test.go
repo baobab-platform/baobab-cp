@@ -38,6 +38,7 @@ const (
 	validatorBearer   = "validator-bearer"
 	tradeToken        = "trade-token.header.signature-0001"
 	tradeRotatedToken = "trade-token.header.signature-0002"
+	opaqueTradeToken  = "opaque+access/token=0123456789"
 )
 
 type validateFixture struct {
@@ -128,6 +129,7 @@ workloads:
 		SubjectVerifiers: audienceTokens{byAudience: map[string]tokenVerifier{
 			"baobab-erp": {
 				tradeToken:                         subject("trade-sub", "jti-1", ""),
+				opaqueTradeToken:                   subject("trade-sub", "opaque-1", ""),
 				tradeRotatedToken:                  subject("trade-sub", "jti-2", ""),
 				"trade-token.same-tenant.sig-0001": subject("trade-sub", "jti-3", "tn_validate"),
 				"trade-token.other-tenant.sig-001": subject("trade-sub", "jti-4", "tn_elsewhere"),
@@ -237,9 +239,11 @@ func TestValidateRefusesAnUnverifiableSubject(t *testing.T) {
 	f := newValidateFixture(t, nil)
 	secret := "garbage-token.header.signature-0001"
 	for name, token := range map[string]string{
-		"unknown token":   secret,
-		"wrong audience":  "cp-token.header.signature-000001",
-		"a human subject": "human-token.header.signature-001",
+		"unknown token":           secret,
+		"unverified opaque token": "opaque_unverified_access_token",
+		"non-JWT text":            "not a jwt, with spaces and a secret",
+		"wrong audience":          "cp-token.header.signature-000001",
+		"a human subject":         "human-token.header.signature-001",
 	} {
 		w := f.post(validatorBearer, vbody(f.owned, token))
 		f.expect(w, http.StatusUnauthorized, "SUBJECT_TOKEN_INVALID")
@@ -251,7 +255,8 @@ func TestValidateRefusesAnUnverifiableSubject(t *testing.T) {
 	for name, body := range map[string]string{
 		"missing subject_token":   `{"context_id":"` + f.owned + `"}`,
 		"missing context_id":      `{"subject_token":"` + tradeToken + `"}`,
-		"malformed subject_token": `{"context_id":"` + f.owned + `","subject_token":"not a jwt, with spaces and a secret"}`,
+		"blank subject_token":     vbody(f.owned, strings.Repeat(" ", 16)),
+		"oversized subject_token": vbody(f.owned, strings.Repeat("x", 8193)),
 		"too short subject_token": `{"context_id":"` + f.owned + `","subject_token":"a.b.c"}`,
 		"not a uuid":              vbody("ctx_not_a_uuid", tradeToken),
 	} {
@@ -350,5 +355,17 @@ func TestValidateNeverLogsTheSubjectToken(t *testing.T) {
 		if !strings.Contains(logged, want) {
 			t.Fatalf("audit record lacks %q:\n%s", want, logged)
 		}
+	}
+}
+
+// Token serialization belongs to the configured verifier, not to the canonical schema.
+// The fixture models successful trusted introspection; the production OIDC adapter
+// remains locally verifiable JWT-only until another adapter is configured.
+func TestValidateAcceptsAnIndependentlyVerifiedOpaqueToken(t *testing.T) {
+	f := newValidateFixture(t, nil)
+	w := f.post(validatorBearer, vbody(f.owned, opaqueTradeToken))
+	f.expect(w, http.StatusOK, "")
+	if strings.Contains(w.Body.String(), opaqueTradeToken) || strings.Contains(f.log.String(), opaqueTradeToken) {
+		t.Fatal("the opaque subject credential was exposed")
 	}
 }

@@ -10,7 +10,7 @@ import (
 )
 
 // callerOwnsContext is the single caller-binding rule for a stored Context
-// (Shared control-plane/v1 1.33.0, design context-authority-for-workloads):
+// (Shared control-plane/v1 1.33.1, design context-authority-for-workloads):
 // a context_id is a handle, not a bearer credential, so it may only be
 // consumed by the principal that resolved it. The authenticated caller's
 // canonical principal must equal Context.PrincipalID.
