@@ -44,14 +44,33 @@ type WorkloadRegistry interface {
 // default -- see api.Dependencies.WorkloadRegistry) disables the check
 // entirely, preserving exactly today's behavior until that snapshot exists.
 type StaticWorkloadRegistry struct {
-	active     map[string]bool
-	reporters  map[string]ReporterScope
-	validators map[string][]string
+	active           map[string]bool
+	allowedScopes    map[string]map[string]bool
+	reporters        map[string]ReporterScope
+	runtimeObservers map[string]ReporterScope
+	validators       map[string][]string
 }
 
-// ContextValidateScope is the workload scope that makes a workload a context
-// validator (Shared authorization/v1 scope registry).
-const ContextValidateScope = "context:validate"
+// Canonical workload scopes consumed by the Control Plane.
+const (
+	ContextValidateScope       = "context:validate"
+	ObserveScope               = "deployment:observe"
+	IdentityRuntimeObserveScope = "identity-runtime:observe"
+)
+
+// WorkloadScopeRegistry answers whether Shared currently permits a workload to
+// hold a scope. Token possession and registry permission are both required.
+type WorkloadScopeRegistry interface {
+	AllowsScope(clientID, scope string) bool
+}
+
+// AllowsScope implements WorkloadScopeRegistry.
+func (r *StaticWorkloadRegistry) AllowsScope(clientID, scope string) bool {
+	if r == nil || !r.active[clientID] {
+		return false
+	}
+	return r.allowedScopes[clientID][scope]
+}
 
 // ValidatorRegistry answers which subject-token audiences a workload is
 // registered to validate contexts for (workload-registry.yaml
@@ -103,13 +122,30 @@ type ReporterRegistry interface {
 	Reporter(clientID string) (ReporterScope, bool)
 }
 
-// ObserveScope is the workload scope that makes a workload a reporter.
-const ObserveScope = "deployment:observe"
+// IdentityRuntimeObserverRegistry is the separate authority for secret-free
+// identity-runtime profile publication. deployment:observe does not imply it.
+type IdentityRuntimeObserverRegistry interface {
+	IdentityRuntimeObserver(clientID string) (ReporterScope, bool)
+}
 
 // Reporter implements ReporterRegistry.
 func (r *StaticWorkloadRegistry) Reporter(clientID string) (ReporterScope, bool) {
 	scope, ok := r.reporters[clientID]
-	return scope, ok
+	if !ok {
+		return ReporterScope{}, false
+	}
+	scope.Regions = slices.Clone(scope.Regions)
+	return scope, true
+}
+
+// IdentityRuntimeObserver implements IdentityRuntimeObserverRegistry.
+func (r *StaticWorkloadRegistry) IdentityRuntimeObserver(clientID string) (ReporterScope, bool) {
+	scope, ok := r.runtimeObservers[clientID]
+	if !ok {
+		return ReporterScope{}, false
+	}
+	scope.Regions = slices.Clone(scope.Regions)
+	return scope, true
 }
 
 func (r *StaticWorkloadRegistry) IsActive(clientID string) bool {
@@ -118,10 +154,9 @@ func (r *StaticWorkloadRegistry) IsActive(clientID string) bool {
 
 // workloadRegistryFile mirrors the subset of baobab-platform/shared's
 // contracts/identity/v1/workload-registry.yaml this repository actually
-// needs (client_id -> status); every other field in that contract
-// (repository, owner, runtime, environment, allowed_audiences,
-// allowed_scopes, credential_type, rotation_owner) is baobab-iam's and
-// baobab-platform/shared's own concern, not re-modelled here.
+// needs for request-time admission: lifecycle, allowed scopes, reporter
+// environment/regions and validator audiences. Provider credential mechanics
+// remain baobab-iam's concern.
 type workloadRegistryFile struct {
 	Workloads map[string]struct {
 		Status             string   `yaml:"status"`
@@ -166,10 +201,18 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 		}
 	}
 	active := make(map[string]bool, len(parsed.Workloads))
+	allowedScopes := make(map[string]map[string]bool, len(parsed.Workloads))
 	reporters := map[string]ReporterScope{}
+	runtimeObservers := map[string]ReporterScope{}
 	validators := map[string][]string{}
 	for clientID, entry := range parsed.Workloads {
 		active[clientID] = entry.Status == "ACTIVE"
+		if active[clientID] {
+			allowedScopes[clientID] = make(map[string]bool, len(entry.AllowedScopes))
+			for _, scope := range entry.AllowedScopes {
+				allowedScopes[clientID][scope] = true
+			}
+		}
 		// Both halves are required, as the registry validator requires them:
 		// the scope without a registered audience, or an audience without the
 		// scope, validates nothing.
@@ -177,8 +220,11 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 			validators[clientID] = slices.Clone(entry.ValidatesAudiences)
 		}
 		if active[clientID] && slices.Contains(entry.AllowedScopes, ObserveScope) && entry.Environment != "" && len(entry.DeploymentRegions) > 0 {
-			reporters[clientID] = ReporterScope{Environment: entry.Environment, Regions: entry.DeploymentRegions}
+			reporters[clientID] = ReporterScope{Environment: entry.Environment, Regions: slices.Clone(entry.DeploymentRegions)}
+		}
+		if active[clientID] && slices.Contains(entry.AllowedScopes, IdentityRuntimeObserveScope) && entry.Environment != "" && len(entry.DeploymentRegions) > 0 {
+			runtimeObservers[clientID] = ReporterScope{Environment: entry.Environment, Regions: slices.Clone(entry.DeploymentRegions)}
 		}
 	}
-	return &StaticWorkloadRegistry{active: active, reporters: reporters, validators: validators}, nil
+	return &StaticWorkloadRegistry{active: active, allowedScopes: allowedScopes, reporters: reporters, runtimeObservers: runtimeObservers, validators: validators}, nil
 }
