@@ -14,6 +14,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/contracttest"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/service"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -41,8 +42,10 @@ type mappingFixture struct {
 	sibling  string
 	foreign  string
 	instance string
-	schemas  map[string]*jsonschema.Schema
-	contexts repository.ContextStore
+	// principalID is the canonical principal the stored test contexts belong to.
+	principalID string
+	schemas     map[string]*jsonschema.Schema
+	contexts    repository.ContextStore
 }
 
 func newMappingFixture(t *testing.T) *mappingFixture {
@@ -106,12 +109,29 @@ func newMappingFixture(t *testing.T) *mappingFixture {
 		"creator":  principal("creator", "mapping:write", "mapping:approve", "canonical:read"),
 		"approver": principal("approver", "mapping:approve", "mapping:write", "canonical:read"),
 	}
+	// A context is consumable only by the principal that resolved it, so
+	// the workloads below are real canonical principals.
+	const issuer = "https://iam.test/realms/baobab"
+	identity := service.IdentityService{Repository: repo, Provision: service.WorkloadOnlyProvisioningPolicy}
+	owner, err := identity.Resolve(ctx, issuer, "trade-"+suffix[:8], "workload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.principalID = owner.ID
+	if _, err := identity.Resolve(ctx, issuer, "stranger-"+suffix[:8], "workload"); err != nil {
+		t.Fatal(err)
+	}
 	workloads := tokenVerifier{
-		"workload":       {Subject: "trade", ActorType: "workload", TenantID: f.tenant, ClientID: "baobab-trade", TokenID: "w1", Scopes: map[string]struct{}{"mapping:read": {}, "mapping:resolve": {}}},
-		"other-workload": {Subject: "trade", ActorType: "workload", TenantID: "tn_elsewhere", ClientID: "baobab-trade", TokenID: "w2", Scopes: map[string]struct{}{"mapping:read": {}, "mapping:resolve": {}}},
+		"workload":       {Subject: "trade-" + suffix[:8], Issuer: issuer, ActorType: "workload", TenantID: f.tenant, ClientID: "baobab-trade", TokenID: "w1", Scopes: map[string]struct{}{"mapping:read": {}, "mapping:resolve": {}}},
+		"other-workload": {Subject: "trade-" + suffix[:8], Issuer: issuer, ActorType: "workload", TenantID: "tn_elsewhere", ClientID: "baobab-trade", TokenID: "w2", Scopes: map[string]struct{}{"mapping:read": {}, "mapping:resolve": {}}},
+		// Holds mapping:resolve and a registered canonical principal, but is
+		// not the principal that resolved the stored contexts.
+		"stranger": {Subject: "stranger-" + suffix[:8], Issuer: issuer, ActorType: "workload", ClientID: "baobab-other", TokenID: "w3", Scopes: map[string]struct{}{"mapping:resolve": {}}},
+		// A canonical principal that does not exist at all.
+		"unregistered": {Subject: "nobody-" + suffix[:8], Issuer: issuer, ActorType: "workload", ClientID: "baobab-none", TokenID: "w4", Scopes: map[string]struct{}{"mapping:resolve": {}}},
 	}
 	f.contexts = repo
-	f.handler = New(Dependencies{Store: &fakeStore{}, AdminVerifier: admins, WorkloadVerifier: workloads, Mappings: repo, Contexts: repo})
+	f.handler = New(Dependencies{Store: &fakeStore{}, AdminVerifier: admins, WorkloadVerifier: workloads, Mappings: repo, Contexts: repo, Identities: repo})
 	if dir := os.Getenv("SHARED_CONTRACTS_DIR"); dir != "" {
 		for _, def := range []string{"externalReference", "externalReferenceList", "mapping", "externalReferenceResolutionResponse", "resolutionResponse"} {
 			f.schemas[def] = contracttest.CompileSchema(t, dir, "control-plane/v1/canonical-mapping.schema.json#/$defs/"+def)
@@ -410,7 +430,7 @@ func TestMappingAdministrationReviewFixes(t *testing.T) {
 func (f *mappingFixture) storeContext(tenant, legalEntity string) string {
 	f.t.Helper()
 	id := domain.NewUUIDv7()
-	if err := f.contexts.CreateContext(f.ctx, domain.Context{ID: id, PrincipalID: "trade", TenantID: tenant, LegalEntityID: legalEntity,
+	if err := f.contexts.CreateContext(f.ctx, domain.Context{ID: id, PrincipalID: f.principalID, TenantID: tenant, LegalEntityID: legalEntity,
 		CorrelationID: domain.NewUUIDv7(), ResolvedAt: time.Now().UTC()}); err != nil {
 		f.t.Fatal(err)
 	}
@@ -455,6 +475,19 @@ func TestMappingResolutionRedeemsATrustedContext(t *testing.T) {
 	f.refused(f.do("workload", http.MethodPost, path, "", request("ctx_unknown", "")), http.StatusNotFound, "CONTEXT_NOT_FOUND")
 	f.refused(f.do("workload", http.MethodPost, path, "", request(domain.NewUUIDv7(), "")), http.StatusNotFound, "CONTEXT_NOT_FOUND")
 	f.refused(f.do("other-workload", http.MethodPost, path, "", request(kenya, "")), http.StatusForbidden, "TENANT_CONTEXT_MISMATCH")
+	// A context_id is a handle, not a bearer credential: a workload that
+	// holds mapping:resolve but did not resolve the context, and one with
+	// no canonical principal, both see exactly what an unknown id shows --
+	// whether the tenant claim is absent (every real workload) or not.
+	for _, caller := range []string{"stranger", "unregistered"} {
+		owned := f.do(caller, http.MethodPost, path, "", request(kenya, ""))
+		f.refused(owned, http.StatusNotFound, "CONTEXT_NOT_FOUND")
+		unknown := f.do(caller, http.MethodPost, path, "", request(domain.NewUUIDv7(), ""))
+		f.refused(unknown, http.StatusNotFound, "CONTEXT_NOT_FOUND")
+		if detail(owned) != detail(unknown) {
+			t.Fatalf("%s: a context another principal resolved must look exactly like an unknown one: %s vs %s", caller, owned.Body.String(), unknown.Body.String())
+		}
+	}
 	if got := f.do("creator", http.MethodPost, path, "", request(kenya, "")); got.Code != http.StatusUnauthorized && got.Code != http.StatusForbidden {
 		t.Fatalf("mapping resolution is for workloads: %d %s", got.Code, got.Body.String())
 	}
@@ -486,4 +519,13 @@ func TestMappingResolutionRedeemsATrustedContext(t *testing.T) {
 	secondID := f.ok(f.do("creator", http.MethodPost, "/v1/external-references", "", second), http.StatusCreated, "externalReference")["external_reference_id"].(string)
 	f.activate(f.proposal(f.entity, secondID))
 	f.refused(f.do("workload", http.MethodPost, path, "", request(uganda, "")), http.StatusConflict, "MAPPING_AMBIGUOUS")
+}
+
+// detail is a problem response's detail text.
+func detail(w *httptest.ResponseRecorder) string {
+	var p struct {
+		Detail string `json:"detail"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &p)
+	return p.Detail
 }

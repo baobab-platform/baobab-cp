@@ -44,8 +44,33 @@ type WorkloadRegistry interface {
 // default -- see api.Dependencies.WorkloadRegistry) disables the check
 // entirely, preserving exactly today's behavior until that snapshot exists.
 type StaticWorkloadRegistry struct {
-	active    map[string]bool
-	reporters map[string]ReporterScope
+	active     map[string]bool
+	reporters  map[string]ReporterScope
+	validators map[string][]string
+}
+
+// ContextValidateScope is the workload scope that makes a workload a context
+// validator (Shared authorization/v1 scope registry).
+const ContextValidateScope = "context:validate"
+
+// ValidatorRegistry answers which subject-token audiences a workload is
+// registered to validate contexts for (workload-registry.yaml
+// validates_audiences). It is the only source of that relationship: the
+// request cannot name an audience, and no audience list the validator merely
+// appears in is consulted.
+type ValidatorRegistry interface {
+	// ValidatesAudiences returns the audiences clientID may validate, or nil
+	// when it is unknown, not ACTIVE, not allowed context:validate, or
+	// declares none.
+	ValidatesAudiences(clientID string) []string
+}
+
+// ValidatesAudiences implements ValidatorRegistry.
+func (r *StaticWorkloadRegistry) ValidatesAudiences(clientID string) []string {
+	if r == nil {
+		return nil
+	}
+	return slices.Clone(r.validators[clientID])
 }
 
 // ReporterScope is where a registered deployment-observation reporter may
@@ -99,10 +124,11 @@ func (r *StaticWorkloadRegistry) IsActive(clientID string) bool {
 // baobab-platform/shared's own concern, not re-modelled here.
 type workloadRegistryFile struct {
 	Workloads map[string]struct {
-		Status            string   `yaml:"status"`
-		Environment       string   `yaml:"environment"`
-		AllowedScopes     []string `yaml:"allowed_scopes"`
-		DeploymentRegions []string `yaml:"deployment_regions"`
+		Status             string   `yaml:"status"`
+		Environment        string   `yaml:"environment"`
+		AllowedScopes      []string `yaml:"allowed_scopes"`
+		DeploymentRegions  []string `yaml:"deployment_regions"`
+		ValidatesAudiences []string `yaml:"validates_audiences"`
 	} `yaml:"workloads"`
 }
 
@@ -141,11 +167,18 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 	}
 	active := make(map[string]bool, len(parsed.Workloads))
 	reporters := map[string]ReporterScope{}
+	validators := map[string][]string{}
 	for clientID, entry := range parsed.Workloads {
 		active[clientID] = entry.Status == "ACTIVE"
+		// Both halves are required, as the registry validator requires them:
+		// the scope without a registered audience, or an audience without the
+		// scope, validates nothing.
+		if active[clientID] && slices.Contains(entry.AllowedScopes, ContextValidateScope) && len(entry.ValidatesAudiences) > 0 {
+			validators[clientID] = slices.Clone(entry.ValidatesAudiences)
+		}
 		if active[clientID] && slices.Contains(entry.AllowedScopes, ObserveScope) && entry.Environment != "" && len(entry.DeploymentRegions) > 0 {
 			reporters[clientID] = ReporterScope{Environment: entry.Environment, Regions: entry.DeploymentRegions}
 		}
 	}
-	return &StaticWorkloadRegistry{active: active, reporters: reporters}, nil
+	return &StaticWorkloadRegistry{active: active, reporters: reporters, validators: validators}, nil
 }

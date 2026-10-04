@@ -19,4 +19,6 @@ artifacts:
     context: .
     runtime: true
 security:
-  sast_provider: codeql
+  # ADR-0020: private repository without licensed CodeQL upload support.
+  # Foundation records fallback coverage and retains portable security scans.
+  sast_provider: fallback

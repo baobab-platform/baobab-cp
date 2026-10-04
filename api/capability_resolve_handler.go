@@ -24,7 +24,10 @@ var (
 // CapabilityResolveHandler serves POST /v1/capabilities/resolve.
 type CapabilityResolveHandler struct {
 	Contexts repository.ContextRepository
-	Service  service.CapabilityResolutionService
+	// Identities is the read-only canonical-principal lookup the ownership
+	// rule needs; without it no context can be consumed.
+	Identities repository.IdentityRepository
+	Service    service.CapabilityResolutionService
 }
 
 type resolutionRequest struct {
@@ -84,8 +87,9 @@ func resolutionOf(rec repository.CapabilityResolutionRecord) (resolutionBody, er
 }
 
 // redeemContext returns the caller's resolved context: a workload holding
-// context:resolve, redeeming a context bound to its own tenant.
-func redeemContext(w http.ResponseWriter, r *http.Request, contexts repository.ContextRepository, contextID string) (domain.Context, bool) {
+// context:resolve, redeeming a context it resolved itself. A context another
+// principal resolved is indistinguishable from an unknown or expired one.
+func redeemContext(w http.ResponseWriter, r *http.Request, contexts repository.ContextRepository, identities repository.IdentityRepository, contextID string) (domain.Context, bool) {
 	principal, ok := auth.PrincipalFromContext(r.Context())
 	if !ok || principal.ActorType != "workload" || !principal.HasScope("context:resolve") {
 		problem(w, r, http.StatusUnauthorized, "AUTH_TOKEN_REQUIRED", "verified workload identity is required", false)
@@ -104,8 +108,20 @@ func redeemContext(w http.ResponseWriter, r *http.Request, contexts repository.C
 		problem(w, r, http.StatusServiceUnavailable, "CONTEXT_STORE_UNAVAILABLE", "context lookup failed", true)
 		return domain.Context{}, false
 	}
+	// A context is bound to the principal that resolved it: it is a handle,
+	// not a bearer credential. Not owning it answers exactly like not
+	// finding it, so a context_id cannot be probed for existence.
+	owned, err := callerOwnsContext(r.Context(), identities, principal, trusted)
+	if err != nil {
+		problem(w, r, http.StatusServiceUnavailable, "CONTEXT_STORE_UNAVAILABLE", "context lookup failed", true)
+		return domain.Context{}, false
+	}
+	if !owned {
+		problem(w, r, http.StatusNotFound, "CONTEXT_NOT_FOUND", "the referenced context_id does not exist or has expired", false)
+		return domain.Context{}, false
+	}
 	// A context is bound to the tenant that produced it (ADR-BCP-004 §71):
-	// another tenant's workload redeeming it fails closed.
+	// a token whose own tenant_id differs fails closed.
 	if _, ok := resolveWorkloadTenant(principal.TenantID, trusted.TenantID); !ok {
 		problem(w, r, http.StatusForbidden, "TENANT_CONTEXT_MISMATCH", "the referenced context does not belong to the authenticated tenant", false)
 		return domain.Context{}, false
@@ -122,7 +138,7 @@ func (h CapabilityResolveHandler) Resolve(w http.ResponseWriter, r *http.Request
 	if !decodeRaw(w, r, resolutionRequestSchema, raw, &req) {
 		return
 	}
-	trusted, ok := redeemContext(w, r, h.Contexts, req.ContextID)
+	trusted, ok := redeemContext(w, r, h.Contexts, h.Identities, req.ContextID)
 	if !ok {
 		return
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 
+	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
@@ -89,10 +90,14 @@ func fullRouter(t *testing.T) chi.Routes {
 		Verification: struct {
 			repository.VerificationRepository
 		}{},
-		Onboarding:      &onboarding.Service{},
-		Applications:    &application.Service{},
-		Classifications: &subscription.Classifier{},
-		Metrics:         metrics.NewRegistry(),
+		// Registered only with all of these, and the contract describes it.
+		Contexts:         repository.NewInMemoryRepository(),
+		WorkloadRegistry: &auth.StaticWorkloadRegistry{},
+		SubjectVerifiers: &auth.AudienceVerifiers{},
+		Onboarding:       &onboarding.Service{},
+		Applications:     &application.Service{},
+		Classifications:  &subscription.Classifier{},
+		Metrics:          metrics.NewRegistry(),
 	})
 	routes, ok := h.(chi.Routes)
 	if !ok {
