@@ -232,15 +232,23 @@ func TestIdentityRuntimeProfilePersistence(t *testing.T) {
 	}
 
 	// Runtime evidence is append-only to the same standard as deployment
-	// observations: UPDATE, DELETE and TRUNCATE are all refused.
+	// observations. UPDATE/DELETE must reach our append-only trigger. TRUNCATE
+	// only needs to be refused: PostgreSQL may reject the parent profile table
+	// at its FK boundary before BEFORE TRUNCATE triggers are invoked.
 	for _, sql := range []string{
 		`UPDATE identity.identity_provider_runtime_profile SET source='x' WHERE provider_id=(SELECT provider_id FROM capability.capability_provider WHERE canonical_provider_id='` + providerID + `')`,
 		`DELETE FROM identity.identity_runtime_capability_observation WHERE provider_id=(SELECT provider_id FROM capability.capability_provider WHERE canonical_provider_id='` + providerID + `')`,
+	} {
+		if _, err := admin.Exec(ctx, sql); err == nil || !strings.Contains(err.Error(), "append-only") {
+			t.Fatalf("%q must be refused by the append-only trigger, got %v", sql, err)
+		}
+	}
+	for _, sql := range []string{
 		`TRUNCATE identity.identity_runtime_capability_observation`,
 		`TRUNCATE identity.identity_provider_runtime_profile`,
 	} {
-		if _, err := admin.Exec(ctx, sql); err == nil || !strings.Contains(err.Error(), "append-only") {
-			t.Fatalf("%q must be refused as append-only, got %v", sql, err)
+		if _, err := admin.Exec(ctx, sql); err == nil {
+			t.Fatalf("%q must be refused", sql)
 		}
 	}
 }
