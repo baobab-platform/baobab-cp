@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/identity/v1/provider-runtime-profile.schema.json",
+  "title": "IdentityProviderRuntimeProfile",
+  "description": "Secret-free identity-runtime verification profile attached to an existing CapabilityProvider and EngineInstance. It is not a replacement provider, binding, topology, health or entitlement model. CP owns platform provider lifecycle/bindings/placement; approved IAM security/configuration references supply additional identity policy. A profile never establishes ACTIVE, HEALTHY, entitlement or canonical workload activation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "provider_id",
+    "engine_instance_id",
+    "configuration_reference",
+    "security_domain_reference",
+    "artifact_digest",
+    "capability_observations",
+    "revision",
+    "published_at"
+  ],
+  "properties": {
+    "provider_id": {
+      "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderId"
+    },
+    "engine_instance_id": {
+      "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId"
+    },
+    "configuration_reference": {
+      "$ref": "../../control-plane/v1/domain.schema.json#/$defs/externalReferenceId",
+      "description": "CP ExternalReference for versioned, approved non-secret runtime configuration; must not resolve to credential values. Provider-native details remain outside this profile."
+    },
+    "security_domain_reference": {
+      "$ref": "../../control-plane/v1/domain.schema.json#/$defs/externalReferenceId",
+      "description": "CP ExternalReference to approved IAM IdentitySecurityDomain policy configuration. Target type and ownership must be verified by the consumer. A realm, tenant, organisation, email domain or region does not imply this relationship."
+    },
+    "artifact_digest": {
+      "$ref": "runtime-capability.schema.json#/$defs/artifactDigest",
+      "description": "Exact artifact the observations describe. Must agree with the approved EngineInstance release; copying a digest into this profile does not approve or prove a deployment."
+    },
+    "capability_observations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "runtime-capability.schema.json#/$defs/capabilityObservation"
+      },
+      "description": "At most one observation per runtime facet; uniqueness by capability is a semantic invariant, including observations with different statuses."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonic approved profile revision; consumers reject rollback and stale publication under governed policy."
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
