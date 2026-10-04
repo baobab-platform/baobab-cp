@@ -95,6 +95,7 @@ type IdentityRuntimeProfileRepository interface {
 		estateID string,
 		runtimeCapability string,
 		configurationReference string,
+		trustMaterialReference string,
 		environment string,
 		now time.Time,
 	) (FederationPlatformSnapshot, error)
