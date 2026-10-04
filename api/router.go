@@ -29,11 +29,14 @@ import (
 type correlationKey struct{}
 
 type Dependencies struct {
-	Store            store.TenantStore
-	AdminVerifier    auth.TokenVerifier
-	WorkloadVerifier auth.TokenVerifier
-	Resolution       service.ResolutionService
-	Canonical        service.CanonicalEntityService
+	// FederationCanonical is the private CP authority source. Missing instance,
+	// references, current workload lifecycle or grants keep reads fail-closed.
+	FederationCanonical *service.FederationIdentityEvidenceService
+	Store               store.TenantStore
+	AdminVerifier       auth.TokenVerifier
+	WorkloadVerifier    auth.TokenVerifier
+	Resolution          service.ResolutionService
+	Canonical           service.CanonicalEntityService
 	// OrganisationMappings backs organisation_id attestation in context
 	// resolution (ADR-BCP-018 ORG-14). Nil leaves every organisation_id
 	// request failing closed.
@@ -285,6 +288,10 @@ func New(dependencies Dependencies) http.Handler {
 	}
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve-batch", CapabilityResolveBatchHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
+	if caller, ok := dependencies.Identities.(repository.FederationIdentityReader); ok {
+		source := federationAuthorityHandler{a, caller, dependencies.FederationCanonical}
+		r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/identity", source.identity)
+	}
 	// Privileged diagnostics (ADR-BCP-004 §77, ADR-BCP-003 §80): admin-only,
 	// distinct scope from the workload resolve endpoints above -- see
 	// CapabilityExplainHandler's doc comment for why it deliberately is not

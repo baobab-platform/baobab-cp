@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 type Config struct {
@@ -32,6 +34,9 @@ type Config struct {
 	// is production for engine registration: providers not permitted in
 	// production are refused (ADR-SHARED-011).
 	Environment string
+	// Exact registered CP runtime instance for private federation evidence.
+	// Empty leaves the source fail-closed; never infer an instance from tenancy.
+	FederationSourceEngineInstanceID string
 	// BillingEngineURL, when set, enables the billing projection of
 	// classified ProductSubscriptions into baobab-subscriptions (ADR-BCP-018
 	// gate ORG-11). BillingWorkloadTokenFile is the platform-projected
@@ -96,7 +101,18 @@ func Load() (Config, error) {
 	}
 	c.PlatformContextTTL = ttl
 	c.Environment = strings.ToLower(strings.TrimSpace(os.Getenv("BAOBAB_ENVIRONMENT")))
+	c.FederationSourceEngineInstanceID = os.Getenv("FEDERATION_SOURCE_ENGINE_INSTANCE_ID")
 	c.WorkloadRegistryFile = strings.TrimSpace(os.Getenv("WORKLOAD_REGISTRY_FILE"))
+	if c.FederationSourceEngineInstanceID != "" {
+		if !domain.ValidEngineInstanceID(c.FederationSourceEngineInstanceID) || c.WorkloadOIDCAudience != "baobab-control-plane" || c.WorkloadRegistryFile == "" {
+			return Config{}, errors.New("federation source requires a canonical CP engine instance, baobab-control-plane workload audience and WORKLOAD_REGISTRY_FILE")
+		}
+		switch c.Environment {
+		case "local", "development", "staging", "production":
+		default:
+			return Config{}, errors.New("federation source requires an explicit canonical reference environment")
+		}
+	}
 	for _, key := range strings.Split(os.Getenv("ADMINISTRATIVE_ENFORCEMENT_ROLLBACK"), ",") {
 		if key = strings.TrimSpace(key); key != "" {
 			c.EnforcementRollback = append(c.EnforcementRollback, key)

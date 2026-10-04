@@ -29,3 +29,9 @@ systems:
   - system_namespace: payload
     engine_ids: [baobab-cms]
     description: "Payload CMS documents held by baobab-cms."
+  - system_namespace: baobab_iam
+    engine_ids: [baobab-iam]
+    description: "Immutable non-secret IAM federation configuration, policy and decision targets. Registration is not approval."
+  - system_namespace: baobab_cp
+    engine_ids: [baobab-cp]
+    description: "Immutable Control Plane identity-relationship and runtime-profile evidence. Registration is not approval and never links identity."

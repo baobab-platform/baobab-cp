@@ -1,0 +1,58 @@
+# ADR-IAM-0026/0031/0033 and ADR-BCP-020. Vocabulary and mandatory
+# restrictions only: this policy issues no grants, registers no native objects,
+# approves no target, activates no trust and changes no workload lifecycle.
+version: 1
+transport:
+  authority_reads:
+    scope: federation-authority:read
+    actors: [workload]
+    audiences: [baobab-control-plane, baobab-iam]
+    require_current_active_principal: true
+    require_current_active_workload: true
+    require_exact_caller_target_association: true
+  governance:
+    scope: federation-governance:manage
+    actors: [human]
+    audiences: [baobab-control-plane, baobab-iam]
+    require_current_active_principal: true
+    require_canonical_administrative_decision: true
+    allow_role_fallback: false
+    allow_effective_authority_display: false
+actions:
+  VIEW: security.federation.view
+  PROPOSE: security.federation.propose
+  DECIDE: security.federation.decide
+  REVOKE: security.federation.revoke
+approval:
+  require_distinct_canonical_maker_checker: true
+  require_exact_target_digest: true
+  require_current_permission_at_use: true
+  revocation_terminal_for_snapshot: true
+  allow_shared_service_account: false
+  allow_secret_targets: false
+  allow_manual_import_as_approval: false
+scope:
+  levels: [PLATFORM, ORGANISATION, DIGITAL_ESTATE]
+  require_canonical_organisation_estate_relationship: true
+  allow_email_or_provider_organisation_as_scope: false
+  allow_implicit_corporate_group_expansion: false
+targets:
+  federation_configuration: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: federation_configuration}
+  federation_trust_material: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: federation_trust_material}
+  assurance_policy: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: assurance_policy}
+  attribute_mapping: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: attribute_mapping}
+  provisioning_policy: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: provisioning_policy}
+  federation_activation: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: federation_activation}
+  assurance_mapping_decision: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: assurance_mapping_decision}
+  canonical_identity_mapping: {system_namespace: baobab_cp, engine_id: baobab-cp, native_entity_type: canonical_identity_mapping}
+  identity_runtime_profile: {system_namespace: baobab_cp, engine_id: baobab-cp, native_entity_type: identity_runtime_profile}
+  identity_runtime_support: {system_namespace: baobab_cp, engine_id: baobab-cp, native_entity_type: identity_runtime_support}
+  identity_security_domain: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: identity_security_domain}
+target_requirements:
+  require_registered_cp_external_reference: true
+  require_non_secret_immutable_native_target: true
+  require_exact_engine_instance_environment: true
+  require_trust_revision_snapshot_scope_binding: true
+  require_current_independent_approval: true
+  reference_existence_is_approval: false
+  identity_mapping_approval_creates_identity_relationship: false

@@ -38,8 +38,7 @@ func (s FederationIdentityService) Resolve(ctx context.Context, issuer, subject 
 	if ctx.Err() != nil {
 		return deny(ErrFederationIdentityUnavailable)
 	}
-	u, err := url.Parse(issuer)
-	if err != nil || u.Scheme == "" || len(issuer) > 2048 || strings.ContainsAny(issuer, " \t\r\n") || subject == "" || len(subject) > 512 || strings.TrimSpace(subject) != subject {
+	if !validFederationEvidenceSubject(issuer, subject) {
 		return deny(ErrFederationIdentityDenied)
 	}
 	mapping, err := s.Repository.ReadFederationIdentity(ctx, issuer, subject)
@@ -54,4 +53,17 @@ func (s FederationIdentityService) Resolve(ctx context.Context, issuer, subject 
 		return deny(ErrFederationIdentityDenied)
 	}
 	return mapping, nil
+}
+
+func validFederationEvidenceSubject(issuer, subject string) bool {
+	u, err := url.Parse(issuer)
+	return err == nil && u.Scheme != "" && len(issuer) <= 2048 && !strings.ContainsAny(issuer, " \t\r\n") && subject != "" && len(subject) <= 512 && strings.TrimSpace(subject) == subject
+}
+
+func validFederationEvidenceEnvironment(environment string) bool {
+	switch environment {
+	case "local", "development", "staging", "production":
+		return true
+	}
+	return false
 }
