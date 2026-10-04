@@ -407,3 +407,31 @@ permissions:
     delegable: false
     read_only: false
     description: "Approve break-glass authority. Never one's own request."
+  - key: security.federation.view
+    domain: SECURITY
+    risk_class: LOW
+    scope_levels: [PLATFORM, ORGANISATION, DIGITAL_ESTATE]
+    delegable: false
+    read_only: true
+    description: "Read non-secret federation governance evidence at the exact canonical organisation and estate scope. No permission to read credentials or create mappings."
+  - key: security.federation.propose
+    domain: SECURITY
+    risk_class: HIGH
+    scope_levels: [PLATFORM, ORGANISATION, DIGITAL_ESTATE]
+    delegable: false
+    read_only: false
+    description: "Propose immutable federation trust, configuration or evidence changes. Never approve a target or activate a trust."
+  - key: security.federation.decide
+    domain: SECURITY
+    risk_class: CRITICAL
+    scope_levels: [PLATFORM, ORGANISATION, DIGITAL_ESTATE]
+    delegable: false
+    read_only: false
+    description: "Independently approve or reject an immutable federation proposal. Canonical maker and checker must differ; technical and organisation evidence remain mandatory before ACTIVE."
+  - key: security.federation.revoke
+    domain: SECURITY
+    risk_class: HIGH
+    scope_levels: [PLATFORM, ORGANISATION, DIGITAL_ESTATE]
+    delegable: false
+    read_only: false
+    description: "Suspend or terminally revoke federation trust or approval at the exact target scope. Current authority is required even for an emergency or the original maker."
