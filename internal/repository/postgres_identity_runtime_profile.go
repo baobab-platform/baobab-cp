@@ -199,7 +199,7 @@ func validateRuntimeProfileReferences(ctx context.Context, q rowsQuerier, profil
 				        AND UPPER(eri.status) = 'ACTIVE'
 				        AND ere.code = $3
 				  )
-			)`, want.id, want.namespace, want.engine, want.entityType).Scan(&ok)
+			)`, want.id, want.namespace, want.engine, want.entityType, environment).Scan(&ok)
 		if err != nil {
 			return fmt.Errorf("verify identity runtime reference: %w", err)
 		}
