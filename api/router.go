@@ -653,14 +653,30 @@ func (a *API) authorize(verifier auth.TokenVerifier, actorType, requiredScope st
 			// a client the workload registry no longer considers ACTIVE --
 			// see auth.WorkloadRegistry's doc comment. Nil (unconfigured)
 			// preserves prior behavior exactly.
-			if actorType == "workload" && a.workloadRegistry != nil && !a.workloadRegistry.IsActive(principal.ClientID) {
-				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
-				return
+			if actorType == "workload" && a.workloadRegistry != nil {
+				if !a.workloadRegistry.IsActive(principal.ClientID) {
+					problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
+					return
+				}
+				if scopes, ok := a.workloadRegistry.(auth.WorkloadScopeRegistry); ok &&
+					!registeredWorkloadScopeAllowed(scopes, principal, requiredScope) {
+					problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
+					return
+				}
 			}
 			*r = *r.WithContext(auth.WithPrincipal(r.Context(), principal))
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func registeredWorkloadScopeAllowed(registry auth.WorkloadScopeRegistry, principal auth.Principal, required string) bool {
+	for _, scope := range strings.Split(required, "|") {
+		if principal.HasScope(scope) && registry.AllowsScope(principal.ClientID, scope) {
+			return true
+		}
+	}
+	return false
 }
 
 // scopeEntitlements binds a scope to the IAM workforce client role that
