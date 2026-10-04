@@ -117,22 +117,22 @@ func TestIdentityRuntimeProfileRouteRequiresTokenAndRegistryScope(t *testing.T) 
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &runtimeProfileRepoStub{}
-			scopes := map[string]map[string]bool{"baobab-iam-staging": {}}
+			scopes := map[string]map[string]bool{"baobab-deployment-controller-staging": {}}
 			if tc.registryScope {
-				scopes["baobab-iam-staging"][auth.IdentityRuntimeObserveScope] = true
+				scopes["baobab-deployment-controller-staging"][auth.IdentityRuntimeObserveScope] = true
 			}
 			registry := &mp2cWorkloadRegistry{
-				active: map[string]bool{"baobab-iam-staging": tc.active},
+				active: map[string]bool{"baobab-deployment-controller-staging": tc.active},
 				scopes: scopes,
 				observer: map[string]auth.ReporterScope{
-					"baobab-iam-staging": {Environment: "staging", Regions: []string{"af-south-1"}},
+					"baobab-deployment-controller-staging": {Environment: "staging", Regions: []string{"af-south-1"}},
 				},
 			}
 			principal := auth.Principal{
 				Issuer:    "https://issuer.test",
 				Subject:   "runtime-observer",
 				ActorType: "workload",
-				ClientID:  "baobab-iam-staging",
+				ClientID:  "baobab-deployment-controller-staging",
 				Scopes:    map[string]struct{}{auth.IdentityRuntimeObserveScope: {}},
 			}
 			handler := New(Dependencies{
@@ -154,7 +154,7 @@ func TestIdentityRuntimeProfileRouteRequiresTokenAndRegistryScope(t *testing.T) 
 				t.Fatalf("repository calls = %d, want %d", repo.calls, tc.wantCalls)
 			}
 			if tc.wantCalls == 1 {
-				if repo.source != "workload:baobab-iam-staging" || repo.environment != "staging" ||
+				if repo.source != "workload:baobab-deployment-controller-staging" || repo.environment != "staging" ||
 					len(repo.regions) != 1 || repo.regions[0] != "af-south-1" {
 					t.Fatalf("wrong reporter provenance: source=%q environment=%q regions=%v", repo.source, repo.environment, repo.regions)
 				}
