@@ -17,6 +17,7 @@ type mp2cWorkloadRegistry struct {
 	active   map[string]bool
 	scopes   map[string]map[string]bool
 	observer map[string]auth.ReporterScope
+	reporter map[string]auth.ReporterScope
 }
 
 func (r *mp2cWorkloadRegistry) IsActive(clientID string) bool {
@@ -30,7 +31,8 @@ func (r *mp2cWorkloadRegistry) IdentityRuntimeObserver(clientID string) (auth.Re
 	return scope, ok && r.active[clientID]
 }
 func (r *mp2cWorkloadRegistry) Reporter(clientID string) (auth.ReporterScope, bool) {
-	return auth.ReporterScope{}, false
+	scope, ok := r.reporter[clientID]
+	return scope, ok && r.active[clientID]
 }
 
 type runtimeProfileRepoStub struct {
@@ -41,6 +43,12 @@ type runtimeProfileRepoStub struct {
 	regions     []string
 	replay      bool
 	err         error
+	snapshot    repository.FederationPlatformSnapshot
+	readErr     error
+	readCalls   int
+	readFacet   string
+	readConfig  string
+	onRead      func()
 }
 
 func (s *runtimeProfileRepoStub) RecordIdentityRuntimeProfile(
@@ -60,17 +68,23 @@ func (s *runtimeProfileRepoStub) RecordIdentityRuntimeProfile(
 }
 
 func (s *runtimeProfileRepoStub) ReadFederationPlatformSnapshot(
-	context.Context,
-	string,
-	string,
-	string,
-	string,
-	string,
-	string,
-	string,
-	time.Time,
+	_ context.Context,
+	_ string,
+	_ string,
+	_ string,
+	_ string,
+	runtimeCapability string,
+	configurationReference string,
+	_ string,
+	_ time.Time,
 ) (repository.FederationPlatformSnapshot, error) {
-	return repository.FederationPlatformSnapshot{}, repository.ErrFederationPlatformEvidenceNotFound
+	s.readCalls++
+	s.readFacet = runtimeCapability
+	s.readConfig = configurationReference
+	if s.onRead != nil {
+		s.onRead()
+	}
+	return s.snapshot, s.readErr
 }
 
 func mp2cRuntimeProfileBody(t *testing.T, now time.Time) string {
