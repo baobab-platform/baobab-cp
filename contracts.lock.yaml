@@ -2,12 +2,12 @@ contract_bundle:
   name: "baobab-platform-resolution"
   version: "1.0.0"
   source_repository: "baobab-platform/shared"
-  source_commit: 6899a2d8f143bf23d36c4f4ac904e0a1e10c3cea
+  source_commit: b10388460c23ac6d7d99bb8a22e2ee4821ad22f6
 schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: 6899a2d8f143bf23d36c4f4ac904e0a1e10c3cea
+  commit: b10388460c23ac6d7d99bb8a22e2ee4821ad22f6
 # This file previously listed 4 of the ~14 contracts this repository actually
 # implements against - see docs/reconciliation/shared-control-plane-audit.md
 # §6. It must declare every schema/policy file whose shape this repository's
@@ -15,6 +15,14 @@ source:
 # contract-compatibility test (internal/contracttest, run against
 # SHARED_CONTRACTS_DIR - see .github/workflows/ci.yml) exists for it yet.
 contracts:
+  # MP2-C identity-runtime boundary compatibility; no federation approval service implied.
+  - contracts/identity/v1/provider-runtime-profile.schema.json
+  - contracts/identity/v1/runtime-capability.schema.json
+  - contracts/identity/v1/federation-domain.schema.json
+  - contracts/identity/v1/federation-trust.schema.json
+  - contracts/identity/v1/federation-lifecycle.yaml
+  - contracts/identity/v1/external-principal.schema.json
+  - contracts/identity/v1/federated-assurance.schema.json
   - contracts/control-plane/v1/access-token-claims.schema.json
   - contracts/control-plane/v1/context-resolution.schema.json
   - contracts/control-plane/v1/domain.schema.json
