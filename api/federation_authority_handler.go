@@ -8,7 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"regexp"
-		"strings"
+	"strings"
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/administration"
@@ -150,12 +150,12 @@ type federationBindingRequest struct {
 		EngineInstanceID       string `json:"engine_instance_id"`
 		ConfigurationReference string `json:"configuration_reference"`
 		TrustMaterialReference string `json:"trust_material_reference"`
-	}
+	} `json:"binding"`
 	Scope struct {
-		OrganisationID string
-		EstateID       string
-	}
-	RuntimeCapability string
+		OrganisationID string `json:"organisation_id"`
+		EstateID       string `json:"estate_id"`
+	} `json:"scope"`
+	RuntimeCapability string `json:"runtime_capability"`
 }
 
 // binding is CP's live PlatformAuthority source. It answers only when a real
@@ -204,6 +204,7 @@ func (h federationAuthorityHandler) binding(w http.ResponseWriter, r *http.Reque
 		req.Scope.EstateID,
 		req.RuntimeCapability,
 		req.Binding.ConfigurationReference,
+		req.Binding.TrustMaterialReference,
 		h.api.environment,
 		time.Now().UTC(),
 	)
