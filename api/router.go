@@ -31,8 +31,9 @@ type correlationKey struct{}
 type Dependencies struct {
 	// FederationCanonical is the private CP authority source. Missing instance,
 	// references, current workload lifecycle or grants keep reads fail-closed.
-	FederationCanonical *service.FederationIdentityEvidenceService
-	Store               store.TenantStore
+	FederationCanonical     *service.FederationIdentityEvidenceService
+	IdentityRuntimeProfiles repository.IdentityRuntimeProfileRepository
+	Store                   store.TenantStore
 	AdminVerifier       auth.TokenVerifier
 	WorkloadVerifier    auth.TokenVerifier
 	Resolution          service.ResolutionService
@@ -289,8 +290,24 @@ func New(dependencies Dependencies) http.Handler {
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve-batch", CapabilityResolveBatchHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
 	if caller, ok := dependencies.Identities.(repository.FederationIdentityReader); ok {
-		source := federationAuthorityHandler{a, caller, dependencies.FederationCanonical}
+		source := federationAuthorityHandler{
+			api:       a,
+			caller:    caller,
+			canonical: dependencies.FederationCanonical,
+			platform:  dependencies.IdentityRuntimeProfiles,
+		}
 		r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/identity", source.identity)
+		if dependencies.IdentityRuntimeProfiles != nil {
+			r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/binding", source.binding)
+		}
+	}
+	if observers, ok := dependencies.WorkloadRegistry.(auth.IdentityRuntimeObserverRegistry); ok && dependencies.IdentityRuntimeProfiles != nil {
+		profiles := identityRuntimeProfileHandler{
+			repo:      dependencies.IdentityRuntimeProfiles,
+			observers: observers,
+			clock:     func() time.Time { return time.Now().UTC() },
+		}
+		r.With(a.authorize(a.workloadVerifier, "workload", auth.IdentityRuntimeObserveScope)).Post("/internal/identity-runtime/v1/profiles", profiles.publish)
 	}
 	// Privileged diagnostics (ADR-BCP-004 §77, ADR-BCP-003 §80): admin-only,
 	// distinct scope from the workload resolve endpoints above -- see
