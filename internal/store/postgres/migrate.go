@@ -127,6 +127,7 @@ var canonicalMigrationNames = []string{
 	"000090_administrative_grant_change_targets.sql",
 	"000091_administrative_grant_supersession.sql",
 	"000092_administrative_shadow_evidence.sql",
+	"000093_identity_runtime_profiles.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
