@@ -306,19 +306,46 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		 AND config_ref.system_namespace = 'baobab_iam'
 		 AND config_ref.engine_id = 'baobab-iam'
 		 AND config_ref.native_entity_type = 'federation_configuration'
+		 AND config_ref.environment = $8
+		 AND config_ref.engine_instance_id IS NOT NULL
 		 AND config_ref.status = 'active'
+		JOIN topology.engine_instance config_instance
+		  ON config_instance.engine_instance_key = config_ref.engine_instance_id
+		 AND config_instance.environment = $8
+		 AND UPPER(config_instance.status) = 'ACTIVE'
+		JOIN topology.engine config_engine
+		  ON config_engine.engine_id = config_instance.engine_id
+		 AND config_engine.code = 'baobab-iam'
 		JOIN mapping.external_reference security_ref
 		  ON security_ref.external_reference_id = p.security_domain_reference
 		 AND security_ref.system_namespace = 'baobab_iam'
 		 AND security_ref.engine_id = 'baobab-iam'
 		 AND security_ref.native_entity_type = 'identity_security_domain'
+		 AND security_ref.environment = $8
+		 AND security_ref.engine_instance_id IS NOT NULL
 		 AND security_ref.status = 'active'
+		JOIN topology.engine_instance security_instance
+		  ON security_instance.engine_instance_key = security_ref.engine_instance_id
+		 AND security_instance.environment = $8
+		 AND UPPER(security_instance.status) = 'ACTIVE'
+		JOIN topology.engine security_engine
+		  ON security_engine.engine_id = security_instance.engine_id
+		 AND security_engine.code = 'baobab-iam'
 		JOIN mapping.external_reference evidence_ref
 		  ON evidence_ref.external_reference_id = ro.evidence_reference
 		 AND evidence_ref.system_namespace = 'baobab_cp'
 		 AND evidence_ref.engine_id = 'baobab-cp'
 		 AND evidence_ref.native_entity_type = 'identity_runtime_support'
+		 AND evidence_ref.environment = $8
+		 AND evidence_ref.engine_instance_id IS NOT NULL
 		 AND evidence_ref.status = 'active'
+		JOIN topology.engine_instance evidence_instance
+		  ON evidence_instance.engine_instance_key = evidence_ref.engine_instance_id
+		 AND evidence_instance.environment = $8
+		 AND UPPER(evidence_instance.status) = 'ACTIVE'
+		JOIN topology.engine evidence_engine
+		  ON evidence_engine.engine_id = evidence_instance.engine_id
+		 AND evidence_engine.code = 'baobab-cp'
 		JOIN mapping.external_reference trust_ref
 		  ON trust_ref.external_reference_id = $7
 		 AND trust_ref.system_namespace = 'baobab_iam'
