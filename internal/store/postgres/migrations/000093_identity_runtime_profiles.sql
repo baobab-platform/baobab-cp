@@ -75,6 +75,14 @@ CREATE TRIGGER identity_provider_runtime_profile_append_only
     BEFORE UPDATE OR DELETE ON identity.identity_provider_runtime_profile
     FOR EACH ROW EXECUTE FUNCTION identity.identity_runtime_profile_append_only();
 
+CREATE TRIGGER identity_provider_runtime_profile_no_truncate
+    BEFORE TRUNCATE ON identity.identity_provider_runtime_profile
+    FOR EACH STATEMENT EXECUTE FUNCTION identity.identity_runtime_profile_append_only();
+
 CREATE TRIGGER identity_runtime_capability_observation_append_only
     BEFORE UPDATE OR DELETE ON identity.identity_runtime_capability_observation
     FOR EACH ROW EXECUTE FUNCTION identity.identity_runtime_profile_append_only();
+
+CREATE TRIGGER identity_runtime_capability_observation_no_truncate
+    BEFORE TRUNCATE ON identity.identity_runtime_capability_observation
+    FOR EACH STATEMENT EXECUTE FUNCTION identity.identity_runtime_profile_append_only();
