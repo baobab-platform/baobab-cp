@@ -66,6 +66,10 @@ type FederationPlatformSnapshot struct {
 	DeployedArtifactDigest string
 	ProfileRevision        uint64
 	EvidenceExpiresAt      time.Time
+	RuntimeEvidenceSource  string `json:"-"`
+	DeploymentEvidenceSource string `json:"-"`
+	EvidenceEnvironment    string `json:"-"`
+	EvidenceRegion         string `json:"-"`
 }
 
 type FederationPlatformScope struct {
