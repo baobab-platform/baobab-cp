@@ -4,8 +4,9 @@
 INFRASTRUCTURE_DIR ?= ../infrastructure
 INFRA_COMPOSE := $(INFRASTRUCTURE_DIR)/compose/compose.yaml
 INFRA_ENV := $(INFRASTRUCTURE_DIR)/compose/.env
+SHARED_CONTRACTS_DIR ?= ../shared
 
-.PHONY: build test test-integration lint run sync-shared-contracts frontend-install frontend-dev frontend-build frontend-test frontend-lint frontend-typecheck frontend-image migrate migrate-up dev-up dev-down dev-logs dev-up-infra dev-down-infra dev-logs-infra dev-env-infra
+.PHONY: build test test-integration lint run sync-shared-contracts check-contract-lock frontend-install frontend-dev frontend-build frontend-test frontend-lint frontend-typecheck frontend-image migrate migrate-up dev-up dev-down dev-logs dev-up-infra dev-down-infra dev-logs-infra dev-env-infra
 build:
 	go build ./cmd/controlplane
 test:
@@ -16,6 +17,14 @@ test-integration:
 	go test -race ./...
 lint:
 	go vet ./...
+# EA-01 consumer lock: pin must exist on Shared main; listed contracts parse.
+# Requires a Shared checkout with history (sibling ../shared or SHARED_CONTRACTS_DIR).
+check-contract-lock:
+	@test -d "$(SHARED_CONTRACTS_DIR)" || { echo "error: set SHARED_CONTRACTS_DIR to a baobab-platform/shared checkout" >&2; exit 1; }
+	python3 $(SHARED_CONTRACTS_DIR)/scripts/contract_lock.py check \
+		--repository-root . \
+		--shared-repo $(SHARED_CONTRACTS_DIR) \
+		--mode enforce
 # Refresh internal/contracts/shared from a baobab-platform/shared checkout at
 # the commit contracts.lock.yaml pins (TestEmbeddedContractsMatchShared
 # fails until they match).

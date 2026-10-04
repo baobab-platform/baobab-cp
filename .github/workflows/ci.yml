@@ -6,6 +6,27 @@ on:
 permissions:
   contents: read
 jobs:
+  contract-lock:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout baobab-platform/shared (full history for EA-01)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: baobab-platform/shared
+          token: ${{ secrets.SHARED_READ_TOKEN || github.token }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: .shared-contracts
+      - name: Install Shared schema runtime
+        run: python3 -m pip install -r .shared-contracts/.github/foundation-tests/requirements.txt
+      - name: EA-01 contract consumer lock (enforce)
+        run: |
+          python3 .shared-contracts/scripts/contract_lock.py check \
+            --repository-root . \
+            --shared-repo .shared-contracts \
+            --mode enforce
+
   test:
     runs-on: ubuntu-24.04
     # A real PostgreSQL 17 instance so the *_integration_test.go suites
