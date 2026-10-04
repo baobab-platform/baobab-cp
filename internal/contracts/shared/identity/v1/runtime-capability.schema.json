@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/identity/v1/runtime-capability.schema.json",
+  "title": "Identity runtime capability verification vocabulary",
+  "description": "ADR-IAM-0033 runtime facets and verification evidence. These labels qualify identity implementation mechanics; they are not platform capability keys and never create catalogue entries, grants, lifecycle or health.",
+  "$defs": {
+    "runtimeCapability": {
+      "type": "string",
+      "enum": [
+        "HUMAN_AUTHENTICATION",
+        "CREDENTIAL_MANAGEMENT",
+        "SESSION_MANAGEMENT",
+        "ACCOUNT_VERIFICATION",
+        "ACCOUNT_RECOVERY",
+        "MFA",
+        "PASSKEY",
+        "OAUTH_AUTHORIZATION_SERVER",
+        "OIDC_PROVIDER",
+        "WORKLOAD_TOKEN_ISSUANCE",
+        "ENTERPRISE_SSO",
+        "SAML_FEDERATION",
+        "OIDC_FEDERATION",
+        "IDENTITY_BROKERING",
+        "IDENTITY_LIFECYCLE_PROVISIONING",
+        "DIRECTORY_SYNCHRONIZATION"
+      ]
+    },
+    "verificationStatus": {
+      "type": "string",
+      "enum": [
+        "UNVERIFIED",
+        "VERIFIED",
+        "UNSUPPORTED",
+        "DEPLOYMENT_DEPENDENT"
+      ],
+      "description": "Observed contract support, not desired lifecycle or operational health. VERIFIED requires fresh, authorised evidence for the exact deployed artifact before consumption."
+    },
+    "artifactDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "verificationEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_reference",
+        "artifact_digest",
+        "observed_at",
+        "expires_at"
+      ],
+      "properties": {
+        "artifact_digest": {
+          "$ref": "#/$defs/artifactDigest"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evidence_reference": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/externalReferenceId"
+        }
+      },
+      "description": "Opaque ExternalReference to approved immutable conformance evidence, not an organisation EvidenceRecord. Sensitive data is prohibited. Consumers must independently check evidence authority, ownership, authenticity, provider and facet coverage, and current eligibility. Expires_at must be strictly later than observed_at."
+    },
+    "capabilityObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "verification_status"
+      ],
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/runtimeCapability"
+        },
+        "verification_status": {
+          "$ref": "#/$defs/verificationStatus"
+        },
+        "evidence": {
+          "$ref": "#/$defs/verificationEvidence"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "verification_status": {
+                "const": "VERIFIED"
+              }
+            },
+            "required": [
+              "verification_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "evidence"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "evidence"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
