@@ -90,6 +90,7 @@ type IdentityRuntimeProfileRepository interface {
 		organisationID string,
 		estateID string,
 		runtimeCapability string,
+		configurationReference string,
 		environment string,
 		now time.Time,
 	) (FederationPlatformSnapshot, error)
@@ -125,6 +126,8 @@ func (p IdentityRuntimeProfile) Validate() error {
 				!validIdentityRuntimeDigest(observation.Evidence.ArtifactDigest) ||
 				observation.Evidence.ArtifactDigest != p.ArtifactDigest ||
 				observation.Evidence.ObservedAt.IsZero() ||
+				observation.Evidence.ObservedAt.After(p.PublishedAt) ||
+				!p.PublishedAt.Before(observation.Evidence.ExpiresAt) ||
 				!observation.Evidence.ExpiresAt.After(observation.Evidence.ObservedAt) {
 				return errors.New("invalid verified identity runtime evidence")
 			}
