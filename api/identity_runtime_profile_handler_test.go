@@ -48,9 +48,10 @@ type runtimeProfileRepoStub struct {
 	snapshot    repository.FederationPlatformSnapshot
 	readErr     error
 	readCalls   int
-	readFacet   string
-	readConfig  string
-	onRead      func()
+	readFacet         string
+	readConfig        string
+	readTrustMaterial string
+	onRead            func()
 }
 
 func (s *runtimeProfileRepoStub) RecordIdentityRuntimeProfile(
@@ -77,12 +78,14 @@ func (s *runtimeProfileRepoStub) ReadFederationPlatformSnapshot(
 	_ string,
 	runtimeCapability string,
 	configurationReference string,
+	trustMaterialReference string,
 	_ string,
 	_ time.Time,
 ) (repository.FederationPlatformSnapshot, error) {
 	s.readCalls++
 	s.readFacet = runtimeCapability
 	s.readConfig = configurationReference
+	s.readTrustMaterial = trustMaterialReference
 	if s.onRead != nil {
 		s.onRead()
 	}
@@ -280,8 +283,8 @@ func TestFederationBindingRouteUsesExactFacetAndCurrentEvidenceSources(t *testin
 				IdentityRuntimeProfiles: platform,
 				Environment:             "staging",
 			})
-			body := `{"Binding":{"provider_id":"provider_aaaaaaaa","engine_instance_id":"ei_aaaaaaaa","configuration_reference":"ref_config","trust_material_reference":"ref_trustmaterial"},"Scope":{"OrganisationID":"` +
-				caller.ID + `","EstateID":"estate_zuribeans"},"RuntimeCapability":"` + tc.runtimeCapability + `"}`
+			body := `{"binding":{"provider_id":"provider_aaaaaaaa","engine_instance_id":"ei_aaaaaaaa","configuration_reference":"ref_config","trust_material_reference":"ref_trustmaterial"},"scope":{"organisation_id":"` +
+				caller.ID + `","estate_id":"estate_zuribeans"},"runtime_capability":"` + tc.runtimeCapability + `"}`
 			req := httptest.NewRequest(http.MethodPost, "/internal/federation/v1/binding", strings.NewReader(body))
 			req.Header.Set("Authorization", "Bearer caller")
 			req.Header.Set("Content-Type", "application/json")
@@ -295,8 +298,8 @@ func TestFederationBindingRouteUsesExactFacetAndCurrentEvidenceSources(t *testin
 				t.Fatalf("platform reads=%d, want %d", platform.readCalls, tc.wantReadCalls)
 			}
 			if tc.wantStatus == http.StatusOK {
-				if platform.readFacet != "OIDC_FEDERATION" || platform.readConfig != "ref_config" {
-					t.Fatalf("platform read was not facet/config bound: %q %q", platform.readFacet, platform.readConfig)
+				if platform.readFacet != "OIDC_FEDERATION" || platform.readConfig != "ref_config" || platform.readTrustMaterial != "ref_trustmaterial" {
+					t.Fatalf("platform read was not facet/config/trust-material bound: %q %q %q", platform.readFacet, platform.readConfig, platform.readTrustMaterial)
 				}
 				if strings.Contains(w.Body.String(), "baobab-deployment-controller-staging") {
 					t.Fatal("private evidence source leaked onto the IAM wire")
