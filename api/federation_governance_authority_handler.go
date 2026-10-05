@@ -35,6 +35,9 @@ var federationGovernanceTargets = map[string]federationGovernanceTargetPolicy{
 	"federation_activation":        {"baobab_iam", "baobab-iam", "federation_activation"},
 	"assurance_mapping_decision":   {"baobab_iam", "baobab-iam", "assurance_mapping_decision"},
 	"canonical_identity_mapping":   {"baobab_cp", "baobab-cp", "canonical_identity_mapping"},
+	"identity_runtime_profile":      {"baobab_cp", "baobab-cp", "identity_runtime_profile"},
+	"identity_runtime_support":      {"baobab_cp", "baobab-cp", "identity_runtime_support"},
+	"identity_security_domain":      {"baobab_iam", "baobab-iam", "identity_security_domain"},
 }
 
 var federationApprovalPermission = map[string]string{
@@ -90,7 +93,7 @@ func validFederationGovernanceExpectation(w federationGovernanceExpectation) (fe
 	}
 
 	switch w.Kind {
-	case "federation_configuration", "federation_trust_material", "assurance_policy", "attribute_mapping", "provisioning_policy", "federation_activation":
+	case "federation_configuration", "federation_trust_material", "assurance_policy", "attribute_mapping", "provisioning_policy", "federation_activation", "identity_runtime_profile", "identity_runtime_support", "identity_security_domain":
 		return policy, w.EventID == "" && w.Issuer == "" && w.Subject == "" && w.Level == "" &&
 			w.EvidenceDigest == "" && w.PrincipalID == "" && w.ExternalIdentityID == ""
 	case "assurance_mapping_decision":
@@ -131,6 +134,19 @@ func (h federationAuthorityHandler) approvalAuthority(w http.ResponseWriter, r *
 	}
 	if h.api == nil || h.api.grants == nil || h.caller == nil || h.targets == nil || h.subjects == nil {
 		h.deny(w, http.StatusServiceUnavailable)
+		return
+	}
+	workloadIdentity, err := h.caller.ReadFederationIdentity(r.Context(), workload.Issuer, workload.Subject)
+	if err != nil ||
+		!federationActorUUID.MatchString(workloadIdentity.Principal.ID) ||
+		!federationActorUUID.MatchString(workloadIdentity.ExternalIdentity.ID) ||
+		workloadIdentity.Principal.Status != "ACTIVE" ||
+		workloadIdentity.ExternalIdentity.Status != "ACTIVE" ||
+		workloadIdentity.Principal.ActorType != "workload" ||
+		workloadIdentity.ExternalIdentity.Issuer != workload.Issuer ||
+		workloadIdentity.ExternalIdentity.Subject != workload.Subject ||
+		workloadIdentity.ExternalIdentity.PrincipalID != workloadIdentity.Principal.ID {
+		h.deny(w, http.StatusForbidden)
 		return
 	}
 
@@ -274,7 +290,17 @@ func (h federationAuthorityHandler) approvalAuthority(w http.ResponseWriter, r *
 		h.deny(w, http.StatusServiceUnavailable)
 		return
 	}
-	if !h.callerActive(workload) {
+	currentWorkload, err := h.caller.ReadFederationIdentity(r.Context(), workload.Issuer, workload.Subject)
+	if err != nil ||
+		currentWorkload.Principal.ID != workloadIdentity.Principal.ID ||
+		currentWorkload.ExternalIdentity.ID != workloadIdentity.ExternalIdentity.ID ||
+		currentWorkload.Principal.Status != "ACTIVE" ||
+		currentWorkload.ExternalIdentity.Status != "ACTIVE" ||
+		currentWorkload.Principal.ActorType != "workload" ||
+		currentWorkload.ExternalIdentity.Issuer != workload.Issuer ||
+		currentWorkload.ExternalIdentity.Subject != workload.Subject ||
+		currentWorkload.ExternalIdentity.PrincipalID != currentWorkload.Principal.ID ||
+		!h.callerActive(workload) {
 		h.deny(w, http.StatusForbidden)
 		return
 	}
