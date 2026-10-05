@@ -54,22 +54,22 @@ type IdentityRuntimeProfile struct {
 // FederationPlatformSnapshot deliberately follows baobab-iam's private
 // PlatformSnapshot wire shape. It is not a new Shared contract.
 type FederationPlatformSnapshot struct {
-	ProviderID             string
-	EngineInstanceID       string
-	Scope                  FederationPlatformScope
-	ProviderStatus         string
-	InstanceStatus         string
-	BindingStatus          string
-	RuntimeCapability      string
-	SupportStatus          string
-	ArtifactDigest         string
-	DeployedArtifactDigest string
-	ProfileRevision        uint64
-	EvidenceExpiresAt      time.Time
-	RuntimeEvidenceSource  string `json:"-"`
+	ProviderID               string
+	EngineInstanceID         string
+	Scope                    FederationPlatformScope
+	ProviderStatus           string
+	InstanceStatus           string
+	BindingStatus            string
+	RuntimeCapability        string
+	SupportStatus            string
+	ArtifactDigest           string
+	DeployedArtifactDigest   string
+	ProfileRevision          uint64
+	EvidenceExpiresAt        time.Time
+	RuntimeEvidenceSource    string `json:"-"`
 	DeploymentEvidenceSource string `json:"-"`
-	EvidenceEnvironment    string `json:"-"`
-	EvidenceRegion         string `json:"-"`
+	EvidenceEnvironment      string `json:"-"`
+	EvidenceRegion           string `json:"-"`
 }
 
 type FederationPlatformScope struct {
