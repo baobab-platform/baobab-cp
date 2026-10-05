@@ -173,6 +173,12 @@ func (h federationAuthorityHandler) approvalAuthority(w http.ResponseWriter, r *
 	case err != nil:
 		h.deny(w, http.StatusServiceUnavailable)
 		return
+	case registration.ReferenceID != req.Target.ID ||
+		registration.Environment != h.api.environment ||
+		registration.TenantID == "" ||
+		!federationSHA256.MatchString(registration.Digest):
+		h.deny(w, http.StatusConflict)
+		return
 	}
 
 	verifier, err := h.subjects.For(r.Context(), federationGovernanceAudience)
