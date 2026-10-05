@@ -33,6 +33,7 @@ type FederationGovernanceTargetRegistration struct {
 	Digest      string
 	ReferenceID string
 	Environment string
+	TenantID    string
 }
 
 type FederationGovernanceTargetReader interface {
