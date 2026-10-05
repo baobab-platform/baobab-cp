@@ -78,6 +78,10 @@ type federationApprovalAuthorityResponse struct {
 	ValidUntil  time.Time `json:"valid_until"`
 }
 
+type federationTargetRegistrationResponse struct {
+	Digest string `json:"digest"`
+}
+
 func validFederationGovernanceExpectation(w federationGovernanceExpectation) (federationGovernanceTargetPolicy, bool) {
 	policy, ok := federationGovernanceTargets[w.Kind]
 	if !ok ||
@@ -114,6 +118,104 @@ func validFederationGovernanceExpectation(w federationGovernanceExpectation) (fe
 	default:
 		return federationGovernanceTargetPolicy{}, false
 	}
+}
+
+// targetRegistration is CP's non-approval attestation used by IAM's
+// composite target resolver. It proves only that the exact ref_/provider/
+// instance/scope tuple is currently registered and active in this environment.
+// The returned fingerprint is not an approval receipt and never substitutes
+// for IAM-owned immutable native target bytes or trust revision/snapshot state.
+func (h federationAuthorityHandler) targetRegistration(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	workload, ok := auth.PrincipalFromContext(r.Context())
+	if !ok || !h.callerActive(workload) {
+		h.deny(w, http.StatusForbidden)
+		return
+	}
+	if h.api == nil || h.caller == nil || h.targets == nil {
+		h.deny(w, http.StatusServiceUnavailable)
+		return
+	}
+	workloadIdentity, err := h.caller.ReadFederationIdentity(r.Context(), workload.Issuer, workload.Subject)
+	if err != nil ||
+		!federationActorUUID.MatchString(workloadIdentity.Principal.ID) ||
+		!federationActorUUID.MatchString(workloadIdentity.ExternalIdentity.ID) ||
+		workloadIdentity.Principal.Status != "ACTIVE" ||
+		workloadIdentity.ExternalIdentity.Status != "ACTIVE" ||
+		workloadIdentity.Principal.ActorType != "workload" ||
+		workloadIdentity.ExternalIdentity.Issuer != workload.Issuer ||
+		workloadIdentity.ExternalIdentity.Subject != workload.Subject ||
+		workloadIdentity.ExternalIdentity.PrincipalID != workloadIdentity.Principal.ID {
+		h.deny(w, http.StatusForbidden)
+		return
+	}
+
+	var target federationGovernanceExpectation
+	if !readFederationAuthorityBody(w, r, &target) {
+		h.deny(w, http.StatusBadRequest)
+		return
+	}
+	targetPolicy, ok := validFederationGovernanceExpectation(target)
+	if !ok {
+		h.deny(w, http.StatusBadRequest)
+		return
+	}
+	query := repository.FederationGovernanceTargetQuery{
+		ReferenceID:      target.ID,
+		Kind:             target.Kind,
+		SystemNamespace:  targetPolicy.systemNamespace,
+		EngineCode:       targetPolicy.engineCode,
+		NativeEntityType: targetPolicy.nativeEntityType,
+		ProviderID:       target.ProviderID,
+		EngineInstanceID: target.EngineInstanceID,
+		OrganisationID:   target.Scope.OrganisationID,
+		DigitalEstateID:  target.Scope.EstateID,
+		Environment:      h.api.environment,
+	}
+	registration, err := h.targets.ReadFederationGovernanceTargetRegistration(r.Context(), query, time.Now().UTC())
+	switch {
+	case errors.Is(err, repository.ErrFederationGovernanceTargetNotFound):
+		h.deny(w, http.StatusConflict)
+		return
+	case err != nil:
+		h.deny(w, http.StatusServiceUnavailable)
+		return
+	case registration.ReferenceID != target.ID ||
+		registration.Environment != h.api.environment ||
+		registration.TenantID == "" ||
+		!federationSHA256.MatchString(registration.Digest):
+		h.deny(w, http.StatusConflict)
+		return
+	}
+
+	// Re-read both CP authorities immediately before success. IAM also
+	// brackets its native-byte read with two calls to this endpoint, so
+	// registration/topology drift cannot silently compose with stale bytes.
+	current, err := h.targets.ReadFederationGovernanceTargetRegistration(r.Context(), query, time.Now().UTC())
+	if errors.Is(err, repository.ErrFederationGovernanceTargetNotFound) ||
+		(err == nil && current != registration) {
+		h.deny(w, http.StatusConflict)
+		return
+	}
+	if err != nil {
+		h.deny(w, http.StatusServiceUnavailable)
+		return
+	}
+	currentWorkload, err := h.caller.ReadFederationIdentity(r.Context(), workload.Issuer, workload.Subject)
+	if err != nil ||
+		currentWorkload.Principal.ID != workloadIdentity.Principal.ID ||
+		currentWorkload.ExternalIdentity.ID != workloadIdentity.ExternalIdentity.ID ||
+		currentWorkload.Principal.Status != "ACTIVE" ||
+		currentWorkload.ExternalIdentity.Status != "ACTIVE" ||
+		currentWorkload.Principal.ActorType != "workload" ||
+		currentWorkload.ExternalIdentity.Issuer != workload.Issuer ||
+		currentWorkload.ExternalIdentity.Subject != workload.Subject ||
+		currentWorkload.ExternalIdentity.PrincipalID != currentWorkload.Principal.ID ||
+		!h.callerActive(workload) {
+		h.deny(w, http.StatusForbidden)
+		return
+	}
+	writeJSON(w, http.StatusOK, federationTargetRegistrationResponse{Digest: registration.Digest})
 }
 
 // approvalAuthority is CP's human maker/checker authority source.
