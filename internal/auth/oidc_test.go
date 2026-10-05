@@ -74,6 +74,9 @@ func TestOIDCVerifierAcceptsContractToken(t *testing.T) {
 	if principal.Issuer != issuer.server.URL {
 		t.Fatalf("expected verified issuer %q on principal, got %q", issuer.server.URL, principal.Issuer)
 	}
+	if principal.ExpiresAt.IsZero() || !principal.ExpiresAt.After(time.Now()) || principal.ExpiresAt.Sub(time.Now()) > 6*time.Minute {
+		t.Fatalf("verified token expiry was not preserved: %v", principal.ExpiresAt)
+	}
 }
 
 func TestOIDCVerifierRejectsExcessiveLifetime(t *testing.T) {

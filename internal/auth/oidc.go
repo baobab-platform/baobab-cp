@@ -37,6 +37,9 @@ type Principal struct {
 	TenantID  string
 	ClientID  string
 	TokenID   string
+	// ExpiresAt is the verified token expiry. Security-sensitive delegated
+	// decisions use it as an upper bound; callers never choose this value.
+	ExpiresAt time.Time
 	Scopes    map[string]struct{}
 	// Roles holds this token's Keycloak realm roles (the realm_access.roles
 	// claim) -- e.g. "cp:platform-admin", "cp:tenant-admin" (Gate IAM-5
@@ -190,7 +193,7 @@ func (v *OIDCVerifier) Verify(ctx context.Context, raw string) (Principal, error
 	// ultimately keyed by (issuer, subject), not subject alone. token.Issuer
 	// comes from the verified ID token (checked against the configured
 	// provider during v.verifier.Verify above), not from an unverified claim.
-	return Principal{Subject: c.Subject, Issuer: token.Issuer, ActorType: c.ActorType, TenantID: c.TenantID, ClientID: c.ClientID, TokenID: c.TokenID, Scopes: scopes, Roles: roles, ClientRoles: clientRoles, Assurance: assurance}, nil
+	return Principal{Subject: c.Subject, Issuer: token.Issuer, ActorType: c.ActorType, TenantID: c.TenantID, ClientID: c.ClientID, TokenID: c.TokenID, ExpiresAt: expiresAt.UTC(), Scopes: scopes, Roles: roles, ClientRoles: clientRoles, Assurance: assurance}, nil
 }
 
 // maximumAssuranceValues bounds the amr list a token may carry.

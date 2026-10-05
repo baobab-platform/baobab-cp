@@ -31,13 +31,14 @@ type correlationKey struct{}
 type Dependencies struct {
 	// FederationCanonical is the private CP authority source. Missing instance,
 	// references, current workload lifecycle or grants keep reads fail-closed.
-	FederationCanonical     *service.FederationIdentityEvidenceService
-	IdentityRuntimeProfiles repository.IdentityRuntimeProfileRepository
-	Store                   store.TenantStore
-	AdminVerifier           auth.TokenVerifier
-	WorkloadVerifier        auth.TokenVerifier
-	Resolution              service.ResolutionService
-	Canonical               service.CanonicalEntityService
+	FederationCanonical         *service.FederationIdentityEvidenceService
+	FederationGovernanceTargets repository.FederationGovernanceTargetReader
+	IdentityRuntimeProfiles     repository.IdentityRuntimeProfileRepository
+	Store                       store.TenantStore
+	AdminVerifier               auth.TokenVerifier
+	WorkloadVerifier            auth.TokenVerifier
+	Resolution                  service.ResolutionService
+	Canonical                   service.CanonicalEntityService
 	// OrganisationMappings backs organisation_id attestation in context
 	// resolution (ADR-BCP-018 ORG-14). Nil leaves every organisation_id
 	// request failing closed.
@@ -295,10 +296,15 @@ func New(dependencies Dependencies) http.Handler {
 			caller:    caller,
 			canonical: dependencies.FederationCanonical,
 			platform:  dependencies.IdentityRuntimeProfiles,
+			targets:   dependencies.FederationGovernanceTargets,
+			subjects:  dependencies.SubjectVerifiers,
 		}
 		r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/identity", source.identity)
 		if dependencies.IdentityRuntimeProfiles != nil {
 			r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/binding", source.binding)
+		}
+		if dependencies.FederationGovernanceTargets != nil && dependencies.SubjectVerifiers != nil && dependencies.AdministrativeGrants != nil {
+			r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/approval-authority", source.approvalAuthority)
 		}
 	}
 	if observers, ok := dependencies.WorkloadRegistry.(auth.IdentityRuntimeObserverRegistry); ok && dependencies.IdentityRuntimeProfiles != nil {

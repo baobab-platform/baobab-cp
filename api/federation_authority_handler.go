@@ -29,6 +29,8 @@ type federationAuthorityHandler struct {
 	caller    repository.FederationIdentityReader
 	canonical *service.FederationIdentityEvidenceService
 	platform  repository.IdentityRuntimeProfileRepository
+	targets   repository.FederationGovernanceTargetReader
+	subjects  auth.SubjectVerifiers
 }
 
 func (h federationAuthorityHandler) deny(w http.ResponseWriter, status int) {
