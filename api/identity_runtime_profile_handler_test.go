@@ -38,16 +38,16 @@ func (r *mp2cWorkloadRegistry) Reporter(clientID string) (auth.ReporterScope, bo
 }
 
 type runtimeProfileRepoStub struct {
-	calls       int
-	profile     repository.IdentityRuntimeProfile
-	source      string
-	environment string
-	regions     []string
-	replay      bool
-	err         error
-	snapshot    repository.FederationPlatformSnapshot
-	readErr     error
-	readCalls   int
+	calls             int
+	profile           repository.IdentityRuntimeProfile
+	source            string
+	environment       string
+	regions           []string
+	replay            bool
+	err               error
+	snapshot          repository.FederationPlatformSnapshot
+	readErr           error
+	readCalls         int
 	readFacet         string
 	readConfig        string
 	readTrustMaterial string
