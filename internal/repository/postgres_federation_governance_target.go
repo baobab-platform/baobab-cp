@@ -35,7 +35,7 @@ func (r *PostgresRepository) ReadFederationGovernanceTargetRegistration(
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	err = tx.QueryRow(ctx, `
-		SELECT ref.fingerprint, ref.external_reference_id, ref.environment
+		SELECT ref.fingerprint, ref.external_reference_id, ref.environment, scope.tenant_id
 		FROM mapping.external_reference ref
 		JOIN topology.engine_instance ref_instance
 		  ON ref_instance.engine_instance_key = ref.engine_instance_id
@@ -99,7 +99,7 @@ func (r *PostgresRepository) ReadFederationGovernanceTargetRegistration(
 		q.DigitalEstateID,
 		q.Environment,
 		now,
-	).Scan(&out.Digest, &out.ReferenceID, &out.Environment)
+	).Scan(&out.Digest, &out.ReferenceID, &out.Environment, &out.TenantID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return FederationGovernanceTargetRegistration{}, ErrFederationGovernanceTargetNotFound
 	}
