@@ -285,13 +285,13 @@ func TestFederationGovernanceTargetPolicyCoversSharedKinds(t *testing.T) {
 	want := map[string]federationGovernanceTargetPolicy{
 		"federation_configuration":  {"baobab_iam", "baobab-iam", "federation_configuration"},
 		"federation_trust_material": {"baobab_iam", "baobab-iam", "federation_trust_material"},
-		"assurance_policy":           {"baobab_iam", "baobab-iam", "assurance_policy"},
-		"attribute_mapping":          {"baobab_iam", "baobab-iam", "attribute_mapping"},
-		"provisioning_policy":        {"baobab_iam", "baobab-iam", "provisioning_policy"},
-		"federation_activation":      {"baobab_iam", "baobab-iam", "federation_activation"},
-		"identity_runtime_profile":   {"baobab_cp", "baobab-cp", "identity_runtime_profile"},
-		"identity_runtime_support":   {"baobab_cp", "baobab-cp", "identity_runtime_support"},
-		"identity_security_domain":   {"baobab_iam", "baobab-iam", "identity_security_domain"},
+		"assurance_policy":          {"baobab_iam", "baobab-iam", "assurance_policy"},
+		"attribute_mapping":         {"baobab_iam", "baobab-iam", "attribute_mapping"},
+		"provisioning_policy":       {"baobab_iam", "baobab-iam", "provisioning_policy"},
+		"federation_activation":     {"baobab_iam", "baobab-iam", "federation_activation"},
+		"identity_runtime_profile":  {"baobab_cp", "baobab-cp", "identity_runtime_profile"},
+		"identity_runtime_support":  {"baobab_cp", "baobab-cp", "identity_runtime_support"},
+		"identity_security_domain":  {"baobab_iam", "baobab-iam", "identity_security_domain"},
 	}
 	for kind, expected := range want {
 		t.Run(kind, func(t *testing.T) {
