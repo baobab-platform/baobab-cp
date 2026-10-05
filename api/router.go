@@ -34,11 +34,11 @@ type Dependencies struct {
 	FederationCanonical         *service.FederationIdentityEvidenceService
 	FederationGovernanceTargets repository.FederationGovernanceTargetReader
 	IdentityRuntimeProfiles     repository.IdentityRuntimeProfileRepository
-	Store                   store.TenantStore
-	AdminVerifier           auth.TokenVerifier
-	WorkloadVerifier        auth.TokenVerifier
-	Resolution              service.ResolutionService
-	Canonical               service.CanonicalEntityService
+	Store                       store.TenantStore
+	AdminVerifier               auth.TokenVerifier
+	WorkloadVerifier            auth.TokenVerifier
+	Resolution                  service.ResolutionService
+	Canonical                   service.CanonicalEntityService
 	// OrganisationMappings backs organisation_id attestation in context
 	// resolution (ADR-BCP-018 ORG-14). Nil leaves every organisation_id
 	// request failing closed.
