@@ -125,7 +125,7 @@ func TestFederationGovernanceTargetRegistrationRequiresCurrentTopologyAndScope(t
 		INSERT INTO capability.capability_binding(
 			capability_id,engine_instance_id,scope_id,binding_mode,status,
 			contract_version,effective_from,provider_id)
-		VALUES ($1::uuid,$2::uuid,$3::uuid,'PRIMARY','ACTIVE','v1',$4,$5::uuid)
+		VALUES ($1::uuid,$2::uuid,$3::uuid,'PRIMARY','ACTIVE','1',$4,$5::uuid)
 		RETURNING id::text`,
 		capabilityID, instanceID, scopeID, now.Add(-time.Minute), providerRowID).Scan(&bindingID); err != nil {
 		t.Fatal(err)
