@@ -70,6 +70,12 @@ func (r *PostgresRepository) ReadFederationGovernanceTargetRegistration(
 		 AND (cb.effective_to IS NULL OR cb.effective_to > $10)
 		JOIN capability.capability_scope scope
 		  ON scope.scope_id = cb.scope_id
+		JOIN registry.tenant_organisation_mapping tom
+		  ON tom.tenant_id = scope.tenant_id
+		 AND tom.organisation_id::text = $7
+		 AND tom.status = 'ACTIVE'
+		 AND tom.effective_from <= $10
+		 AND (tom.effective_to IS NULL OR tom.effective_to > $10)
 		WHERE ref.external_reference_id = $1
 		  AND ref.system_namespace = $2
 		  AND ref.engine_id = $3
