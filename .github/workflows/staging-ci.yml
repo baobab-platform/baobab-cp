@@ -1,0 +1,55 @@
+name: Staging Build & Image Deployment
+
+on:
+  push:
+    branches: [ staging ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=staging-,format=short
+            type=raw,value=staging-latest
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  trigger-infra-dispatch:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Event to Infrastructure Repo
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.INFRA_DISPATCH_TOKEN }} # PAT with repo access to baobab-platform/infrastructure
+          repository: baobab-platform/infrastructure
+          event-type: deploy-staging
+          client-payload: '{"service": "${{ github.event.repository.name }}", "tag": "staging-${{ github.sha }}"}'
