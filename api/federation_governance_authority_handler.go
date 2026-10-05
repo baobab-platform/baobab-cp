@@ -27,17 +27,17 @@ type federationGovernanceTargetPolicy struct {
 // This map says who owns the registered target. It does not make the
 // ExternalReference an approval.
 var federationGovernanceTargets = map[string]federationGovernanceTargetPolicy{
-	"federation_configuration":    {"baobab_iam", "baobab-iam", "federation_configuration"},
-	"federation_trust_material":   {"baobab_iam", "baobab-iam", "federation_trust_material"},
-	"assurance_policy":             {"baobab_iam", "baobab-iam", "assurance_policy"},
-	"attribute_mapping":            {"baobab_iam", "baobab-iam", "attribute_mapping"},
-	"provisioning_policy":          {"baobab_iam", "baobab-iam", "provisioning_policy"},
-	"federation_activation":        {"baobab_iam", "baobab-iam", "federation_activation"},
-	"assurance_mapping_decision":   {"baobab_iam", "baobab-iam", "assurance_mapping_decision"},
-	"canonical_identity_mapping":   {"baobab_cp", "baobab-cp", "canonical_identity_mapping"},
-	"identity_runtime_profile":      {"baobab_cp", "baobab-cp", "identity_runtime_profile"},
-	"identity_runtime_support":      {"baobab_cp", "baobab-cp", "identity_runtime_support"},
-	"identity_security_domain":      {"baobab_iam", "baobab-iam", "identity_security_domain"},
+	"federation_configuration":   {"baobab_iam", "baobab-iam", "federation_configuration"},
+	"federation_trust_material":  {"baobab_iam", "baobab-iam", "federation_trust_material"},
+	"assurance_policy":           {"baobab_iam", "baobab-iam", "assurance_policy"},
+	"attribute_mapping":          {"baobab_iam", "baobab-iam", "attribute_mapping"},
+	"provisioning_policy":        {"baobab_iam", "baobab-iam", "provisioning_policy"},
+	"federation_activation":      {"baobab_iam", "baobab-iam", "federation_activation"},
+	"assurance_mapping_decision": {"baobab_iam", "baobab-iam", "assurance_mapping_decision"},
+	"canonical_identity_mapping": {"baobab_cp", "baobab-cp", "canonical_identity_mapping"},
+	"identity_runtime_profile":   {"baobab_cp", "baobab-cp", "identity_runtime_profile"},
+	"identity_runtime_support":   {"baobab_cp", "baobab-cp", "identity_runtime_support"},
+	"identity_security_domain":   {"baobab_iam", "baobab-iam", "identity_security_domain"},
 }
 
 var federationApprovalPermission = map[string]string{
@@ -68,9 +68,9 @@ type federationGovernanceExpectation struct {
 }
 
 type federationApprovalAuthorityRequest struct {
-	Action       string                         `json:"action"`
+	Action       string                          `json:"action"`
 	Target       federationGovernanceExpectation `json:"target"`
-	SubjectToken string                         `json:"subject_token"`
+	SubjectToken string                          `json:"subject_token"`
 }
 
 type federationApprovalAuthorityResponse struct {
