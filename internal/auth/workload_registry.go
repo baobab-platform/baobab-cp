@@ -53,8 +53,8 @@ type StaticWorkloadRegistry struct {
 
 // Canonical workload scopes consumed by the Control Plane.
 const (
-	ContextValidateScope       = "context:validate"
-	ObserveScope               = "deployment:observe"
+	ContextValidateScope        = "context:validate"
+	ObserveScope                = "deployment:observe"
 	IdentityRuntimeObserveScope = "identity-runtime:observe"
 )
 
