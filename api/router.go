@@ -31,12 +31,13 @@ type correlationKey struct{}
 type Dependencies struct {
 	// FederationCanonical is the private CP authority source. Missing instance,
 	// references, current workload lifecycle or grants keep reads fail-closed.
-	FederationCanonical *service.FederationIdentityEvidenceService
-	Store               store.TenantStore
-	AdminVerifier       auth.TokenVerifier
-	WorkloadVerifier    auth.TokenVerifier
-	Resolution          service.ResolutionService
-	Canonical           service.CanonicalEntityService
+	FederationCanonical     *service.FederationIdentityEvidenceService
+	IdentityRuntimeProfiles repository.IdentityRuntimeProfileRepository
+	Store                   store.TenantStore
+	AdminVerifier           auth.TokenVerifier
+	WorkloadVerifier        auth.TokenVerifier
+	Resolution              service.ResolutionService
+	Canonical               service.CanonicalEntityService
 	// OrganisationMappings backs organisation_id attestation in context
 	// resolution (ADR-BCP-018 ORG-14). Nil leaves every organisation_id
 	// request failing closed.
@@ -289,8 +290,24 @@ func New(dependencies Dependencies) http.Handler {
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve-batch", CapabilityResolveBatchHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
 	if caller, ok := dependencies.Identities.(repository.FederationIdentityReader); ok {
-		source := federationAuthorityHandler{a, caller, dependencies.FederationCanonical}
+		source := federationAuthorityHandler{
+			api:       a,
+			caller:    caller,
+			canonical: dependencies.FederationCanonical,
+			platform:  dependencies.IdentityRuntimeProfiles,
+		}
 		r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/identity", source.identity)
+		if dependencies.IdentityRuntimeProfiles != nil {
+			r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/binding", source.binding)
+		}
+	}
+	if observers, ok := dependencies.WorkloadRegistry.(auth.IdentityRuntimeObserverRegistry); ok && dependencies.IdentityRuntimeProfiles != nil {
+		profiles := identityRuntimeProfileHandler{
+			repo:      dependencies.IdentityRuntimeProfiles,
+			observers: observers,
+			clock:     func() time.Time { return time.Now().UTC() },
+		}
+		r.With(a.authorize(a.workloadVerifier, "workload", auth.IdentityRuntimeObserveScope)).Post("/internal/identity-runtime/v1/profiles", profiles.publish)
 	}
 	// Privileged diagnostics (ADR-BCP-004 §77, ADR-BCP-003 §80): admin-only,
 	// distinct scope from the workload resolve endpoints above -- see
@@ -653,14 +670,30 @@ func (a *API) authorize(verifier auth.TokenVerifier, actorType, requiredScope st
 			// a client the workload registry no longer considers ACTIVE --
 			// see auth.WorkloadRegistry's doc comment. Nil (unconfigured)
 			// preserves prior behavior exactly.
-			if actorType == "workload" && a.workloadRegistry != nil && !a.workloadRegistry.IsActive(principal.ClientID) {
-				problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
-				return
+			if actorType == "workload" && a.workloadRegistry != nil {
+				if !a.workloadRegistry.IsActive(principal.ClientID) {
+					problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
+					return
+				}
+				if scopes, ok := a.workloadRegistry.(auth.WorkloadScopeRegistry); ok &&
+					!registeredWorkloadScopeAllowed(scopes, principal, requiredScope) {
+					problem(w, r, http.StatusForbidden, "AUTHORIZATION_DENIED", "the authenticated principal lacks required authority", false)
+					return
+				}
 			}
 			*r = *r.WithContext(auth.WithPrincipal(r.Context(), principal))
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func registeredWorkloadScopeAllowed(registry auth.WorkloadScopeRegistry, principal auth.Principal, required string) bool {
+	for _, scope := range strings.Split(required, "|") {
+		if principal.HasScope(scope) && registry.AllowsScope(principal.ClientID, scope) {
+			return true
+		}
+	}
+	return false
 }
 
 // scopeEntitlements binds a scope to the IAM workforce client role that
