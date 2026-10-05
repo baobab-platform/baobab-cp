@@ -166,7 +166,7 @@ func TestFederationGovernanceTargetRegistrationRequiresCurrentTopologyAndScope(t
 		ReferenceID: refID, Kind: "federation_configuration",
 		SystemNamespace: "baobab_iam", EngineCode: "baobab-iam",
 		NativeEntityType: "federation_configuration",
-		ProviderID: providerID, EngineInstanceID: instanceKey,
+		ProviderID:       providerID, EngineInstanceID: instanceKey,
 		OrganisationID: orgID, DigitalEstateID: estateID, Environment: "staging",
 	}
 	got, err := repo.ReadFederationGovernanceTargetRegistration(ctx, query, now)
