@@ -214,6 +214,86 @@ func TestFederationApprovalAuthorityRequiresIndependentHumanAuthority(t *testing
 }
 
 
+func TestFederationTargetRegistrationAuthority(t *testing.T) {
+	ctx := context.Background()
+	identities := repository.NewInMemoryRepository()
+	workloadIdentity := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "workload", Status: "ACTIVE"}
+	mustNoError(t, identities.CreateIdentity(ctx, workloadIdentity))
+	mustNoError(t, identities.LinkExternalIdentity(ctx, domain.ExternalIdentity{
+		ID: domain.NewExternalIdentityID(), PrincipalID: workloadIdentity.ID,
+		Issuer: testRealm, Subject: "iam-authority", Status: "ACTIVE",
+	}))
+	workload := auth.Principal{
+		Issuer: testRealm, Subject: "iam-authority", ActorType: "workload",
+		ClientID: "baobab-iam-staging", TokenID: "svc-token",
+		Scopes: map[string]struct{}{"federation-authority:read": {}},
+	}
+	digest := "sha256:" + strings.Repeat("a", 64)
+	target := &governanceTargetFake{registration: repository.FederationGovernanceTargetRegistration{
+		Digest: digest, ReferenceID: "ref_governance", Environment: "staging", TenantID: "tn_governance",
+	}}
+	body := `{"id":"ref_governance","kind":"federation_configuration","trust_id":"11111111-1111-4111-8111-111111111111","snapshot_id":"snap_1","trust_revision":1,"provider_id":"provider_aaaaaaaa","engine_instance_id":"ei_aaaaaaaa","scope":{"organisation_id":"11111111-1111-4111-8111-111111111111","estate_id":"estate_zuribeans"}}`
+	call := func(local repository.FederationGovernanceTargetReader) *httptest.ResponseRecorder {
+		h := New(Dependencies{
+			Store: &fakeStore{}, WorkloadVerifier: tokenVerifier{"caller": workload},
+			WorkloadRegistry: privateWorkloadRegistry(true), Identities: identities,
+			Environment: "staging", FederationGovernanceTargets: local,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/internal/federation/v1/target-registration", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer caller")
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w
+	}
+
+	t.Run("returns current non-approval fingerprint", func(t *testing.T) {
+		w := call(target)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+		}
+		var out federationTargetRegistrationResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		if out.Digest != digest || target.calls != 2 {
+			t.Fatalf("response=%#v calls=%d", out, target.calls)
+		}
+	})
+
+	t.Run("registration drift is unverified", func(t *testing.T) {
+		drift := &governanceTargetFake{registration: target.registration, mutate: true}
+		w := call(drift)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("suspended canonical workload is denied before target read", func(t *testing.T) {
+		suspended := repository.NewInMemoryRepository()
+		p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "workload", Status: "SUSPENDED"}
+		mustNoError(t, suspended.CreateIdentity(ctx, p))
+		mustNoError(t, suspended.LinkExternalIdentity(ctx, domain.ExternalIdentity{
+			ID: domain.NewExternalIdentityID(), PrincipalID: p.ID,
+			Issuer: testRealm, Subject: "iam-authority", Status: "ACTIVE",
+		}))
+		localTarget := &governanceTargetFake{registration: target.registration}
+		h := New(Dependencies{
+			Store: &fakeStore{}, WorkloadVerifier: tokenVerifier{"caller": workload},
+			WorkloadRegistry: privateWorkloadRegistry(true), Identities: suspended,
+			Environment: "staging", FederationGovernanceTargets: localTarget,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/internal/federation/v1/target-registration", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer caller")
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusForbidden || localTarget.calls != 0 {
+			t.Fatalf("status=%d target_calls=%d body=%s", w.Code, localTarget.calls, w.Body.String())
+		}
+	})
+}
+
 func TestFederationApprovalAuthorityRejectsSuspendedCanonicalWorkload(t *testing.T) {
 	now := time.Now().UTC()
 	ctx := context.Background()
