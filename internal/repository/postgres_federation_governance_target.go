@@ -39,6 +39,7 @@ func (r *PostgresRepository) ReadFederationGovernanceTargetRegistration(
 		FROM mapping.external_reference ref
 		JOIN topology.engine_instance ref_instance
 		  ON ref_instance.engine_instance_key = ref.engine_instance_id
+		 AND ref_instance.engine_instance_key = $6
 		 AND ref_instance.environment = $9
 		 AND UPPER(ref_instance.status) = 'ACTIVE'
 		JOIN topology.engine ref_engine

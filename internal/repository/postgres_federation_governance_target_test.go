@@ -155,6 +155,7 @@ func TestFederationGovernanceTargetRegistrationRequiresCurrentTopologyAndScope(t
 		_, _ = tx.Exec(ctx, `DELETE FROM capability.capability_scope WHERE scope_id=$1::uuid`, scopeID)
 		_, _ = tx.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_id=$1::uuid`, providerRowID)
 		_, _ = tx.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_instance_id=$1::uuid`, instanceID)
+		_, _ = tx.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id=$1::uuid AND region='af-south-1b' AND environment='staging'`, engineID)
 		_, _ = tx.Exec(ctx, `DELETE FROM registry.tenant_organisation_mapping WHERE tenant_id=$1`, tenantID)
 		_, _ = tx.Exec(ctx, `DELETE FROM registry.canonical_entity WHERE canonical_entity_id=$1::uuid`, orgID)
 		_, _ = tx.Exec(ctx, `DELETE FROM tenants WHERE tenant_id=$1`, tenantID)
@@ -191,6 +192,31 @@ func TestFederationGovernanceTargetRegistrationRequiresCurrentTopologyAndScope(t
 				t.Fatalf("got %v, want ErrFederationGovernanceTargetNotFound", err)
 			}
 		})
+	}
+
+	var alternateInstanceID, alternateInstanceKey string
+	if err := admin.QueryRow(ctx, `
+		INSERT INTO topology.engine_instance(engine_id,region,environment,status)
+		VALUES ($1::uuid,'af-south-1b','staging','ACTIVE')
+		RETURNING engine_instance_id::text, engine_instance_key`, engineID).Scan(&alternateInstanceID, &alternateInstanceKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.Exec(ctx, `
+		UPDATE capability.capability_binding
+		SET engine_instance_id=$1::uuid
+		WHERE id=$2::uuid`, alternateInstanceID, bindingID); err != nil {
+		t.Fatal(err)
+	}
+	alternateQuery := query
+	alternateQuery.EngineInstanceID = alternateInstanceKey
+	if _, err := repo.ReadFederationGovernanceTargetRegistration(ctx, alternateQuery, now); !errors.Is(err, ErrFederationGovernanceTargetNotFound) {
+		t.Fatalf("reference registered on a different active instance was accepted: %v", err)
+	}
+	if _, err := admin.Exec(ctx, `
+		UPDATE capability.capability_binding
+		SET engine_instance_id=$1::uuid
+		WHERE id=$2::uuid`, instanceID, bindingID); err != nil {
+		t.Fatal(err)
 	}
 
 	if _, err := admin.Exec(ctx, `UPDATE mapping.external_reference SET source_authority='manual-import' WHERE external_reference_id=$1`, refID); err != nil {

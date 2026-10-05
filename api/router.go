@@ -303,6 +303,9 @@ func New(dependencies Dependencies) http.Handler {
 		if dependencies.IdentityRuntimeProfiles != nil {
 			r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/binding", source.binding)
 		}
+		if dependencies.FederationGovernanceTargets != nil {
+			r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/target-registration", source.targetRegistration)
+		}
 		if dependencies.FederationGovernanceTargets != nil && dependencies.SubjectVerifiers != nil && dependencies.AdministrativeGrants != nil {
 			r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/approval-authority", source.approvalAuthority)
 		}
