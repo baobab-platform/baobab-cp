@@ -14,16 +14,16 @@ var ErrFederationGovernanceTargetNotFound = errors.New("federation governance ta
 // platform scope. IAM's composite target resolver must prove the native trust
 // revision/snapshot binding before an approval can use the digest.
 type FederationGovernanceTargetQuery struct {
-	ReferenceID       string
-	Kind              string
-	SystemNamespace   string
-	EngineCode        string
-	NativeEntityType  string
-	ProviderID        string
-	EngineInstanceID  string
-	OrganisationID    string
-	DigitalEstateID   string
-	Environment       string
+	ReferenceID      string
+	Kind             string
+	SystemNamespace  string
+	EngineCode       string
+	NativeEntityType string
+	ProviderID       string
+	EngineInstanceID string
+	OrganisationID   string
+	DigitalEstateID  string
+	Environment      string
 }
 
 // FederationGovernanceTargetRegistration is non-approval CP evidence. Digest
