@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -152,12 +153,40 @@ func (c *contexts) CreateContext(_ context.Context, ctx domain.Context) error {
 }
 
 type ledger struct {
-	subs map[string]Submission
-	last map[string]int64
+	subs    map[string]Submission
+	last    map[string]int64
+	intents map[string]Intent
+	// failSubmitted, when set, makes the next Submitted fail once (a crash after ERP accepted the request).
+	failSubmitted error
 }
 
-func newLedger() *ledger { return &ledger{subs: map[string]Submission{}, last: map[string]int64{}} }
+func newLedger() *ledger {
+	return &ledger{subs: map[string]Submission{}, last: map[string]int64{}, intents: map[string]Intent{}}
+}
+func (l *ledger) intentKey(id string, a Authority) string {
+	return id + "|" + a.PlanID + "|" + strconv.Itoa(a.PlanVersion) + "|" + a.PlanDigest
+}
+func (l *ledger) Intent(_ context.Context, id string, a Authority) (Intent, bool, error) {
+	in, ok := l.intents[l.intentKey(id, a)]
+	return in, ok, nil
+}
+func (l *ledger) RecordIntent(_ context.Context, in Intent) (Intent, error) {
+	k := l.intentKey(in.TenantProvisioningID, in.Authority)
+	if prior, ok := l.intents[k]; ok {
+		return prior, nil
+	}
+	l.intents[k] = in
+	return in, nil
+}
+func (l *ledger) DiscardIntent(_ context.Context, id string, a Authority) error {
+	delete(l.intents, l.intentKey(id, a))
+	return nil
+}
 func (l *ledger) Submitted(_ context.Context, sub Submission, st State) error {
+	if err := l.failSubmitted; err != nil {
+		l.failSubmitted = nil
+		return err
+	}
 	l.subs[sub.OperationID] = sub
 	if st.Revision > l.last[sub.OperationID] {
 		l.last[sub.OperationID] = st.Revision

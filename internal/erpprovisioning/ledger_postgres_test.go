@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,6 +43,8 @@ func TestPostgresLedger(t *testing.T) {
 	)
 	var rowID string
 	cleanup := func() {
+		pool.Exec(ctx, `DELETE FROM provisioning.erp_submission_intent WHERE tenant_provisioning_id IN
+			(SELECT tenant_provisioning_id FROM provisioning.tenant_provisioning WHERE tenant_id = $1)`, tenantID)
 		pool.Exec(ctx, `DELETE FROM provisioning.erp_submission WHERE tenant_id = $1`, tenantID)
 		pool.Exec(ctx, `DELETE FROM provisioning.tenant_provisioning WHERE tenant_id = $1`, tenantID)
 	}
@@ -84,6 +87,47 @@ func TestPostgresLedger(t *testing.T) {
 	}
 	if _, found, _ := l.Lookup(ctx, opB); found {
 		t.Fatal("an unknown operation must not be found")
+	}
+	// The intent is fixed before the request is sent: the first writer wins, later attempts get the recorded one back, and a
+	// different plan has its own.
+	if _, found, err := l.Intent(ctx, key, sub.Authority); found || err != nil {
+		t.Fatalf("no intent is recorded yet: %v %v", found, err)
+	}
+	first := Intent{TenantProvisioningID: key, Authority: sub.Authority, FinanceBaselines: refs, FunctionalCurrencies: []string{"ZAR", "UGX", "ZAR"}}
+	recorded, err := l.RecordIntent(ctx, first)
+	if err != nil || len(recorded.FinanceBaselines) != 2 || recorded.FinanceBaselines[0] != ref("LE-A", 1) ||
+		!slices.Equal(recorded.FunctionalCurrencies, []string{"UGX", "ZAR"}) {
+		t.Fatalf("record intent: %+v %v", recorded, err)
+	}
+	later := first
+	later.FinanceBaselines = []FinanceBaselineReference{ref("LE-A", 9), ref("LE-B", 9)}
+	later.FunctionalCurrencies = []string{"USD"}
+	if again, err := l.RecordIntent(ctx, later); err != nil || again.FinanceBaselines[0] != ref("LE-A", 1) || again.FunctionalCurrencies[0] != "UGX" {
+		t.Fatalf("the first intent wins: %+v %v", again, err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE provisioning.erp_submission_intent SET plan_digest = plan_digest WHERE tenant_provisioning_id = $1::uuid`, rowID); err == nil {
+		t.Fatal("an intent must be immutable")
+	}
+	otherPlan := first
+	otherPlan.Authority.PlanDigest = "sha256:" + strings.Repeat("2", 64)
+	if _, found, _ := l.Intent(ctx, key, otherPlan.Authority); found {
+		t.Fatal("another plan digest has no intent")
+	}
+	// A refused, unsubmitted intent can be dropped so the baseline is resolved again; one whose plan has a submission never is.
+	if _, err := l.RecordIntent(ctx, otherPlan); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.DiscardIntent(ctx, key, otherPlan.Authority); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := l.Intent(ctx, key, otherPlan.Authority); found {
+		t.Fatal("an unsubmitted intent is dropped")
+	}
+	if err := l.DiscardIntent(ctx, key, sub.Authority); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := l.Intent(ctx, key, sub.Authority); !found {
+		t.Fatal("an intent whose plan has a recorded submission is never dropped")
 	}
 	// The recorded submission is found by its exact approved plan tuple, and only by it.
 	if byPlan, found, err := l.ForPlan(ctx, key, sub.Authority); err != nil || !found || byPlan.OperationID != opA {
