@@ -62,6 +62,10 @@ type Config struct {
 	// EventProcessingInterval is how often recorded events are applied (they are also applied as soon as one is recorded).
 	EventDeliveryKeysFile   string
 	EventProcessingInterval time.Duration
+	// ERPRecoveryInterval (ERP_RECOVERY_INTERVAL, default 1m) is how often the recovery sweep looks for open ERP operations that have
+	// gone quiet; ERPRecoveryGrace (ERP_RECOVERY_GRACE, default 5m) is how long an open operation may be quiet before it is read.
+	ERPRecoveryInterval time.Duration
+	ERPRecoveryGrace    time.Duration
 	// GroupDerivationInterval is how often due CorporateGroup derivations
 	// are processed; GroupReconciliationInterval how often every derivable
 	// group is re-derived to repair drift (ADR-BCP-018 gate ORG-05).
@@ -180,6 +184,12 @@ func Load() (Config, error) {
 	}
 	if c.EventProcessingInterval, err = time.ParseDuration(env("EVENT_PROCESSING_INTERVAL", "10s")); err != nil || c.EventProcessingInterval < time.Second {
 		return Config{}, errors.New("EVENT_PROCESSING_INTERVAL must be a Go duration of at least 1s")
+	}
+	if c.ERPRecoveryInterval, err = time.ParseDuration(env("ERP_RECOVERY_INTERVAL", "1m")); err != nil || c.ERPRecoveryInterval < 10*time.Second {
+		return Config{}, errors.New("ERP_RECOVERY_INTERVAL must be a Go duration of at least 10s")
+	}
+	if c.ERPRecoveryGrace, err = time.ParseDuration(env("ERP_RECOVERY_GRACE", "5m")); err != nil || c.ERPRecoveryGrace < time.Minute {
+		return Config{}, errors.New("ERP_RECOVERY_GRACE must be a Go duration of at least 1m")
 	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("TENANT_BOOTSTRAP_REGISTRATION"))) {
 	case "", "disabled":

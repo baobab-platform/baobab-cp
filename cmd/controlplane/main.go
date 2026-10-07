@@ -172,6 +172,11 @@ func main() {
 		}
 		erpProvisioner = erpprovisioning.Provisioner{Worker: worker, Phase: resolverRepository, Latest: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()}}
 		erpWorker = &worker
+		// Events are the primary path; this reads ERP only for an open operation that has gone quiet, with back-off and a
+		// maximum age, so a lost event still converges.
+		sweep := erpprovisioning.DefaultSweepPolicy()
+		sweep.Grace = cfg.ERPRecoveryGrace
+		go (&erpprovisioning.Sweeper{Claims: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()}, Worker: worker, Policy: sweep}).Run(ctx, cfg.ERPRecoveryInterval)
 	}
 	// Signed delivery of canonical engine events (Shared control-plane/v1 receiveEngineEvent): verified, recorded durably, and
 	// applied afterwards. Off unless a delivery key registry is configured; an event is only ever recorded for a key in it.

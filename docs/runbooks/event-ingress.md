@@ -40,3 +40,13 @@ The file is re-read when it changes. Add the new key, switch the sender, then ma
 | 413 | body over 1 MiB |
 | 422 | type, source or key's producer not accepted, or data fails its schema |
 | 503 | could not be recorded; retry |
+
+## Recovery sweep (FB-04d)
+
+Events are the primary path. A lost or overdue `provisioning.changed` is repaired by a bounded sweep that reads the operation from ERP and records it through the same forward-only rule, so it can never rewind a newer state.
+
+- It reads only operations that are **open** (not `active`, `failed` or `cancelled`) and have had **no recorded state for `ERP_RECOVERY_GRACE`** (default `5m`, minimum `1m`). A healthy event path never triggers a read.
+- Each pass (`ERP_RECOVERY_INTERVAL`, default `1m`, minimum `10s`) reads at most 20 operations. A read is claimed first (`provisioning.erp_submission.last_swept_at`, `sweep_attempts`), so instances sharing the database never read the same operation at once.
+- The wait between reads of one operation doubles from 1 minute to 1 hour while nothing newer is found; recording a newer state resets it.
+- An operation older than 72 hours (the sender's retry horizon) is no longer swept. One still open then needs an operator: look at the ERP operation and `provisioning.erp_submission.last_state`.
+- Logs: `erp provisioning recovered a missed state` (the sweep repaired something: worth a look at why the event did not arrive), `erp provisioning recovery read failed` (WARN; ERROR when ERP's state disagrees with the submission, which is never recorded).
