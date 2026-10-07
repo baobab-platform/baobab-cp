@@ -1,6 +1,9 @@
 package repository
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
@@ -37,3 +40,31 @@ func ApprovedPlanProblem(c ConvergedProvisioning, desired convergence.DesiredSta
 // Pool is the connection pool, for stores that own their own table (the ERP
 // provisioning ledger) and so do not belong in this package.
 func (r *PostgresRepository) Pool() *pgxpool.Pool { return r.pool }
+
+// EnterProviderProvisioning moves a provisioning into PROVISIONING_PROVIDERS, the canonical state in which provider
+// provisioning executes (Shared tenant-provisioning-lifecycle.yaml). Only a provisioning still before it advances; one
+// already provisioning providers, verifying readiness or remediating is left as it is (a resumed execution), and one in
+// any other state (blocked, failed, cancelled, ready, active, ...) is refused. It is the executing operation's own
+// bookkeeping, not a command, and it deliberately leaves the revision alone: the orchestrator running this very phase
+// holds the revision it read and would otherwise fail its next optimistic update.
+func (r *PostgresRepository) EnterProviderProvisioning(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE provisioning.tenant_provisioning SET state = 'PROVISIONING_PROVIDERS', updated_at = now()
+		WHERE tenant_provisioning_id = $1::uuid
+		  AND state IN ('REGISTERING', 'CONFIGURING_CONTEXT', 'PROVISIONING_ENTITLEMENTS')`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 1 {
+		return nil
+	}
+	var state string
+	if err := r.pool.QueryRow(ctx, `SELECT state FROM provisioning.tenant_provisioning WHERE tenant_provisioning_id = $1::uuid`,
+		id).Scan(&state); err != nil {
+		return err
+	}
+	switch state {
+	case "PROVISIONING_PROVIDERS", "VERIFYING_READINESS", "REMEDIATING":
+		return nil
+	}
+	return fmt.Errorf("a provisioning in state %s cannot provision providers", state)
+}

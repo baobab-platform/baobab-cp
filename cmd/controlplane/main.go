@@ -172,7 +172,7 @@ func main() {
 				Issuer: cfg.ERPProvisionerIssuer, Subject: cfg.ERPProvisionerSubject, TTL: cfg.ERPProvisioningContextTTL},
 			Ledger: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()},
 		}
-		erpProvisioner = erpprovisioning.Provisioner{Worker: worker, Latest: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()}}
+		erpProvisioner = erpprovisioning.Provisioner{Worker: worker, Phase: resolverRepository, Latest: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()}}
 	}
 	applyExecutor := apply.Executor{Store: resolverRepository, Registry: resolverRepository, Lease: 5 * time.Minute,
 		Planner:  convergence.Planner{Registry: resolverRepository, Environment: cfg.Environment},

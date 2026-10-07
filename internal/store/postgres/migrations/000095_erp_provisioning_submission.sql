@@ -46,6 +46,9 @@ BEGIN
     IF NEW.last_revision < OLD.last_revision THEN
         RAISE EXCEPTION 'ERP progress never moves backwards';
     END IF;
+    IF NEW.last_revision = OLD.last_revision AND NEW.last_state <> OLD.last_state THEN
+        RAISE EXCEPTION 'an ERP state changes only at a newer revision';
+    END IF;
     RETURN NEW;
 END $$;
 

@@ -145,3 +145,56 @@ func TestProvisionerReadyOnlyWhenERPReportsActive(t *testing.T) {
 		t.Fatal("a ledger failure must not read as not-ready-without-error")
 	}
 }
+
+func TestSourceSendsEachCurrencyOnce(t *testing.T) {
+	// A resolver may answer once per legal entity; erp/v1 declares the list unique.
+	fin := &financeFake{currencies: []string{"ZAR", "UGX", "ZAR"}}
+	got, err := PlanSource{Provisionings: approvedProvisioning(), Finance: fin}.Authorised(context.Background(), provisioningKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.Currencies, []string{"UGX", "ZAR"}) {
+		t.Fatalf("got %v", got.Currencies)
+	}
+}
+
+type phaseFake struct {
+	entered []string
+	err     error
+}
+
+func (f *phaseFake) EnterProviderProvisioning(_ context.Context, id string) error {
+	f.entered = append(f.entered, id)
+	return f.err
+}
+
+type countingSource struct{ calls int }
+
+func (s *countingSource) Authorised(context.Context, string) (Authorised, error) {
+	s.calls++
+	return Authorised{}, ErrNotAuthorised
+}
+
+func TestProvisionerEntersProviderProvisioningBeforeAnythingIsSent(t *testing.T) {
+	src := &countingSource{}
+	phase := &phaseFake{}
+	p := Provisioner{Worker: Worker{Source: src}, Phase: phase}
+	if err := p.Submit(context.Background(), provisioningKey); !errors.Is(err, ErrNotAuthorised) {
+		t.Fatalf("got %v", err)
+	}
+	if len(phase.entered) != 1 || phase.entered[0] != "00000000-0000-0000-0000-000000000001" || src.calls != 1 {
+		t.Fatalf("phase %v source calls %d", phase.entered, src.calls)
+	}
+
+	// A provisioning that cannot enter the phase never gets a context or a request.
+	src, phase = &countingSource{}, &phaseFake{err: errors.New("in state BLOCKED")}
+	if err := (Provisioner{Worker: Worker{Source: src}, Phase: phase}).Submit(context.Background(), provisioningKey); err == nil || src.calls != 0 {
+		t.Fatalf("err %v source calls %d", err, src.calls)
+	}
+	if err := (Provisioner{Worker: Worker{Source: src}}).Submit(context.Background(), provisioningKey); err == nil || src.calls != 0 {
+		t.Fatal("an unconfigured phase must not submit")
+	}
+	if err := (Provisioner{Worker: Worker{Source: src}, Phase: phase}).Submit(context.Background(), "nope"); !errors.Is(err, ErrNotAuthorised) {
+		t.Fatalf("got %v", err)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
@@ -98,8 +99,15 @@ func (s PlanSource) Authorised(ctx context.Context, tenantProvisioningID string)
 	return Authorised{
 		TenantID:       c.TenantID,
 		Authority:      Authority{TenantProvisioningID: c.Key, PlanID: c.Plan.PlanID, PlanVersion: c.Plan.PlanVersion, PlanDigest: c.Plan.PlanDigest},
-		LegalEntityIDs: entities, Countries: countries, Currencies: sorted(currencies),
+		LegalEntityIDs: entities, Countries: countries, Currencies: unique(currencies),
 	}, nil
 }
 
 var _ Source = PlanSource{}
+
+// unique is the sorted set of values: erp/v1 declares functional_currencies
+// uniqueItems, and a resolver may answer once per legal entity.
+func unique(in []string) []string {
+	out := sorted(in)
+	return slices.Compact(out)
+}

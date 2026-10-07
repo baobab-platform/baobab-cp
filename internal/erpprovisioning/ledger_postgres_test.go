@@ -133,6 +133,9 @@ func TestPostgresLedger(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE provisioning.erp_submission SET last_revision = 0 WHERE operation_id = $1::uuid`, opA); err == nil {
 		t.Fatal("progress moved backwards")
 	}
+	if _, err := pool.Exec(ctx, `UPDATE provisioning.erp_submission SET last_state = 'failed' WHERE operation_id = $1::uuid`, opA); err == nil {
+		t.Fatal("a state changed without a newer revision")
+	}
 	if _, err := pool.Exec(ctx, `UPDATE provisioning.erp_submission SET last_state = 'done' WHERE operation_id = $1::uuid`, opA); err == nil {
 		t.Fatal("a state outside erp/v1 was accepted")
 	}
