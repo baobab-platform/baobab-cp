@@ -23,8 +23,8 @@ jobs:
           set -euo pipefail
           [[ "$GITHUB_REF_NAME" =~ ^release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-staging$ ]]
           tag="${GITHUB_REF_NAME#release/}"
-          git fetch --no-tags origin main:refs/remotes/origin/main
-          [[ "$(git rev-parse origin/main)" == "$GITHUB_SHA" ]]
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          [[ "$main_sha" == "$GITHUB_SHA" ]]
           gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" --event push --status success --json headSha,conclusion > source-ci.json
           TAG="$tag" python - <<'PY'
           import json, os
