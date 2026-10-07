@@ -168,7 +168,7 @@ func (r *PostgresRepository) RecordProviderCapabilityCertification(
 
 	if _, err := tx.Exec(ctx, `
 		SELECT pg_advisory_xact_lock(
-			hashtext('ea09:' || $1 || ':' || $2 || ':' || $3::text || ':' || $4)
+			hashtext('ea09:' || $1 || ':' || $2 || ':' || $3::integer::text || ':' || $4)
 		)
 	`, providerUUID, capabilityUUID, req.ContractVersion, releaseUUID); err != nil {
 		return certification.Certification{}, false, err
