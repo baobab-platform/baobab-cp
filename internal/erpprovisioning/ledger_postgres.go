@@ -86,7 +86,7 @@ func (l PostgresLedger) Lookup(ctx context.Context, operationID string) (Submiss
 
 func (l PostgresLedger) Apply(ctx context.Context, operationID string, st State) (bool, error) {
 	tag, err := l.DB.Exec(ctx, `
-		UPDATE provisioning.erp_submission SET last_revision = $2, last_state = $3, updated_at = now()
+		UPDATE provisioning.erp_submission SET last_revision = $2, last_state = $3, updated_at = now(), sweep_attempts = 0
 		 WHERE operation_id = $1::uuid AND last_revision < $2`, operationID, st.Revision, st.State)
 	if err != nil {
 		return false, err
