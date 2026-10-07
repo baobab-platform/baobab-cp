@@ -238,6 +238,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	var expires time.Time
+	var eligibleRows int
 	err = tx.QueryRow(ctx, `
 		WITH current_profile AS (
 			SELECT p.*
@@ -271,7 +272,8 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 			p.source,
 			dep.source,
 			ei.environment,
-			ei.region
+			ei.region,
+			COUNT(*) OVER ()
 		FROM current_profile p
 		JOIN capability.capability_provider cp
 		  ON cp.provider_id = p.provider_id
@@ -284,6 +286,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		  ON pcs.provider_id = cp.provider_id
 		 AND pcs.capability_id = cap.capability_id
 		 AND pcs.status = 'ACTIVE'
+		 AND 1 = ANY(pcs.contract_versions)
 		 AND pcs.effective_from <= $9
 		 AND (pcs.effective_to IS NULL OR pcs.effective_to > $9)
 		JOIN capability.capability_binding cb
@@ -292,6 +295,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		 AND cb.capability_id = cap.capability_id
 		 AND cb.binding_mode = 'PRIMARY'
 		 AND cb.status = 'ACTIVE'
+		 AND cb.contract_version = '1'
 		 AND cb.effective_from <= $9
 		 AND (cb.effective_to IS NULL OR cb.effective_to > $9)
 		JOIN capability.capability_scope scope
@@ -364,6 +368,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		JOIN topology.engine_release desired
 		  ON desired.engine_release_id = ei.desired_release_id
 		 AND desired.status = 'APPROVED'
+		 AND desired.engine_id = ei.engine_id
 		JOIN topology.engine_release_artifact desired_artifact
 		  ON desired_artifact.engine_release_id = desired.engine_release_id
 		 AND desired_artifact.digest = p.artifact_digest
@@ -377,6 +382,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		  AND scope.organisation_id = $3
 		  AND scope.digital_estate_id = $4
 		  AND p.configuration_reference = $6
+		  AND p.published_at <= $9
 		  AND (scope.environment IS NULL OR scope.environment = $8)
 		  AND ei.environment = $8
 		  AND UPPER(cp.status) = 'ACTIVE'
@@ -416,6 +422,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		&out.DeploymentEvidenceSource,
 		&out.EvidenceEnvironment,
 		&out.EvidenceRegion,
+		&eligibleRows,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return FederationPlatformSnapshot{}, ErrFederationPlatformEvidenceNotFound
@@ -423,7 +430,10 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 	if err != nil {
 		return FederationPlatformSnapshot{}, fmt.Errorf("read federation platform evidence: %w", err)
 	}
-	if !now.Before(expires) {
+	// A projection must not hide competing scoped bindings with LIMIT 1.
+	// Generic CP resolution remains authoritative; this read independently
+	// rejects ambiguous current runtime evidence instead of choosing a row.
+	if eligibleRows != 1 || !now.Before(expires) {
 		return FederationPlatformSnapshot{}, ErrFederationPlatformEvidenceNotFound
 	}
 
