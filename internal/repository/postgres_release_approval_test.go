@@ -234,7 +234,7 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 	exec(`INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status)
 		VALUES ($1, $2, 'af-south-1', 'production', 'PROVISIONING')`, production, engineID)
 	c := approvals.draft(candidate, "key-approve-"+suffix)
-	c = approvals.submit(c, changeset.StateBlocked, "RELEASE_PROVENANCE_MISSING")
+	c = approvals.submit(c, changeset.StateBlocked, "RELEASE_PROVENANCE_MISSING", "RELEASE_NOT_CERTIFIED")
 	exec(`UPDATE topology.engine_instance SET status = 'RETIRED' WHERE engine_instance_id = $1`, production)
 
 	// Support the catalogue no longer defines blocks.
