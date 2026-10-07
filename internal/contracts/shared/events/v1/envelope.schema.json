@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/events/v1/envelope.schema.json",
+  "title": "Baobab cross-engine event envelope",
+  "description": "CloudEvents 1.0 structured JSON profile for asynchronous communication between independently deployable Baobab-Platform services.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "specversion",
+    "id",
+    "type",
+    "source",
+    "subject",
+    "time",
+    "datacontenttype",
+    "dataschema",
+    "baobabscope",
+    "correlationid",
+    "data"
+  ],
+  "properties": {
+    "specversion": {
+      "const": "1.0",
+      "description": "CloudEvents specification version."
+    },
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Immutable event occurrence identifier. The pair (source, id) is the delivery deduplication key."
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^com\\.baobab-platform\\.[a-z0-9]+(?:[.-][a-z0-9]+)*\\.v[1-9][0-9]*$",
+      "maxLength": 255,
+      "description": "Versioned reverse-DNS event type. The major payload version is the final vN segment."
+    },
+    "source": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 255,
+      "description": "Stable absolute URI identifying the logical producer. It must not contain a deployment hostname, credential or tenant secret."
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Canonical subject within the producer context; never an iDempiere, ERPNext or other vendor-internal identifier."
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp of the business occurrence, not the delivery attempt."
+    },
+    "datacontenttype": {
+      "const": "application/json"
+    },
+    "dataschema": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 512,
+      "description": "Immutable URI of the versioned data payload schema."
+    },
+    "baobabscope": {
+      "type": "string",
+      "enum": ["platform", "tenant"],
+      "description": "Declares whether tenant context is mandatory. A platform event must never invent a default tenant."
+    },
+    "correlationid": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Stable identifier joining one distributed business interaction."
+    },
+    "causationid": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identifier of the immediate command or event that caused this occurrence. Omit it for a root event; do not send null."
+    },
+    "tenantid": {
+      "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId",
+      "description": "Control Plane-minted tenant context. Required when baobabscope is tenant."
+    },
+    "idempotencykey": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "minLength": 16,
+      "maxLength": 128,
+      "description": "Stable originating command key when the event is a consequence of an idempotent command. It does not replace (source, id) for delivery deduplication."
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-(?!00000000000000000000000000000000)[0-9a-f]{32}-(?!0000000000000000)[0-9a-f]{16}-[0-9a-f]{2}$",
+      "description": "W3C Trace Context version 00 traceparent value."
+    },
+    "tracestate": {
+      "type": "string",
+      "pattern": "^[ -~]+$",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Optional W3C vendor trace state. It must not carry credentials, personal data or business payloads."
+    },
+    "data": {
+      "type": "object",
+      "description": "Domain payload validated by dataschema."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "baobabscope": { "const": "tenant" } },
+        "required": ["baobabscope"]
+      },
+      "then": { "required": ["tenantid"] },
+      "else": {
+        "not": { "required": ["tenantid"] }
+      }
+    }
+  ]
+}

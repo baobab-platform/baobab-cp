@@ -56,6 +56,12 @@ type Config struct {
 	ERPProvisionerIssuer      string
 	ERPProvisionerSubject     string
 	ERPProvisioningContextTTL time.Duration
+	// EventDeliveryKeysFile (EVENT_DELIVERY_KEYS_FILE) is the registry of delivery keys for signed engine event delivery (Shared
+	// control-plane/v1 receiveEngineEvent): a JSON array of {key_id, sender, secret_b64, revoked}. Unset, the route is not served.
+	// It is a mounted secret, never a value in the environment, and is re-read when it changes so keys rotate without a restart.
+	// EventProcessingInterval is how often recorded events are applied (they are also applied as soon as one is recorded).
+	EventDeliveryKeysFile   string
+	EventProcessingInterval time.Duration
 	// GroupDerivationInterval is how often due CorporateGroup derivations
 	// are processed; GroupReconciliationInterval how often every derivable
 	// group is re-derived to repair drift (ADR-BCP-018 gate ORG-05).
@@ -168,6 +174,12 @@ func Load() (Config, error) {
 			return Config{}, errors.New("ERP_PROVISIONING_CONTEXT_TTL must be a Go duration between 1m and 15m")
 		}
 		c.ERPProvisioningContextTTL = ttl
+	}
+	if raw := strings.TrimSpace(os.Getenv("EVENT_DELIVERY_KEYS_FILE")); raw != "" {
+		c.EventDeliveryKeysFile = raw
+	}
+	if c.EventProcessingInterval, err = time.ParseDuration(env("EVENT_PROCESSING_INTERVAL", "10s")); err != nil || c.EventProcessingInterval < time.Second {
+		return Config{}, errors.New("EVENT_PROCESSING_INTERVAL must be a Go duration of at least 1s")
 	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("TENANT_BOOTSTRAP_REGISTRATION"))) {
 	case "", "disabled":
