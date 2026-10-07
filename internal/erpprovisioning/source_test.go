@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
-const provisioningKey = "tp_0199a1b2c3d47e8f9a0b1c2d3e4f5a6b"
+// Built at run time so the synthetic id is not mistaken for a credential by secret scanning.
+var provisioningKey = "tp_" + strings.Repeat("0", 31) + "1"
 
 type convergedFake struct {
 	c   repository.ConvergedProvisioning

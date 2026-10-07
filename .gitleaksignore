@@ -5,3 +5,7 @@
 # generic-api-key mistook for a credential. It is a public identifier, not a secret; the constant is now built at
 # runtime. The scan covers full history, so the original commit's finding is recorded here.
 8d52ff338ae70ffd4e22c9cf635120a2c8c40e69:api/erp_assignment_handler_test.go:generic-api-key:26
+#
+# internal/erpprovisioning/source_test.go:13 held the same kind of synthetic provisioning id as a constant; it is
+# now a low-entropy value. Same reason, same history rule.
+94105352ef95d9d8a370d04a35e7eab22c428d62:internal/erpprovisioning/source_test.go:generic-api-key:13
