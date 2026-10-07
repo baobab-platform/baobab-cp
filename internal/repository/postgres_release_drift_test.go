@@ -83,6 +83,9 @@ func TestReleaseDrift(t *testing.T) {
 
 	var engineID string
 	must(admin.QueryRow(ctx, `INSERT INTO topology.engine (code, name) VALUES ($1, $1) RETURNING engine_id::text`, engine).Scan(&engineID))
+	var providerID string
+	must(admin.QueryRow(ctx, `INSERT INTO capability.capability_provider(provider_key, name, provider_type, engine_id, status)
+		VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, 'ACTIVE') RETURNING provider_id::text`, engine+".engine", engineID).Scan(&providerID))
 	_, err = repo.SyncCapabilityCatalogue(ctx, []CatalogueCapability{{Capability: capabilitydomain.Capability{Key: capabilityKey,
 		Name: "Drift test", DomainKey: "test", Lifecycle: capabilitydomain.CapabilityLifecycleActive,
 		Maturity: capabilitydomain.CapabilityMaturitySupported}, ContractVersions: []int{1}, DataClassification: "INTERNAL",
@@ -279,9 +282,6 @@ func TestReleaseDrift(t *testing.T) {
 	must(admin.QueryRow(ctx, `SELECT capability_id::text FROM capability.capability WHERE code = $1`, capabilityKey).Scan(&capabilityID))
 	var scopeID string
 	must(admin.QueryRow(ctx, `INSERT INTO capability.capability_scope(tenant_id) VALUES ($1) RETURNING scope_id::text`, tenantBound).Scan(&scopeID))
-	var providerID string
-	must(admin.QueryRow(ctx, `INSERT INTO capability.capability_provider(provider_key, name, provider_type, engine_id, status)
-		VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, 'ACTIVE') RETURNING provider_id::text`, engine+".engine", engineID).Scan(&providerID))
 	_, err = admin.Exec(ctx, `INSERT INTO capability.capability_binding(capability_id, engine_instance_id, scope_id, binding_mode, status, contract_version, effective_from, provider_id)
 		VALUES ($1::uuid, $2::uuid, $3::uuid, 'PRIMARY', 'ACTIVE', '1', now() - interval '1 day', $4::uuid)`, capabilityID, instanceID, scopeID, providerID)
 	must(err)
