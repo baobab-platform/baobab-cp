@@ -97,11 +97,24 @@ func (r *PostgresRepository) RecordEngineRelease(ctx context.Context, req releas
 	case !errors.Is(err, pgx.ErrNoRows):
 		return release.Release{}, false, err
 	}
-	// Every supported capability and contract major is catalogued.
+	// Every provider belongs to this engine, and every supported capability and
+	// contract major is catalogued. A provider-shaped string is never enough:
+	// release certification must bind to a registered CapabilityProvider.
 	for _, s := range req.ProviderSupport {
+		var supportEngine string
+		err := tx.QueryRow(ctx, `SELECT engine_id::text FROM capability.capability_provider WHERE provider_key = $1`,
+			s.ProviderKey).Scan(&supportEngine)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && supportEngine != engineUUID) {
+			return release.Release{}, false, &release.ErrInvalid{Code: release.ReasonProviderNotOwned,
+				Detail: fmt.Sprintf("provider %s is not registered to engine %s", s.ProviderKey, req.EngineID)}
+		}
+		if err != nil {
+			return release.Release{}, false, err
+		}
+
 		var majors []int32
 		var canonical *string
-		err := tx.QueryRow(ctx, `SELECT COALESCE(contract_versions, '{}'), canonical_digest FROM capability.capability WHERE code = $1`,
+		err = tx.QueryRow(ctx, `SELECT COALESCE(contract_versions, '{}'), canonical_digest FROM capability.capability WHERE code = $1`,
 			s.CapabilityKey).Scan(&majors, &canonical)
 		if errors.Is(err, pgx.ErrNoRows) || (err == nil && canonical == nil) {
 			return release.Release{}, false, &release.ErrInvalid{Code: release.ReasonCapabilityNotCatalogue,

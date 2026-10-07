@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/baobab-platform/baobab-cp/internal/capability/certification"
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/changeset"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
@@ -148,6 +149,7 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 
 	suffix := strings.ReplaceAll(domain.NewUUIDv7(), "-", "")[20:]
 	engine := "baobab-approval" + suffix
+	providerKey := engine + ".engine"
 	capabilityKey := "test.approval" + suffix + ".perform"
 	var releases []string
 	cleanup := func() {
@@ -155,6 +157,7 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 			removeChangesetsFor(ctx, admin, id)
 		}
 		removeEngineReleases(ctx, admin, engine)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, providerKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
@@ -178,6 +181,29 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 		Owner: engine, Source: "fixtures/approval-test", Digest: "sha256:" + strings.Repeat("7", 64)}}); err != nil {
 		t.Fatal(err)
 	}
+	if err := repo.RegisterEngine(ctx, EngineRegistrationRecord{
+		Repository: engine,
+		Capabilities: []capabilitydomain.Capability{{
+			Key: capabilityKey, Name: "Approval test", DomainKey: "test",
+			Lifecycle: capabilitydomain.CapabilityLifecycleActive,
+			Maturity: capabilitydomain.CapabilityMaturitySupported,
+		}},
+		Provider: EngineRegistrationProvider{
+			ProviderKey: providerKey, Name: "Approval provider",
+			ProviderType: "BAOBAB_ENGINE", EngineKey: "engine",
+			Lifecycle: "DRAFT", Ownership: engine, ProductionPermitted: true,
+		},
+		Support: []EngineRegistrationSupport{{CapabilityKey: capabilityKey, ContractVersions: []int{1}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var providerID string
+	if err := admin.QueryRow(ctx,
+		`SELECT canonical_provider_id FROM capability.capability_provider WHERE provider_key = $1`,
+		providerKey,
+	).Scan(&providerID); err != nil {
+		t.Fatal(err)
+	}
 	staging := domain.NewUUIDv7()
 	exec(`INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status)
 		VALUES ($1, $2, 'af-south-1', 'staging', 'ACTIVE')`, staging, engineID)
@@ -190,7 +216,7 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 		rel, _, err := repo.RecordEngineRelease(ctx, release.RecordRequest{EngineID: engine, ReleaseVersion: version,
 			Artifacts: []release.Artifact{{ArtifactType: "OCI_IMAGE", Repository: "ghcr.io/baobab-platform/" + engine,
 				Digest: "sha256:" + strings.Repeat(string(rune('a'+seed)), 56) + suffix[:8]}},
-			ProviderSupport:                     []release.ProviderSupport{{ProviderKey: engine + ".engine", CapabilityKey: capabilityKey, ContractVersions: []int{1}}},
+			ProviderSupport:                     []release.ProviderSupport{{ProviderKey: providerKey, CapabilityKey: capabilityKey, ContractVersions: []int{1}}},
 			CapabilityProviderDeclarationDigest: "sha256:" + strings.Repeat("d", 64), SourceRevision: strings.Repeat("e", 40),
 			Provenance: provenance, Reason: "Built from main."}, recorder, now, actor)
 		if err != nil {
@@ -208,7 +234,7 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 	exec(`INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status)
 		VALUES ($1, $2, 'af-south-1', 'production', 'PROVISIONING')`, production, engineID)
 	c := approvals.draft(candidate, "key-approve-"+suffix)
-	c = approvals.submit(c, changeset.StateBlocked, "RELEASE_PROVENANCE_MISSING")
+	c = approvals.submit(c, changeset.StateBlocked, "RELEASE_PROVENANCE_MISSING", "RELEASE_NOT_CERTIFIED")
 	exec(`UPDATE topology.engine_instance SET status = 'RETIRED' WHERE engine_instance_id = $1`, production)
 
 	// Support the catalogue no longer defines blocks.
@@ -226,10 +252,28 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 	productionCP.Environment = "production"
 	inProduction := approvals
 	inProduction.repo = productionCP
-	c = inProduction.submit(c, changeset.StateBlocked, "RELEASE_PROVENANCE_MISSING")
+	c = inProduction.submit(c, changeset.StateBlocked, "RELEASE_PROVENANCE_MISSING", "RELEASE_NOT_CERTIFIED")
 	attested := record("2.1.0", 1, &release.Provenance{AttestationURI: "https://attestations.example/" + engine + "/2.1.0",
 		AttestationDigest: "sha256:" + strings.Repeat("f", 64), BuilderID: "https://github.com/baobab-platform/actions/builder"})
-	inProduction.submit(inProduction.draft(attested, "key-attested-"+suffix), changeset.StateAwaitingApproval)
+	attestedChange := inProduction.submit(
+		inProduction.draft(attested, "key-attested-"+suffix),
+		changeset.StateBlocked,
+		"RELEASE_NOT_CERTIFIED",
+	)
+	certActor := AuditActor{ActorID: approver, ActorType: "human", CorrelationID: domain.NewUUIDv7()}
+	if _, replay, err := repo.RecordProviderCapabilityCertification(ctx, certification.RecordRequest{
+		ProviderID: providerID, CapabilityKey: capabilityKey, ContractVersion: 1,
+		ReleaseID: attested, QualificationProfile: "ea-09/release-approval-test-v1",
+		Evidence: []certification.Evidence{{
+			Type: "INTEGRATION_TEST",
+			URI: "https://github.com/baobab-platform/baobab-cp/actions/runs/1",
+			Digest: "sha256:" + strings.Repeat("a", 64),
+		}},
+		Reason: "Production qualification passed.",
+	}, approver, now, certActor); err != nil || replay {
+		t.Fatalf("certify attested release: replay=%v err=%v", replay, err)
+	}
+	attestedChange = inProduction.submit(attestedChange, changeset.StateAwaitingApproval)
 
 	// Nothing blocks the candidate any more; the plan approves exactly it.
 	c = approvals.submit(c, changeset.StateAwaitingApproval)

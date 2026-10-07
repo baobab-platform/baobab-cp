@@ -294,7 +294,7 @@ func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool
 		}
 	}
 	if c.DesiredChange.TargetType() == changeset.TargetRelease {
-		if t.CheckFailures, err = engineReleaseApprovalChecks(ctx, tx, c.DesiredChange.ReleaseID, environment); err != nil {
+		if t.CheckFailures, err = engineReleaseApprovalChecks(ctx, tx, c.DesiredChange.ReleaseID, environment, now); err != nil {
 			return t, err
 		}
 	}
@@ -304,7 +304,7 @@ func readTarget(ctx context.Context, tx pgx.Tx, c changeset.Changeset, lock bool
 		}
 	}
 	if c.DesiredChange.TargetType() == changeset.TargetInstance {
-		if t.DesiredReleaseID, t.CheckFailures, err = desiredReleaseChecks(ctx, tx, c.DesiredChange.EngineInstanceID, c.DesiredChange.ReleaseID); err != nil {
+		if t.DesiredReleaseID, t.CheckFailures, err = desiredReleaseChecks(ctx, tx, c.DesiredChange.EngineInstanceID, c.DesiredChange.ReleaseID, now); err != nil {
 			return t, err
 		}
 	}

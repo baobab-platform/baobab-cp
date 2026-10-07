@@ -29,6 +29,9 @@ func removeEngineReleases(ctx context.Context, admin *pgxpool.Pool, engine strin
 	if _, err := tx.Exec(ctx, `SET LOCAL session_replication_role = replica`); err != nil {
 		return
 	}
+	tx.Exec(ctx, `DELETE FROM capability.provider_capability_certification
+		WHERE engine_release_id IN (SELECT r.engine_release_id FROM topology.engine_release r
+		JOIN topology.engine e ON e.engine_id = r.engine_id WHERE e.code = $1)`, engine)
 	for _, table := range []string{"engine_release_artifact", "engine_release_provider_support"} {
 		tx.Exec(ctx, `DELETE FROM topology.`+table+` WHERE engine_release_id IN (SELECT r.engine_release_id
 			FROM topology.engine_release r JOIN topology.engine e ON e.engine_id = r.engine_id WHERE e.code = $1)`, engine)
@@ -78,6 +81,7 @@ func TestEngineReleaseRecord(t *testing.T) {
 	cleanup := func() {
 		removeEngineReleases(ctx, admin, engine)
 		removeEngineReleases(ctx, admin, other)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key IN ($1, $2)`, engine+".engine", other+".engine")
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code IN ($1, $2)`, engine, other)
 	}
@@ -85,6 +89,14 @@ func TestEngineReleaseRecord(t *testing.T) {
 	t.Cleanup(cleanup)
 	for _, code := range []string{engine, other} {
 		if _, err := admin.Exec(ctx, `INSERT INTO topology.engine (code, name) VALUES ($1, $1)`, code); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, code := range []string{engine, other} {
+		if _, err := admin.Exec(ctx, `INSERT INTO capability.capability_provider
+			(provider_key, name, provider_type, engine_id, status)
+			SELECT $1, $1, 'BAOBAB_ENGINE', engine_id, 'DRAFT' FROM topology.engine WHERE code = $2`,
+			code+".engine", code); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -148,6 +160,11 @@ func TestEngineReleaseRecord(t *testing.T) {
 	var invalid *release.ErrInvalid
 	if _, _, err := repo.RecordEngineRelease(ctx, foreign, "workload:release-tooling", now, actor); !errors.As(err, &invalid) || invalid.Code != release.ReasonProviderNotOwned {
 		t.Fatalf("another engine's provider: %v", err)
+	}
+	fabricated := request("1.2.0", "c", "e")
+	fabricated.ProviderSupport[0].ProviderKey = engine + ".unregistered"
+	if _, _, err := repo.RecordEngineRelease(ctx, fabricated, "workload:release-tooling", now, actor); !errors.As(err, &invalid) || invalid.Code != release.ReasonProviderNotOwned {
+		t.Fatalf("an unregistered provider-shaped key: %v", err)
 	}
 	uncatalogued := request("1.2.0", "c", "e")
 	uncatalogued.ProviderSupport[0].ContractVersions = []int{1, 2}

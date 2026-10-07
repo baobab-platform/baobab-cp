@@ -145,6 +145,9 @@ type Dependencies struct {
 	// EngineReleases backs the /v1/engine-releases routes (ADR-BCP-025
 	// gate ER-02); nil disables them.
 	EngineReleases repository.EngineReleaseRepository
+	// ProviderCertifications backs the EA-09 certification routes and the
+	// release/provider policy checks that consume current certification.
+	ProviderCertifications repository.ProviderCapabilityCertificationRepository
 	// ReleaseDrift adds ENGINE_INSTANCE_RELEASE drift to a tenant's
 	// provisioning drift (ADR-BCP-025 gate ER-05). Nil omits it.
 	ReleaseDrift repository.ReleaseDriftRepository
@@ -495,6 +498,26 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "topology:read"), a.requireAdminRole(nil, true)).Get("/v1/provider-migrations/{providerMigrationID}/plan", migrations.plan)
 		r.With(a.authorize(a.adminVerifier, "human", "provider-migration:approve"), a.requireAdminRole(nil, true)).Post("/v1/provider-migrations/{providerMigrationID}/approve", migrations.approve)
 		r.With(a.authorize(a.adminVerifier, "human", "provider-migration:execute"), a.requireAdminRole(nil, true)).Post("/v1/provider-migrations/{providerMigrationID}/advance", migrations.advance)
+	}
+	if dependencies.ProviderCertifications != nil {
+		// EA-09: certification is a platform-admin qualification record.
+		// It does not approve a release or activate a provider.
+		certifications := providerCapabilityCertificationHandler{
+			repo:       dependencies.ProviderCertifications,
+			identities: a.identities,
+		}
+		read := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "topology:read"),
+			a.requireAdminRole(nil, true),
+		}
+		write := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "provider:certify"),
+			a.requireAdminRole(nil, true),
+		}
+		r.With(write...).Post("/v1/provider-capability-certifications", certifications.record)
+		r.With(read...).Get("/v1/provider-capability-certifications", certifications.list)
+		r.With(read...).Get("/v1/provider-capability-certifications/{certificationID}", certifications.get)
+		r.With(write...).Post("/v1/provider-capability-certifications/{certificationID}/revocations", certifications.revoke)
 	}
 	if dependencies.EngineReleases != nil {
 		// ADR-BCP-025 gate ER-02: release tooling records under its own

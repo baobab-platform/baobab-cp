@@ -6,6 +6,7 @@
 #   ADR-SHARED-017 — canonical capability governance
 #   ADR-SHARED-025 — intelligence namespace / Pulse provider boundary
 #   ADR-SHARED-029 — Pulse capability census and first canonical tranche
+#   ADR-SHARED-032 — EA-09 certification and P-CAP-08 activation admission
 #
 # These definitions specify WHAT an Intelligence provider may be asked to do.
 # They do not imply provider implementation, certification, Control Plane
@@ -27,7 +28,7 @@ capabilities:
       embeddings or provider-specific retrieval structures.
     domain: intelligence
     owner: baobab-pulse
-    lifecycle: DRAFT
+    lifecycle: ACTIVE
     maturity: EXPERIMENTAL
     contracts:
       - major: 1
@@ -36,8 +37,8 @@ capabilities:
         error_schema: ../../errors/v1/problem-details.schema.json
     data_classification: TENANT_CONFIDENTIAL
     metadata:
-      authority: ADR-SHARED-031
-      provider_implementation: p-cap-07-readiness-governed
+      authority: ADR-SHARED-032
+      provider_implementation: p-cap-08-certification-activation-governed
 
   - capability_key: intelligence.research-mission.manage
     name: Manage intelligence research mission
@@ -51,7 +52,7 @@ capabilities:
       confer authority over operational engines or regulatory decisions.
     domain: intelligence
     owner: baobab-pulse
-    lifecycle: DRAFT
+    lifecycle: ACTIVE
     maturity: EXPERIMENTAL
     contracts:
       - major: 1
@@ -60,5 +61,5 @@ capabilities:
         error_schema: ../../errors/v1/problem-details.schema.json
     data_classification: TENANT_CONFIDENTIAL
     metadata:
-      authority: ADR-SHARED-031
-      provider_implementation: p-cap-07-readiness-governed
+      authority: ADR-SHARED-032
+      provider_implementation: p-cap-08-certification-activation-governed

@@ -253,9 +253,11 @@ func providerActivationChecks(ctx context.Context, tx pgx.Tx, providerUUID strin
 		}
 	}
 
-	// CERTIFICATION: only where release-policy.yaml requires it for an
-	// environment an active instance serves. EA-09 certification records do
-	// not exist yet, so a requiring environment always blocks.
+	// CERTIFICATION: where release-policy.yaml requires it, some APPROVED
+	// covering release must carry current EA-09 certification for every
+	// provider capability contract major it supplies. Certification is
+	// release-bound; qualification of an older release never transfers to a
+	// newer one.
 	policy, err := certificationPolicy()
 	if err != nil {
 		return nil, err
@@ -267,8 +269,16 @@ func providerActivationChecks(ctx context.Context, tx pgx.Tx, providerUUID strin
 		}
 	}
 	if len(requiring) > 0 {
-		failures[checkCertification] = fmt.Sprintf("Environment %s requires certified provider support, and no certification is recorded (EA-09).",
-			strings.Join(requiring, ", "))
+		certified, err := providerHasCertifiedApprovedReleaseCovering(ctx, tx, providerUUID, now)
+		if err != nil {
+			return nil, err
+		}
+		if !certified {
+			failures[checkCertification] = fmt.Sprintf(
+				"Environment %s requires a current EA-09-certified approved release covering every provider capability contract major.",
+				strings.Join(requiring, ", "),
+			)
+		}
 	}
 
 	// PRODUCTION_PERMITTED: a simulated provider, or one not permitted in

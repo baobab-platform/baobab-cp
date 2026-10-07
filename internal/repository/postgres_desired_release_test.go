@@ -68,6 +68,7 @@ func TestDesiredReleaseLifecycle(t *testing.T) {
 		removeEngineReleases(ctx, admin, engine)
 		removeEngineReleases(ctx, admin, other)
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code IN ($1, $2))`, engine, other)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key IN ($1, $2)`, engine+".engine", other+".engine")
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code IN ($1, $2)`, engine, other)
 	}
@@ -90,6 +91,13 @@ func TestDesiredReleaseLifecycle(t *testing.T) {
 		var id string
 		must(admin.QueryRow(ctx, `INSERT INTO topology.engine (code, name) VALUES ($1, $1) RETURNING engine_id::text`, code).Scan(&id))
 		engineIDs[code] = id
+	}
+	for _, code := range []string{engine, other} {
+		mustExecResult, err := admin.Exec(ctx, `INSERT INTO capability.capability_provider
+			(provider_key, name, provider_type, engine_id, status)
+			VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, 'DRAFT')`, code+".engine", engineIDs[code])
+		_ = mustExecResult
+		must(err)
 	}
 	_, err = repo.SyncCapabilityCatalogue(ctx, []CatalogueCapability{{Capability: capabilitydomain.Capability{Key: capabilityKey,
 		Name: "Desired test", DomainKey: "test", Lifecycle: capabilitydomain.CapabilityLifecycleActive,

@@ -43,8 +43,9 @@ desired_state:
 
 # What approval (CANDIDATE -> APPROVED) requires, by control-plane/v1
 # environment. Approval is not certification (amendment A3):
-# certification_required stays false until EA-09 records
-# ProviderCapabilityCertification, and changing it is a policy change here.
+# EA-09 now records ProviderCapabilityCertification. Production release
+# approval and provider activation therefore require current certification;
+# non-production environments remain permissive until separately tightened.
 approval:
   provenance_required:
     local: false
@@ -55,7 +56,7 @@ approval:
     local: false
     development: false
     staging: false
-    production: false
+    production: true
 
 # DeploymentObservation ageing (section 2.6), as for health-policy.yaml.
 observation:

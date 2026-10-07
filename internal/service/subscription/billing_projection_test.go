@@ -413,12 +413,12 @@ func TestEnginesRegisterFromSharedRegistrations(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	if _, err := e.admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key IN
-		('baobab-subscriptions.temporary-billing', 'baobab-payments.sandbox')`); err != nil {
+		('baobab-subscriptions.temporary-billing', 'baobab-payments.sandbox', 'baobab-pulse.core')`); err != nil {
 		t.Fatal(err)
 	}
 	registered, err := billing.RegisterEmbeddedEngines(ctx, e.repo, "", discard())
-	if err != nil || len(registered) != 0 {
-		t.Fatalf("production registers no simulated provider: %v %v", err, registered)
+	if err != nil || len(registered) != 1 || registered[0] != "baobab-pulse.core" {
+		t.Fatalf("production registers only the production-permitted Pulse provider: %v %v", err, registered)
 	}
 	for range 2 {
 		registered, err = billing.RegisterEmbeddedEngines(ctx, e.repo, "integration", discard())
@@ -426,11 +426,17 @@ func TestEnginesRegisterFromSharedRegistrations(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(registered) != 2 {
-		t.Fatalf("both engines register: %v", registered)
+	if len(registered) != 3 {
+		t.Fatalf("all indexed providers register in integration: %v", registered)
 	}
-	for provider, engine := range map[string]string{"baobab-subscriptions.temporary-billing": "baobab-subscriptions",
-		"baobab-payments.sandbox": "baobab-payments"} {
+	for provider, expected := range map[string]struct {
+		engine    string
+		simulated bool
+	}{
+		"baobab-pulse.core":                    {engine: "baobab-pulse", simulated: false},
+		"baobab-subscriptions.temporary-billing": {engine: "baobab-subscriptions", simulated: true},
+		"baobab-payments.sandbox":               {engine: "baobab-payments", simulated: true},
+	} {
 		var engineCode string
 		var supports int
 		var simulated bool
@@ -440,7 +446,7 @@ func TestEnginesRegisterFromSharedRegistrations(t *testing.T) {
 			provider).Scan(&engineCode, &simulated, &supports); err != nil {
 			t.Fatalf("%s: %v", provider, err)
 		}
-		if engineCode != engine || !simulated || supports == 0 {
+		if engineCode != expected.engine || simulated != expected.simulated || supports == 0 {
 			t.Fatalf("%s: engine %s simulated %v supports %d", provider, engineCode, simulated, supports)
 		}
 	}
