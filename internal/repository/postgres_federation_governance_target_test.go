@@ -292,7 +292,7 @@ func verifyCPMappingTarget(t *testing.T, repo *PostgresRepository, db *pgxpool.P
 		restore     string
 		restoreArgs []any
 	}{
-		{`UPDATE mapping.external_reference SET status='revoked' WHERE external_reference_id=$1`, []any{ref}, `UPDATE mapping.external_reference SET status='active' WHERE external_reference_id=$1`, []any{ref}},
+		{`UPDATE mapping.external_reference SET status='archived' WHERE external_reference_id=$1`, []any{ref}, `UPDATE mapping.external_reference SET status='active' WHERE external_reference_id=$1`, []any{ref}},
 		{`UPDATE mapping.external_reference SET fingerprint=$2 WHERE external_reference_id=$1`, []any{ref, "sha256:" + strings.Repeat("b", 64)}, `UPDATE mapping.external_reference SET fingerprint=$2 WHERE external_reference_id=$1`, []any{ref, digest}},
 		{`UPDATE mapping.external_reference SET last_verified_at=$2 WHERE external_reference_id=$1`, []any{ref, now.Add(-5 * time.Minute)}, `UPDATE mapping.external_reference SET last_verified_at=$2 WHERE external_reference_id=$1`, []any{ref, now}},
 		{`UPDATE identity.external_identity SET status='REVOKED' WHERE external_identity_id=$1::uuid`, []any{e.ID}, `UPDATE identity.external_identity SET status='ACTIVE' WHERE external_identity_id=$1::uuid`, []any{e.ID}},
