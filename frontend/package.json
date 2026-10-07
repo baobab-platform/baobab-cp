@@ -18,7 +18,7 @@
     "check:cp-client": "node scripts/generate-cp-client.mjs --check"
   },
   "dependencies": {
-    "next": "16.3.6",
+    "next": "16.3.8",
     "openapi-fetch": "0.17.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
