@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -136,7 +138,7 @@ func TestIdentityRuntimeProfilePersistence(t *testing.T) {
 	}
 	t.Cleanup(cleanup)
 
-	digest := "sha256:" + strings.Repeat("a", 64)
+	digest := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(suffix)))
 	profile := IdentityRuntimeProfile{
 		ProviderID:              providerID,
 		EngineInstanceID:        iamInstance,
@@ -230,6 +232,8 @@ func TestIdentityRuntimeProfilePersistence(t *testing.T) {
 	if profileRows != 2 || observationRows != 2 {
 		t.Fatalf("stored rows: profiles=%d observations=%d", profileRows, observationRows)
 	}
+
+	verifyRuntimeReadiness(t, repo, admin, next, refs, suffix, iamEngineID, now.Add(2*time.Second))
 
 	// Runtime evidence is append-only to the same standard as deployment
 	// observations. UPDATE/DELETE must reach our append-only trigger. TRUNCATE
