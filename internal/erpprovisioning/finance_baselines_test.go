@@ -214,3 +214,25 @@ func TestResolutionIsAskedOnlyThroughTheEffectiveRead(t *testing.T) {
 		}
 	}
 }
+
+// Finance may supersede a baseline between a submission and a retry (an orchestrator that failed after the submission, a
+// redelivered trigger). The retry must continue the recorded operation: resolving again would send other references under
+// another idempotency key, and ERP would be asked for a second operation for the same approved plan.
+func TestARetryAfterTheBaselineMovedOnContinuesTheRecordedOperation(t *testing.T) {
+	r := newRig(t)
+	first, err := r.w.Submit(context.Background(), provisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := baselineFor("ZURIBEANS-ZA", "ZAR")
+	moved["reference"].(map[string]any)["version"] = 4
+	r.erp.baselines = map[string]map[string]any{"ZURIBEANS-ZA": moved}
+	calls := len(r.erp.baselineCalls)
+	again, err := r.w.Submit(context.Background(), provisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.OperationID != first.OperationID || len(r.erp.posts) != 1 || len(r.erp.baselineCalls) != calls {
+		t.Fatalf("the retry must continue %s without resolving or posting again (posts=%d resolutions=%d)", first.OperationID, len(r.erp.posts), len(r.erp.baselineCalls)-calls)
+	}
+}

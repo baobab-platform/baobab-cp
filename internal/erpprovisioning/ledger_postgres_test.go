@@ -85,6 +85,15 @@ func TestPostgresLedger(t *testing.T) {
 	if _, found, _ := l.Lookup(ctx, opB); found {
 		t.Fatal("an unknown operation must not be found")
 	}
+	// The recorded submission is found by its exact approved plan tuple, and only by it.
+	if byPlan, found, err := l.ForPlan(ctx, key, sub.Authority); err != nil || !found || byPlan.OperationID != opA {
+		t.Fatalf("for plan: %+v %v %v", byPlan, found, err)
+	}
+	replanned := sub.Authority
+	replanned.PlanDigest = "sha256:" + strings.Repeat("1", 64)
+	if _, found, err := l.ForPlan(ctx, key, replanned); found || err != nil {
+		t.Fatalf("another plan digest has no submission: %v %v", found, err)
+	}
 	if _, found, err := l.Lookup(ctx, "not-an-id"); found || err != nil {
 		t.Fatalf("a malformed id is absent, not an error: %v %v", found, err)
 	}

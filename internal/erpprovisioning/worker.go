@@ -81,6 +81,9 @@ type Ledger interface {
 	Submitted(ctx context.Context, sub Submission, st State) error
 	// Lookup finds a submission by ERP operation id.
 	Lookup(ctx context.Context, operationID string) (Submission, bool, error)
+	// ForPlan finds the submission already recorded for an approved plan tuple of a provisioning, if any. One approved plan
+	// has at most one ERP operation, so a retry must continue that operation rather than request another.
+	ForPlan(ctx context.Context, tenantProvisioningID string, authority Authority) (Submission, bool, error)
 	// Apply records st for the operation only if its revision is newer than the
 	// recorded one, and reports whether it was newer. Events arrive late and out
 	// of order, and a read can race an event; an older state never overwrites a
@@ -109,6 +112,15 @@ func (w Worker) Submit(ctx context.Context, tenantProvisioningID string) (State,
 	}
 	if auth.Authority.TenantProvisioningID != tenantProvisioningID {
 		return State{}, fmt.Errorf("%w: the authority names another provisioning", ErrNotAuthorised)
+	}
+	// An approved plan has one ERP operation. If it is already recorded, a retry (an orchestrator that failed after the
+	// submission, a redelivered trigger) continues that operation: the Finance baseline in force may have moved on since,
+	// and asking again would send different references under a different idempotency key.
+	if prior, found, err := w.Ledger.ForPlan(ctx, tenantProvisioningID, auth.Authority); err != nil {
+		return State{}, err
+	} else if found {
+		st, _, err := w.Reconcile(ctx, prior.OperationID)
+		return st, err
 	}
 	// The Context's tenant is the provisioning's tenant, never a caller input.
 	cx, err := w.Context.Issue(ctx, auth.TenantID, auth.Authority, tenantProvisioningID)

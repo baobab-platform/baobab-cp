@@ -94,6 +94,20 @@ func (l PostgresLedger) Apply(ctx context.Context, operationID string, st State)
 	return tag.RowsAffected() == 1, nil
 }
 
+// ForPlan implements Ledger: the one submission recorded for the exact approved plan tuple of the provisioning.
+func (l PostgresLedger) ForPlan(ctx context.Context, tenantProvisioningID string, authority Authority) (Submission, bool, error) {
+	id, err := repository.ProvisioningUUID(tenantProvisioningID)
+	if err != nil {
+		return Submission{}, false, err
+	}
+	sub, err := l.scan(l.DB.QueryRow(ctx, selectSubmission+` WHERE tenant_provisioning_id = $1::uuid AND plan_id = $2
+		AND plan_version = $3 AND plan_digest = $4`, id, authority.PlanID, authority.PlanVersion, authority.PlanDigest))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Submission{}, false, nil
+	}
+	return sub, err == nil, err
+}
+
 // LatestForTenant is the most recently submitted operation of the tenant, which
 // is the one readiness waits on.
 func (l PostgresLedger) LatestForTenant(ctx context.Context, tenantID string) (Submission, bool, error) {

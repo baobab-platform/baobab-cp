@@ -168,6 +168,14 @@ func (l *ledger) Lookup(_ context.Context, id string) (Submission, bool, error) 
 	s, ok := l.subs[id]
 	return s, ok, nil
 }
+func (l *ledger) ForPlan(_ context.Context, id string, a Authority) (Submission, bool, error) {
+	for _, s := range l.subs {
+		if s.TenantProvisioningID == id && s.Authority.PlanID == a.PlanID && s.Authority.PlanVersion == a.PlanVersion && s.Authority.PlanDigest == a.PlanDigest {
+			return s, true, nil
+		}
+	}
+	return Submission{}, false, nil
+}
 func (l *ledger) Apply(_ context.Context, id string, st State) (bool, error) {
 	if st.Revision <= l.last[id] {
 		return false, nil
@@ -242,18 +250,15 @@ func TestSubmitSendsTheApprovedTupleUnderTheProvisionersOwnContext(t *testing.T)
 	}
 }
 
-func TestReplayUsesTheSameKeyEvenWithAFreshContextAndAReplanUsesAnother(t *testing.T) {
+func TestReplayContinuesTheRecordedOperationAndAReplanUsesAnotherKey(t *testing.T) {
 	r := newRig(t)
 	for range 2 {
 		if _, err := r.w.Submit(context.Background(), provisionID); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(r.ctx.created) != 2 || r.ctx.created[0].ID == r.ctx.created[1].ID {
-		t.Fatal("each attempt issues its own bounded context")
-	}
-	if r.erp.posts[0].Get("Idempotency-Key") != r.erp.posts[1].Get("Idempotency-Key") {
-		t.Fatal("a replay must reuse the idempotency key; context_id is not part of request identity")
+	if len(r.erp.posts) != 1 || len(r.ctx.created) != 1 {
+		t.Fatalf("an approved plan has one ERP operation; the retry must continue it (posts=%d contexts=%d)", len(r.erp.posts), len(r.ctx.created))
 	}
 	a := approved()
 	a.Authority.PlanDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
