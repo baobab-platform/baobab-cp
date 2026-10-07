@@ -94,6 +94,9 @@ contracts:
   - contracts/subscriptions/v1/capabilities.yaml
   - contracts/trade/v1/capabilities.yaml
   - contracts/erp/v1/capabilities.yaml
+  - contracts/erp/v1/domain.schema.json
+  - contracts/erp/v1/provisioning-request.schema.json
+  - contracts/erp/v1/provisioning-state.schema.json
   - contracts/buyer-organisation/v1/capabilities.yaml
   - contracts/identity/v1/capabilities.yaml
   - contracts/intelligence/v1/capabilities.yaml

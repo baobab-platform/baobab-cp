@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/erp/v1/domain.schema.json",
+  "title": "Baobab ERP boundary domain types",
+  "$defs": {
+    "canonicalResourceId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "minLength": 3,
+      "maxLength": 128,
+      "description": "Opaque identifier minted by the declared canonical owner. Names, email addresses, document numbers and vendor database IDs are not identities."
+    },
+    "erpResourceId": {
+      "type": "string",
+      "pattern": "^erp_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63,
+      "description": "Public identifier minted by the Baobab ERP boundary; never an iDempiere or ERPNext identifier."
+    },
+    "mappingId": {
+      "type": "string",
+      "pattern": "^map_[a-z0-9]+$",
+      "minLength": 8,
+      "maxLength": 63
+    },
+    "operationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "canonicalReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "resource_type", "resource_id"],
+      "properties": {
+        "owner": {
+          "type": "string",
+          "enum": ["control-plane", "shared", "trade", "erp", "identity-provider", "payment-provider"]
+        },
+        "resource_type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+          "maxLength": 63
+        },
+        "resource_id": { "$ref": "#/$defs/canonicalResourceId" }
+      }
+    },
+    "decimal": {
+      "type": "string",
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+      "maxLength": 64,
+      "description": "Base-10 decimal string. Floating-point JSON numbers are forbidden for monetary values and quantities."
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO 4217 alphabetic currency code."
+    },
+    "country": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$",
+      "description": "ISO 3166-1 alpha-2 country code."
+    },
+    "money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": { "$ref": "#/$defs/decimal" },
+        "currency": { "$ref": "#/$defs/currency" }
+      }
+    },
+    "quantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": { "$ref": "#/$defs/decimal" },
+        "unit": {
+          "type": "string",
+          "pattern": "^[A-Z0-9][A-Z0-9._/-]*$",
+          "maxLength": 24
+        }
+      }
+    },
+    "version": { "type": "integer", "minimum": 1 },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}
