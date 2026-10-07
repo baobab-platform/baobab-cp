@@ -176,6 +176,39 @@ func TestSharedWorkloadRegistryLifecycle(t *testing.T) {
 	}
 }
 
+// TestSharedPulseValidatorAuthority proves the canonical P-CAP-07 registry
+// makes Pulse a validator only for callers addressed to the baobab-pulse
+// resource-server audience. The validator credential itself is still a
+// tenant-neutral baobab-control-plane workload token.
+func TestSharedPulseValidatorAuthority(t *testing.T) {
+	dir := os.Getenv("SHARED_CONTRACTS_DIR")
+	if dir == "" {
+		t.Skip("SHARED_CONTRACTS_DIR not set; skipping baobab-platform/shared contract-compatibility test")
+	}
+	registry, err := LoadWorkloadRegistryFile(filepath.Join(dir, "contracts", "identity", "v1", "workload-registry.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const clientID = "baobab-pulse-workload"
+	if !registry.IsActive(clientID) {
+		t.Fatal("Pulse validator workload must be ACTIVE")
+	}
+	if !registry.AllowsScope(clientID, ContextValidateScope) {
+		t.Fatal("Pulse validator workload must be allowed context:validate")
+	}
+	got := registry.ValidatesAudiences(clientID)
+	if len(got) != 1 || got[0] != "baobab-pulse" {
+		t.Fatalf("Pulse validator audiences = %v, want [baobab-pulse]", got)
+	}
+	for _, forbidden := range []string{"baobab-erp", "baobab-control-plane", "baobab-trade"} {
+		for _, audience := range got {
+			if audience == forbidden {
+				t.Fatalf("Pulse validator must not validate %q", forbidden)
+			}
+		}
+	}
+}
+
 // A validator needs all three: ACTIVE, the context:validate scope, and a
 // registered audience. Any one missing validates nothing.
 func TestValidatesAudiencesRequiresStatusScopeAndAudience(t *testing.T) {

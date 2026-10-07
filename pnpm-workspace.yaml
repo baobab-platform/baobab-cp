@@ -5,6 +5,8 @@
 packages:
   - frontend
 overrides:
+  sharp: 0.35.5
+  source-map-js: 1.2.2
   # Next 16.3.6 uses only globSync(pattern, { onlyDirectories: true })
   # in get-root-dirs. tinyglobby supports that API without the vulnerable
   # braces dependency (GHSA-vfj7-8cjw-p6xm). lint runs its integration fixture.

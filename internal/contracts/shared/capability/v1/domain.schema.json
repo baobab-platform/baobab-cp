@@ -13,7 +13,7 @@
     },
     "capabilityDomain": {
       "type": "string",
-      "enum": ["identity", "tenant", "organisation", "counterparty", "supplier", "customer", "market", "internal-trade", "commercial", "contract", "commerce", "catalogue", "pricing", "inventory", "procurement", "trade", "customs", "tax", "logistics", "fulfilment", "documents", "finance", "billing", "payment", "settlement", "content", "intelligence", "audit", "integration"],
+      "enum": ["identity", "tenant", "organisation", "counterparty", "supplier", "customer", "market", "internal-trade", "commercial", "contract", "commerce", "catalogue", "pricing", "inventory", "procurement", "regulations", "trade", "customs", "tax", "logistics", "fulfilment", "documents", "finance", "billing", "payment", "settlement", "content", "intelligence", "audit", "integration"],
       "description": "Governed top-level namespace for a capability key's first segment. A new top-level domain requires an architecture review and an update to this enum; see namespace-registry.yaml for rationale per domain."
     },
     "capabilityId": {
