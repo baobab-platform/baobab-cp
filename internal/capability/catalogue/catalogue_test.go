@@ -37,7 +37,9 @@ func TestEmbeddedCatalogue(t *testing.T) {
 	want := "billing.subscription.manage,billing.usage.record,commerce.cart.manage,commercial.quotation.manage," +
 		"commercial.rfq.manage,content.entry.resolve,customer.buyer-application.manage,customer.buyer-membership.manage," +
 		"finance.order-consequence.process,identity.authentication.perform,identity.workload-token.issue," +
-		"payment.intent.cancel,payment.intent.create,payment.payment.authorize,payment.payment.capture,payment.refund.create"
+		"intelligence.evidence.search,intelligence.research-mission.manage," +
+		"payment.intent.cancel,payment.intent.create,payment.payment.authorize,payment.payment.capture,payment.refund.create," +
+		"regulations.decision.evaluate,regulations.evidence.assess,regulations.requirement.resolve"
 	if strings.Join(keys, ",") != want {
 		t.Fatalf("catalogue = %v", keys)
 	}
@@ -143,7 +145,7 @@ func TestSyncEmbeddedCatalogue(t *testing.T) {
 		t.Fatal(err)
 	}
 	report, err := SyncEmbedded(ctx, repo)
-	if err != nil || len(report.Unchanged) != 16 || len(report.Created)+len(report.Updated) != 0 {
+	if err != nil || len(report.Unchanged) != 21 || len(report.Created)+len(report.Updated) != 0 {
 		t.Fatalf("second sync: %+v %v", report, err)
 	}
 	admin, err := pgxpool.New(ctx, url)
