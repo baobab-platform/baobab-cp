@@ -41,12 +41,16 @@ func TestEngineReleaseRoutes(t *testing.T) {
 			}
 			tx.Commit(ctx)
 		}
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, engine+".engine")
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
 	}
 	cleanup()
 	t.Cleanup(cleanup)
 	_, err := admin.Exec(ctx, `INSERT INTO topology.engine (code, name) VALUES ($1, $1)`, engine)
+	mustNoError(t, err)
+	_, err = admin.Exec(ctx, `INSERT INTO capability.capability_provider (provider_key, name, provider_type, engine_id, status)
+		SELECT $1, $1, 'BAOBAB_ENGINE', engine_id, 'DRAFT' FROM topology.engine WHERE code = $2`, engine+".engine", engine)
 	mustNoError(t, err)
 	_, err = repo.SyncCapabilityCatalogue(ctx, []repository.CatalogueCapability{{Capability: capabilitydomain.Capability{Key: capabilityKey,
 		Name: "API release test", DomainKey: "test", Lifecycle: capabilitydomain.CapabilityLifecycleActive,
