@@ -62,7 +62,7 @@ scopes:
     grants_authority: false
 
   - name: "erp:provision"
-    description: "Allows a workload to submit a provisioning command to baobab-erp's Boundary API and to observe the provisioning operation it created. It grants no tenant authority and authorises nothing by itself: ERP provisions only what the exact approved Control Plane plan and its Finance-approved baseline allow, and the tenant comes from a trusted Control Plane context. It is not erp:read, erp:integrate or erp-assignment:read."
+    description: "Allows a workload to submit a provisioning command to baobab-erp's Boundary API and to observe the provisioning operation it created, and to resolve (read-only) the Finance baseline references that command relies on. It grants no tenant authority and authorises nothing by itself: ERP provisions only what the exact approved Control Plane plan and its Finance-approved baseline allow, and the tenant comes from a trusted Control Plane context. It is not erp:read, erp:integrate or erp-assignment:read."
     audience: ["baobab-erp"]
     allowed_actors: ["workload"]
     grants_authority: false

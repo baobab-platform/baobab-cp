@@ -27,17 +27,6 @@ func (f convergedFake) GetDesiredState(context.Context, string, int64) (converge
 	return f.d, f.err
 }
 
-type financeFake struct {
-	got        []string
-	currencies []string
-	err        error
-}
-
-func (f *financeFake) FunctionalCurrencies(_ context.Context, _ string, entities []string) ([]string, error) {
-	f.got = entities
-	return f.currencies, f.err
-}
-
 func approvedProvisioning() convergedFake {
 	plan := &convergence.Plan{PlanID: "plan-1", PlanVersion: 2, PlanDigest: planDigest, TenantID: tenant,
 		TenantProvisioningID: provisioningKey, DesiredStateDigest: "sha256:d"}
@@ -49,37 +38,18 @@ func approvedProvisioning() convergedFake {
 	}
 }
 
-func TestSourceAssemblesTheApprovedPlanAndFinanceCurrencies(t *testing.T) {
-	fin := &financeFake{currencies: []string{"ZAR", "UGX"}}
-	got, err := PlanSource{Provisionings: approvedProvisioning(), Finance: fin}.Authorised(context.Background(), provisioningKey)
+func TestSourceAssemblesTheApprovedPlanWithoutAnyCurrency(t *testing.T) {
+	got, err := PlanSource{Provisionings: approvedProvisioning()}.Authorised(context.Background(), provisioningKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Authorised{TenantID: tenant, Authority: Authority{provisioningKey, "plan-1", 2, planDigest},
-		LegalEntityIDs: []string{"LE-A", "LE-B"}, Countries: []string{"UG", "ZA"}, Currencies: []string{"UGX", "ZAR"}}
-	if got.TenantID != want.TenantID || got.Authority != want.Authority || !slices.Equal(got.LegalEntityIDs, want.LegalEntityIDs) ||
-		!slices.Equal(got.Countries, want.Countries) || !slices.Equal(got.Currencies, want.Currencies) {
-		t.Fatalf("got %+v want %+v", got, want)
-	}
-	if !slices.Equal(fin.got, []string{"LE-A", "LE-B"}) {
-		t.Fatalf("Finance was asked about %v", fin.got)
-	}
-}
-
-func TestSourceNeverDerivesCurrenciesWithoutAFinanceBaseline(t *testing.T) {
-	_, err := PlanSource{Provisionings: approvedProvisioning()}.Authorised(context.Background(), provisioningKey)
-	if !errors.Is(err, ErrFinanceBaselineUnavailable) {
-		t.Fatalf("got %v", err)
-	}
-	for name, fin := range map[string]*financeFake{"error": {err: errors.New("down")}, "empty": {}} {
-		if _, err := (PlanSource{Provisionings: approvedProvisioning(), Finance: fin}).Authorised(context.Background(), provisioningKey); !errors.Is(err, ErrFinanceBaselineUnavailable) {
-			t.Fatalf("%s: got %v", name, err)
-		}
+	if got.TenantID != tenant || got.Authority != (Authority{provisioningKey, "plan-1", 2, planDigest}) ||
+		!slices.Equal(got.LegalEntityIDs, []string{"LE-A", "LE-B"}) || !slices.Equal(got.Countries, []string{"UG", "ZA"}) {
+		t.Fatalf("got %+v", got)
 	}
 }
 
 func TestSourceRefusesWhatIsNotApprovedAndCurrent(t *testing.T) {
-	fin := &financeFake{currencies: []string{"ZAR"}}
 	for name, mutate := range map[string]func(*convergedFake){
 		"no decision":         func(f *convergedFake) { f.c.Decision = nil },
 		"rejected":            func(f *convergedFake) { f.c.Decision.Decision = "REJECTED" },
@@ -92,12 +62,9 @@ func TestSourceRefusesWhatIsNotApprovedAndCurrent(t *testing.T) {
 	} {
 		f := approvedProvisioning()
 		mutate(&f)
-		if _, err := (PlanSource{Provisionings: f, Finance: fin}).Authorised(context.Background(), provisioningKey); !errors.Is(err, ErrNotAuthorised) {
+		if _, err := (PlanSource{Provisionings: f}).Authorised(context.Background(), provisioningKey); !errors.Is(err, ErrNotAuthorised) {
 			t.Errorf("%s: got %v", name, err)
 		}
-	}
-	if fin.got != nil {
-		t.Fatal("Finance must not be consulted for a plan that is not approved")
 	}
 }
 
@@ -143,18 +110,6 @@ func TestProvisionerReadyOnlyWhenERPReportsActive(t *testing.T) {
 	}
 	if _, _, err := (Provisioner{Latest: latestFake{err: errors.New("db")}}).Ready(context.Background(), tenant); err == nil {
 		t.Fatal("a ledger failure must not read as not-ready-without-error")
-	}
-}
-
-func TestSourceSendsEachCurrencyOnce(t *testing.T) {
-	// A resolver may answer once per legal entity; erp/v1 declares the list unique.
-	fin := &financeFake{currencies: []string{"ZAR", "UGX", "ZAR"}}
-	got, err := PlanSource{Provisionings: approvedProvisioning(), Finance: fin}.Authorised(context.Background(), provisioningKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(got.Currencies, []string{"UGX", "ZAR"}) {
-		t.Fatalf("got %v", got.Currencies)
 	}
 }
 

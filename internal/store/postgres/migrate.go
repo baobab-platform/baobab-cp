@@ -131,6 +131,7 @@ var canonicalMigrationNames = []string{
 	"000094_context_authority_purpose.sql",
 	"000095_erp_provisioning_submission.sql",
 	"000096_provider_capability_certification.sql",
+	"000097_erp_submission_finance_baselines.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

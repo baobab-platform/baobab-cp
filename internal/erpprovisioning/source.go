@@ -4,31 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sort"
 
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
-
-// ErrFinanceBaselineUnavailable means the Finance-authoritative functional
-// currencies of the legal entities could not be resolved, so nothing is sent to
-// ERP.
-var ErrFinanceBaselineUnavailable = errors.New("the Finance baseline of the legal entities is not available")
-
-// FinanceBaselines resolves the functional currencies of legal entities from
-// their Finance-authoritative baseline.
-//
-// The Control Plane does not own accounting facts. A market's registry
-// currency is a market fact, not an entity's functional currency, and neither
-// the approved plan nor the desired state carries one, so the Source never
-// derives it. There is no resolver until Shared defines a versioned Finance
-// baseline reference and ERP exposes it; until one is configured every
-// submission stops here, which is the fail-closed outcome (ERP would refuse a
-// guess anyway: erp/v1 answers 409 PLAN_AUTHORITY_MISMATCH).
-type FinanceBaselines interface {
-	FunctionalCurrencies(ctx context.Context, tenantID string, legalEntityIDs []string) ([]string, error)
-}
 
 // ConvergedSource is what the Source reads; PostgresRepository satisfies it.
 type ConvergedSource interface {
@@ -42,14 +22,14 @@ type ConvergedSource interface {
 //     plan and the desired state it froze (the single definition of "approved
 //     plan" is repository.ApprovedPlanProblem, shared with ERP's assignment read
 //     and with context validation, so the three can never disagree);
-//   - functional currencies come from the Finance baseline, never from this
-//     repository's markets.
+//   - functional currencies are not here at all: neither the plan nor this
+//     repository's markets carry them, and Finance owns them. The worker takes
+//     them from ERP's effective Finance baseline (Worker.Submit).
 //
 // Countries are intent only: ERP refuses requested_countries that differ from
 // the markets of the approved plan.
 type PlanSource struct {
 	Provisionings ConvergedSource
-	Finance       FinanceBaselines
 }
 
 func (s PlanSource) Authorised(ctx context.Context, tenantProvisioningID string) (Authorised, error) {
@@ -80,17 +60,7 @@ func (s PlanSource) Authorised(ctx context.Context, tenantProvisioningID string)
 	if len(desired.LegalEntities) == 0 || len(desired.MarketParticipation) == 0 {
 		return Authorised{}, fmt.Errorf("%w: the desired state names no legal entity or market", ErrNotAuthorised)
 	}
-	if s.Finance == nil {
-		return Authorised{}, ErrFinanceBaselineUnavailable
-	}
 	entities := sorted(desired.LegalEntities)
-	currencies, err := s.Finance.FunctionalCurrencies(ctx, c.TenantID, entities)
-	if err != nil {
-		return Authorised{}, fmt.Errorf("%w: %v", ErrFinanceBaselineUnavailable, err)
-	}
-	if len(currencies) == 0 {
-		return Authorised{}, fmt.Errorf("%w: no functional currency", ErrFinanceBaselineUnavailable)
-	}
 	countries := make([]string, 0, len(desired.MarketParticipation))
 	for _, m := range desired.MarketParticipation {
 		countries = append(countries, m.Market)
@@ -99,15 +69,8 @@ func (s PlanSource) Authorised(ctx context.Context, tenantProvisioningID string)
 	return Authorised{
 		TenantID:       c.TenantID,
 		Authority:      Authority{TenantProvisioningID: c.Key, PlanID: c.Plan.PlanID, PlanVersion: c.Plan.PlanVersion, PlanDigest: c.Plan.PlanDigest},
-		LegalEntityIDs: entities, Countries: countries, Currencies: unique(currencies),
+		LegalEntityIDs: entities, Countries: countries,
 	}, nil
 }
 
 var _ Source = PlanSource{}
-
-// unique is the sorted set of values: erp/v1 declares functional_currencies
-// uniqueItems, and a resolver may answer once per legal entity.
-func unique(in []string) []string {
-	out := sorted(in)
-	return slices.Compact(out)
-}

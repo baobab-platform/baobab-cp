@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,8 @@ import (
 var (
 	requestSchema     = contracts.MustSchema("erp/v1/provisioning-request.schema.json")
 	stateSchema       = contracts.MustSchema("erp/v1/provisioning-state.schema.json")
+	baselineSchema    = contracts.MustSchema("erp/v1/finance-baseline.schema.json")
+	legalEntityFormat = regexp.MustCompile(`^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$`)
 	idempotencyKey    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$`)
 	problemCode       = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,95}$`)
 	operationIDFormat = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -59,14 +62,53 @@ type Authority struct {
 // Request is erp/v1 ProvisioningRequest. Countries and currencies are intent,
 // never authority: ERP refuses a mismatch with the approved plan.
 type Request struct {
-	TenantID               string    `json:"tenant_id"`
-	ContextID              string    `json:"context_id"`
-	Authority              Authority `json:"control_plane_authority"`
-	LegalEntityIDs         []string  `json:"legal_entity_ids"`
-	RequestedCountries     []string  `json:"requested_countries"`
-	FunctionalCurrencies   []string  `json:"functional_currencies"`
-	DeploymentPolicyID     string    `json:"deployment_policy_id,omitempty"`
-	LocalisationProfileIDs []string  `json:"localisation_profile_ids,omitempty"`
+	TenantID       string    `json:"tenant_id"`
+	ContextID      string    `json:"context_id"`
+	Authority      Authority `json:"control_plane_authority"`
+	LegalEntityIDs []string  `json:"legal_entity_ids"`
+	// FinanceBaselines is the exact approved Finance baseline version relied on for each legal entity, as ERP itself
+	// named it. The Control Plane refers to a baseline and never holds its accounting configuration; ERP re-resolves each
+	// reference before it provisions anything (erp/v1 1.3.0).
+	FinanceBaselines       []FinanceBaselineReference `json:"finance_baselines"`
+	RequestedCountries     []string                   `json:"requested_countries"`
+	FunctionalCurrencies   []string                   `json:"functional_currencies"`
+	DeploymentPolicyID     string                     `json:"deployment_policy_id,omitempty"`
+	LocalisationProfileIDs []string                   `json:"localisation_profile_ids,omitempty"`
+}
+
+// FinanceBaselineReference is erp/v1 FinanceBaselineReference: the exact approved baseline version a provisioning relies
+// on. It carries no accounting value.
+type FinanceBaselineReference struct {
+	BaselineID    string `json:"baseline_id"`
+	LegalEntityID string `json:"legal_entity_id"`
+	Version       int    `json:"version"`
+	Digest        string `json:"digest"`
+	EffectiveFrom string `json:"effective_from"`
+	Authority     struct {
+		EngineID       string `json:"engine_id"`
+		SystemOfRecord string `json:"system_of_record"`
+	} `json:"authority"`
+}
+
+// FinanceBaselineResolution is erp/v1 FinanceBaselineResolution: ERP's answer for one baseline version. Only the
+// functional currency of the accounting configuration is disclosed.
+type FinanceBaselineResolution struct {
+	Reference          FinanceBaselineReference `json:"reference"`
+	Status             string                   `json:"status"`
+	FunctionalCurrency string                   `json:"functional_currency"`
+	ResolvedAt         time.Time                `json:"resolved_at"`
+}
+
+// ParseFinanceBaselineResolution validates an ERP answer against the pinned erp/v1 schema and decodes it.
+func ParseFinanceBaselineResolution(payload []byte) (FinanceBaselineResolution, error) {
+	if err := contracts.Validate(baselineSchema, payload); err != nil {
+		return FinanceBaselineResolution{}, fmt.Errorf("finance baseline resolution does not conform to erp/v1: %w", err)
+	}
+	var r FinanceBaselineResolution
+	if err := json.Unmarshal(payload, &r); err != nil {
+		return FinanceBaselineResolution{}, err
+	}
+	return r, nil
 }
 
 // State is erp/v1 ProvisioningState, as answered by ERP and as carried by
@@ -122,6 +164,21 @@ func (p *Problem) PlanAuthorityMismatch() bool {
 	return p.Status == http.StatusConflict && p.Code == "PLAN_AUTHORITY_MISMATCH"
 }
 
+// FinanceBaselineMismatch reports ERP's 409 FINANCE_BASELINE_MISMATCH: ERP does not hold exactly the referenced baseline.
+// ERP provisioned nothing; the reference must be resolved again, not the request retried.
+func (p *Problem) FinanceBaselineMismatch() bool {
+	return p.Status == http.StatusConflict && p.Code == "FINANCE_BASELINE_MISMATCH"
+}
+
+// FinanceBaselineNotUsable reports ERP's 409 FINANCE_BASELINE_NOT_USABLE: the exact baseline version is withdrawn, superseded
+// or not yet effective. ERP provisioned nothing.
+func (p *Problem) FinanceBaselineNotUsable() bool {
+	return p.Status == http.StatusConflict && p.Code == "FINANCE_BASELINE_NOT_USABLE"
+}
+
+// NotFound reports a 404, which for the effective Finance baseline read means nothing approved is in force.
+func (p *Problem) NotFound() bool { return p.Status == http.StatusNotFound }
+
 // ContextRejected reports ERP's 403 ERP_CONTEXT_REJECTED. ERP deliberately does
 // not say why, so the only safe reading is: this context is not usable by this
 // caller for this tenant.
@@ -137,6 +194,19 @@ type Client struct {
 	Tokens  TokenSource
 }
 
+// BaselineSetKey is the canonical identity of a set of Finance baseline references: one entry per legal entity, in legal
+// entity order, naming the exact baseline, version and digest. The same set always yields the same text, and any altered
+// reference yields different text, so it can take part in a submission's identity.
+func BaselineSetKey(refs []FinanceBaselineReference) string {
+	sortedRefs := append([]FinanceBaselineReference(nil), refs...)
+	sort.Slice(sortedRefs, func(i, j int) bool { return sortedRefs[i].LegalEntityID < sortedRefs[j].LegalEntityID })
+	parts := make([]string, 0, len(sortedRefs))
+	for _, ref := range sortedRefs {
+		parts = append(parts, strings.Join([]string{ref.LegalEntityID, ref.BaselineID, strconv.Itoa(ref.Version), ref.Digest, ref.EffectiveFrom}, ":"))
+	}
+	return strings.Join(parts, ",")
+}
+
 // IdempotencyKey is the deterministic key for one approved request. The same
 // authority and entities always yield the same key, so a replay (retry after a
 // crash, a lost 202) returns ERP's prior operation, and a replan (new digest)
@@ -144,7 +214,8 @@ type Client struct {
 // and ERP treats it as authorisation evidence, not request identity.
 func IdempotencyKey(r Request) string {
 	h := sha256Hex(strings.Join([]string{r.TenantID, r.Authority.TenantProvisioningID, r.Authority.PlanID,
-		strconv.Itoa(r.Authority.PlanVersion), r.Authority.PlanDigest, strings.Join(sorted(r.LegalEntityIDs), ",")}, "|"))
+		strconv.Itoa(r.Authority.PlanVersion), r.Authority.PlanDigest, strings.Join(sorted(r.LegalEntityIDs), ","),
+		BaselineSetKey(r.FinanceBaselines)}, "|"))
 	return "cp-erp-prov:" + h[:48]
 }
 
@@ -162,7 +233,23 @@ func (c *Client) Provision(ctx context.Context, req Request, correlationID strin
 	if !idempotencyKey.MatchString(key) {
 		return State{}, fmt.Errorf("invalid idempotency key %q", key)
 	}
-	return c.do(ctx, http.MethodPost, "/provisioning-operations", raw, key, correlationID, http.StatusAccepted)
+	return c.doState(ctx, http.MethodPost, "/provisioning-operations", raw, key, correlationID, http.StatusAccepted)
+}
+
+// EffectiveFinanceBaseline asks ERP which approved Finance baseline version is in force for a legal entity
+// (getEffectiveFinanceBaseline). ERP is the authority: the answer, reference and functional currency, is taken verbatim
+// and nothing about it is derived here. The caller's context must be the TENANT_PROVISIONING context bound to the approved
+// plan, and ERP answers 404 for a legal entity outside that provisioning or with no approved baseline in force.
+func (c *Client) EffectiveFinanceBaseline(ctx context.Context, contextID, legalEntityID, correlationID string) (FinanceBaselineResolution, error) {
+	if !legalEntityFormat.MatchString(legalEntityID) || len(legalEntityID) < 3 || len(legalEntityID) > 63 {
+		return FinanceBaselineResolution{}, fmt.Errorf("invalid legal entity id %q", legalEntityID)
+	}
+	path := "/legal-entities/" + url.PathEscape(legalEntityID) + "/effective-finance-baseline?context_id=" + url.QueryEscape(contextID)
+	payload, err := c.do(ctx, http.MethodGet, path, nil, "", correlationID, http.StatusOK)
+	if err != nil {
+		return FinanceBaselineResolution{}, err
+	}
+	return ParseFinanceBaselineResolution(payload)
 }
 
 // Operation reads an operation's current state. It exists for recovery and
@@ -172,20 +259,30 @@ func (c *Client) Operation(ctx context.Context, operationID, correlationID strin
 	if !operationIDFormat.MatchString(operationID) {
 		return State{}, fmt.Errorf("invalid ERP operation id %q", operationID)
 	}
-	return c.do(ctx, http.MethodGet, "/provisioning-operations/"+url.PathEscape(operationID), nil, "", correlationID, http.StatusOK)
+	return c.doState(ctx, http.MethodGet, "/provisioning-operations/"+url.PathEscape(operationID), nil, "", correlationID, http.StatusOK)
 }
 
-func (c *Client) do(ctx context.Context, method, path string, body []byte, key, correlationID string, want int) (State, error) {
+// doState calls the boundary and decodes a ProvisioningState answer.
+func (c *Client) doState(ctx context.Context, method, path string, body []byte, key, correlationID string, want int) (State, error) {
+	payload, err := c.do(ctx, method, path, body, key, correlationID, want)
+	if err != nil {
+		return State{}, err
+	}
+	return ParseState(payload)
+}
+
+// do calls the boundary and returns the raw answer when it is the wanted status; anything else is a bounded Problem.
+func (c *Client) do(ctx context.Context, method, path string, body []byte, key, correlationID string, want int) ([]byte, error) {
 	if c.Tokens == nil {
-		return State{}, errors.New("provisioner token source is not configured")
+		return nil, errors.New("provisioner token source is not configured")
 	}
 	token, err := c.Tokens.Token(ctx)
 	if err != nil {
-		return State{}, err
+		return nil, err
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.BaseURL, "/")+path, bytes.NewReader(body))
 	if err != nil {
-		return State{}, err
+		return nil, err
 	}
 	httpReq.Header.Set("Accept", "application/json, application/problem+json")
 	httpReq.Header.Set("Authorization", "Bearer "+token)
@@ -206,23 +303,23 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, key, 
 	if err != nil {
 		// The caller's own cancellation or deadline is not ERP being down: keep it detectable and not retryable.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return State{}, ctxErr
+			return nil, ctxErr
 		}
 		// Unreachable is ERP's problem to recover from, not a refusal: retryable.
-		return State{}, &Problem{Code: "ERP_UNREACHABLE", Retryable: true}
+		return nil, &Problem{Code: "ERP_UNREACHABLE", Retryable: true}
 	}
 	defer resp.Body.Close()
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return State{}, ctxErr
+			return nil, ctxErr
 		}
-		return State{}, &Problem{Status: resp.StatusCode, Code: "ERP_UNREACHABLE", Retryable: true}
+		return nil, &Problem{Status: resp.StatusCode, Code: "ERP_UNREACHABLE", Retryable: true}
 	}
 	if resp.StatusCode != want {
-		return State{}, problemFrom(resp, payload)
+		return nil, problemFrom(resp, payload)
 	}
-	return ParseState(payload)
+	return payload, nil
 }
 
 // problemFrom keeps only the bounded parts of a refusal: status, a well-formed

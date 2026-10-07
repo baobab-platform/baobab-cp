@@ -21,11 +21,26 @@ var (
 	// ErrStateDisagrees is an ERP answer whose tenant or legal entities differ
 	// from what was submitted. It is never recorded.
 	ErrStateDisagrees = errors.New("the ERP state disagrees with the submitted request")
+	// ErrNoFinanceBaseline means ERP has no approved Finance baseline in force for a legal entity of the provisioning (or
+	// does not know the entity there). Nothing was sent: Finance approves a baseline in ERP first, and the Control Plane
+	// never substitutes one.
+	ErrNoFinanceBaseline = errors.New("ERP has no approved Finance baseline in force for a legal entity")
+	// ErrFinanceBaselineUnavailable means the baseline answers could not be trusted (an answer that does not conform to
+	// erp/v1, names another entity or another owner, or repeats an entity). Nothing was sent.
+	ErrFinanceBaselineUnavailable = errors.New("the Finance baseline of the legal entities could not be resolved")
+	// ErrFinanceBaselineMismatch is ERP's 409 FINANCE_BASELINE_MISMATCH: ERP does not hold exactly the referenced baseline.
+	// ERP provisioned nothing; resolve the reference again, do not retry the same request.
+	ErrFinanceBaselineMismatch = errors.New("ERP does not hold the referenced Finance baseline")
+	// ErrFinanceBaselineNotUsable is ERP's 409 FINANCE_BASELINE_NOT_USABLE: the exact baseline version is withdrawn,
+	// superseded or not yet effective. ERP provisioned nothing.
+	ErrFinanceBaselineNotUsable = errors.New("the referenced Finance baseline is not usable")
 )
 
 // Authorised is everything the approved plan authorises ERP to provision for one
 // tenant provisioning: the tenant, the exact plan tuple, and the legal
-// entities, countries and currencies it covers. The provisioning's Control
+// entities and countries it covers. Functional currencies are deliberately not
+// here: the plan does not carry them, and they come from ERP's Finance baseline
+// (Worker.Submit). The provisioning's Control
 // Plane source (desired state, approved plan, approval) assembles it; the
 // approving human is provenance there and never appears as a caller here.
 type Authorised struct {
@@ -33,7 +48,6 @@ type Authorised struct {
 	Authority              Authority
 	LegalEntityIDs         []string
 	Countries              []string
-	Currencies             []string
 	DeploymentPolicyID     string
 	LocalisationProfileIDs []string
 }
@@ -52,9 +66,12 @@ type Submission struct {
 	TenantID             string
 	Authority            Authority
 	LegalEntityIDs       []string
-	OperationID          string
-	LastRevision         int64
-	LastState            string
+	// FinanceBaselines is the complete set of Finance baseline references the request carried, one per legal entity, exactly
+	// as submitted. With the plan tuple it lets an audit answer which Finance baseline caused this provisioning.
+	FinanceBaselines []FinanceBaselineReference
+	OperationID      string
+	LastRevision     int64
+	LastState        string
 }
 
 // Ledger persists submissions and the ERP progress recorded against them.
@@ -64,6 +81,9 @@ type Ledger interface {
 	Submitted(ctx context.Context, sub Submission, st State) error
 	// Lookup finds a submission by ERP operation id.
 	Lookup(ctx context.Context, operationID string) (Submission, bool, error)
+	// ForPlan finds the submission already recorded for an approved plan tuple of a provisioning, if any. One approved plan
+	// has at most one ERP operation, so a retry must continue that operation rather than request another.
+	ForPlan(ctx context.Context, tenantProvisioningID string, authority Authority) (Submission, bool, error)
 	// Apply records st for the operation only if its revision is newer than the
 	// recorded one, and reports whether it was newer. Events arrive late and out
 	// of order, and a read can race an event; an older state never overwrites a
@@ -93,26 +113,48 @@ func (w Worker) Submit(ctx context.Context, tenantProvisioningID string) (State,
 	if auth.Authority.TenantProvisioningID != tenantProvisioningID {
 		return State{}, fmt.Errorf("%w: the authority names another provisioning", ErrNotAuthorised)
 	}
+	// An approved plan has one ERP operation. If it is already recorded, a retry (an orchestrator that failed after the
+	// submission, a redelivered trigger) continues that operation: the Finance baseline in force may have moved on since,
+	// and asking again would send different references under a different idempotency key.
+	if prior, found, err := w.Ledger.ForPlan(ctx, tenantProvisioningID, auth.Authority); err != nil {
+		return State{}, err
+	} else if found {
+		st, _, err := w.Reconcile(ctx, prior.OperationID)
+		return st, err
+	}
 	// The Context's tenant is the provisioning's tenant, never a caller input.
 	cx, err := w.Context.Issue(ctx, auth.TenantID, auth.Authority, tenantProvisioningID)
 	if err != nil {
 		return State{}, err
 	}
+	// Finance owns the accounting facts. For every legal entity ERP names the baseline version in force and its functional
+	// currency, under the same provisioning context; both are taken verbatim and nothing here derives or defaults them. The
+	// provisioning command is where ERP independently proves the exact references are still usable, so they are not asked
+	// for a second time.
+	baselines, currencies, err := w.resolveBaselines(ctx, cx.ID, auth.LegalEntityIDs, tenantProvisioningID)
+	if err != nil {
+		return State{}, err
+	}
 	req := Request{
 		TenantID: auth.TenantID, ContextID: cx.ID, Authority: auth.Authority,
-		LegalEntityIDs: auth.LegalEntityIDs, RequestedCountries: auth.Countries, FunctionalCurrencies: auth.Currencies,
+		LegalEntityIDs: auth.LegalEntityIDs, FinanceBaselines: baselines, RequestedCountries: auth.Countries, FunctionalCurrencies: currencies,
 		DeploymentPolicyID: auth.DeploymentPolicyID, LocalisationProfileIDs: auth.LocalisationProfileIDs,
 	}
 	st, err := w.Client.Provision(ctx, req, tenantProvisioningID)
 	if err != nil {
 		var p *Problem
-		if errors.As(err, &p) && p.PlanAuthorityMismatch() {
+		switch {
+		case errors.As(err, &p) && p.PlanAuthorityMismatch():
 			return State{}, fmt.Errorf("%w", ErrPlanAuthorityMismatch)
+		case errors.As(err, &p) && p.FinanceBaselineMismatch():
+			return State{}, fmt.Errorf("%w", ErrFinanceBaselineMismatch)
+		case errors.As(err, &p) && p.FinanceBaselineNotUsable():
+			return State{}, fmt.Errorf("%w", ErrFinanceBaselineNotUsable)
 		}
 		return State{}, err
 	}
 	sub := Submission{TenantProvisioningID: tenantProvisioningID, TenantID: auth.TenantID, Authority: auth.Authority,
-		LegalEntityIDs: auth.LegalEntityIDs, OperationID: st.OperationID}
+		LegalEntityIDs: auth.LegalEntityIDs, FinanceBaselines: baselines, OperationID: st.OperationID}
 	if err := agrees(sub, st); err != nil {
 		return State{}, err
 	}
@@ -122,6 +164,52 @@ func (w Worker) Submit(ctx context.Context, tenantProvisioningID string) (State,
 	slog.InfoContext(ctx, "erp provisioning requested", "tenant_provisioning_id", tenantProvisioningID,
 		"tenant_id", auth.TenantID, "operation_id", st.OperationID, "state", st.State, "revision", st.Revision)
 	return st, nil
+}
+
+// resolveBaselines asks ERP for the Finance baseline in force for each legal entity and returns the references to send, in
+// legal entity order, and the set of functional currencies ERP reported. It fails closed: an entity ERP has no baseline
+// for, an answer that is not exactly one conforming, ERP-owned, effective baseline for exactly that entity, or any
+// resolver failure means nothing is submitted.
+func (w Worker) resolveBaselines(ctx context.Context, contextID string, legalEntityIDs []string, correlationID string) ([]FinanceBaselineReference, []string, error) {
+	var refs []FinanceBaselineReference
+	seen := map[string]bool{}
+	var currencies []string
+	for _, entity := range sorted(legalEntityIDs) {
+		if seen[entity] {
+			return nil, nil, fmt.Errorf("%w: legal entity %s is listed twice", ErrFinanceBaselineUnavailable, entity)
+		}
+		seen[entity] = true
+		res, err := w.Client.EffectiveFinanceBaseline(ctx, contextID, entity, correlationID)
+		if err != nil {
+			var p *Problem
+			if errors.As(err, &p) {
+				if p.NotFound() {
+					return nil, nil, fmt.Errorf("%w: %s", ErrNoFinanceBaseline, entity)
+				}
+				return nil, nil, err
+			}
+			if ctx.Err() != nil {
+				return nil, nil, err
+			}
+			return nil, nil, fmt.Errorf("%w: %s: %v", ErrFinanceBaselineUnavailable, entity, err)
+		}
+		ref := res.Reference
+		switch {
+		case ref.LegalEntityID != entity:
+			return nil, nil, fmt.Errorf("%w: ERP answered for another legal entity", ErrFinanceBaselineUnavailable)
+		case ref.Authority.EngineID != "baobab-erp" || ref.Authority.SystemOfRecord != "FINANCE_BASELINE":
+			return nil, nil, fmt.Errorf("%w: the baseline of %s is not owned by ERP", ErrFinanceBaselineUnavailable, entity)
+		case res.Status != "EFFECTIVE":
+			// The read names the version in force; anything else means it is not usable now.
+			return nil, nil, fmt.Errorf("%w: %s is %s", ErrFinanceBaselineNotUsable, entity, res.Status)
+		}
+		refs = append(refs, ref)
+		currencies = append(currencies, res.FunctionalCurrency)
+	}
+	if len(refs) == 0 {
+		return nil, nil, fmt.Errorf("%w: no legal entity", ErrFinanceBaselineUnavailable)
+	}
+	return refs, uniqueStrings(currencies), nil
 }
 
 // OnProvisioningChanged handles the data of a

@@ -160,10 +160,6 @@ func main() {
 	// operation is resumed by the next.
 	var erpProvisioner provisioning.ERPProvisioning
 	if cfg.ERPProvisioningURL != "" {
-		// No Finance baseline resolver exists yet (the Control Plane never derives
-		// a functional currency from a market), so submissions stop at the
-		// source until Shared defines the baseline reference and one is wired.
-		slog.Warn("ERP provisioning is configured without a Finance baseline resolver; submissions will not be sent")
 		worker := erpprovisioning.Worker{
 			Source: erpprovisioning.PlanSource{Provisionings: resolverRepository},
 			Client: &erpprovisioning.Client{BaseURL: cfg.ERPProvisioningURL, HTTP: &http.Client{Timeout: 30 * time.Second},
