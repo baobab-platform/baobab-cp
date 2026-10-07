@@ -343,6 +343,7 @@ func TestProviderActivationChangeset(t *testing.T) {
 		cleanupChangesets(ctx, admin, func() []string { return []string{canonical} })
 		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, providerKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, engine+".engine")
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
 	}
@@ -440,6 +441,7 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 			tx.Commit(ctx)
 		}
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, engine+".engine")
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
 	}
@@ -454,6 +456,9 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 		Name: "API approval test", DomainKey: "test", Lifecycle: capabilitydomain.CapabilityLifecycleActive,
 		Maturity: capabilitydomain.CapabilityMaturitySupported}, ContractVersions: []int{1}, DataClassification: "INTERNAL",
 		Owner: engine, Source: "fixtures/api-approval-test", Digest: "sha256:" + strings.Repeat("8", 64)}})
+	mustNoError(t, err)
+	_, err = admin.Exec(ctx, `INSERT INTO capability.capability_provider (provider_key, name, provider_type, engine_id, status)
+		VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, 'DRAFT')`, engine+".engine", engineID)
 	mustNoError(t, err)
 
 	identities := repository.NewInMemoryRepository()
@@ -551,6 +556,7 @@ func TestDesiredReleaseRoutes(t *testing.T) {
 			tx.Commit(ctx)
 		}
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, engine+".engine")
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
 	}
@@ -564,6 +570,9 @@ func TestDesiredReleaseRoutes(t *testing.T) {
 		Name: "API desired test", DomainKey: "test", Lifecycle: capabilitydomain.CapabilityLifecycleActive,
 		Maturity: capabilitydomain.CapabilityMaturitySupported}, ContractVersions: []int{1}, DataClassification: "INTERNAL",
 		Owner: engine, Source: "fixtures/api-desired-test", Digest: "sha256:" + strings.Repeat("5", 64)}})
+	mustNoError(t, err)
+	_, err = admin.Exec(ctx, `INSERT INTO capability.capability_provider (provider_key, name, provider_type, engine_id, status)
+		VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, 'DRAFT')`, engine+".engine", engineID)
 	mustNoError(t, err)
 
 	identities := repository.NewInMemoryRepository()
