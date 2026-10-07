@@ -23,6 +23,9 @@ schema:
   version: "1.0"
 
 bundles:
+  - path: intelligence/v1/pulse-registration.json
+    engine_id: baobab-pulse
+    provider_key: baobab-pulse.core
   - path: payments/v1/capabilities.json
     engine_id: baobab-payments
     provider_key: baobab-payments.sandbox
