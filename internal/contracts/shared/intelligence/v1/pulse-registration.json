@@ -1,0 +1,69 @@
+{
+  "repository": "baobab-pulse",
+  "capabilities": [
+    {
+      "capability_key": "intelligence.evidence.search",
+      "name": "Search intelligence evidence",
+      "description": "Search the authorised Pulse evidence corpus using provider-neutral semantic retrieval and return canonical evidence identities plus retrieval freshness. Tenant scope comes from caller-bound Control Plane context; operation authority and classification clearance come from the authenticated Pulse resource-server token. The capability does not expose vector-store identities, embeddings or provider-specific retrieval structures.",
+      "domain": "intelligence",
+      "owner": "baobab-pulse",
+      "lifecycle": "ACTIVE",
+      "maturity": "EXPERIMENTAL",
+      "contracts": [
+        {
+          "major": 1,
+          "request_schema": "domain.schema.json#/$defs/evidenceSearchRequest",
+          "response_schema": "domain.schema.json#/$defs/evidenceSearchResponse",
+          "error_schema": "../../errors/v1/problem-details.schema.json"
+        }
+      ],
+      "data_classification": "TENANT_CONFIDENTIAL"
+    },
+    {
+      "capability_key": "intelligence.research-mission.manage",
+      "name": "Manage intelligence research mission",
+      "description": "Create or retrieve a governed research mission that frames an intelligence question, evidence expectations, scope, classification and confidence requirement without exposing Haystack, model-provider or pipeline internals. Tenant scope comes from caller-bound Control Plane context; operation and classification authority come from the authenticated Pulse resource-server token. This capability owns the Pulse research workflow only; it does not confer authority over operational engines or regulatory decisions.",
+      "domain": "intelligence",
+      "owner": "baobab-pulse",
+      "lifecycle": "ACTIVE",
+      "maturity": "EXPERIMENTAL",
+      "contracts": [
+        {
+          "major": 1,
+          "request_schema": "domain.schema.json#/$defs/researchMissionManageRequest",
+          "response_schema": "domain.schema.json#/$defs/researchMissionResponse",
+          "error_schema": "../../errors/v1/problem-details.schema.json"
+        }
+      ],
+      "data_classification": "TENANT_CONFIDENTIAL"
+    }
+  ],
+  "provider": {
+    "provider_key": "baobab-pulse.core",
+    "name": "Baobab Pulse core provider",
+    "provider_type": "BAOBAB_ENGINE",
+    "engine_key": "core",
+    "lifecycle": "DRAFT",
+    "ownership": "baobab-pulse",
+    "simulated": false,
+    "production_permitted": true,
+    "invocation": {
+      "service_reference": "service://baobab-pulse/capabilities",
+      "protocol": "http"
+    }
+  },
+  "support": [
+    {
+      "capability_key": "intelligence.evidence.search",
+      "contract_versions": [
+        1
+      ]
+    },
+    {
+      "capability_key": "intelligence.research-mission.manage",
+      "contract_versions": [
+        1
+      ]
+    }
+  ]
+}
