@@ -50,7 +50,7 @@ func (h EventIngressHandler) Receive(w http.ResponseWriter, r *http.Request) {
 		reject(rejection)
 		return
 	}
-	if h.Wake != nil {
+	if receipt.Status == eventingress.Accepted && h.Wake != nil {
 		select {
 		case h.Wake <- struct{}{}:
 		default:

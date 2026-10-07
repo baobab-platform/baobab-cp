@@ -34,7 +34,9 @@ func TestPostgresInbox(t *testing.T) {
 	defer pool.Close()
 
 	const source = "urn:baobab-platform:service:inbox-test"
-	cleanup := func() { _, _ = pool.Exec(ctx, `DELETE FROM messaging.event_receipt WHERE source = $1`, source) }
+	cleanup := func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM messaging.event_receipt WHERE source = ANY($1::text[])`, []string{source, source + "-other"})
+	}
 	cleanup()
 	t.Cleanup(cleanup)
 	inbox := PostgresInbox{DB: pool}
