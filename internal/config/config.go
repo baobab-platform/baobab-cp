@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/workloadtoken"
 )
 
 type Config struct {
@@ -51,11 +52,20 @@ type Config struct {
 	// ERPProvisionerIssuer and ERPProvisionerSubject are that token's iss and
 	// sub, which name the canonical principal that owns the provisioning
 	// Context. Unset, the pipeline is unchanged.
-	ERPProvisioningURL        string
-	ERPProvisionerTokenFile   string
-	ERPProvisionerIssuer      string
-	ERPProvisionerSubject     string
-	ERPProvisioningContextTTL time.Duration
+	ERPProvisioningURL      string
+	ERPProvisionerTokenFile string
+	// ERPProvisionerAssertionFile (ERP_PROVISIONER_ASSERTION_FILE) selects the federated mode: the platform-projected assertion that
+	// is exchanged at ERPProvisionerTokenURL (ERP_PROVISIONER_TOKEN_URL, the provider's public token endpoint) as the public client
+	// ERPProvisionerClientID (ERP_PROVISIONER_CLIENT_ID) for ERPProvisionerScope (ERP_PROVISIONER_SCOPE, default erp:provision), with
+	// the optional ERPProvisionerAudience (ERP_PROVISIONER_AUDIENCE). Exactly one of this and ERPProvisionerTokenFile is set.
+	ERPProvisionerAssertionFile string
+	ERPProvisionerTokenURL      string
+	ERPProvisionerClientID      string
+	ERPProvisionerScope         string
+	ERPProvisionerAudience      string
+	ERPProvisionerIssuer        string
+	ERPProvisionerSubject       string
+	ERPProvisioningContextTTL   time.Duration
 	// EventDeliveryKeysFile (EVENT_DELIVERY_KEYS_FILE) is the registry of delivery keys for signed engine event delivery (Shared
 	// control-plane/v1 receiveEngineEvent): a JSON array of {key_id, sender, secret_b64, revoked}. Unset, the route is not served.
 	// It is a mounted secret, never a value in the environment, and is re-read when it changes so keys rotate without a restart.
@@ -166,10 +176,36 @@ func Load() (Config, error) {
 		}
 		c.ERPProvisioningURL = raw
 		c.ERPProvisionerTokenFile = os.Getenv("ERP_PROVISIONER_TOKEN_FILE")
+		c.ERPProvisionerAssertionFile = os.Getenv("ERP_PROVISIONER_ASSERTION_FILE")
+		c.ERPProvisionerTokenURL = strings.TrimSpace(os.Getenv("ERP_PROVISIONER_TOKEN_URL"))
+		c.ERPProvisionerClientID = strings.TrimSpace(os.Getenv("ERP_PROVISIONER_CLIENT_ID"))
+		c.ERPProvisionerScope = env("ERP_PROVISIONER_SCOPE", "erp:provision")
+		c.ERPProvisionerAudience = strings.TrimSpace(os.Getenv("ERP_PROVISIONER_AUDIENCE"))
 		c.ERPProvisionerIssuer = strings.TrimSpace(os.Getenv("ERP_PROVISIONER_ISSUER"))
-		c.ERPProvisionerSubject = env("ERP_PROVISIONER_SUBJECT", "baobab-cp-provisioning-workload")
-		if c.ERPProvisionerTokenFile == "" || c.ERPProvisionerIssuer == "" {
-			return Config{}, errors.New("ERP_PROVISIONER_TOKEN_FILE and ERP_PROVISIONER_ISSUER are required when ERP_PROVISIONING_URL is set")
+		// Under the federated exchange the access token's subject is the assertion's subject, not the logical client id, so it has
+		// no safe default there: it must be set to the exact subject the provider's trust grant binds.
+		defaultSubject := "baobab-cp-provisioning-workload"
+		if c.ERPProvisionerAssertionFile != "" {
+			defaultSubject = ""
+		}
+		c.ERPProvisionerSubject = env("ERP_PROVISIONER_SUBJECT", defaultSubject)
+		if (c.ERPProvisionerTokenFile == "") == (c.ERPProvisionerAssertionFile == "") {
+			return Config{}, errors.New("exactly one of ERP_PROVISIONER_TOKEN_FILE and ERP_PROVISIONER_ASSERTION_FILE is required when ERP_PROVISIONING_URL is set")
+		}
+		if c.ERPProvisionerIssuer == "" {
+			return Config{}, errors.New("ERP_PROVISIONER_ISSUER is required when ERP_PROVISIONING_URL is set")
+		}
+		if c.ERPProvisionerAssertionFile != "" {
+			if c.ERPProvisionerTokenURL == "" || c.ERPProvisionerClientID == "" || c.ERPProvisionerSubject == "" {
+				return Config{}, errors.New("ERP_PROVISIONER_TOKEN_URL, ERP_PROVISIONER_CLIENT_ID and ERP_PROVISIONER_SUBJECT are required with ERP_PROVISIONER_ASSERTION_FILE")
+			}
+			exchange := &workloadtoken.JWTBearer{TokenURL: c.ERPProvisionerTokenURL, ClientID: c.ERPProvisionerClientID,
+				AssertionFile: c.ERPProvisionerAssertionFile, Scope: strings.Fields(c.ERPProvisionerScope)}
+			if err := exchange.Validate(); err != nil {
+				return Config{}, fmt.Errorf("ERP provisioner token exchange: %w", err)
+			}
+		} else if c.ERPProvisionerTokenURL != "" || c.ERPProvisionerClientID != "" || c.ERPProvisionerAudience != "" {
+			return Config{}, errors.New("ERP_PROVISIONER_TOKEN_URL, ERP_PROVISIONER_CLIENT_ID and ERP_PROVISIONER_AUDIENCE apply only with ERP_PROVISIONER_ASSERTION_FILE")
 		}
 		// A provisioning Context lives at most 15 minutes (Shared
 		// control-plane/v1 1.34.0); the default leaves room for a slow ERP.
