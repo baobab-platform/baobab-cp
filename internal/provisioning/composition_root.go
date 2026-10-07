@@ -122,6 +122,10 @@ type ZB02Dependencies struct {
 	// check (ADR-BCP-025 section 2.8): a tenant is not READY while a mandatory
 	// dependency runs a revoked or unrecorded release or in the wrong place.
 	ReleaseReadiness ReleaseReadinessSource
+	// ERP, when set, adds the provider-provisioning step: APPLY requests ERP
+	// provisioning for the approved plan, and the tenant is not READY until ERP
+	// reports it complete. Unset, the pipeline is unchanged.
+	ERP ERPProvisioning
 }
 
 // EnsureDefaultCapabilityScope returns the tenant-wide, unconstrained
@@ -179,12 +183,19 @@ func BuildZB02Pipeline(deps ZB02Dependencies, manifest ResolvedManifest, scopeID
 	bindingProvisioner := NewCapabilityBindingProvisioner(deps.Repo)
 	contextResolver := NewAuthoritativeContextResolver(ContextAuthorityAdapter{Tenants: deps.Tenants, Repo: deps.Repo})
 
-	applyWorker := ApplyWorker{Steps: []ApplyStep{
+	applySteps := []ApplyStep{
 		marketParticipationApplyStep{repo: deps.Repo, manifest: manifest, newID: domain.NewUUIDv7, now: now},
 		capabilityGrantApplyStep{provisioner: grantProvisioner, scopeID: scopeID, manifest: manifest, now: now},
 		capabilityBindingApplyStep{provisioner: bindingProvisioner, scopeID: scopeID, manifest: manifest, now: now},
 		tradeLaneApplyStep{repo: deps.Repo, marketAssignments: deps.Repo, manifest: manifest, now: now},
-	}}
+	}
+	// Provider provisioning follows the bindings it depends on (Technical
+	// Specification section 22: PROVISIONING_PROVIDERS after the capability
+	// bindings exist).
+	if deps.ERP != nil {
+		applySteps = append(applySteps, erpProvisioningApplyStep{erp: deps.ERP})
+	}
+	applyWorker := ApplyWorker{Steps: applySteps}
 
 	reconcileWorker := ReconcileWorker{Reconciler: DesiredObservedReconciler{Resources: []ResourceReconciler{
 		HashResourceReconciler{
@@ -236,6 +247,9 @@ func BuildZB02Pipeline(deps ZB02Dependencies, manifest ResolvedManifest, scopeID
 	}
 	if deps.ReleaseReadiness != nil {
 		readinessChecks = append(readinessChecks, NewProbeCheck(ReleaseReadinessCheckKey, releaseReadinessProbe{source: deps.ReleaseReadiness}))
+	}
+	if deps.ERP != nil {
+		readinessChecks = append(readinessChecks, NewProbeCheck(ERPProvisioningCheckKey, erpProvisioningProbe{erp: deps.ERP}))
 	}
 	readinessWorker := ReadinessWorker{Evaluator: NewReadinessEvaluator(readinessChecks...), Snapshots: deps.Repo}
 

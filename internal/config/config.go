@@ -44,6 +44,18 @@ type Config struct {
 	BillingEngineURL         string
 	BillingWorkloadTokenFile string
 	BillingSyncInterval      time.Duration
+	// ERPProvisioningURL, when set, enables provider provisioning of ERP from
+	// the APPLY phase (Shared erp/v1 requestErpProvisioning), called as the
+	// dedicated provisioner workload. ERPProvisionerTokenFile is its
+	// platform-projected token for audience baobab-erp (no static secret);
+	// ERPProvisionerIssuer and ERPProvisionerSubject are that token's iss and
+	// sub, which name the canonical principal that owns the provisioning
+	// Context. Unset, the pipeline is unchanged.
+	ERPProvisioningURL        string
+	ERPProvisionerTokenFile   string
+	ERPProvisionerIssuer      string
+	ERPProvisionerSubject     string
+	ERPProvisioningContextTTL time.Duration
 	// GroupDerivationInterval is how often due CorporateGroup derivations
 	// are processed; GroupReconciliationInterval how often every derivable
 	// group is re-derived to repair drift (ADR-BCP-018 gate ORG-05).
@@ -136,6 +148,26 @@ func Load() (Config, error) {
 			return Config{}, errors.New("BILLING_SYNC_INTERVAL must be a Go duration of at least 1s")
 		}
 		c.BillingSyncInterval = interval
+	}
+	if raw := strings.TrimSpace(os.Getenv("ERP_PROVISIONING_URL")); raw != "" {
+		engine, err := url.Parse(raw)
+		if err != nil || engine.Host == "" || (engine.Scheme != "https" && !localIssuer(engine)) {
+			return Config{}, errors.New("ERP_PROVISIONING_URL must use HTTPS (HTTP is allowed only for localhost development)")
+		}
+		c.ERPProvisioningURL = raw
+		c.ERPProvisionerTokenFile = os.Getenv("ERP_PROVISIONER_TOKEN_FILE")
+		c.ERPProvisionerIssuer = strings.TrimSpace(os.Getenv("ERP_PROVISIONER_ISSUER"))
+		c.ERPProvisionerSubject = env("ERP_PROVISIONER_SUBJECT", "baobab-cp-provisioning-workload")
+		if c.ERPProvisionerTokenFile == "" || c.ERPProvisionerIssuer == "" {
+			return Config{}, errors.New("ERP_PROVISIONER_TOKEN_FILE and ERP_PROVISIONER_ISSUER are required when ERP_PROVISIONING_URL is set")
+		}
+		// A provisioning Context lives at most 15 minutes (Shared
+		// control-plane/v1 1.34.0); the default leaves room for a slow ERP.
+		ttl, err := time.ParseDuration(env("ERP_PROVISIONING_CONTEXT_TTL", "10m"))
+		if err != nil || ttl < time.Minute || ttl > 15*time.Minute {
+			return Config{}, errors.New("ERP_PROVISIONING_CONTEXT_TTL must be a Go duration between 1m and 15m")
+		}
+		c.ERPProvisioningContextTTL = ttl
 	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("TENANT_BOOTSTRAP_REGISTRATION"))) {
 	case "", "disabled":
