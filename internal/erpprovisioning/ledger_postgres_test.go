@@ -113,6 +113,22 @@ func TestPostgresLedger(t *testing.T) {
 	if _, found, _ := l.Intent(ctx, key, otherPlan.Authority); found {
 		t.Fatal("another plan digest has no intent")
 	}
+	// A refused, unsubmitted intent can be dropped so the baseline is resolved again; one whose plan has a submission never is.
+	if _, err := l.RecordIntent(ctx, otherPlan); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.DiscardIntent(ctx, key, otherPlan.Authority); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := l.Intent(ctx, key, otherPlan.Authority); found {
+		t.Fatal("an unsubmitted intent is dropped")
+	}
+	if err := l.DiscardIntent(ctx, key, sub.Authority); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := l.Intent(ctx, key, sub.Authority); !found {
+		t.Fatal("an intent whose plan has a recorded submission is never dropped")
+	}
 	// The recorded submission is found by its exact approved plan tuple, and only by it.
 	if byPlan, found, err := l.ForPlan(ctx, key, sub.Authority); err != nil || !found || byPlan.OperationID != opA {
 		t.Fatalf("for plan: %+v %v %v", byPlan, found, err)

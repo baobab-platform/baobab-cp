@@ -268,3 +268,35 @@ func TestARetryAfterACrashBeforeTheOperationWasRecordedSendsTheSameRequest(t *te
 		t.Fatal("the retry must carry exactly the references of the first attempt")
 	}
 }
+
+// ERP refused the references outright (Finance superseded the baseline between the read and the POST): no operation exists,
+// so the next attempt resolves the baseline again instead of resending the refused reference forever. An ambiguous outcome
+// (ERP unavailable, the answer lost) keeps the intent fixed, because ERP may already have accepted the request.
+func TestADefiniteFinanceRefusalDropsTheIntentButAnAmbiguousOutcomeKeepsIt(t *testing.T) {
+	for _, code := range []string{"FINANCE_BASELINE_MISMATCH", "FINANCE_BASELINE_NOT_USABLE"} {
+		r := twoEntities(t)
+		r.erp.status, r.erp.problem = 409, code
+		if _, err := r.w.Submit(context.Background(), provisionID); err == nil {
+			t.Fatalf("%s must be refused", code)
+		}
+		if len(r.led.intents) != 0 {
+			t.Fatalf("%s: a refused intent must not stay fixed", code)
+		}
+		r.erp.status = 0
+		calls := len(r.erp.baselineCalls)
+		if _, err := r.w.Submit(context.Background(), provisionID); err != nil {
+			t.Fatalf("%s: the next attempt resolves again: %v", code, err)
+		}
+		if len(r.erp.baselineCalls) == calls || len(r.led.intents) != 1 {
+			t.Fatalf("%s: the baseline must be resolved again and a new intent recorded", code)
+		}
+	}
+	r := twoEntities(t)
+	r.erp.status, r.erp.problem = 503, "ERP_SERVICE_UNAVAILABLE"
+	if _, err := r.w.Submit(context.Background(), provisionID); !Retryable(err) {
+		t.Fatalf("err=%v", err)
+	}
+	if len(r.led.intents) != 1 {
+		t.Fatal("an ambiguous outcome keeps the intent fixed")
+	}
+}

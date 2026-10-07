@@ -95,6 +95,9 @@ type Ledger interface {
 	// RecordIntent records the intent for the approved plan unless one exists, and returns the one that is recorded: the
 	// first writer wins, so concurrent or repeated attempts all send the same references under the same key.
 	RecordIntent(ctx context.Context, in Intent) (Intent, error)
+	// DiscardIntent removes the unsubmitted intent of the approved plan after ERP definitively refused its Finance references,
+	// so the next attempt resolves them again. It never removes an intent whose plan has a recorded submission.
+	DiscardIntent(ctx context.Context, tenantProvisioningID string, authority Authority) error
 	// ForPlan finds the submission already recorded for an approved plan tuple of a provisioning, if any. One approved plan
 	// has at most one ERP operation, so a retry must continue that operation rather than request another.
 	ForPlan(ctx context.Context, tenantProvisioningID string, authority Authority) (Submission, bool, error)
@@ -174,9 +177,9 @@ func (w Worker) Submit(ctx context.Context, tenantProvisioningID string) (State,
 		case errors.As(err, &p) && p.PlanAuthorityMismatch():
 			return State{}, fmt.Errorf("%w", ErrPlanAuthorityMismatch)
 		case errors.As(err, &p) && p.FinanceBaselineMismatch():
-			return State{}, fmt.Errorf("%w", ErrFinanceBaselineMismatch)
+			return State{}, w.refused(ctx, tenantProvisioningID, auth.Authority, ErrFinanceBaselineMismatch)
 		case errors.As(err, &p) && p.FinanceBaselineNotUsable():
-			return State{}, fmt.Errorf("%w", ErrFinanceBaselineNotUsable)
+			return State{}, w.refused(ctx, tenantProvisioningID, auth.Authority, ErrFinanceBaselineNotUsable)
 		}
 		return State{}, err
 	}
@@ -191,6 +194,16 @@ func (w Worker) Submit(ctx context.Context, tenantProvisioningID string) (State,
 	slog.InfoContext(ctx, "erp provisioning requested", "tenant_provisioning_id", tenantProvisioningID,
 		"tenant_id", auth.TenantID, "operation_id", st.OperationID, "state", st.State, "revision", st.Revision)
 	return st, nil
+}
+
+// refused handles ERP's definitive refusal of the Finance references: no operation exists, so the recorded intent is dropped
+// and the next attempt resolves the baseline again (Finance may have superseded it since). Ambiguous outcomes (a timeout, a
+// 5xx, a lost answer) never come here: the intent stays fixed, because ERP may already have accepted the request.
+func (w Worker) refused(ctx context.Context, tenantProvisioningID string, authority Authority, refusal error) error {
+	if err := w.Ledger.DiscardIntent(ctx, tenantProvisioningID, authority); err != nil {
+		return fmt.Errorf("%w: discard the refused intent: %v", refusal, err)
+	}
+	return fmt.Errorf("%w", refusal)
 }
 
 // resolveBaselines asks ERP for the Finance baseline in force for each legal entity and returns the references to send, in

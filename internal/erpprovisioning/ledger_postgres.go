@@ -157,6 +157,20 @@ func (l PostgresLedger) RecordIntent(ctx context.Context, in Intent) (Intent, er
 	return got, nil
 }
 
+// DiscardIntent implements Ledger. The guard keeps an intent whose plan already has a recorded submission.
+func (l PostgresLedger) DiscardIntent(ctx context.Context, tenantProvisioningID string, authority Authority) error {
+	id, err := repository.ProvisioningUUID(tenantProvisioningID)
+	if err != nil {
+		return err
+	}
+	_, err = l.DB.Exec(ctx, `DELETE FROM provisioning.erp_submission_intent i
+		WHERE i.tenant_provisioning_id = $1::uuid AND i.plan_id = $2 AND i.plan_version = $3 AND i.plan_digest = $4
+		  AND NOT EXISTS (SELECT 1 FROM provisioning.erp_submission s WHERE s.tenant_provisioning_id = i.tenant_provisioning_id
+		       AND s.plan_id = i.plan_id AND s.plan_version = i.plan_version AND s.plan_digest = i.plan_digest)`,
+		id, authority.PlanID, authority.PlanVersion, authority.PlanDigest)
+	return err
+}
+
 // LatestForTenant is the most recently submitted operation of the tenant, which
 // is the one readiness waits on.
 func (l PostgresLedger) LatestForTenant(ctx context.Context, tenantID string) (Submission, bool, error) {

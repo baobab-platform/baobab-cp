@@ -178,6 +178,10 @@ func (l *ledger) RecordIntent(_ context.Context, in Intent) (Intent, error) {
 	l.intents[k] = in
 	return in, nil
 }
+func (l *ledger) DiscardIntent(_ context.Context, id string, a Authority) error {
+	delete(l.intents, l.intentKey(id, a))
+	return nil
+}
 func (l *ledger) Submitted(_ context.Context, sub Submission, st State) error {
 	if err := l.failSubmitted; err != nil {
 		l.failSubmitted = nil
