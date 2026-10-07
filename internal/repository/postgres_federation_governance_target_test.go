@@ -178,6 +178,10 @@ func TestFederationGovernanceTargetRegistrationRequiresCurrentTopologyAndScope(t
 		t.Fatalf("registration = %#v", got)
 	}
 
+	t.Run("CP-owned mapping on distinct authority instance", func(t *testing.T) {
+		verifyCPMappingTarget(t, repo, admin, query, now)
+	})
+
 	for name, mutate := range map[string]func(*FederationGovernanceTargetQuery){
 		"wrong organisation": func(q *FederationGovernanceTargetQuery) { q.OrganisationID = domain.NewUUIDv7() },
 		"wrong estate":       func(q *FederationGovernanceTargetQuery) { q.DigitalEstateID = "estate_other" },
@@ -224,5 +228,91 @@ func TestFederationGovernanceTargetRegistrationRequiresCurrentTopologyAndScope(t
 	}
 	if _, err := repo.ReadFederationGovernanceTargetRegistration(ctx, query, now); !errors.Is(err, ErrFederationGovernanceTargetNotFound) {
 		t.Fatalf("manual-import target accepted: %v", err)
+	}
+}
+
+func verifyCPMappingTarget(t *testing.T, repo *PostgresRepository, db *pgxpool.Pool, base FederationGovernanceTargetQuery, now time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	var engine, instance, key string
+	if err := db.QueryRow(ctx, `INSERT INTO topology.engine(code,name) VALUES ('baobab-cp','Control Plane') ON CONFLICT(code) DO UPDATE SET code=EXCLUDED.code RETURNING engine_id::text`).Scan(&engine); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(ctx, `INSERT INTO topology.engine_instance(engine_id,region,environment,status) VALUES ($1::uuid,'af-south-1','staging','ACTIVE') RETURNING engine_instance_id::text,engine_instance_key`, engine).Scan(&instance, &key); err != nil {
+		t.Fatal(err)
+	}
+	p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "human", Status: "ACTIVE"}
+	e := domain.ExternalIdentity{ID: domain.NewExternalIdentityID(), PrincipalID: p.ID, Issuer: "https://mapping-" + domain.NewUUIDv7() + ".example", Subject: "exact-subject", Status: "ACTIVE"}
+	ref := domain.NewExternalReferenceID()
+	t.Cleanup(func() {
+		db.Exec(ctx, `DELETE FROM mapping.external_reference WHERE external_reference_id=$1`, ref)
+		db.Exec(ctx, `DELETE FROM identity.external_identity WHERE external_identity_id=$1::uuid`, e.ID)
+		db.Exec(ctx, `DELETE FROM identity.principal WHERE principal_id=$1::uuid`, p.ID)
+		db.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_instance_id=$1::uuid`, instance)
+	})
+	if err := repo.CreateIdentity(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.LinkExternalIdentity(ctx, e); err != nil {
+		t.Fatal(err)
+	}
+	digest := FederationIdentityDigest(FederationIdentity{Principal: p, ExternalIdentity: e})
+	if _, err := db.Exec(ctx, `INSERT INTO mapping.external_reference(external_reference_id,system_namespace,engine_id,engine_instance_id,environment,native_entity_type,native_id,source_authority,fingerprint,status,first_seen_at,last_verified_at) VALUES ($1,'baobab_cp','baobab-cp',$2,'staging','canonical_identity_mapping',$3,'reconciliation',$4,'active',$5,$5)`, ref, key, e.ID, digest, now); err != nil {
+		t.Fatal(err)
+	}
+	q := base
+	q.ReferenceID, q.Kind, q.SystemNamespace, q.EngineCode, q.NativeEntityType = ref, "canonical_identity_mapping", "baobab_cp", "baobab-cp", "canonical_identity_mapping"
+	q.Issuer, q.Subject, q.PrincipalID, q.ExternalIdentityID = e.Issuer, e.Subject, p.ID, e.ID
+	if key == q.EngineInstanceID {
+		t.Fatal("fixture must use distinct CP and IAM instances")
+	}
+	if got, err := repo.ReadFederationGovernanceTargetRegistration(ctx, q, now); err != nil || got.Digest != digest || got.TenantID == "" {
+		t.Fatal(got, err)
+	}
+	for name, mutate := range map[string]func(*FederationGovernanceTargetQuery){
+		"issuer":            func(q *FederationGovernanceTargetQuery) { q.Issuer = "https://other.example" },
+		"subject":           func(q *FederationGovernanceTargetQuery) { q.Subject = "other" },
+		"principal":         func(q *FederationGovernanceTargetQuery) { q.PrincipalID = domain.NewPrincipalID() },
+		"external identity": func(q *FederationGovernanceTargetQuery) { q.ExternalIdentityID = domain.NewExternalIdentityID() },
+		"reference":         func(q *FederationGovernanceTargetQuery) { q.ReferenceID = domain.NewExternalReferenceID() },
+		"tenant scope":      func(q *FederationGovernanceTargetQuery) { q.OrganisationID = domain.NewUUIDv7() },
+		"provider instance": func(q *FederationGovernanceTargetQuery) { q.EngineInstanceID = key },
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := q
+			mutate(&bad)
+			if _, err := repo.ReadFederationGovernanceTargetRegistration(ctx, bad, now); !errors.Is(err, ErrFederationGovernanceTargetNotFound) {
+				t.Fatal("substitution accepted", err)
+			}
+		})
+	}
+	for _, change := range []struct {
+		sql         string
+		args        []any
+		restore     string
+		restoreArgs []any
+	}{
+		{`UPDATE mapping.external_reference SET status='revoked' WHERE external_reference_id=$1`, []any{ref}, `UPDATE mapping.external_reference SET status='active' WHERE external_reference_id=$1`, []any{ref}},
+		{`UPDATE mapping.external_reference SET fingerprint=$2 WHERE external_reference_id=$1`, []any{ref, "sha256:" + strings.Repeat("b", 64)}, `UPDATE mapping.external_reference SET fingerprint=$2 WHERE external_reference_id=$1`, []any{ref, digest}},
+		{`UPDATE mapping.external_reference SET last_verified_at=$2 WHERE external_reference_id=$1`, []any{ref, now.Add(-5 * time.Minute)}, `UPDATE mapping.external_reference SET last_verified_at=$2 WHERE external_reference_id=$1`, []any{ref, now}},
+		{`UPDATE identity.external_identity SET status='REVOKED' WHERE external_identity_id=$1::uuid`, []any{e.ID}, `UPDATE identity.external_identity SET status='ACTIVE' WHERE external_identity_id=$1::uuid`, []any{e.ID}},
+		{`UPDATE identity.principal SET status='SUSPENDED' WHERE principal_id=$1::uuid`, []any{p.ID}, `UPDATE identity.principal SET status='ACTIVE' WHERE principal_id=$1::uuid`, []any{p.ID}},
+		{`UPDATE topology.engine_instance SET status='RETIRED' WHERE engine_instance_id=$1::uuid`, []any{instance}, `UPDATE topology.engine_instance SET status='ACTIVE' WHERE engine_instance_id=$1::uuid`, []any{instance}},
+	} {
+		if _, err := db.Exec(ctx, change.sql, change.args...); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.ReadFederationGovernanceTargetRegistration(ctx, q, now); !errors.Is(err, ErrFederationGovernanceTargetNotFound) {
+			t.Fatal("stale authority accepted", err)
+		}
+		if _, err := db.Exec(ctx, change.restore, change.restoreArgs...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM mapping.external_reference WHERE external_reference_id=$1`, ref); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ReadFederationGovernanceTargetRegistration(ctx, q, now); !errors.Is(err, ErrFederationGovernanceTargetNotFound) {
+		t.Fatal("deleted mapping accepted", err)
 	}
 }

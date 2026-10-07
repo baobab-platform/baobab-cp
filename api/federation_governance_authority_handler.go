@@ -171,6 +171,8 @@ func (h federationAuthorityHandler) targetRegistration(w http.ResponseWriter, r 
 		OrganisationID:   target.Scope.OrganisationID,
 		DigitalEstateID:  target.Scope.EstateID,
 		Environment:      h.api.environment,
+		Issuer:           target.Issuer, Subject: target.Subject,
+		PrincipalID: target.PrincipalID, ExternalIdentityID: target.ExternalIdentityID,
 	}
 	registration, err := h.targets.ReadFederationGovernanceTargetRegistration(r.Context(), query, time.Now().UTC())
 	switch {
@@ -282,6 +284,8 @@ func (h federationAuthorityHandler) approvalAuthority(w http.ResponseWriter, r *
 		OrganisationID:   req.Target.Scope.OrganisationID,
 		DigitalEstateID:  req.Target.Scope.EstateID,
 		Environment:      h.api.environment,
+		Issuer:           req.Target.Issuer, Subject: req.Target.Subject,
+		PrincipalID: req.Target.PrincipalID, ExternalIdentityID: req.Target.ExternalIdentityID,
 	}
 	registration, err := h.targets.ReadFederationGovernanceTargetRegistration(r.Context(), query, now)
 	switch {

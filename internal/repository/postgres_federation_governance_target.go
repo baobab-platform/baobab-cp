@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -27,6 +28,16 @@ func (r *PostgresRepository) ReadFederationGovernanceTargetRegistration(
 		return out, ErrFederationGovernanceTargetNotFound
 	}
 	now = now.UTC()
+	mappingDigest := ""
+	if q.Kind == "canonical_identity_mapping" {
+		if q.Issuer == "" || q.Subject == "" || q.PrincipalID == "" || q.ExternalIdentityID == "" {
+			return out, ErrFederationGovernanceTargetNotFound
+		}
+		mappingDigest = FederationIdentityDigest(FederationIdentity{
+			Principal:        domain.Principal{ID: q.PrincipalID},
+			ExternalIdentity: domain.ExternalIdentity{ID: q.ExternalIdentityID, Issuer: q.Issuer, Subject: q.Subject},
+		})
+	}
 
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly, IsoLevel: pgx.RepeatableRead})
 	if err != nil {
@@ -39,7 +50,7 @@ func (r *PostgresRepository) ReadFederationGovernanceTargetRegistration(
 		FROM mapping.external_reference ref
 		JOIN topology.engine_instance ref_instance
 		  ON ref_instance.engine_instance_key = ref.engine_instance_id
-		 AND ref_instance.engine_instance_key = $6
+		 AND ($4 = 'canonical_identity_mapping' OR ref_instance.engine_instance_key = $6)
 		 AND ref_instance.environment = $9
 		 AND UPPER(ref_instance.status) = 'ACTIVE'
 		JOIN topology.engine ref_engine
@@ -86,6 +97,22 @@ func (r *PostgresRepository) ReadFederationGovernanceTargetRegistration(
 		  AND ref.status = 'active'
 		  AND ref.source_authority <> 'manual-import'
 		  AND ref.fingerprint ~ '^sha256:[0-9a-f]{64}$'
+		  AND ($4 <> 'canonical_identity_mapping' OR (
+		       ref.fingerprint = $15
+		       AND ref.source_authority IN ('engine','reconciliation')
+		       AND ref.last_verified_at <= $10
+		       AND ref.last_verified_at > $10 - INTERVAL '5 minutes'
+		       AND EXISTS (
+		         SELECT 1 FROM identity.external_identity e
+		         JOIN identity.principal p ON p.principal_id = e.principal_id
+		         WHERE e.external_identity_id::text = ref.native_id
+		           AND e.external_identity_id::text = $14
+		           AND e.principal_id::text = $13
+		           AND e.issuer = $11 AND e.subject = $12
+		           AND e.status = 'ACTIVE' AND p.status = 'ACTIVE'
+		           AND p.actor_type = 'human'
+		       )
+		  ))
 		  AND scope.organisation_id = $7
 		  AND scope.digital_estate_id = $8
 		  AND (scope.environment IS NULL OR scope.environment = $9)
@@ -100,6 +127,7 @@ func (r *PostgresRepository) ReadFederationGovernanceTargetRegistration(
 		q.DigitalEstateID,
 		q.Environment,
 		now,
+		q.Issuer, q.Subject, q.PrincipalID, q.ExternalIdentityID, mappingDigest,
 	).Scan(&out.Digest, &out.ReferenceID, &out.Environment, &out.TenantID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return FederationGovernanceTargetRegistration{}, ErrFederationGovernanceTargetNotFound

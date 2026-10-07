@@ -30,10 +30,12 @@ type governanceTargetFake struct {
 	err          error
 	calls        int
 	mutate       bool
+	query        repository.FederationGovernanceTargetQuery
 }
 
-func (f *governanceTargetFake) ReadFederationGovernanceTargetRegistration(context.Context, repository.FederationGovernanceTargetQuery, time.Time) (repository.FederationGovernanceTargetRegistration, error) {
+func (f *governanceTargetFake) ReadFederationGovernanceTargetRegistration(_ context.Context, q repository.FederationGovernanceTargetQuery, _ time.Time) (repository.FederationGovernanceTargetRegistration, error) {
 	f.calls++
+	f.query = q
 	if f.err != nil {
 		return repository.FederationGovernanceTargetRegistration{}, f.err
 	}
@@ -91,7 +93,7 @@ func TestFederationApprovalAuthorityRequiresIndependentHumanAuthority(t *testing
 	human := auth.Principal{
 		Issuer: testRealm, Subject: "alice", ActorType: "human", TokenID: "human-token",
 		ExpiresAt: now.Add(10 * time.Minute),
-		Scopes: map[string]struct{}{"federation-governance:manage": {}},
+		Scopes:    map[string]struct{}{"federation-governance:manage": {}},
 		Assurance: auth.Assurance{ACR: "2", AuthenticatedAt: now},
 	}
 	orgID := domain.NewPrincipalID()
@@ -105,14 +107,14 @@ func TestFederationApprovalAuthorityRequiresIndependentHumanAuthority(t *testing
 	grant := administration.Grant{
 		GrantID: "agr_fedpropose", PrincipalID: humanIdentity.ID,
 		Permission: "security.federation.propose",
-		Scope: administration.Scope{Level: administration.LevelDigitalEstate, DigitalEstateID: estateID, Environment: "staging"},
-		GrantType: administration.TypeTimeBound, Source: administration.SourceDirect,
+		Scope:      administration.Scope{Level: administration.LevelDigitalEstate, DigitalEstateID: estateID, Environment: "staging"},
+		GrantType:  administration.TypeTimeBound, Source: administration.SourceDirect,
 		RiskClass: administration.RiskHigh, ValidFrom: now.Add(-time.Minute), ValidUntil: &grantUntil,
 		Status: administration.StatusActive, GrantedBy: domain.NewPrincipalID(), Reason: "test",
 		CreatedAt: now.Add(-time.Minute), Version: 1,
 	}
 	grants := governanceGrantReader{
-		grants: map[string][]administration.Grant{humanIdentity.ID: {grant}},
+		grants:    map[string][]administration.Grant{humanIdentity.ID: {grant}},
 		relations: administration.Relations{TenantOrganisations: map[string][]string{tenantID: {orgID}}},
 	}
 	subjects := governanceSubjectVerifiers{verifier: tokenVerifier{"human": human, "service": workload}}
@@ -163,7 +165,7 @@ func TestFederationApprovalAuthorityRequiresIndependentHumanAuthority(t *testing
 			Store: &fakeStore{}, WorkloadVerifier: tokenVerifier{"caller": workload},
 			WorkloadRegistry: privateWorkloadRegistry(true), Identities: identities,
 			AdministrativeGrants: grants, Environment: "staging",
-			SubjectVerifiers: governanceSubjectVerifiers{verifier: tokenVerifier{"human": noScope}},
+			SubjectVerifiers:            governanceSubjectVerifiers{verifier: tokenVerifier{"human": noScope}},
 			FederationGovernanceTargets: target,
 		})
 		req := httptest.NewRequest(http.MethodPost, "/internal/federation/v1/approval-authority", strings.NewReader(body("human")))
@@ -213,7 +215,6 @@ func TestFederationApprovalAuthorityRequiresIndependentHumanAuthority(t *testing
 	})
 }
 
-
 func TestFederationTargetRegistrationAuthority(t *testing.T) {
 	ctx := context.Background()
 	identities := repository.NewInMemoryRepository()
@@ -258,6 +259,21 @@ func TestFederationTargetRegistrationAuthority(t *testing.T) {
 		}
 		if out.Digest != digest || target.calls != 2 {
 			t.Fatalf("response=%#v calls=%d", out, target.calls)
+		}
+	})
+
+	t.Run("forwards exact CP mapping evidence to owner", func(t *testing.T) {
+		original := body
+		defer func() { body = original }()
+		body = strings.Replace(body, `"kind":"federation_configuration"`, `"kind":"canonical_identity_mapping"`, 1)
+		body = strings.TrimSuffix(body, "}") + `,"issuer":"https://upstream.example","subject":"exact-human","principal_id":"33333333-3333-4333-8333-333333333333","external_identity_id":"44444444-4444-4444-8444-444444444444"}`
+		local := &governanceTargetFake{registration: target.registration}
+		if w := call(local); w.Code != http.StatusOK {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		q := local.query
+		if q.EngineCode != "baobab-cp" || q.SystemNamespace != "baobab_cp" || q.Issuer != "https://upstream.example" || q.Subject != "exact-human" || q.PrincipalID != "33333333-3333-4333-8333-333333333333" || q.ExternalIdentityID != "44444444-4444-4444-8444-444444444444" {
+			t.Fatal(q)
 		}
 	})
 
@@ -320,7 +336,7 @@ func TestFederationApprovalAuthorityRejectsSuspendedCanonicalWorkload(t *testing
 	human := auth.Principal{
 		Issuer: testRealm, Subject: "alice", ActorType: "human", TokenID: "human-token",
 		ExpiresAt: now.Add(10 * time.Minute),
-		Scopes: map[string]struct{}{"federation-governance:manage": {}},
+		Scopes:    map[string]struct{}{"federation-governance:manage": {}},
 		Assurance: auth.Assurance{ACR: "2", AuthenticatedAt: now},
 	}
 	target := &governanceTargetFake{registration: repository.FederationGovernanceTargetRegistration{
@@ -332,7 +348,7 @@ func TestFederationApprovalAuthorityRejectsSuspendedCanonicalWorkload(t *testing
 		Store: &fakeStore{}, WorkloadVerifier: tokenVerifier{"caller": workload},
 		WorkloadRegistry: privateWorkloadRegistry(true), Identities: identities,
 		AdministrativeGrants: governanceGrantReader{}, Environment: "staging",
-		SubjectVerifiers: governanceSubjectVerifiers{verifier: tokenVerifier{"human": human}},
+		SubjectVerifiers:            governanceSubjectVerifiers{verifier: tokenVerifier{"human": human}},
 		FederationGovernanceTargets: target,
 	})
 	body := `{"action":"PROPOSE","target":{"id":"ref_governance","kind":"federation_configuration","trust_id":"11111111-1111-4111-8111-111111111111","snapshot_id":"snap_1","trust_revision":1,"provider_id":"provider_aaaaaaaa","engine_instance_id":"ei_aaaaaaaa","scope":{"organisation_id":"11111111-1111-4111-8111-111111111111","estate_id":"estate_zuribeans"}},"subject_token":"human"}`
@@ -427,13 +443,13 @@ func TestFederationApprovalAuthorityCriticalDecisionRequiresPhishingResistantSte
 	}}
 	grant := administration.Grant{
 		GrantID: "agr_feddecide", PrincipalID: humanIdentity.ID, Permission: "security.federation.decide",
-		Scope: administration.Scope{Level: administration.LevelDigitalEstate, DigitalEstateID: estateID, Environment: "staging"},
+		Scope:     administration.Scope{Level: administration.LevelDigitalEstate, DigitalEstateID: estateID, Environment: "staging"},
 		GrantType: administration.TypeStanding, Source: administration.SourceDirect, RiskClass: administration.RiskCritical,
 		ValidFrom: now.Add(-time.Minute), Status: administration.StatusActive, GrantedBy: domain.NewPrincipalID(),
 		Reason: "test", CreatedAt: now.Add(-time.Minute), Version: 1,
 	}
 	grants := governanceGrantReader{
-		grants: map[string][]administration.Grant{humanIdentity.ID: {grant}},
+		grants:    map[string][]administration.Grant{humanIdentity.ID: {grant}},
 		relations: administration.Relations{TenantOrganisations: map[string][]string{tenantID: {orgID}}},
 	}
 	payload := `{"action":"DECIDE","target":{"id":"ref_governance","kind":"federation_configuration","trust_id":"11111111-1111-4111-8111-111111111111","snapshot_id":"snap_1","trust_revision":1,"provider_id":"provider_aaaaaaaa","engine_instance_id":"ei_aaaaaaaa","scope":{"organisation_id":"` + orgID + `","estate_id":"estate_zuribeans"}},"subject_token":"human"}`
@@ -452,7 +468,7 @@ func TestFederationApprovalAuthorityCriticalDecisionRequiresPhishingResistantSte
 				Store: &fakeStore{}, WorkloadVerifier: tokenVerifier{"caller": service},
 				WorkloadRegistry: privateWorkloadRegistry(true), Identities: identities,
 				AdministrativeGrants: grants, Environment: "staging",
-				SubjectVerifiers: governanceSubjectVerifiers{verifier: tokenVerifier{"human": human}},
+				SubjectVerifiers:            governanceSubjectVerifiers{verifier: tokenVerifier{"human": human}},
 				FederationGovernanceTargets: target,
 			})
 			req := httptest.NewRequest(http.MethodPost, "/internal/federation/v1/approval-authority", strings.NewReader(payload))
@@ -486,11 +502,11 @@ func TestFederationApprovalAuthorityVerifierFailureIsUnavailable(t *testing.T) {
 			Issuer: testRealm, Subject: "iam", ActorType: "workload", ClientID: "baobab-iam-staging",
 			TokenID: "svc", Scopes: map[string]struct{}{"federation-authority:read": {}},
 		}},
-		WorkloadRegistry: privateWorkloadRegistry(true),
-		Identities: identities,
+		WorkloadRegistry:     privateWorkloadRegistry(true),
+		Identities:           identities,
 		AdministrativeGrants: governanceGrantReader{},
-		Environment: "staging",
-		SubjectVerifiers: governanceSubjectVerifiers{err: errors.New("discovery unavailable")},
+		Environment:          "staging",
+		SubjectVerifiers:     governanceSubjectVerifiers{err: errors.New("discovery unavailable")},
 		FederationGovernanceTargets: &governanceTargetFake{registration: repository.FederationGovernanceTargetRegistration{
 			Digest: "sha256:" + strings.Repeat("a", 64), ReferenceID: "ref_governance", Environment: "staging", TenantID: "tn_governance",
 		}},
