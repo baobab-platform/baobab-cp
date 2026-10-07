@@ -21,7 +21,7 @@ func TestEmbeddedRegistrationsFollowTheBundleIndex(t *testing.T) {
 	for _, rec := range records {
 		got = append(got, rec.Repository+"/"+rec.Provider.ProviderKey)
 	}
-	want := "baobab-payments/baobab-payments.sandbox,baobab-subscriptions/baobab-subscriptions.temporary-billing"
+	want := "baobab-pulse/baobab-pulse.core,baobab-payments/baobab-payments.sandbox,baobab-subscriptions/baobab-subscriptions.temporary-billing"
 	if strings.Join(got, ",") != want {
 		t.Fatalf("registrations = %v, want %s", got, want)
 	}
