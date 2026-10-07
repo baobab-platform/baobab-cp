@@ -108,6 +108,55 @@ func (l PostgresLedger) ForPlan(ctx context.Context, tenantProvisioningID string
 	return sub, err == nil, err
 }
 
+// Intent implements Ledger.
+func (l PostgresLedger) Intent(ctx context.Context, tenantProvisioningID string, authority Authority) (Intent, bool, error) {
+	id, err := repository.ProvisioningUUID(tenantProvisioningID)
+	if err != nil {
+		return Intent{}, false, err
+	}
+	var refs []byte
+	in := Intent{TenantProvisioningID: tenantProvisioningID, Authority: authority}
+	err = l.DB.QueryRow(ctx, `SELECT finance_baselines, functional_currencies FROM provisioning.erp_submission_intent
+		WHERE tenant_provisioning_id = $1::uuid AND plan_id = $2 AND plan_version = $3 AND plan_digest = $4`,
+		id, authority.PlanID, authority.PlanVersion, authority.PlanDigest).Scan(&refs, &in.FunctionalCurrencies)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Intent{}, false, nil
+	}
+	if err != nil {
+		return Intent{}, false, err
+	}
+	if err := json.Unmarshal(refs, &in.FinanceBaselines); err != nil {
+		return Intent{}, false, fmt.Errorf("recorded finance baselines: %w", err)
+	}
+	return in, true, nil
+}
+
+// RecordIntent implements Ledger: the first writer for the approved plan wins and every caller gets the recorded intent.
+func (l PostgresLedger) RecordIntent(ctx context.Context, in Intent) (Intent, error) {
+	id, err := repository.ProvisioningUUID(in.TenantProvisioningID)
+	if err != nil {
+		return Intent{}, err
+	}
+	refs, err := json.Marshal(canonicalReferences(in.FinanceBaselines))
+	if err != nil {
+		return Intent{}, err
+	}
+	if _, err := l.DB.Exec(ctx, `INSERT INTO provisioning.erp_submission_intent (tenant_provisioning_id, plan_id, plan_version,
+			plan_digest, finance_baselines, functional_currencies) VALUES ($1::uuid, $2, $3, $4, $5::jsonb, $6)
+		ON CONFLICT DO NOTHING`, id, in.Authority.PlanID, in.Authority.PlanVersion, in.Authority.PlanDigest, refs,
+		uniqueStrings(in.FunctionalCurrencies)); err != nil {
+		return Intent{}, err
+	}
+	got, found, err := l.Intent(ctx, in.TenantProvisioningID, in.Authority)
+	if err != nil {
+		return Intent{}, err
+	}
+	if !found {
+		return Intent{}, errors.New("ERP submission intent was not recorded")
+	}
+	return got, nil
+}
+
 // LatestForTenant is the most recently submitted operation of the tenant, which
 // is the one readiness waits on.
 func (l PostgresLedger) LatestForTenant(ctx context.Context, tenantID string) (Submission, bool, error) {

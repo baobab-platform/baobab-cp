@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -234,5 +235,36 @@ func TestARetryAfterTheBaselineMovedOnContinuesTheRecordedOperation(t *testing.T
 	}
 	if again.OperationID != first.OperationID || len(r.erp.posts) != 1 || len(r.erp.baselineCalls) != calls {
 		t.Fatalf("the retry must continue %s without resolving or posting again (posts=%d resolutions=%d)", first.OperationID, len(r.erp.posts), len(r.erp.baselineCalls)-calls)
+	}
+}
+
+// The window the retry lookup alone cannot close: ERP accepted the request and the Control Plane failed before recording the
+// operation. The intent was fixed before the POST, so the retry sends the same references under the same key even though
+// Finance has moved on, and ERP returns its prior operation.
+func TestARetryAfterACrashBeforeTheOperationWasRecordedSendsTheSameRequest(t *testing.T) {
+	r := newRig(t)
+	r.led.failSubmitted = errors.New("connection lost")
+	if _, err := r.w.Submit(context.Background(), provisionID); err == nil {
+		t.Fatal("the failed ledger write must surface")
+	}
+	if len(r.erp.posts) != 1 || len(r.led.intents) != 1 {
+		t.Fatalf("the request was sent once and its intent recorded first (posts=%d intents=%d)", len(r.erp.posts), len(r.led.intents))
+	}
+	moved := baselineFor("ZURIBEANS-ZA", "ZAR")
+	moved["reference"].(map[string]any)["version"] = 4
+	r.erp.baselines = map[string]map[string]any{"ZURIBEANS-ZA": moved}
+	calls := len(r.erp.baselineCalls)
+	if _, err := r.w.Submit(context.Background(), provisionID); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.erp.baselineCalls) != calls {
+		t.Fatal("a recorded intent is not resolved again")
+	}
+	if len(r.erp.posts) != 2 || r.erp.posts[0].Get("Idempotency-Key") != r.erp.posts[1].Get("Idempotency-Key") {
+		t.Fatal("the retry must reuse the idempotency key so ERP returns its prior operation")
+	}
+	if !reflect.DeepEqual(r.erp.bodies[0]["finance_baselines"], r.erp.bodies[1]["finance_baselines"]) ||
+		!reflect.DeepEqual(r.erp.bodies[0]["functional_currencies"], r.erp.bodies[1]["functional_currencies"]) {
+		t.Fatal("the retry must carry exactly the references of the first attempt")
 	}
 }

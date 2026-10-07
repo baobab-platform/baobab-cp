@@ -74,6 +74,15 @@ type Submission struct {
 	LastState        string
 }
 
+// Intent is what a provisioning request for an approved plan will carry from the Finance side, fixed before the request is
+// first sent. Finance may supersede a baseline at any time; the intent is why a retry still sends the same request.
+type Intent struct {
+	TenantProvisioningID string
+	Authority            Authority
+	FinanceBaselines     []FinanceBaselineReference
+	FunctionalCurrencies []string
+}
+
 // Ledger persists submissions and the ERP progress recorded against them.
 type Ledger interface {
 	// Submitted records the operation ERP accepted for a provisioning. Recording
@@ -81,6 +90,11 @@ type Ledger interface {
 	Submitted(ctx context.Context, sub Submission, st State) error
 	// Lookup finds a submission by ERP operation id.
 	Lookup(ctx context.Context, operationID string) (Submission, bool, error)
+	// Intent returns the Finance baseline references recorded for the approved plan before its request was first sent.
+	Intent(ctx context.Context, tenantProvisioningID string, authority Authority) (Intent, bool, error)
+	// RecordIntent records the intent for the approved plan unless one exists, and returns the one that is recorded: the
+	// first writer wins, so concurrent or repeated attempts all send the same references under the same key.
+	RecordIntent(ctx context.Context, in Intent) (Intent, error)
 	// ForPlan finds the submission already recorded for an approved plan tuple of a provisioning, if any. One approved plan
 	// has at most one ERP operation, so a retry must continue that operation rather than request another.
 	ForPlan(ctx context.Context, tenantProvisioningID string, authority Authority) (Submission, bool, error)
@@ -130,11 +144,24 @@ func (w Worker) Submit(ctx context.Context, tenantProvisioningID string) (State,
 	// Finance owns the accounting facts. For every legal entity ERP names the baseline version in force and its functional
 	// currency, under the same provisioning context; both are taken verbatim and nothing here derives or defaults them. The
 	// provisioning command is where ERP independently proves the exact references are still usable, so they are not asked
-	// for a second time.
-	baselines, currencies, err := w.resolveBaselines(ctx, cx.ID, auth.LegalEntityIDs, tenantProvisioningID)
+	// for a second time. The answer is recorded as the plan's intent before anything is sent: a retry after a crash then
+	// sends the same references under the same key, even if Finance has moved on, and ERP returns its prior operation.
+	intent, found, err := w.Ledger.Intent(ctx, tenantProvisioningID, auth.Authority)
 	if err != nil {
 		return State{}, err
 	}
+	if !found {
+		refs, currencies, err := w.resolveBaselines(ctx, cx.ID, auth.LegalEntityIDs, tenantProvisioningID)
+		if err != nil {
+			return State{}, err
+		}
+		intent, err = w.Ledger.RecordIntent(ctx, Intent{TenantProvisioningID: tenantProvisioningID, Authority: auth.Authority,
+			FinanceBaselines: refs, FunctionalCurrencies: currencies})
+		if err != nil {
+			return State{}, fmt.Errorf("record ERP submission intent: %w", err)
+		}
+	}
+	baselines, currencies := intent.FinanceBaselines, intent.FunctionalCurrencies
 	req := Request{
 		TenantID: auth.TenantID, ContextID: cx.ID, Authority: auth.Authority,
 		LegalEntityIDs: auth.LegalEntityIDs, FinanceBaselines: baselines, RequestedCountries: auth.Countries, FunctionalCurrencies: currencies,
