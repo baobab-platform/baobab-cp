@@ -11,8 +11,6 @@ overrides:
   # in get-root-dirs. tinyglobby supports that API without the vulnerable
   # braces dependency (GHSA-vfj7-8cjw-p6xm). lint runs its integration fixture.
   '@next/eslint-plugin-next>fast-glob': npm:tinyglobby@0.2.17
-  # GHSA-68fv-2mgg-jv7q / CVE-2026-93749 (source-map-js < 1.2.2): some transitive ranges still pinned 1.2.1.
-  source-map-js: 1.2.2
 allowBuilds:
   # Its native resolver ships as prebuilt optional packages; the install
   # script is not needed.

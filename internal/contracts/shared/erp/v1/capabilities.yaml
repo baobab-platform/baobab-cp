@@ -36,3 +36,18 @@ capabilities:
     - invoice-outcome.schema.json
     - payment-outcome.schema.json
   data_classification: TENANT_CONFIDENTIAL
+- capability_key: inventory.availability.query
+  name: Query physical inventory availability
+  description: Query ERP-owned physical stock availability for one canonical SKU and ERP warehouse, excluding Trade reservations and returning no estimated figure when the ERP engine cannot be read.
+  domain: inventory
+  owner: baobab-erp
+  lifecycle: ACTIVE
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: inventory-availability-query.schema.json
+    response_schema: inventory-availability.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+    event_schemas:
+    - inventory-availability.schema.json
+  data_classification: TENANT_CONFIDENTIAL

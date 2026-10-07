@@ -50,6 +50,68 @@ type Context struct {
 	// default TTL.
 	ExpiresAt  *time.Time               `json:"expires_at,omitempty"`
 	Provenance map[string]ContextSource `json:"provenance"`
+	// AuthorityPurpose says what the context is authority for (Shared
+	// control-plane/v1 ContextAuthorityPurpose). The zero value is RUNTIME, the
+	// only purpose every pre-existing context and every context resolved through
+	// POST /v1/platform-context/resolve has. Like the rest of a context it is
+	// fixed at creation (ADR-BCP-004 section 71).
+	AuthorityPurpose ContextAuthorityPurpose `json:"authority_purpose,omitempty"`
+	// ProvisioningAuthority is the approved plan a TENANT_PROVISIONING context
+	// is bound to, and is present exactly for that purpose.
+	ProvisioningAuthority *ProvisioningAuthority `json:"provisioning_authority,omitempty"`
+}
+
+// ContextAuthorityPurpose is control-plane/v1 ContextAuthorityPurpose.
+type ContextAuthorityPurpose string
+
+const (
+	// ContextPurposeRuntime acts for an ACTIVE tenant.
+	ContextPurposeRuntime ContextAuthorityPurpose = "RUNTIME"
+	// ContextPurposeTenantProvisioning is the pre-activation provisioning
+	// authority: created only by the Control Plane's own provisioning execution,
+	// for the dedicated provisioner workload, bound to one approved plan, and never
+	// RUNTIME authority.
+	ContextPurposeTenantProvisioning ContextAuthorityPurpose = "TENANT_PROVISIONING"
+)
+
+// MaxProvisioningContextLifetime bounds a TENANT_PROVISIONING context
+// (control-plane/v1: at most 15 minutes).
+const MaxProvisioningContextLifetime = 15 * time.Minute
+
+// ProvisioningAuthority is control-plane/v1 ProvisioningContextAuthority: the
+// approved plan tuple (ADR-BCP-021 section 24: an approval binds plan id, version
+// and digest together).
+type ProvisioningAuthority struct {
+	TenantProvisioningID string `json:"tenant_provisioning_id"`
+	PlanID               string `json:"plan_id"`
+	PlanVersion          int    `json:"plan_version"`
+	PlanDigest           string `json:"plan_digest"`
+}
+
+// Purpose returns the context's purpose, RUNTIME when none was recorded.
+func (c Context) Purpose() ContextAuthorityPurpose {
+	if c.AuthorityPurpose == "" {
+		return ContextPurposeRuntime
+	}
+	return c.AuthorityPurpose
+}
+
+// IsRuntime reports whether the context may be redeemed as ordinary runtime
+// authority. A provisioning context never may.
+func (c Context) IsRuntime() bool { return c.Purpose() == ContextPurposeRuntime }
+
+func (a ProvisioningAuthority) validate() error {
+	switch {
+	case !strings.HasPrefix(a.TenantProvisioningID, "tp_") || len(a.TenantProvisioningID) < 6:
+		return errors.New("provisioning authority needs a tenant provisioning id")
+	case !strings.HasPrefix(a.PlanID, "plan_") || len(a.PlanID) < 8:
+		return errors.New("provisioning authority needs a plan id")
+	case a.PlanVersion < 1:
+		return errors.New("provisioning authority needs a plan version")
+	case !strings.HasPrefix(a.PlanDigest, "sha256:") || len(a.PlanDigest) != len("sha256:")+64:
+		return errors.New("provisioning authority needs a plan digest")
+	}
+	return nil
 }
 
 func (c Context) Validate() error {
@@ -66,6 +128,30 @@ func (c Context) Validate() error {
 		if field == "" || source.Source == "" || source.TrustLevel == "" || source.TrustLevel == TrustUntrusted {
 			return errors.New("context provenance must identify a trusted source")
 		}
+	}
+	switch c.Purpose() {
+	case ContextPurposeRuntime:
+		if c.ProvisioningAuthority != nil {
+			return errors.New("only a TENANT_PROVISIONING context carries a provisioning authority")
+		}
+	case ContextPurposeTenantProvisioning:
+		// Docs/architecture/context-authority-for-workloads.md section 13: bound to one approved plan, short, and
+		// carrying no business dimension, so it cannot be mistaken for the context of an operating tenant.
+		if c.ProvisioningAuthority == nil {
+			return errors.New("a TENANT_PROVISIONING context must carry the approved plan it is bound to")
+		}
+		if err := c.ProvisioningAuthority.validate(); err != nil {
+			return err
+		}
+		if c.ExpiresAt == nil || c.ExpiresAt.Sub(c.ResolvedAt) > MaxProvisioningContextLifetime {
+			return errors.New("a TENANT_PROVISIONING context must expire within 15 minutes")
+		}
+		if c.LegalEntityID != "" || c.OrganisationID != "" || c.BusinessUnitID != "" || c.DigitalEstateID != "" || c.DigitalPropertyID != "" ||
+			c.ChannelID != "" || c.MarketID != "" || c.Jurisdiction != "" || c.CountryCode != "" || c.CurrencyCode != "" {
+			return errors.New("a TENANT_PROVISIONING context carries no business dimension")
+		}
+	default:
+		return errors.New("unknown context authority purpose")
 	}
 	return nil
 }

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.baobab-platform.com/control-plane/v1/platform-context.schema.json",
   "title": "Platform context resolution",
-  "description": "POST /v1/platform-context/resolve resolves and persists the trusted PlatformContext a workload redeems by context_id in capability resolution (capability/v1 resolution.schema.json). POST /v1/platform-context/validate lets a resource server ask whether a stored context belongs to the actual caller it authenticated (context-authority-for-workloads.md). POST /v1/resolve is the deprecated composed resolution that predates the context_id flow (ADR-BCP-004 section 52, ADR-BCP-016, ADR-BCP-018 ORG-10, ADR-BCP-024).",
+  "description": "POST /v1/platform-context/resolve resolves and persists the trusted PlatformContext (always authority_purpose RUNTIME: no request can ask for another purpose) a workload redeems by context_id in capability resolution (capability/v1 resolution.schema.json). POST /v1/platform-context/validate lets a resource server ask whether a stored context belongs to the actual caller it authenticated (context-authority-for-workloads.md). POST /v1/resolve is the deprecated composed resolution that predates the context_id flow (ADR-BCP-004 section 52, ADR-BCP-016, ADR-BCP-018 ORG-10, ADR-BCP-024).",
   "$defs": {
     "organisationKind": {
       "type": "string",
@@ -129,19 +129,41 @@
         }
       }
     },
+    "ContextAuthorityPurpose": {
+      "type": "string",
+      "enum": ["RUNTIME", "TENANT_PROVISIONING"],
+      "description": "What a stored context is authority for. RUNTIME is the context of POST /v1/platform-context/resolve: it acts for a tenant that is ACTIVE. TENANT_PROVISIONING is created only by the Control Plane's own provisioning execution, never through any HTTP operation, for the dedicated provisioner workload (workload-registry context_purposes), and is authority only for the operations one approved provisioning plan authorises while the tenant is not yet ACTIVE. It is not redeemable as RUNTIME authority: capability resolution, batch resolution and mapping resolution answer a TENANT_PROVISIONING context CONTEXT_NOT_FOUND (404), indistinguishable from an unknown one."
+    },
+    "ProvisioningContextAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant_provisioning_id", "plan_id", "plan_version", "plan_digest"],
+      "description": "The exact approved plan a TENANT_PROVISIONING context is bound to (ADR-BCP-021: an approval binds plan id, version and digest together). It is the same tuple an ERP provisioning request names in control_plane_authority, so a resource server compares them member by member.",
+      "properties": {
+        "tenant_provisioning_id": { "$ref": "domain.schema.json#/$defs/tenantProvisioningId" },
+        "plan_id": { "$ref": "domain.schema.json#/$defs/provisioningPlanId" },
+        "plan_version": { "type": "integer", "minimum": 1 },
+        "plan_digest": { "$ref": "domain.schema.json#/$defs/planDigest" }
+      }
+    },
     "PlatformContextValidation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["context_id", "tenant_id", "resolved_at", "expires_at"],
-      "description": "Only the trusted facts a resource server needs. expires_at is required because a context that crosses a service boundary as authority must be bounded. legal_entity_id is deliberately absent: Context.LegalEntityID is the tenant's single registered legal entity, a degenerate derivation rather than an authoritative selection, and it is not added for a consumer's convenience.",
+      "required": ["context_id", "tenant_id", "resolved_at", "expires_at", "authority_purpose"],
+      "description": "Only the trusted facts a resource server needs. expires_at is required because a context that crosses a service boundary as authority must be bounded; a TENANT_PROVISIONING context is bounded to at most 15 minutes (PT15M). authority_purpose is always stated, never implied: RUNTIME for a context that acts for an ACTIVE tenant, TENANT_PROVISIONING for the pre-activation provisioning authority, which carries provisioning_authority and must not be accepted by a resource server for anything the approved plan does not authorise. legal_entity_id is deliberately absent: Context.LegalEntityID is the tenant's single registered legal entity, a degenerate derivation rather than an authoritative selection, and it is not added for a consumer's convenience.",
       "properties": {
         "context_id": { "$ref": "domain.schema.json#/$defs/uuid" },
         "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
         "resolved_at": { "type": "string", "format": "date-time" },
         "expires_at": { "type": "string", "format": "date-time" },
         "market_id": { "$ref": "market.schema.json#/$defs/marketId" },
-        "organisation_id": { "$ref": "domain.schema.json#/$defs/canonicalEntityId" }
-      }
+        "organisation_id": { "$ref": "domain.schema.json#/$defs/canonicalEntityId" },
+        "authority_purpose": { "$ref": "#/$defs/ContextAuthorityPurpose" },
+        "provisioning_authority": { "$ref": "#/$defs/ProvisioningContextAuthority" }
+      },
+      "if": { "properties": { "authority_purpose": { "const": "TENANT_PROVISIONING" } }, "required": ["authority_purpose"] },
+      "then": { "required": ["provisioning_authority"] },
+      "else": { "not": { "required": ["provisioning_authority"] } }
     },
       "ComposedResolutionRequest": {
       "type": "object",

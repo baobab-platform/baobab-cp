@@ -94,7 +94,7 @@ func (w Worker) Submit(ctx context.Context, tenantProvisioningID string) (State,
 		return State{}, fmt.Errorf("%w: the authority names another provisioning", ErrNotAuthorised)
 	}
 	// The Context's tenant is the provisioning's tenant, never a caller input.
-	cx, err := w.Context.Issue(ctx, auth.TenantID, tenantProvisioningID)
+	cx, err := w.Context.Issue(ctx, auth.TenantID, auth.Authority, tenantProvisioningID)
 	if err != nil {
 		return State{}, err
 	}

@@ -2313,23 +2313,29 @@ func (r *PostgresRepository) CreateContext(ctx context.Context, resolved domain.
 	if err != nil {
 		return fmt.Errorf("marshal context provenance: %w", err)
 	}
+	var authority []byte
+	if resolved.ProvisioningAuthority != nil {
+		if authority, err = json.Marshal(resolved.ProvisioningAuthority); err != nil {
+			return fmt.Errorf("marshal context provisioning authority: %w", err)
+		}
+	}
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO context.resolved_context(
 			context_id, principal_id, tenant_id, legal_entity_id, organisation_id, business_unit_id,
 			digital_estate_id, digital_property_id, channel_id, market_id, jurisdiction,
 			country_code, currency_code, locale, deployment_region, environment, isolation_profile_id,
-			correlation_id, resolved_at, expires_at, provenance
+			correlation_id, resolved_at, expires_at, provenance, authority_purpose, provisioning_authority
 		)
 		VALUES (
 			$1::uuid, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''),
 			NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''),
 			NULLIF($12, ''), NULLIF($13, ''), NULLIF($14, ''), NULLIF($15, ''), NULLIF($16, ''), NULLIF($17, ''),
-			$18, $19, $20, $21
+			$18, $19, $20, $21, $22, $23
 		)`,
 		resolved.ID, resolved.PrincipalID, resolved.TenantID, resolved.LegalEntityID, resolved.OrganisationID, resolved.BusinessUnitID,
 		resolved.DigitalEstateID, resolved.DigitalPropertyID, resolved.ChannelID, resolved.MarketID, resolved.Jurisdiction,
 		resolved.CountryCode, resolved.CurrencyCode, resolved.Locale, resolved.DeploymentRegion, resolved.Environment, resolved.IsolationProfileID,
-		resolved.CorrelationID, resolved.ResolvedAt, resolved.ExpiresAt, provenance,
+		resolved.CorrelationID, resolved.ResolvedAt, resolved.ExpiresAt, provenance, string(resolved.Purpose()), authority,
 	)
 	return err
 }
@@ -2338,21 +2344,30 @@ const resolvedContextSelectColumns = `
 	context_id::text, principal_id, tenant_id, COALESCE(legal_entity_id, ''), COALESCE(organisation_id, ''), COALESCE(business_unit_id, ''),
 	COALESCE(digital_estate_id, ''), COALESCE(digital_property_id, ''), COALESCE(channel_id, ''), COALESCE(market_id, ''), COALESCE(jurisdiction, ''),
 	COALESCE(country_code, ''), COALESCE(currency_code, ''), COALESCE(locale, ''), COALESCE(deployment_region, ''), COALESCE(environment, ''), COALESCE(isolation_profile_id, ''),
-	correlation_id, resolved_at, expires_at, provenance`
+	correlation_id, resolved_at, expires_at, provenance, authority_purpose, provisioning_authority`
 
 func scanResolvedContext(row interface {
 	Scan(dest ...any) error
 }) (domain.Context, error) {
 	var c domain.Context
-	var provenance []byte
+	var provenance, authority []byte
+	var purpose string
 	err := row.Scan(
 		&c.ID, &c.PrincipalID, &c.TenantID, &c.LegalEntityID, &c.OrganisationID, &c.BusinessUnitID,
 		&c.DigitalEstateID, &c.DigitalPropertyID, &c.ChannelID, &c.MarketID, &c.Jurisdiction,
 		&c.CountryCode, &c.CurrencyCode, &c.Locale, &c.DeploymentRegion, &c.Environment, &c.IsolationProfileID,
-		&c.CorrelationID, &c.ResolvedAt, &c.ExpiresAt, &provenance,
+		&c.CorrelationID, &c.ResolvedAt, &c.ExpiresAt, &provenance, &purpose, &authority,
 	)
 	if err != nil {
 		return domain.Context{}, err
+	}
+	c.AuthorityPurpose = domain.ContextAuthorityPurpose(purpose)
+	if len(authority) > 0 {
+		var a domain.ProvisioningAuthority
+		if err := json.Unmarshal(authority, &a); err != nil {
+			return domain.Context{}, fmt.Errorf("unmarshal context provisioning authority: %w", err)
+		}
+		c.ProvisioningAuthority = &a
 	}
 	if len(provenance) > 0 {
 		if err := json.Unmarshal(provenance, &c.Provenance); err != nil {

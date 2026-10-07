@@ -89,6 +89,18 @@
 #                              workload grants nothing to another. ERP validates
 #                              baobab-erp and Pulse validates baobab-pulse; each
 #                              relationship is explicit on its own entry.
+#   context_purposes        -- optional. The Control Plane context authority
+#                              purposes (control-plane/v1 ContextAuthorityPurpose)
+#                              a context owned by this workload may carry.
+#                              Absent means none beyond the RUNTIME contexts the
+#                              workload resolves for itself. TENANT_PROVISIONING
+#                              is the pre-activation provisioning authority: it
+#                              is listed only by the dedicated provisioner
+#                              workload, which may hold no context:resolve and
+#                              no context:validate and must use a federated
+#                              workload token, so the identity that provisions a
+#                              not-yet-active tenant can never also act as a
+#                              runtime caller or a validator.
 #   rotation_owner          -- team/repository responsible for rotating
 #                              this workload's credential.
 #   status                  -- PROVISIONED | ACTIVE | SUSPENDED | REVOKED |
@@ -264,6 +276,7 @@ workloads:
     environment: production
     allowed_audiences: ["baobab-erp"]
     allowed_scopes: ["erp:provision"]
+    context_purposes: ["TENANT_PROVISIONING"]
     credential_type: federated_workload_token
     rotation_owner: baobab-platform/baobab-cp
     status: PROVISIONED

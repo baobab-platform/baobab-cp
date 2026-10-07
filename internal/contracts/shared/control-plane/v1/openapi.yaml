@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.33.1
+  version: 1.34.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -196,7 +196,8 @@ paths:
         to the principal that resolved it: the authenticated caller's canonical
         principal must equal the context's, and a context another principal
         resolved is indistinguishable from an unknown or expired one
-        (CONTEXT_NOT_FOUND, 404). A token tenant_id that differs from the
+        (CONTEXT_NOT_FOUND, 404), as is a TENANT_PROVISIONING context, which is
+        never RUNTIME authority. A token tenant_id that differs from the
         context's tenant is TENANT_CONTEXT_MISMATCH (403). It decides the
         capability as capability/v1 resolution.schema.json. A non-RESOLVED
         decision is a normal 200 carrying a capability_resolution_denial
@@ -249,7 +250,8 @@ paths:
         principal that resolved it: the authenticated caller's canonical
         principal must equal the context's, and a context another principal
         resolved is indistinguishable from an unknown or expired one
-        (CONTEXT_NOT_FOUND, 404). A token tenant_id that differs from the
+        (CONTEXT_NOT_FOUND, 404), as is a TENANT_PROVISIONING context, which is
+        never RUNTIME authority. A token tenant_id that differs from the
         context's tenant is TENANT_CONTEXT_MISMATCH (403).
       security:
         - workloadOidc: [context:resolve]
@@ -291,7 +293,9 @@ paths:
         and its exact kind (ADR-BCP-016, ADR-BCP-018 ORG-10, ADR-BCP-024). The
         context is persisted and returned by context_id, which capability
         resolution (capability/v1 resolution.schema.json) redeems instead of
-        an inline tenant. An empty body is valid.
+        an inline tenant. An empty body is valid. The persisted context is
+        always authority_purpose RUNTIME and acts only for an ACTIVE tenant;
+        no request can ask for another purpose.
       security:
         - workloadOidc: [context:resolve]
       parameters:
@@ -356,7 +360,26 @@ paths:
         CONTEXT_NOT_FOUND (404) and these cases are indistinguishable. A
         subject token tenant_id that differs from the context tenant is
         TENANT_CONTEXT_MISMATCH (403) and a tenant that is no longer ACTIVE is
-        TENANT_NOT_ACTIVE (403). This is not token exchange: no token is
+        TENANT_NOT_ACTIVE (403) for a RUNTIME context.
+
+        Every answer states authority_purpose. A TENANT_PROVISIONING context
+        (docs/architecture/context-authority-for-workloads.md section 13) is
+        the one narrow exception to the ACTIVE rule: it is created only by the
+        Control Plane's own provisioning execution, never through any HTTP
+        operation, and it is valid only while ALL of these hold: its owner is
+        the dedicated provisioner principal, proved by the subject token of a
+        workload whose workload-registry entry lists TENANT_PROVISIONING in
+        context_purposes; it is bounded to at most 15 minutes; the tenant is
+        not suspended, decommissioning or decommissioned (a pending tenant is
+        admissible, an ACTIVE one is too); and the TenantProvisioning it names
+        is in PROVISIONING_PROVIDERS, VERIFYING_READINESS or REMEDIATING with
+        the approved, current plan whose id, version and digest it carries as
+        provisioning_authority. A provisioning that is stale, withdrawn,
+        cancelled, failed, blocked, or in any other state, or a plan that is
+        no longer the approved current one, is PROVISIONING_AUTHORITY_NOT_CURRENT
+        (403). The tenant ACTIVE rule is never relaxed for a RUNTIME context,
+        and a TENANT_PROVISIONING context is never accepted as RUNTIME
+        authority. This is not token exchange: no token is
         issued. subject_token is a bearer token, accepted only in this POST
         body over the authenticated call, never persisted, never logged and
         never placed in a trace, an error or an audit payload; audit records
@@ -377,7 +400,8 @@ paths:
         "200":
           description: >-
             The context belongs to the subject. Only the trusted facts a
-            resource server needs; expires_at is always present and
+            resource server needs; expires_at and authority_purpose are always
+            present, provisioning_authority only for TENANT_PROVISIONING, and
             legal_entity_id is deliberately absent.
           content:
             application/json:
@@ -831,7 +855,8 @@ paths:
         bound to the principal that resolved it: the authenticated caller's
         canonical principal must equal the context's, and a context another
         principal resolved is indistinguishable from an unknown or expired one
-        (CONTEXT_NOT_FOUND, 404). A token tenant_id that differs from the
+        (CONTEXT_NOT_FOUND, 404), as is a TENANT_PROVISIONING context, which is
+        never RUNTIME authority. A token tenant_id that differs from the
         context's tenant is TENANT_CONTEXT_MISMATCH (403). No match is
         MAPPING_NOT_FOUND (404); equally authoritative matches are
         MAPPING_AMBIGUOUS (409) and resolve to nothing.

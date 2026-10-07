@@ -77,6 +77,9 @@ capabilities:
   - capability_key: intelligence.research-mission.manage
     owner: baobab-pulse
     source: ../../intelligence/v1/capabilities.yaml
+  - capability_key: inventory.availability.query
+    owner: baobab-erp
+    source: ../../erp/v1/capabilities.yaml
   - capability_key: payment.intent.cancel
     owner: baobab-payments
     source: ../../payments/v1/capabilities.yaml

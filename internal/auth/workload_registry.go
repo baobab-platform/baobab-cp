@@ -49,6 +49,7 @@ type StaticWorkloadRegistry struct {
 	reporters        map[string]ReporterScope
 	runtimeObservers map[string]ReporterScope
 	validators       map[string][]string
+	purposes         map[string][]string
 }
 
 // Canonical workload scopes consumed by the Control Plane.
@@ -70,6 +71,35 @@ func (r *StaticWorkloadRegistry) AllowsScope(clientID, scope string) bool {
 		return false
 	}
 	return r.allowedScopes[clientID][scope]
+}
+
+// Context authority purposes a workload may be registered for
+// (workload-registry.yaml context_purposes; Shared control-plane/v1
+// ContextAuthorityPurpose).
+const (
+	ContextPurposeRuntime            = "RUNTIME"
+	ContextPurposeTenantProvisioning = "TENANT_PROVISIONING"
+)
+
+// ContextPurposeRegistry answers whether the owner of a context may hold a
+// non-RUNTIME purpose. A TENANT_PROVISIONING context is authority only when the
+// workload that owns it is registered for that purpose, so the identity that acts
+// before a tenant is ACTIVE is a dedicated one and a stolen or misissued context of
+// any other workload gains nothing from carrying the purpose.
+type ContextPurposeRegistry interface {
+	// AllowsContextPurpose reports whether clientID is known, currently ACTIVE
+	// and lists purpose in context_purposes. Like every other registry-derived
+	// permission it is false for a workload that is not ACTIVE: allocation is not
+	// activation.
+	AllowsContextPurpose(clientID, purpose string) bool
+}
+
+// AllowsContextPurpose implements ContextPurposeRegistry.
+func (r *StaticWorkloadRegistry) AllowsContextPurpose(clientID, purpose string) bool {
+	if r == nil {
+		return false
+	}
+	return slices.Contains(r.purposes[clientID], purpose)
 }
 
 // ValidatorRegistry answers which subject-token audiences a workload is
@@ -164,6 +194,7 @@ type workloadRegistryFile struct {
 		AllowedScopes      []string `yaml:"allowed_scopes"`
 		DeploymentRegions  []string `yaml:"deployment_regions"`
 		ValidatesAudiences []string `yaml:"validates_audiences"`
+		ContextPurposes    []string `yaml:"context_purposes"`
 	} `yaml:"workloads"`
 }
 
@@ -199,12 +230,20 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 		default:
 			return nil, fmt.Errorf("workload registry: %s has unknown status %q", clientID, entry.Status)
 		}
+		// A purpose this binary does not know cannot be honoured, and ignoring it would silently narrow the
+		// registry: refused at startup like an unknown status.
+		for _, purpose := range entry.ContextPurposes {
+			if purpose != ContextPurposeRuntime && purpose != ContextPurposeTenantProvisioning {
+				return nil, fmt.Errorf("workload registry: %s lists unknown context purpose %q", clientID, purpose)
+			}
+		}
 	}
 	active := make(map[string]bool, len(parsed.Workloads))
 	allowedScopes := make(map[string]map[string]bool, len(parsed.Workloads))
 	reporters := map[string]ReporterScope{}
 	runtimeObservers := map[string]ReporterScope{}
 	validators := map[string][]string{}
+	purposes := map[string][]string{}
 	for clientID, entry := range parsed.Workloads {
 		active[clientID] = entry.Status == "ACTIVE"
 		if active[clientID] {
@@ -219,6 +258,9 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 		if active[clientID] && slices.Contains(entry.AllowedScopes, ContextValidateScope) && len(entry.ValidatesAudiences) > 0 {
 			validators[clientID] = slices.Clone(entry.ValidatesAudiences)
 		}
+		if active[clientID] && len(entry.ContextPurposes) > 0 {
+			purposes[clientID] = slices.Clone(entry.ContextPurposes)
+		}
 		if active[clientID] && slices.Contains(entry.AllowedScopes, ObserveScope) && entry.Environment != "" && len(entry.DeploymentRegions) > 0 {
 			reporters[clientID] = ReporterScope{Environment: entry.Environment, Regions: slices.Clone(entry.DeploymentRegions)}
 		}
@@ -226,5 +268,5 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 			runtimeObservers[clientID] = ReporterScope{Environment: entry.Environment, Regions: slices.Clone(entry.DeploymentRegions)}
 		}
 	}
-	return &StaticWorkloadRegistry{active: active, allowedScopes: allowedScopes, reporters: reporters, runtimeObservers: runtimeObservers, validators: validators}, nil
+	return &StaticWorkloadRegistry{active: active, allowedScopes: allowedScopes, reporters: reporters, runtimeObservers: runtimeObservers, validators: validators, purposes: purposes}, nil
 }

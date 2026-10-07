@@ -282,3 +282,70 @@ workloads:
 		t.Fatalf("revoked validator: %v", got)
 	}
 }
+
+// context_purposes: TENANT_PROVISIONING is honoured only for a workload that is ACTIVE, exactly like every other permission
+// the registry derives (allocation is not activation), and an unknown purpose refuses the snapshot.
+func TestContextPurposesFollowTheWorkloadLifecycle(t *testing.T) {
+	registry, err := LoadWorkloadRegistryFile(writeTestRegistry(t, `
+workloads:
+  provisioner-active:
+    status: ACTIVE
+    context_purposes: ["TENANT_PROVISIONING"]
+  provisioner-allocated:
+    status: PROVISIONED
+    context_purposes: ["TENANT_PROVISIONING"]
+  provisioner-suspended:
+    status: SUSPENDED
+    context_purposes: ["TENANT_PROVISIONING"]
+  provisioner-revoked:
+    status: REVOKED
+    context_purposes: ["TENANT_PROVISIONING"]
+  ordinary:
+    status: ACTIVE
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for client, want := range map[string]bool{"provisioner-active": true, "provisioner-allocated": false, "provisioner-suspended": false,
+		"provisioner-revoked": false, "ordinary": false, "unknown": false} {
+		if got := registry.AllowsContextPurpose(client, ContextPurposeTenantProvisioning); got != want {
+			t.Errorf("%s: AllowsContextPurpose = %v, want %v", client, got, want)
+		}
+	}
+	if registry.AllowsContextPurpose("provisioner-active", ContextPurposeRuntime) {
+		t.Fatal("only a listed purpose is allowed")
+	}
+	var nilRegistry *StaticWorkloadRegistry
+	if nilRegistry.AllowsContextPurpose("provisioner-active", ContextPurposeTenantProvisioning) {
+		t.Fatal("a missing registry allows nothing")
+	}
+	if _, err := LoadWorkloadRegistryFile(writeTestRegistry(t, `
+workloads:
+  w:
+    status: ACTIVE
+    context_purposes: ["TENANT_PROVISIONING", "SOMETHING_NEW"]
+`)); err == nil {
+		t.Fatal("an unknown context purpose must refuse the snapshot, not be silently ignored")
+	}
+}
+
+// The real Shared registry: the provisioner is the only workload that lists the purpose, and while it is PROVISIONED the
+// Control Plane honours none of it.
+func TestSharedRegistryProvisionerPurposeIsAllocatedNotActive(t *testing.T) {
+	dir := os.Getenv("SHARED_CONTRACTS_DIR")
+	if dir == "" {
+		t.Skip("SHARED_CONTRACTS_DIR not set; skipping baobab-platform/shared contract-compatibility test")
+	}
+	registry, err := LoadWorkloadRegistryFile(filepath.Join(dir, "contracts", "identity", "v1", "workload-registry.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registry.AllowsContextPurpose("baobab-cp-provisioning-workload", ContextPurposeTenantProvisioning) {
+		t.Fatal("the provisioner is PROVISIONED: allocating a purpose is not activating it")
+	}
+	for client := range registry.active {
+		if registry.AllowsContextPurpose(client, ContextPurposeTenantProvisioning) {
+			t.Fatalf("%s must not hold TENANT_PROVISIONING", client)
+		}
+	}
+}

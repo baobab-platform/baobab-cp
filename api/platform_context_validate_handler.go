@@ -45,6 +45,12 @@ type ContextValidationHandler struct {
 	Tenants    interface {
 		GetTenant(context.Context, string) (domain.Tenant, error)
 	}
+	// Purposes and Provisioning make a TENANT_PROVISIONING context judgeable
+	// (docs/architecture/context-authority-for-workloads.md section 13). Without
+	// either, a provisioning context is simply never valid: nothing is relaxed by
+	// leaving them unconfigured.
+	Purposes     auth.ContextPurposeRegistry
+	Provisioning *provisioningAuthority
 }
 
 type validateRequest struct {
@@ -59,6 +65,9 @@ type validateResponse struct {
 	ExpiresAt      time.Time `json:"expires_at"`
 	MarketID       string    `json:"market_id,omitempty"`
 	OrganisationID string    `json:"organisation_id,omitempty"`
+	// AuthorityPurpose is always stated, never implied (control-plane/v1 1.34.0).
+	AuthorityPurpose      domain.ContextAuthorityPurpose `json:"authority_purpose"`
+	ProvisioningAuthority *domain.ProvisioningAuthority  `json:"provisioning_authority,omitempty"`
 }
 
 const (
@@ -68,6 +77,8 @@ const (
 	reasonUnknown         = "context_unknown_or_expired"
 	reasonUnbounded       = "context_unbounded"
 	reasonNotOwned        = "subject_not_owner"
+	// A provisioning context whose owner's workload is not registered for the purpose is answered as unknown.
+	reasonPurposeNotRegistered = "provisioning_purpose_not_registered"
 )
 
 func (h ContextValidationHandler) Validate(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +163,12 @@ func (h ContextValidationHandler) Validate(w http.ResponseWriter, r *http.Reques
 		notFound(reasonNotOwned, req.ContextID)
 		return
 	}
+	// A provisioning context is authority only for the dedicated provisioner: its owner's workload must be registered
+	// for the purpose, and the judge must be configured. Anything else is answered like an unknown context.
+	if !stored.IsRuntime() && (h.Purposes == nil || h.Provisioning == nil || !h.Purposes.AllowsContextPurpose(subject.ClientID, string(stored.Purpose()))) {
+		notFound(reasonPurposeNotRegistered, req.ContextID)
+		return
+	}
 	// Only the owner reaches the checks below, so neither can be used to
 	// probe a context it does not own.
 	if subject.TenantID != "" && subject.TenantID != stored.TenantID {
@@ -165,16 +182,46 @@ func (h ContextValidationHandler) Validate(w http.ResponseWriter, r *http.Reques
 		problem(w, r, http.StatusServiceUnavailable, "CONTEXT_STORE_UNAVAILABLE", "tenant lookup failed", true)
 		return
 	}
-	if err != nil || tenant.ObservedState != string(domain.LifecycleActive) {
-		audit("DENIED", "tenant_not_active", stored.ID, stored.TenantID, subjectPrincipal)
-		problem(w, r, http.StatusForbidden, "TENANT_NOT_ACTIVE", "the tenant is not active", false)
-		return
+	response := validateResponse{ContextID: stored.ID, TenantID: stored.TenantID, ResolvedAt: stored.ResolvedAt,
+		ExpiresAt: *stored.ExpiresAt, AuthorityPurpose: stored.Purpose()}
+	reason := "owner_confirmed"
+	if stored.IsRuntime() {
+		// The ACTIVE rule for a RUNTIME context is never relaxed.
+		if err != nil || tenant.ObservedState != string(domain.LifecycleActive) {
+			audit("DENIED", "tenant_not_active", stored.ID, stored.TenantID, subjectPrincipal)
+			problem(w, r, http.StatusForbidden, "TENANT_NOT_ACTIVE", "the tenant is not active", false)
+			return
+		}
+		response.MarketID, response.OrganisationID = stored.MarketID, stored.OrganisationID
+	} else {
+		// TENANT_PROVISIONING (section 13): the one narrow exception, valid only while every condition holds.
+		if err != nil || !tenantAdmissibleForProvisioning(tenant) {
+			audit("DENIED", "tenant_not_admissible", stored.ID, stored.TenantID, subjectPrincipal)
+			problem(w, r, http.StatusForbidden, "TENANT_NOT_ACTIVE", "the tenant is not active", false)
+			return
+		}
+		state, why, jerr := h.Provisioning.judge(r.Context(), stored)
+		if jerr != nil {
+			problem(w, r, http.StatusServiceUnavailable, "CONTEXT_STORE_UNAVAILABLE", "provisioning lookup failed", true)
+			return
+		}
+		if state != provisioningAuthorityCurrent {
+			audit("DENIED", why, stored.ID, stored.TenantID, subjectPrincipal)
+			problem(w, r, http.StatusForbidden, "PROVISIONING_AUTHORITY_NOT_CURRENT", "the provisioning authority of the referenced context is not current", false)
+			return
+		}
+		response.ProvisioningAuthority = stored.ProvisioningAuthority
+		reason = "provisioning_authority_current"
 	}
 
-	audit("VALID", "owner_confirmed", stored.ID, stored.TenantID, subjectPrincipal)
+	audit("VALID", reason, stored.ID, stored.TenantID, subjectPrincipal)
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, validateResponse{ContextID: stored.ID, TenantID: stored.TenantID, ResolvedAt: stored.ResolvedAt,
-		ExpiresAt: *stored.ExpiresAt, MarketID: stored.MarketID, OrganisationID: stored.OrganisationID})
+	writeJSON(w, http.StatusOK, response)
+}
+
+func tenantAdmissibleForProvisioning(tenant domain.Tenant) bool {
+	_, ok := admissibleTenantStates[tenant.ObservedState]
+	return ok
 }
 
 type subjectStatus int
