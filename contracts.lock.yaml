@@ -96,6 +96,8 @@ contracts:
   - contracts/erp/v1/capabilities.yaml
   - contracts/buyer-organisation/v1/capabilities.yaml
   - contracts/identity/v1/capabilities.yaml
+  - contracts/intelligence/v1/capabilities.yaml
+  - contracts/regulations/v1/capabilities.yaml
   - contracts/content/v1/capabilities.yaml
   - contracts/capability/v1/resolution.schema.json
   - contracts/capability/v1/health.schema.json
