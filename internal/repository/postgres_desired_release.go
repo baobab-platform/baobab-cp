@@ -57,16 +57,16 @@ var _ DesiredReleaseRepository = (*PostgresRepository)(nil)
 // release of an instance of engineID in environment, by plan check name.
 // An empty result means it may. It is the check a desired-release
 // changeset and a revocation's replacement both run.
-func desiredReleaseEligibility(ctx context.Context, tx pgx.Tx, releaseKey, engineID, environment string) (map[string]string, error) {
+func desiredReleaseEligibility(ctx context.Context, tx pgx.Tx, releaseKey, engineID, environment string, now time.Time) (map[string]string, error) {
 	failures := map[string]string{}
 	var (
-		status, releaseEngine, engineCode, version string
-		provenance                                 bool
+		releaseUUID, status, releaseEngine, engineCode, version string
+		provenance                                              bool
 	)
-	err := tx.QueryRow(ctx, `SELECT r.status, r.engine_id::text, e.code, r.release_version,
+	err := tx.QueryRow(ctx, `SELECT r.engine_release_id::text, r.status, r.engine_id::text, e.code, r.release_version,
 			r.provenance IS NOT NULL AND r.provenance <> 'null'::jsonb
 		FROM topology.engine_release r JOIN topology.engine e ON e.engine_id = r.engine_id
-		WHERE r.release_key = $1`, releaseKey).Scan(&status, &releaseEngine, &engineCode, &version, &provenance)
+		WHERE r.release_key = $1`, releaseKey).Scan(&releaseUUID, &status, &releaseEngine, &engineCode, &version, &provenance)
 	if errors.Is(err, pgx.ErrNoRows) {
 		failures[checkDesiredApproved] = fmt.Sprintf("Release %s is not recorded.", releaseKey)
 		return failures, nil
@@ -91,7 +91,16 @@ func desiredReleaseEligibility(ctx context.Context, tx pgx.Tx, releaseKey, engin
 			environment, version, engineCode)
 	}
 	if doc.Approval.CertificationRequired[environment] {
-		failures[checkDesiredCertification] = fmt.Sprintf("Environment %s requires certification, and no certification is recorded (EA-09).", environment)
+		gaps, err := releaseCertificationGaps(ctx, tx, releaseUUID, "", now)
+		if err != nil {
+			return nil, err
+		}
+		if len(gaps) > 0 {
+			failures[checkDesiredCertification] = fmt.Sprintf(
+				"Environment %s requires current EA-09 certification; release %s of engine %s is missing: %s.",
+				environment, version, engineCode, strings.Join(gaps, ", "),
+			)
+		}
 	}
 	return failures, nil
 }
@@ -99,7 +108,7 @@ func desiredReleaseEligibility(ctx context.Context, tx pgx.Tx, releaseKey, engin
 // desiredReleaseChecks runs every ENGINE_INSTANCE_DESIRED_RELEASE plan check
 // for desiring releaseKey ("" to clear) on the instance, and returns the
 // instance's current desired release with each failure by check name.
-func desiredReleaseChecks(ctx context.Context, tx pgx.Tx, instanceKey, releaseKey string) (string, map[string]string, error) {
+func desiredReleaseChecks(ctx context.Context, tx pgx.Tx, instanceKey, releaseKey string, now time.Time) (string, map[string]string, error) {
 	var engineID, environment, current string
 	if err := tx.QueryRow(ctx, `SELECT ei.engine_id::text, COALESCE(ei.environment, ''), COALESCE(r.release_key, '')
 		FROM topology.engine_instance ei LEFT JOIN topology.engine_release r ON r.engine_release_id = ei.desired_release_id
@@ -109,7 +118,7 @@ func desiredReleaseChecks(ctx context.Context, tx pgx.Tx, instanceKey, releaseKe
 	failures := map[string]string{}
 	if releaseKey != "" {
 		var err error
-		if failures, err = desiredReleaseEligibility(ctx, tx, releaseKey, engineID, environment); err != nil {
+		if failures, err = desiredReleaseEligibility(ctx, tx, releaseKey, engineID, environment, now); err != nil {
 			return "", nil, err
 		}
 	}
@@ -286,7 +295,7 @@ func disposeOfDesiringInstances(ctx context.Context, tx pgx.Tx, source, releaseU
 			if d.ReplacementReleaseID == releaseID {
 				return nil, &release.ErrInvalid{Code: release.ReasonNotApproved, Detail: "a revoked release never replaces itself"}
 			}
-			failures, err := desiredReleaseEligibility(ctx, tx, d.ReplacementReleaseID, instance.engineID, instance.environment)
+			failures, err := desiredReleaseEligibility(ctx, tx, d.ReplacementReleaseID, instance.engineID, instance.environment, now)
 			if err != nil {
 				return nil, err
 			}
