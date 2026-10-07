@@ -14,6 +14,7 @@ on:
       - "api/event_ingress*.go"
       - "internal/store/postgres/migrations/**"
       - "internal/contracts/**"
+      - "contracts.lock.yaml"
       - ".github/workflows/convergence.yml"
   push:
     branches: [main]
