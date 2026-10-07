@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.34.0
+  version: 1.35.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -4558,6 +4558,177 @@ paths:
           $ref: "#/components/responses/PreconditionRequired"
         "500":
           $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /provider-capability-certifications:
+    parameters:
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: recordProviderCapabilityCertification
+      summary: Record an EA-09 provider capability certification
+      description: >-
+        Records qualification of one exact CapabilityProvider, canonical
+        capability contract major and immutable EngineRelease (ADR-SHARED-032,
+        EA-09). The release may be CANDIDATE or APPROVED but never REVOKED.
+        The Control Plane verifies that provider and release belong to the
+        same engine, both the provider and release declare the capability
+        major, and the certifier is not the release recorder. Certification
+        never activates a provider, approves a release, binds a tenant or
+        grants capability authority.
+      security:
+        - adminOidc: [provider:certify]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../capability/v1/certification.schema.json#/$defs/ProviderCapabilityCertificationRecordRequest
+      responses:
+        "200":
+          description: Idempotent replay of an existing current certification.
+          content:
+            application/json:
+              schema:
+                $ref: ../../capability/v1/certification.schema.json#/$defs/ProviderCapabilityCertification
+        "201":
+          description: Certification recorded.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: ../../capability/v1/certification.schema.json#/$defs/ProviderCapabilityCertification
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    get:
+      tags: [Topology]
+      operationId: listProviderCapabilityCertifications
+      summary: List EA-09 provider capability certifications
+      security:
+        - adminOidc: [topology:read]
+      parameters:
+        - name: provider_id
+          in: query
+          schema:
+            $ref: ../../capability/v1/domain.schema.json#/$defs/capabilityProviderId
+        - name: capability_key
+          in: query
+          schema:
+            $ref: ../../capability/v1/domain.schema.json#/$defs/capabilityKey
+        - name: release_id
+          in: query
+          schema:
+            $ref: ./domain.schema.json#/$defs/engineReleaseId
+        - name: status
+          in: query
+          schema:
+            $ref: ../../capability/v1/certification.schema.json#/$defs/certificationStatus
+        - name: page_token
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+      responses:
+        "200":
+          description: A page of certifications.
+          content:
+            application/json:
+              schema:
+                $ref: ../../capability/v1/certification.schema.json#/$defs/ProviderCapabilityCertificationPage
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /provider-capability-certifications/{certification_id}:
+    parameters:
+      - name: certification_id
+        in: path
+        required: true
+        schema:
+          $ref: ../../capability/v1/certification.schema.json#/$defs/certificationId
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Topology]
+      operationId: getProviderCapabilityCertification
+      summary: Read one EA-09 provider capability certification
+      security:
+        - adminOidc: [topology:read]
+      responses:
+        "200":
+          description: The certification.
+          content:
+            application/json:
+              schema:
+                $ref: ../../capability/v1/certification.schema.json#/$defs/ProviderCapabilityCertification
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /provider-capability-certifications/{certification_id}/revocations:
+    parameters:
+      - name: certification_id
+        in: path
+        required: true
+        schema:
+          $ref: ../../capability/v1/certification.schema.json#/$defs/certificationId
+      - $ref: "#/components/parameters/CorrelationId"
+    post:
+      tags: [Topology]
+      operationId: revokeProviderCapabilityCertification
+      summary: Revoke an EA-09 provider capability certification
+      description: >-
+        Revokes one current certification and records the authenticated
+        revoker and reason. Revocation does not directly mutate provider,
+        release, binding or grant state; it causes subsequent certification
+        eligibility checks to fail.
+      security:
+        - adminOidc: [provider:certify]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../capability/v1/certification.schema.json#/$defs/ProviderCapabilityCertificationRevocationRequest
+      responses:
+        "200":
+          description: Certification revoked.
+          content:
+            application/json:
+              schema:
+                $ref: ../../capability/v1/certification.schema.json#/$defs/ProviderCapabilityCertification
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
   /engine-releases:
