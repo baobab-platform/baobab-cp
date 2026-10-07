@@ -143,3 +143,24 @@ func TestERPProvisioningRejectsAnUnsafeOrIncompleteConfiguration(t *testing.T) {
 		}
 	}
 }
+
+func TestERPRecoverySettings(t *testing.T) {
+	validConfigEnv(t)
+	cfg, err := Load()
+	if err != nil || cfg.ERPRecoveryInterval != time.Minute || cfg.ERPRecoveryGrace != 5*time.Minute {
+		t.Fatalf("defaults: %v %s %s", err, cfg.ERPRecoveryInterval, cfg.ERPRecoveryGrace)
+	}
+	t.Setenv("ERP_RECOVERY_INTERVAL", "30s")
+	t.Setenv("ERP_RECOVERY_GRACE", "10m")
+	if cfg, err = Load(); err != nil || cfg.ERPRecoveryInterval != 30*time.Second || cfg.ERPRecoveryGrace != 10*time.Minute {
+		t.Fatalf("configured: %v %s %s", err, cfg.ERPRecoveryInterval, cfg.ERPRecoveryGrace)
+	}
+	for name, value := range map[string]string{"ERP_RECOVERY_INTERVAL": "1s", "ERP_RECOVERY_GRACE": "10s"} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, value)
+			if _, err := Load(); err == nil {
+				t.Fatalf("%s=%s must be rejected", name, value)
+			}
+		})
+	}
+}
