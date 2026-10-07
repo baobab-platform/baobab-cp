@@ -145,7 +145,7 @@ func TestSyncEmbeddedCatalogue(t *testing.T) {
 		t.Fatal(err)
 	}
 	report, err := SyncEmbedded(ctx, repo)
-	if err != nil || len(report.Unchanged) != 21 || len(report.Created)+len(report.Updated) != 0 {
+	if err != nil || len(report.Unchanged) != 22 || len(report.Created)+len(report.Updated) != 0 {
 		t.Fatalf("second sync: %+v %v", report, err)
 	}
 	admin, err := pgxpool.New(ctx, url)
