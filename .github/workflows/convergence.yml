@@ -1,0 +1,86 @@
+name: ERP event convergence
+# FB-04e. ERP's real provisioning event producer, outbox and signed dispatcher (baobab-erp, at the revision pinned below) deliver to this
+# repository's real event ingress, inbox, processor and recovery sweep, and the two sides must agree on the final state of an
+# operation (internal/convergence). It certifies the contract between ERP's dispatcher and the ingress, not the iDempiere engine.
+#
+# A missing dependency FAILS this job (CONVERGENCE_REQUIRED=1); it never skips. Bump ERP_COMMIT deliberately, with the ERP change that
+# needs it; the Shared revision is the one contracts.lock.yaml already pins.
+on:
+  pull_request:
+    paths:
+      - "internal/convergence/**"
+      - "internal/eventingress/**"
+      - "internal/erpprovisioning/**"
+      - "api/event_ingress*.go"
+      - "internal/store/postgres/migrations/**"
+      - "internal/contracts/**"
+      - ".github/workflows/convergence.yml"
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  ERP_COMMIT: 7aa76884d3bbe5fbb5cca4b3c5ac878e687ad022
+jobs:
+  convergence:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: baobab_cp_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CONVERGENCE_REQUIRED: "1"
+      TEST_DATABASE_URL: postgres://postgres@localhost:5432/baobab_cp_ci?sslmode=disable
+      CONVERGENCE_ERP_DATABASE_URL: postgres://postgres@localhost:5432/baobab_erp_ci
+      CONVERGENCE_ERP_DIR: ${{ github.workspace }}/.erp
+      CONVERGENCE_SHARED_DIR: ${{ github.workspace }}/.shared-contracts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read immutable shared-contract pin
+        id: pin
+        run: echo "commit=$(grep -m1 'commit:' contracts.lock.yaml | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Checkout baobab-platform/shared at pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: baobab-platform/shared
+          token: ${{ secrets.SHARED_READ_TOKEN || github.token }}
+          persist-credentials: false
+          ref: ${{ steps.pin.outputs.commit }}
+          path: .shared-contracts
+      - name: Checkout baobab-platform/baobab-erp at the pinned revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: baobab-platform/baobab-erp
+          token: ${{ secrets.SHARED_READ_TOKEN || github.token }}
+          persist-credentials: false
+          ref: ${{ env.ERP_COMMIT }}
+          path: .erp
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install the ERP producer's Python dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/erp-venv"
+          "$RUNNER_TEMP/erp-venv/bin/pip" install --disable-pip-version-check \
+            "psycopg[binary]>=3.1,<4" "PyJWT[crypto]>=2.8,<3" "jsonschema[format-nongpl]>=4.21,<5" "referencing>=0.35,<1" "PyYAML>=6,<7"
+          echo "$RUNNER_TEMP/erp-venv/bin" >> "$GITHUB_PATH"
+      - name: Create the ERP database
+        run: psql "postgres://postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -c "CREATE DATABASE baobab_erp_ci"
+      - name: ERP event to Control Plane convergence
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.erp/modules
+          BAOBAB_SHARED_PATH: ${{ github.workspace }}/.shared-contracts
+        run: go test -count=1 -p 1 -v ./internal/convergence/
