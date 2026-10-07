@@ -1,0 +1,54 @@
+name: Cut Staging Tag
+on:
+  push:
+    branches: ['release/v*.*.*-staging']
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: staging-tag-cut-${{ github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  cut:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact green main source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-staging$ ]]
+          tag="${GITHUB_REF_NAME#release/}"
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          [[ "$(git rev-parse origin/main)" == "$GITHUB_SHA" ]]
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" --event push --status success --json headSha,conclusion > source-ci.json
+          TAG="$tag" python - <<'PY'
+          import json, os
+          runs=json.load(open("source-ci.json",encoding="utf-8"))
+          if not any(x["headSha"]==os.environ["GITHUB_SHA"] and x["conclusion"]=="success" for x in runs):
+              raise SystemExit("staging source requires successful CP CI on exact main commit")
+          PY
+          echo "tag=$tag" >> "$GITHUB_ENV"
+      - name: Create or verify immutable staging tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ref_json="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" 2>/dev/null)"; then
+            REF_JSON="$ref_json" EXPECTED_SHA="$GITHUB_SHA" python - <<'PY'
+          import json, os
+          obj=json.loads(os.environ["REF_JSON"])["object"]
+          if obj["type"]!="commit" or obj["sha"]!=os.environ["EXPECTED_SHA"]:
+              raise SystemExit("existing staging tag is not the exact requested commit")
+          PY
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
+          fi
+      - name: Dispatch staging publisher at immutable tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run staging-ci.yml --repo "$GITHUB_REPOSITORY" --ref "$tag"
