@@ -74,7 +74,7 @@ func TestProviderActivationChangeset(t *testing.T) {
 			admin.Exec(ctx, `DELETE FROM changeset.changeset WHERE target_id = $1`, canonical)
 		}
 		removeEngineReleases(ctx, admin, engine)
-		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, providerKey)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key IN ($1, $2)`, providerKey, engine+".other")
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
@@ -110,6 +110,8 @@ func TestProviderActivationChangeset(t *testing.T) {
 	if status != "DRAFT" || canonical != domain.ProviderID(providerUUID) || !domain.ValidProviderID(canonical) {
 		t.Fatalf("registered provider: %s %s (uuid %s)", status, canonical, providerUUID)
 	}
+	exec(`INSERT INTO capability.capability_provider(provider_key, name, provider_type, engine_id, status)
+		VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, 'DRAFT')`, engine+".other", engineID)
 	staging := domain.NewUUIDv7()
 	exec(`INSERT INTO topology.engine_instance(engine_instance_id, engine_id, region, environment, status)
 		VALUES ($1, $2, 'af-south-1', 'staging', 'ACTIVE')`, staging, engineID)

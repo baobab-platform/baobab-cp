@@ -48,6 +48,7 @@ profiles:
       - provider-migration.execute
       - engine-release.change-status
       - engine-release.record
+      - provider.certify
       - audit.view
       - changeset.submit
       - changeset.review

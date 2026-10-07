@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -81,7 +82,7 @@ func requiring(policy map[string]bool, environments []string) []string {
 // on the release and returns each failure's explanation by check name. A
 // check absent from the result passed. environment is the Control Plane's
 // own deployment environment.
-func engineReleaseApprovalChecks(ctx context.Context, tx pgx.Tx, releaseKey, environment string) (map[string]string, error) {
+func engineReleaseApprovalChecks(ctx context.Context, tx pgx.Tx, releaseKey, environment string, now time.Time) (map[string]string, error) {
 	failures := map[string]string{}
 	var (
 		releaseUUID, engineID, engineCode, version string
@@ -130,8 +131,16 @@ func engineReleaseApprovalChecks(ctx context.Context, tx pgx.Tx, releaseKey, env
 			strings.Join(required, ", "), version, engineCode)
 	}
 	if required := requiring(policy.CertificationRequired, environments); len(required) > 0 {
-		failures[checkReleaseCertification] = fmt.Sprintf("Environment %s requires certification, and no certification is recorded (EA-09).",
-			strings.Join(required, ", "))
+		gaps, err := releaseCertificationGaps(ctx, tx, releaseUUID, "", now)
+		if err != nil {
+			return nil, err
+		}
+		if len(gaps) > 0 {
+			failures[checkReleaseCertification] = fmt.Sprintf(
+				"Environment %s requires current EA-09 certification for every release support major; release %s of engine %s is missing: %s.",
+				strings.Join(required, ", "), version, engineCode, strings.Join(gaps, ", "),
+			)
+		}
 	}
 	return failures, nil
 }

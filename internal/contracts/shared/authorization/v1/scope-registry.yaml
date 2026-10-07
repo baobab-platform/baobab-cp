@@ -1,0 +1,609 @@
+# scope-registry.yaml
+# Canonical list of OAuth scopes used across Baobab services.
+
+scopes:
+  - name: "openid"
+    description: "Standard OIDC scope for identity claims."
+    required: true
+
+  - name: "profile"
+    description: "Access to basic profile information."
+    required: false
+
+  - name: "email"
+    description: "Access to email address."
+    required: false
+
+  - name: "context:resolve"
+    description: "Allows calling the Control Plane context resolution API."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload", "human"]
+
+  - name: "identity:self"
+    description: "Allows reading the authenticated principal's own identity data."
+    audience: ["baobab-cp", "baobab-iam"]
+    allowed_actors: ["human", "workload"]
+
+  - name: "identity:read"
+    description: "Allows reading identity data of other principals (privileged)."
+    audience: ["baobab-cp"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "tenant:read"
+    description: >-
+      Read tenants, their product entitlements, provisioning runs and
+      counterparty roles in the Control Plane. Necessary but not sufficient:
+      the Control Plane also requires platform-administrator authority, or
+      tenant-administrator authority over that tenant.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload", "human"]
+
+  - name: "events:publish"
+    description: "Allows publishing canonical events."
+    audience: ["event-broker"]
+    allowed_actors: ["workload"]
+
+  - name: "mapping:read"
+    description: "Read a canonical mapping by ID."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+
+  - name: "erp-assignment:read"
+    description: "Allows an authorised ERP workload to read the Control Plane ERP assignment projection of one approved tenant provisioning and legal entity. It grants no authority: Control Plane additionally requires the token's tenant_id to equal the path tenant and the provisioning and legal entity to belong to it. It is not tenant:read (the administrative plan read), erp:read (the ERP data-plane reads) or erp:provision. Defined here; granted to no workload client."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "erp:read"
+    description: "Allows a workload to call baobab-erp's Boundary API business-data read operations (mappings, order consequences, inventory availability). It grants no tenant authority: the tenant an ERP call operates in comes from a trusted Control Plane context, never from this scope or from a caller-supplied tenant. It is not erp:integrate (the internal integration boundary), erp:provision (which covers provisioning, including observing the provisioning operation) or erp-assignment:read."
+    audience: ["baobab-erp"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "erp:provision"
+    description: "Allows a workload to submit a provisioning command to baobab-erp's Boundary API and to observe the provisioning operation it created. It grants no tenant authority and authorises nothing by itself: ERP provisions only what the exact approved Control Plane plan and its Finance-approved baseline allow, and the tenant comes from a trusted Control Plane context. It is not erp:read, erp:integrate or erp-assignment:read."
+    audience: ["baobab-erp"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "context:validate"
+    description: "Allows a registered resource server to ask the Control Plane whether a stored context belongs to the actual caller it authenticated, presenting that caller's token as subject evidence. It grants no business authority: the Control Plane judges the subject token's canonical principal against the context's owner, requires a bounded context, and only the audiences the validator is registered to validate (workload-registry validates_audiences) are accepted. It is not context:resolve (which creates a context) and creates nothing. Currently allocated to ERP and Pulse resource-server validators for their own registered audiences."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "intelligence:evidence:search"
+    description: >-
+      Allows an authenticated workload to invoke
+      intelligence.evidence.search at the baobab-pulse resource-server
+      audience. It grants no tenant authority: Pulse must redeem the supplied
+      PlatformContext against the actual caller through the Control Plane.
+      With that validated tenant context this base scope authorises evidence
+      classifications through CONFIDENTIAL. RESTRICTED additionally requires
+      intelligence:restricted.
+    audience: ["baobab-pulse"]
+    allowed_actors: ["workload"]
+
+  - name: "intelligence:research-mission:manage"
+    description: >-
+      Allows an authenticated workload to invoke
+      intelligence.research-mission.manage at the baobab-pulse
+      resource-server audience. It grants no tenant authority: Pulse must
+      redeem the supplied PlatformContext against the actual caller through
+      the Control Plane. With that validated tenant context this base scope
+      authorises ResearchMission classifications through CONFIDENTIAL.
+      RESTRICTED additionally requires intelligence:restricted.
+    audience: ["baobab-pulse"]
+    allowed_actors: ["workload"]
+
+  - name: "intelligence:restricted"
+    description: >-
+      Supplemental Pulse data-classification clearance. It has no effect by
+      itself and authorises no operation or tenant. When the caller also holds
+      the exact intelligence capability scope and Pulse has validated the
+      caller-bound tenant PlatformContext, it raises that capability
+      invocation's maximum Intelligence classification from CONFIDENTIAL to
+      RESTRICTED.
+    audience: ["baobab-pulse"]
+    allowed_actors: ["workload"]
+
+  - name: "mapping:write"
+    description: "Record external references and propose, change, validate or retire canonical mappings (privileged; the actor is always the verified caller)."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "mapping:approve"
+    description: "Transition a mapping from VALIDATED to ACTIVE (privileged; four-eyes: never the mapping's creator)."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "mapping:resolve"
+    description: "Resolve a canonical entity to its external representation(s)."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+
+  - name: "market:read"
+    description: "Read market configuration."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+
+  - name: "market:write"
+    description: "Create or update market configuration (privileged)."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "market:approve"
+    description: "Transition a market from VALIDATED to ACTIVE (privileged)."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "application:read"
+    description: >-
+      An applicant reads their own ClientApplications (ADR-BCP-017 section 5).
+      Grants nothing about any tenant, organisation or other applicant.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+
+  - name: "application:write"
+    description: >-
+      An applicant creates, edits, submits, answers and withdraws their own
+      ClientApplications (ADR-BCP-017 sections 5, 8). It can never set status,
+      subscription classification or verification: those are server-authoritative.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+
+  - name: "authority:self"
+    description: >-
+      A human administrator reads their own effective administrative
+      authority: the ACTIVE, currently valid AdministrativeGrants the CP
+      Console drives navigation and scope display from (ADR-BCP-020 sections
+      99-102, 110). Reveals only the caller's own grants, never another
+      principal's, and confers no authority itself.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+
+  - name: "administrator:read"
+    description: >-
+      A human administrator inspects AdministrativeGrants within the scopes
+      they administer (ADR-BCP-020 section 6; ADA-05). Necessary but not
+      sufficient: the Control Plane also requires administrator.view over the
+      grant's scope.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+
+  - name: "administrator:write"
+    description: >-
+      A human administrator issues, suspends, resumes, revokes, withdraws or
+      delegates AdministrativeGrants (ADR-BCP-020 sections 38-48, 57-64;
+      ADA-05). Necessary but not sufficient: the Control Plane also requires
+      administrator.grant, administrator.revoke or administrator.delegate
+      over the grant's scope, and refuses self-grants. HIGH and CRITICAL
+      authority changes additionally need the maker-checker path (ADA-06).
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "administrator:approve"
+    description: >-
+      A human administrator decides an AdministrativeGrant change request
+      (issuance or delegation of HIGH or CRITICAL authority) as its checker
+      (ADR-BCP-020 sections 38-39; gate ADA-06). Necessary but not
+      sufficient: the Control Plane also requires changeset:approve, refuses
+      an approver who is the requester or the grantee, and enforces
+      separation-of-duties.yaml.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "admission:review"
+    description: >-
+      A platform admission reviewer inspects applications, moves them through
+      validation and review, requests information and cancels them
+      (ADR-BCP-020 section 34). It does not include the admission decision.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "admission:decide"
+    description: >-
+      A platform admission approver approves or rejects an application under
+      review and classifies its subscription (ADR-BCP-017 section 21,
+      ADR-BCP-020 section 35). Never on an application the approver made.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "tenant:write"
+    description: >-
+      A platform or tenant administrator manages tenants in the Control Plane:
+      registers a tenant from an AUTHORISED TenantOnboardingRequest, suspends,
+      activates or decommissions it, and manages its organisation admission,
+      counterparty roles, PlatformAccount binding and provisioning. Necessary
+      but not sufficient: the Control Plane also requires platform-administrator
+      authority, or tenant-administrator authority over that tenant. Never
+      registers a tenant without an onboarding request (see tenant:bootstrap).
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "canonical:read"
+    description: >-
+      Read canonical entities and Organisation administration in the Control
+      Plane: IAM organisation links, external references, resolution
+      candidates, platform accounts, drift and audit lineage (ADR-BCP-016,
+      ADR-BCP-018). Necessary but not sufficient: the Control Plane also
+      requires platform-administrator authority.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "canonical:write"
+    description: >-
+      Create canonical entities and change them through their lifecycle, link
+      IAM organisations and external references, run organisation
+      reconciliation, decide resolution candidates and change platform
+      account status (ADR-BCP-016, ADR-BCP-018). Necessary but not
+      sufficient: the Control Plane also requires platform-administrator
+      authority. It never merges Organisations.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "capabilities:explain"
+    description: >-
+      Explain how the Control Plane resolved, or refused, a capability for a
+      stored context: the mapping, grant, binding, engine instance, policy
+      and topology it used (ADR-BCP-022 section 47). A privileged diagnostic
+      exposing internal topology; never an access path.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "metrics:read"
+    description: >-
+      Scrape the Control Plane's metrics endpoint. Labels are bounded
+      vocabularies and carry no identifiers.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+
+  - name: "tenant:bootstrap"
+    description: >-
+      Registers a tenant that predates the admission workflow, without a
+      TenantOnboardingRequest (migration and platform bootstrap only; the
+      Control Plane keeps it disabled unless explicitly enabled). Every use
+      records its reason and evidence reference. Never a route for a new
+      customer, which is registered from an AUTHORISED onboarding request.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "onboarding:request"
+    description: >-
+      A platform onboarding requester hands an APPROVED AdmissionDecision to
+      onboarding as a TenantOnboardingRequest, records the tenant provisioning
+      produced, or cancels a request (ADR-BCP-017 sections 22-24). Never for
+      an application the requester made or a decision the requester took.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "onboarding:authorise"
+    description: >-
+      A platform onboarding authoriser authorises a REQUESTED
+      TenantOnboardingRequest before provisioning may fulfil it (ADR-BCP-017
+      sections 22, 39). Never a request the authoriser made, nor for an
+      application the authoriser made.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "provisioning:approve"
+    description: >-
+      Approve, reject or request changes to one exact tenant provisioning plan,
+      bound to its digest (ADR-SHARED-015, ADR-BCP-021 sections 24 and 50).
+      Never held by the principal who requested the provisioning: the Control
+      Plane refuses self-approval.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "topology:read"
+    description: >-
+      A platform administrator reads provider topology and provider
+      migrations, and previews a migration plan, which is side-effect free
+      (ADR-BCP-006 sections 119-122). Necessary but not sufficient: the
+      Control Plane also requires platform-administrator authority.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "topology:write"
+    description: >-
+      A platform administrator creates a provider migration and its plan
+      (ADR-BCP-006 sections 44-58). Planning binds nothing: advancing a
+      migration is approved separately. Necessary but not sufficient: the
+      Control Plane also requires platform-administrator authority.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "provider-migration:approve"
+    description: >-
+      Approve, reject or request changes to one exact provider migration plan,
+      bound to its digest (ADR-SHARED-016 section 1). One approval authorises
+      that plan's whole sequence; a replan needs a new decision. Never held by
+      the principal who created the migration: the Control Plane refuses
+      self-approval.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "provider-migration:execute"
+    description: >-
+      Advance an approved provider migration one lifecycle transition at a
+      time, as a durable operation, and cancel or roll it back (ADR-SHARED-016
+      section 2). Necessary but not sufficient: every forward advance also
+      needs an approval of the current plan.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "provider-migration:task"
+    description: >-
+      An engine workload lists, claims and reports the engine migration tasks
+      assigned to the engine instances whose registration names its client as
+      their attested workload (ADR-SHARED-016 section 4). The instance is never
+      taken from the request.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+
+  - name: "provider:approve"
+    description: >-
+      Approve the plan of a PROVIDER_ACTIVATION changeset, the only path
+      from a registered DRAFT capability provider to ACTIVE (EA-02D). Held
+      with changeset:approve; never by the changeset's requester.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "provider:certify"
+    description: >-
+      Record or revoke an EA-09 ProviderCapabilityCertification for one exact
+      provider, canonical capability contract major and EngineRelease. The
+      Control Plane verifies provider/release ownership, declared support,
+      release support and maker/checker separation. Certification grants no
+      activation, binding, grant or tenant entitlement.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "engine-release:approve"
+    description: >-
+      Approve the plan of an ENGINE_RELEASE_APPROVAL changeset, the only
+      path from a recorded CANDIDATE engine release to APPROVED (ADR-BCP-025
+      section 2.4). Held with changeset:approve; never by the changeset's
+      requester or the release's recorder. Approval is not certification.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "desired-release:approve"
+    description: >-
+      Approve the plan of an ENGINE_INSTANCE_DESIRED_RELEASE changeset, the
+      only way an engine instance's desired release is set or cleared
+      outside a revocation (ADR-BCP-025 section 2.5, gate ER-03). Held with
+      changeset:approve; never by the changeset's requester.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "desired-release:read"
+    description: >-
+      Infrastructure tooling reads an engine instance's desired release and
+      executes it (ADR-BCP-025 sections 2.5, 93). Reading changes nothing;
+      the Control Plane never deploys. Never held by an engine for itself.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+
+  - name: "engine-release:record"
+    description: >-
+      Release tooling records an immutable engine release: its
+      content-addressed artifacts, per-provider contract support and
+      declaration digest (ADR-BCP-025 gate ER-02). Recording never approves,
+      desires or deploys a release. Never held by an engine for itself.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+
+  - name: "deployment:observe"
+    description: >-
+      Infrastructure tooling (a deploy controller or admission webhook)
+      submits DeploymentObservations of what is running on engine instances
+      (ADR-BCP-025 section 2.9). Held only by a registered reporter workload,
+      and accepted only for the environments and regions it is registered
+      for. Never held by an engine: an engine cannot report its own release.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+
+  - name: "identity-runtime:observe"
+    description: >-
+      Infrastructure-owned runtime verification tooling publishes secret-free
+      IdentityProviderRuntimeProfile evidence for the exact CapabilityProvider,
+      EngineInstance and deployed artifact it independently observed. The
+      Control Plane revalidates provider/instance ownership, registered
+      environment and region, runtime-facet evidence and deployed-artifact
+      identity. This scope never activates a provider, creates a capability,
+      grants tenancy/business authority or lets an identity engine attest to
+      itself.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "verification:read"
+    description: >-
+      Read verification cases, their claims, checks, results and
+      discrepancies, evidence metadata and the evidence source registry
+      (ADR-BCP-023). Never artifact content.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "verification:write"
+    description: >-
+      Work verification cases: open them, record claims, register evidence
+      obtained from a source, record checks, raise discrepancies and move a
+      case through review (ADR-BCP-023). Necessary but not sufficient: the
+      Control Plane refuses anyone checking a claim they asserted.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "verification:decide"
+    description: >-
+      Record claims' verification results, resolve discrepancies and
+      conclude verification cases (ADR-BCP-023 sections 32, 74-76). Never
+      on a claim the caller asserted.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "changeset:read"
+    description: >-
+      Read changesets, their plans and outcomes (ADR-BCP-021, ADR-BCP-022
+      section 44). Necessary but not sufficient: the Control Plane also
+      requires administrative authority over the changeset's target.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "changeset:write"
+    description: >-
+      Draft, submit, apply and cancel changesets (ADR-BCP-021). Submitting
+      plans side-effect free; applying executes only a plan approved by
+      someone else. Necessary but not sufficient.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "changeset:approve"
+    description: >-
+      Approve, reject or request changes to one exact changeset plan, bound
+      to its digest (ADR-BCP-021 sections 24, 49-52). Never held to decide a
+      changeset the caller requested: the Control Plane refuses
+      self-approval.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "operation:read"
+    description: >-
+      Poll durable long-running operations within the caller's administrative
+      authority (ADR-BCP-022 sections 54-67).
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+
+  - name: "operation:control"
+    description: >-
+      Retry or cancel a durable long-running operation within the caller's
+      administrative authority (ADR-BCP-022 section 45). Never recomputes the
+      intent or plan the operation executes.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "subscription:read"
+    description: >-
+      A platform operator reads ProductSubscription classifications and their
+      explanation ("why is this subscription INTERNAL?", ADR-SHARED-011).
+      Exposes relationship identifiers, never the corporate graph.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "subscription:classify"
+    description: >-
+      A platform approver classifies or reclassifies a ProductSubscription
+      (ADR-BCP-017 section 48, ADR-BCP-018 ORG-11). INTERNAL is accepted only
+      when the Control Plane itself establishes eligibility; never by the
+      subscription's own organisation.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "erp:integrate"
+    description: >-
+      Allows a workload to call baobab-erp's own application-service integration
+      boundary (context/mapping resolution, inbound events) rather than
+      baobab-control-plane. Distinct from context:resolve/mapping:resolve, whose
+      audience is baobab-control-plane -- a token scoped for the Control Plane SHALL
+      NOT also work against ERP (ADR-0007 §§24-25; ADR-0014 §111).
+    audience: ["baobab-erp"]
+    allowed_actors: ["workload"]
+
+  # ADR-SHARED-011 section 5: engine workload scopes. Each is issued only
+  # for its engine's audience, so a token for one engine never works
+  # against another or against the Control Plane.
+  - name: "billing:manage"
+    description: >-
+      The Control Plane ensures, suspends and cancels the billing projection of
+      a classified ProductSubscription (baobab-subscriptions,
+      billing.subscription.manage). Tenant, legal entity and classification are
+      asserted by the caller and never accepted from browsers.
+    audience: ["baobab-subscriptions"]
+    allowed_actors: ["workload"]
+
+  - name: "billing:read"
+    description: "Read billing projections and their readiness (baobab-subscriptions)."
+    audience: ["baobab-subscriptions"]
+    allowed_actors: ["workload"]
+
+  - name: "usage:record"
+    description: >-
+      Meter usage against a billing projection (baobab-subscriptions,
+      billing.usage.record). Usage is metered for every subscription type.
+    audience: ["baobab-subscriptions"]
+    allowed_actors: ["workload"]
+
+  - name: "payment:execute"
+    description: >-
+      Create, confirm, capture and cancel payment intents (baobab-payments,
+      payment.intent.create, payment.payment.authorize, payment.payment.capture).
+      Never issued for INTERNAL billing, which never invokes payments.
+    audience: ["baobab-payments"]
+    allowed_actors: ["workload"]
+
+  - name: "payment:refund"
+    description: "Refund a captured payment (baobab-payments, payment.refund.create)."
+    audience: ["baobab-payments"]
+    allowed_actors: ["workload"]
+
+  - name: "payment:read"
+    description: "Read payment intents, payments and refunds (baobab-payments)."
+    audience: ["baobab-payments"]
+    allowed_actors: ["workload"]
+
+  - name: "federation-authority:read"
+    description: >-
+      Transport admission for private federation authority reads. Source must
+      independently verify current ACTIVE canonical workload, service audience,
+      exact trust/provider/organisation/estate target and authorised caller
+      association. No administrative permission, target approval or identity
+      linking authority; granted to no workload by this contract change.
+    audience: ["baobab-control-plane", "baobab-iam"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "federation-governance:manage"
+    description: >-
+      Transport admission for private federation governance operations by a
+      currently ACTIVE canonical human. Every action additionally requires its
+      exact security.federation permission, canonical resource scope, verified
+      assurance and independent maker/checker where applicable. A shared service
+      account cannot approve; this scope alone grants no authority.
+    audience: ["baobab-control-plane", "baobab-iam"]
+    allowed_actors: ["human"]
+    grants_authority: false

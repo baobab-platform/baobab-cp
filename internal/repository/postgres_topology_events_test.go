@@ -62,6 +62,7 @@ func TestTopologyEvents(t *testing.T) {
 		admin.Exec(ctx, `UPDATE topology.engine_instance SET desired_release_id = NULL WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
 		removeEngineReleases(ctx, admin, engine)
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code = $1)`, engine)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key = $1`, engine+".engine")
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code = $1`, engine)
 	}
@@ -75,6 +76,10 @@ func TestTopologyEvents(t *testing.T) {
 	}
 	var engineID string
 	must(admin.QueryRow(ctx, `INSERT INTO topology.engine (code, name) VALUES ($1, $1) RETURNING engine_id::text`, engine).Scan(&engineID))
+	_, err = admin.Exec(ctx, `INSERT INTO capability.capability_provider
+		(provider_key, name, provider_type, engine_id, status)
+		VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, 'DRAFT')`, engine+".engine", engineID)
+	must(err)
 	_, err = repo.SyncCapabilityCatalogue(ctx, []CatalogueCapability{{Capability: capabilitydomain.Capability{Key: capabilityKey,
 		Name: "Events test", DomainKey: "test", Lifecycle: capabilitydomain.CapabilityLifecycleActive,
 		Maturity: capabilitydomain.CapabilityMaturitySupported}, ContractVersions: []int{1}, DataClassification: "INTERNAL",

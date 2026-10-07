@@ -358,6 +358,13 @@ permissions:
     delegable: false
     read_only: false
     description: "Record an immutable engine release: its content-addressed artifacts, per-provider contract support and declaration digest (ADR-BCP-025 gate ER-02). Release tooling records under the engine-release:record workload scope; this permission covers an administrator doing so. Recording never approves, desires or deploys a release."
+  - key: provider.certify
+    domain: OPERATIONS
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Record or revoke EA-09 ProviderCapabilityCertification for an exact provider, canonical capability contract major and immutable EngineRelease. Certification is independent of release approval and provider activation, and requires maker/checker separation from the release recorder (ADR-SHARED-032)."
   - key: audit.view
     domain: AUDIT
     risk_class: MODERATE

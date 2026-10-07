@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/baobab-platform/baobab-cp/internal/capability/certification"
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/changeset"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
@@ -68,6 +69,7 @@ func TestDesiredReleaseLifecycle(t *testing.T) {
 		removeEngineReleases(ctx, admin, engine)
 		removeEngineReleases(ctx, admin, other)
 		admin.Exec(ctx, `DELETE FROM topology.engine_instance WHERE engine_id IN (SELECT engine_id FROM topology.engine WHERE code IN ($1, $2))`, engine, other)
+		admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key IN ($1, $2)`, engine+".engine", other+".engine")
 		admin.Exec(ctx, `DELETE FROM capability.capability WHERE code = $1`, capabilityKey)
 		admin.Exec(ctx, `DELETE FROM topology.engine WHERE code IN ($1, $2)`, engine, other)
 	}
@@ -91,11 +93,27 @@ func TestDesiredReleaseLifecycle(t *testing.T) {
 		must(admin.QueryRow(ctx, `INSERT INTO topology.engine (code, name) VALUES ($1, $1) RETURNING engine_id::text`, code).Scan(&id))
 		engineIDs[code] = id
 	}
+	for _, code := range []string{engine, other} {
+		mustExecResult, err := admin.Exec(ctx, `INSERT INTO capability.capability_provider
+			(provider_key, name, provider_type, engine_id, status)
+			VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, 'DRAFT')`, code+".engine", engineIDs[code])
+		_ = mustExecResult
+		must(err)
+	}
 	_, err = repo.SyncCapabilityCatalogue(ctx, []CatalogueCapability{{Capability: capabilitydomain.Capability{Key: capabilityKey,
 		Name: "Desired test", DomainKey: "test", Lifecycle: capabilitydomain.CapabilityLifecycleActive,
 		Maturity: capabilitydomain.CapabilityMaturitySupported}, ContractVersions: []int{1}, DataClassification: "INTERNAL",
 		Owner: engine, Source: "fixtures/desired-test", Digest: "sha256:" + strings.Repeat("9", 64)}})
 	must(err)
+	// fixtures/desired-test provider support: certification is meaningful only
+	// against support the provider actually declares.
+	for _, code := range []string{engine, other} {
+		_, err = admin.Exec(ctx, `INSERT INTO capability.provider_capability_support(provider_id, capability_id, contract_versions)
+			SELECT p.provider_id, cap.capability_id, '{1}'::integer[]
+			FROM capability.capability_provider p, capability.capability cap
+			WHERE p.provider_key = $1 AND cap.code = $2`, code+".engine", capabilityKey)
+		must(err)
+	}
 	instance := func(engineCode, environment string) string {
 		t.Helper()
 		var key string
@@ -178,9 +196,9 @@ func TestDesiredReleaseLifecycle(t *testing.T) {
 	}
 	// blocked submits a change that must block with exactly code, then
 	// removes it so it holds no lock on the instance.
-	blocked := func(instanceKey, releaseKey, code string) {
+	blocked := func(instanceKey, releaseKey string, codes ...string) {
 		t.Helper()
-		submit(draft(instanceKey, releaseKey), changeset.StateBlocked, code)
+		submit(draft(instanceKey, releaseKey), changeset.StateBlocked, codes...)
 		removeChangesetsFor(ctx, admin, instanceKey)
 	}
 	apply := func(c changeset.Changeset) changeset.Outcome {
@@ -217,8 +235,26 @@ func TestDesiredReleaseLifecycle(t *testing.T) {
 	// Each check that fails blocks with its own code.
 	blocked(staging, candidate, "DESIRED_RELEASE_NOT_APPROVED")
 	blocked(staging, foreign, "DESIRED_RELEASE_ENGINE_MISMATCH")
-	blocked(production, unattested, "DESIRED_RELEASE_PROVENANCE_MISSING")
+	blocked(production, unattested, "DESIRED_RELEASE_PROVENANCE_MISSING", "DESIRED_RELEASE_NOT_CERTIFIED")
 	blocked(staging, "", "DESIRED_RELEASE_UNCHANGED")
+
+	var canonicalProviderID string
+	must(admin.QueryRow(ctx, `SELECT canonical_provider_id FROM capability.capability_provider WHERE provider_key = $1`,
+		engine+".engine").Scan(&canonicalProviderID))
+	qualified, replayed, err := repo.RecordProviderCapabilityCertification(ctx, certification.RecordRequest{
+		ProviderID: canonicalProviderID, CapabilityKey: capabilityKey, ContractVersion: 1,
+		ReleaseID: attested, QualificationProfile: "ea-09/desired-release-test-v1",
+		Evidence: []certification.Evidence{{
+			Type:        "INTEGRATION_TEST",
+			URI:         "https://github.com/baobab-platform/baobab-cp/actions",
+			Digest:      "sha256:" + strings.Repeat("a", 64),
+			Description: "Production desired-release qualification.",
+		}},
+		Reason: "Qualified for the production desired-release test.",
+	}, requester, now.Add(time.Minute), actor)
+	if err != nil || replayed || qualified.ReleaseID != attested {
+		t.Fatalf("qualify production desired release: %+v replay=%v err=%v", qualified, replayed, err)
+	}
 
 	// Desire an attested release for staging; the plan names the release on
 	// both steps, and apply sets it at the next desired-release version.
