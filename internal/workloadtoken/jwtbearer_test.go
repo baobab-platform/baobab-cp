@@ -14,7 +14,8 @@ import (
 	"time"
 )
 
-const assertion = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJwcm92aXNpb25lciJ9.c2lnbmF0dXJl"
+// A compact-JWT-shaped fixture (three dot-separated parts). It is deliberately not base64 of a real header, so it is not credential-shaped.
+const assertion = "projected.assertion.fixture"
 
 // hydra is a stand-in token endpoint that records every request it receives.
 type hydra struct {
@@ -121,7 +122,7 @@ func TestAssertionIsReadAgainOnEveryExchangeSoRotationNeedsNoRestart(t *testing.
 	if _, err := s.Token(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	rotated := "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJyb3RhdGVkIn0.cm90YXRlZA"
+	rotated := "rotated.assertion.fixture"
 	if err := os.WriteFile(file, []byte(rotated), 0o600); err != nil {
 		t.Fatal(err)
 	}

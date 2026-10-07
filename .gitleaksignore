@@ -9,3 +9,9 @@
 # internal/erpprovisioning/source_test.go:13 held the same kind of synthetic provisioning id as a constant; it is
 # now a low-entropy value. Same reason, same history rule.
 94105352ef95d9d8a370d04a35e7eab22c428d62:internal/erpprovisioning/source_test.go:generic-api-key:13
+#
+# internal/workloadtoken/jwtbearer_test.go held two synthetic compact-JWT-shaped strings as assertion fixtures (a made-up header and
+# payload, no key material), which the jwt rule flagged. They are now plain three-part fixtures. The scan covers full history, so the
+# original commit's two findings are recorded here.
+14fab141f9240aacc6fabfedf620944663fd34aa:internal/workloadtoken/jwtbearer_test.go:jwt:17
+14fab141f9240aacc6fabfedf620944663fd34aa:internal/workloadtoken/jwtbearer_test.go:jwt:124
