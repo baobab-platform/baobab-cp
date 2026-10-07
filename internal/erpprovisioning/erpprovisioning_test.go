@@ -393,3 +393,19 @@ func TestKeyIdentityIsTheEntitiesNotTheirOrderAndStatusDecidesMismatch(t *testin
 		t.Fatal("the code alone, with another status, is not a rejected context")
 	}
 }
+
+func TestACancelledCallerIsNotERPBeingDown(t *testing.T) {
+	r := newRig(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := r.w.Client.Operation(ctx, operationID, "c")
+	if !errors.Is(err, context.Canceled) || Retryable(err) {
+		t.Fatalf("a cancelled caller must stay detectable and must not be rescheduled: err=%v retryable=%v", err, Retryable(err))
+	}
+	short, stop := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer stop()
+	time.Sleep(time.Millisecond)
+	if _, err = r.w.Client.Operation(short, operationID, "c"); !errors.Is(err, context.DeadlineExceeded) || Retryable(err) {
+		t.Fatalf("err=%v retryable=%v", err, Retryable(err))
+	}
+}

@@ -204,12 +204,19 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte, key, 
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		// The caller's own cancellation or deadline is not ERP being down: keep it detectable and not retryable.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return State{}, ctxErr
+		}
 		// Unreachable is ERP's problem to recover from, not a refusal: retryable.
 		return State{}, &Problem{Code: "ERP_UNREACHABLE", Retryable: true}
 	}
 	defer resp.Body.Close()
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return State{}, ctxErr
+		}
 		return State{}, &Problem{Status: resp.StatusCode, Code: "ERP_UNREACHABLE", Retryable: true}
 	}
 	if resp.StatusCode != want {
