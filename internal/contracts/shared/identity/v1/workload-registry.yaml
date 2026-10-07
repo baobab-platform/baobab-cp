@@ -86,8 +86,9 @@
 #                              baobab-control-plane. Several independently
 #                              revocable workloads may explicitly register the
 #                              same subject audience; registration for one
-#                              workload grants nothing to another. No workload holds
-#                              context:validate yet, so no entry declares it.
+#                              workload grants nothing to another. ERP validates
+#                              baobab-erp and Pulse validates baobab-pulse; each
+#                              relationship is explicit on its own entry.
 #   rotation_owner          -- team/repository responsible for rotating
 #                              this workload's credential.
 #   status                  -- PROVISIONED | ACTIVE | SUSPENDED | REVOKED |
@@ -99,7 +100,26 @@
 #                              registry's audience/scope constraints.
 #                              PROVISIONED means registered but not yet proven
 #                              under that full path; baobab-cp rejects incoming
-#                              tokens for non-ACTIVE registry entries.
+#                              tokens for non-ACTIVE registry entries. ACTIVE
+#                              attests the entry's credential profile, not each
+#                              scope or audience it lists: allowed_scopes,
+#                              allowed_audiences and validates_audiences are
+#                              ceilings on what baobab-iam may issue, and
+#                              authorise nothing until baobab-iam issues them
+#                              (its CI rejects any issued scope the registry does
+#                              not allow). A newly allowed scope is therefore
+#                              added here first and proven afterwards, in the
+#                              baobab-iam and resource-server changes that follow.
+#                              Allocation is not activation: a new path lands
+#                              here first (and a new workload as PROVISIONED),
+#                              and is promoted to ACTIVE only when all of this
+#                              has been shown, in order: this registry allows
+#                              it; baobab-iam can issue or exchange the
+#                              credential; the token carries exactly the
+#                              audience and scope; the resource server verifies
+#                              it; the resource server validates the Context
+#                              through the Control Plane; and the cross-tenant
+#                              and not-the-owner negative tests pass.
 #
 # scripts/validate-authorization-contracts.rb checks every entry: its scopes
 # are registered, workload-usable and issued for one of its audiences; it
@@ -137,13 +157,19 @@ workloads:
     # Gate IAM-10 (ADR-0014 §111): added baobab-erp/erp:integrate so this
     # workload's own iDempiere OSGi bundles (org.baobab-platform.baobab.erp.context/
     # mapping) can authenticate to baobab-app's HTTP boundary, which
-    # previously trusted network location alone. erp:read and erp:provision
-    # (the Boundary API) are allowed here and to no other workload. The
-    # client stays tenant-neutral: no tenant_id is stamped on it, because
-    # tenant entitlement is a Control Plane decision (ADR-0007 sections
-    # 88-91); a call operates in the tenant of a trusted Control Plane context.
+    # previously trusted network location alone. The client stays
+    # tenant-neutral: no tenant_id is stamped on it, because tenant
+    # entitlement is a Control Plane decision (ADR-0007 sections 88-91).
+    # ERP is the resource server of the Boundary API, not a caller of it, so
+    # it holds neither erp:read nor erp:provision: those belong to the
+    # workloads that call it, each with credentials of its own. ERP is the
+    # validator of the baobab-erp audience: context:validate lets it ask the
+    # Control Plane whether a context belongs to the caller it authenticated,
+    # and validates_audiences registers the one subject audience it may
+    # validate (docs/architecture/context-authority-for-workloads.md).
     allowed_audiences: ["baobab-control-plane", "baobab-erp"]
-    allowed_scopes: ["context:resolve", "erp:integrate", "erp:read", "erp:provision", "provider-migration:task"]
+    allowed_scopes: ["context:resolve", "context:validate", "erp:integrate", "provider-migration:task"]
+    validates_audiences: ["baobab-erp"]
     credential_type: client_credentials
     rotation_owner: baobab-platform/baobab-erp
     status: ACTIVE
@@ -151,10 +177,15 @@ workloads:
   baobab-pulse-workload:
     repository: baobab-platform/baobab-pulse
     owner: baobab-platform/baobab-pulse
-    runtime: "baobab-pulse service"
+    runtime: "baobab-pulse service and validator of the baobab-pulse resource-server audience"
     environment: production
+    # P-CAP-07: Pulse's own workload calls the Control Plane as the validator
+    # of subject tokens presented to the Pulse capability API. context:validate
+    # grants no tenant/business authority; validates_audiences binds this
+    # validator to the one subject audience it is permitted to present.
     allowed_audiences: ["baobab-control-plane"]
-    allowed_scopes: ["context:resolve", "provider-migration:task"]
+    allowed_scopes: ["context:resolve", "context:validate", "provider-migration:task"]
+    validates_audiences: ["baobab-pulse"]
     credential_type: client_credentials
     rotation_owner: baobab-platform/baobab-pulse
     status: ACTIVE
@@ -164,8 +195,11 @@ workloads:
     owner: baobab-platform/baobab-trade
     runtime: "baobab-trade service"
     environment: production
-    allowed_audiences: ["baobab-control-plane"]
-    allowed_scopes: ["context:resolve", "provider-migration:task"]
+    # Trade reads ERP's order consequences and inventory availability
+    # (erp:read, audience baobab-erp). It acts in the tenant of a Control
+    # Plane context it resolved itself; the scope grants no tenant authority.
+    allowed_audiences: ["baobab-control-plane", "baobab-erp"]
+    allowed_scopes: ["context:resolve", "erp:read", "provider-migration:task"]
     credential_type: client_credentials
     rotation_owner: baobab-platform/baobab-trade
     status: ACTIVE
@@ -207,6 +241,29 @@ workloads:
     environment: production
     allowed_audiences: ["baobab-subscriptions"]
     allowed_scopes: ["billing:manage", "billing:read"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-cp
+    status: PROVISIONED
+
+  # The credential boundary of the baobab-cp worker that executes approved
+  # provisioning plans against external engines (authorised onboarding ->
+  # desired state -> deterministic plan -> approval -> execution ->
+  # reconciliation). ERP provisioning authority belongs to this Control
+  # Plane execution identity: not to Trade, and not to ERP itself. It is
+  # deliberately not baobab-cp-workload, whose runtime is the billing
+  # projection: one identity per authority keeps revocation, audit and least
+  # privilege separable. The Context it presents to ERP belongs to this
+  # workload's own principal, not to the human who approved the plan, who
+  # remains immutable provenance on the approval and the operation.
+  # Allocation is not activation: PROVISIONED until the end-to-end evidence
+  # in the header above exists.
+  baobab-cp-provisioning-workload:
+    repository: baobab-platform/baobab-cp
+    owner: baobab-platform/baobab-cp
+    runtime: "baobab-cp tenant provisioning execution worker"
+    environment: production
+    allowed_audiences: ["baobab-erp"]
+    allowed_scopes: ["erp:provision"]
     credential_type: federated_workload_token
     rotation_owner: baobab-platform/baobab-cp
     status: PROVISIONED
