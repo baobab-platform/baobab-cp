@@ -58,7 +58,7 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 		exec(`INSERT INTO topology.deployment_observation(observation_key,engine_instance_key,artifacts,environment,region,observed_at,expires_at,recorded_at,source)
 		 VALUES($1,$2,$3::jsonb,'staging','af-south-1',$4,$5,$4,'test-readiness')`, key, p.EngineInstanceID, fmt.Sprintf(`[{"digest":%q}]`, digest), at, expires)
 	}
-	observe("dob_ready"+suffix, p.ArtifactDigest, now, now.Add(time.Minute))
+	observe("dob_ready"+suffix, p.ArtifactDigest, now.Add(-3*time.Second), now.Add(time.Minute))
 	t.Cleanup(func() {
 		tx, err := db.Begin(ctx)
 		if err != nil {
