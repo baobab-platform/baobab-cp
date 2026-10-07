@@ -29,6 +29,9 @@ func removeEngineReleases(ctx context.Context, admin *pgxpool.Pool, engine strin
 	if _, err := tx.Exec(ctx, `SET LOCAL session_replication_role = replica`); err != nil {
 		return
 	}
+	tx.Exec(ctx, `DELETE FROM capability.provider_capability_certification
+		WHERE engine_release_id IN (SELECT r.engine_release_id FROM topology.engine_release r
+		JOIN topology.engine e ON e.engine_id = r.engine_id WHERE e.code = $1)`, engine)
 	for _, table := range []string{"engine_release_artifact", "engine_release_provider_support"} {
 		tx.Exec(ctx, `DELETE FROM topology.`+table+` WHERE engine_release_id IN (SELECT r.engine_release_id
 			FROM topology.engine_release r JOIN topology.engine e ON e.engine_id = r.engine_id WHERE e.code = $1)`, engine)
