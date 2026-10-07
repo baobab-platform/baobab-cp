@@ -15,6 +15,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/billing"
 	"github.com/baobab-platform/baobab-cp/internal/capability/catalogue"
 	"github.com/baobab-platform/baobab-cp/internal/config"
+	"github.com/baobab-platform/baobab-cp/internal/erpprovisioning"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/apply"
@@ -157,9 +158,25 @@ func main() {
 	// Applies approved provisioning plans as durable operations
 	// (ADR-SHARED-015). An executor that dies loses its lease and the
 	// operation is resumed by the next.
+	var erpProvisioner provisioning.ERPProvisioning
+	if cfg.ERPProvisioningURL != "" {
+		// No Finance baseline resolver exists yet (the Control Plane never derives
+		// a functional currency from a market), so submissions stop at the
+		// source until Shared defines the baseline reference and one is wired.
+		slog.Warn("ERP provisioning is configured without a Finance baseline resolver; submissions will not be sent")
+		worker := erpprovisioning.Worker{
+			Source: erpprovisioning.PlanSource{Provisionings: resolverRepository},
+			Client: &erpprovisioning.Client{BaseURL: cfg.ERPProvisioningURL, HTTP: &http.Client{Timeout: 30 * time.Second},
+				Tokens: billing.FileTokenSource{Path: cfg.ERPProvisionerTokenFile}},
+			Context: erpprovisioning.ContextIssuer{Identities: resolverRepository, Contexts: resolverRepository,
+				Issuer: cfg.ERPProvisionerIssuer, Subject: cfg.ERPProvisionerSubject, TTL: cfg.ERPProvisioningContextTTL},
+			Ledger: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()},
+		}
+		erpProvisioner = erpprovisioning.Provisioner{Worker: worker, Latest: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()}}
+	}
 	applyExecutor := apply.Executor{Store: resolverRepository, Registry: resolverRepository, Lease: 5 * time.Minute,
 		Planner:  convergence.Planner{Registry: resolverRepository, Environment: cfg.Environment},
-		Pipeline: apply.StandardPipeline(provisioning.ZB02Dependencies{Tenants: db, Repo: resolverRepository, Provisioning: resolverRepository, ReleaseReadiness: resolverRepository})}
+		Pipeline: apply.StandardPipeline(provisioning.ZB02Dependencies{Tenants: db, Repo: resolverRepository, Provisioning: resolverRepository, ReleaseReadiness: resolverRepository, ERP: erpProvisioner})}
 	go applyExecutor.Run(ctx, 2*time.Second)
 	// The canonical workload registry is production authority (Shared
 	// workload-registry.yaml): a workload that is not ACTIVE has no runtime

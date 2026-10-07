@@ -96,3 +96,50 @@ func TestProductionRequiresTheWorkloadRegistry(t *testing.T) {
 		}
 	}
 }
+
+func TestERPProvisioningIsOffUnlessConfigured(t *testing.T) {
+	validConfigEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ERPProvisioningURL != "" {
+		t.Fatal("ERP provisioning must be off by default")
+	}
+}
+
+func TestERPProvisioningConfiguration(t *testing.T) {
+	validConfigEnv(t)
+	t.Setenv("ERP_PROVISIONING_URL", "https://erp.example.invalid/v1")
+	t.Setenv("ERP_PROVISIONER_TOKEN_FILE", "/var/run/secrets/erp-token")
+	t.Setenv("ERP_PROVISIONER_ISSUER", "https://iam.example.invalid/realms/baobab")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ERPProvisionerSubject != "baobab-cp-provisioning-workload" || cfg.ERPProvisioningContextTTL != 10*time.Minute {
+		t.Fatalf("defaults: %q %s", cfg.ERPProvisionerSubject, cfg.ERPProvisioningContextTTL)
+	}
+}
+
+func TestERPProvisioningRejectsAnUnsafeOrIncompleteConfiguration(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"plain http":      {"ERP_PROVISIONING_URL": "http://erp.example.invalid/v1"},
+		"no token":        {"ERP_PROVISIONER_TOKEN_FILE": ""},
+		"no issuer":       {"ERP_PROVISIONER_ISSUER": ""},
+		"ttl above 15m":   {"ERP_PROVISIONING_CONTEXT_TTL": "16m"},
+		"ttl below 1m":    {"ERP_PROVISIONING_CONTEXT_TTL": "30s"},
+		"ttl not a value": {"ERP_PROVISIONING_CONTEXT_TTL": "soon"},
+	} {
+		validConfigEnv(t)
+		t.Setenv("ERP_PROVISIONING_URL", "https://erp.example.invalid/v1")
+		t.Setenv("ERP_PROVISIONER_TOKEN_FILE", "/var/run/secrets/erp-token")
+		t.Setenv("ERP_PROVISIONER_ISSUER", "https://iam.example.invalid/realms/baobab")
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+		if _, err := Load(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

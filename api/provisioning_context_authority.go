@@ -37,7 +37,7 @@ const (
 // context is never rewritten). The context is current only when ALL hold:
 //
 //   - the TenantProvisioning it names exists, belongs to the context's tenant, and is in an admissible canonical state;
-//   - that provisioning has an approved, current plan (approvedPlanProblem, the single definition shared with the ERP
+//   - that provisioning has an approved, current plan (repository.ApprovedPlanProblem, the single definition shared with the ERP
 //     assignment projection) and its plan id, version and digest equal the context's tuple member by member.
 //
 // The tenant's own state is judged by the caller (a suspended tenant is TENANT_NOT_ACTIVE, not "authority not current").
@@ -75,7 +75,7 @@ func (a provisioningAuthority) judge(ctx context.Context, stored domain.Context)
 	case err != nil:
 		return 0, "", err
 	}
-	if approvedPlanProblem(c, desired) != "" {
+	if repository.ApprovedPlanProblem(c, desired) != "" {
 		return provisioningAuthorityNotCurrent, "no_approved_current_plan", nil
 	}
 	if c.Plan.PlanID != authority.PlanID || c.Plan.PlanVersion != authority.PlanVersion || c.Plan.PlanDigest != authority.PlanDigest {
