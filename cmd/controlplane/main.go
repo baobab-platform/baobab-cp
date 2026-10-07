@@ -16,6 +16,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/capability/catalogue"
 	"github.com/baobab-platform/baobab-cp/internal/config"
 	"github.com/baobab-platform/baobab-cp/internal/erpprovisioning"
+	"github.com/baobab-platform/baobab-cp/internal/eventingress"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/apply"
@@ -159,6 +160,7 @@ func main() {
 	// (ADR-SHARED-015). An executor that dies loses its lease and the
 	// operation is resumed by the next.
 	var erpProvisioner provisioning.ERPProvisioning
+	var erpWorker *erpprovisioning.Worker
 	if cfg.ERPProvisioningURL != "" {
 		worker := erpprovisioning.Worker{
 			Source: erpprovisioning.PlanSource{Provisionings: resolverRepository},
@@ -169,6 +171,35 @@ func main() {
 			Ledger: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()},
 		}
 		erpProvisioner = erpprovisioning.Provisioner{Worker: worker, Phase: resolverRepository, Latest: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()}}
+		erpWorker = &worker
+	}
+	// Signed delivery of canonical engine events (Shared control-plane/v1 receiveEngineEvent): verified, recorded durably, and
+	// applied afterwards. Off unless a delivery key registry is configured; an event is only ever recorded for a key in it.
+	var eventIngress *eventingress.Receiver
+	var eventWake chan struct{}
+	if cfg.EventDeliveryKeysFile != "" {
+		policy, err := eventingress.LoadPolicy()
+		if err != nil {
+			slog.Error("event ingress policy unavailable", "error", err)
+			os.Exit(1)
+		}
+		keys, err := eventingress.NewFileKeys(cfg.EventDeliveryKeysFile, policy.Producers(), func(err error) {
+			slog.Error("event delivery keys not reloaded; the last valid registry stays in force", "error", err)
+		})
+		if err != nil {
+			slog.Error("event delivery keys unavailable", "error", err)
+			os.Exit(1)
+		}
+		inbox := eventingress.PostgresInbox{DB: resolverRepository.Pool()}
+		eventIngress = &eventingress.Receiver{Keys: keys.Lookup, Policy: policy, Inbox: inbox}
+		eventWake = make(chan struct{}, 1)
+		handlers := map[string]eventingress.Apply{}
+		if erpWorker != nil {
+			handlers[erpprovisioning.ProvisioningChangedEvent] = erpWorker.ApplyEvent
+		} else {
+			slog.Warn("event ingress is on but ERP provisioning is not configured; provisioning.changed events are recorded and wait", "setting", "ERP_PROVISIONING_URL")
+		}
+		go (&eventingress.Processor{Inbox: inbox, Policy: policy, Handlers: handlers}).Run(ctx, cfg.EventProcessingInterval, eventWake)
 	}
 	applyExecutor := apply.Executor{Store: resolverRepository, Registry: resolverRepository, Lease: 5 * time.Minute,
 		Planner:  convergence.Planner{Registry: resolverRepository, Environment: cfg.Environment},
@@ -190,7 +221,7 @@ func main() {
 	} else {
 		slog.Warn("workload registry not configured; workload lifecycle is not enforced (non-production only)", "environment", cfg.Environment)
 	}
-	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{FederationCanonical: &service.FederationIdentityEvidenceService{Repository: resolverRepository, Environment: cfg.Environment, EngineInstanceID: cfg.FederationSourceEngineInstanceID, Now: time.Now}, FederationGovernanceTargets: resolverRepository, IdentityRuntimeProfiles: resolverRepository, Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, OrganisationMappings: resolverRepository, Mappings: resolverRepository, Operations: resolverRepository, AdministrativeGrants: resolverRepository, AdministrativeGrantAdmin: resolverRepository, ShadowEvidence: resolverRepository, EnforcementRollback: cfg.EnforcementRollback, ProviderMigrations: resolverRepository, EngineReleases: resolverRepository, ProviderCertifications: resolverRepository, DesiredReleases: resolverRepository, DeploymentObservations: resolverRepository, ReleaseDrift: resolverRepository, ReleaseReadiness: resolverRepository, WorkloadRegistry: workloadRegistry, SubjectVerifiers: &auth.AudienceVerifiers{Issuer: cfg.WorkloadOIDCIssuer}, EngineMigrationTasks: resolverRepository, Changesets: resolverRepository, Markets: resolverRepository, Verification: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, MarketParticipations: resolverRepository, CapabilityResolutions: resolverRepository, OrganisationObservability: resolverRepository, PlatformAccounts: resolverRepository, Metrics: metrics.Default, Applications: applications, Classifications: classifications, Onboarding: &onboarding.Service{Repo: resolverRepository, Admissions: resolverRepository}, TenantBootstrapRegistration: cfg.TenantBootstrapRegistration, Environment: cfg.Environment}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{EventIngress: eventIngress, EventWake: eventWake, FederationCanonical: &service.FederationIdentityEvidenceService{Repository: resolverRepository, Environment: cfg.Environment, EngineInstanceID: cfg.FederationSourceEngineInstanceID, Now: time.Now}, FederationGovernanceTargets: resolverRepository, IdentityRuntimeProfiles: resolverRepository, Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, OrganisationMappings: resolverRepository, Mappings: resolverRepository, Operations: resolverRepository, AdministrativeGrants: resolverRepository, AdministrativeGrantAdmin: resolverRepository, ShadowEvidence: resolverRepository, EnforcementRollback: cfg.EnforcementRollback, ProviderMigrations: resolverRepository, EngineReleases: resolverRepository, ProviderCertifications: resolverRepository, DesiredReleases: resolverRepository, DeploymentObservations: resolverRepository, ReleaseDrift: resolverRepository, ReleaseReadiness: resolverRepository, WorkloadRegistry: workloadRegistry, SubjectVerifiers: &auth.AudienceVerifiers{Issuer: cfg.WorkloadOIDCIssuer}, EngineMigrationTasks: resolverRepository, Changesets: resolverRepository, Markets: resolverRepository, Verification: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, MarketParticipations: resolverRepository, CapabilityResolutions: resolverRepository, OrganisationObservability: resolverRepository, PlatformAccounts: resolverRepository, Metrics: metrics.Default, Applications: applications, Classifications: classifications, Onboarding: &onboarding.Service{Repo: resolverRepository, Admissions: resolverRepository}, TenantBootstrapRegistration: cfg.TenantBootstrapRegistration, Environment: cfg.Environment}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		slog.Info("control plane listening", "address", cfg.HTTPAddress)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

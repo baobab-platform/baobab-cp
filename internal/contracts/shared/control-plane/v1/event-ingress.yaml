@@ -1,0 +1,30 @@
+# Control Plane event ingress: which engine events the Control Plane accepts over signed HTTPS delivery
+# (receiveEngineEvent, docs/architecture/signed-event-delivery.md). An event type and producer not listed here is refused
+# (422). The list is closed, and adding a type is a reviewed contract change, never configuration.
+#
+# The event contracts themselves (type, payload, producer) stay in contracts/events/v1/event-registry.yaml and the engine's
+# AsyncAPI document. This file only says which of them the Control Plane consumes and what it does with them.
+version: 1
+recipient: baobab-control-plane
+signing_algorithms: [hmac-sha256]
+replay_window_seconds: 300
+receipt_retention_days: 7
+max_retry_horizon_hours: 72
+# Receipts and conflicts are keyed by the envelope's (source, id), the delivery identity envelope.schema.json defines.
+identity: [source, id]
+accepted:
+  - type: com.baobab-platform.erp.provisioning.changed.v1
+    producer: baobab-erp
+    source: urn:baobab-platform:service:baobab-erp
+    # ERP provisioning state carries no provisioning id; the Control Plane ties it to the submission it recorded when it
+    # requested the operation. An event can arrive before that submission is recorded (ERP accepts the request, then
+    # publishes, while the Control Plane is still recording its own answer), so an unknown operation is never dropped on
+    # arrival: the event stays accepted in the inbox and is applied once the submission exists.
+    handling: >-
+      The event data is validated against erp/v1 provisioning-state.schema.json and applied only if its revision is newer
+      than the recorded one. The event is a trigger to record ERP's state for a known submission; readiness is still
+      decided by the Control Plane from that recorded state. An event for an operation with no recorded submission stays
+      pending in the inbox and is retried; one still unmatched after pending_max_age_hours is dead-lettered for operators.
+      The recovery sweep, not the event, is what repairs a state the Control Plane never learned.
+    pending_max_age_hours: 24
+    scope: tenant

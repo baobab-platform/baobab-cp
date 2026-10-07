@@ -14,6 +14,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/administration"
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/eventingress"
 	"github.com/baobab-platform/baobab-cp/internal/health"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
@@ -29,6 +30,10 @@ import (
 type correlationKey struct{}
 
 type Dependencies struct {
+	// EventIngress backs POST /v1/integration/events, the signed delivery of canonical engine events (Shared control-plane/v1
+	// receiveEngineEvent). Nil skips the route. EventWake is nudged after an event is recorded.
+	EventIngress *eventingress.Receiver
+	EventWake    chan<- struct{}
 	// FederationCanonical is the private CP authority source. Missing instance,
 	// references, current workload lifecycle or grants keep reads fail-closed.
 	FederationCanonical         *service.FederationIdentityEvidenceService
@@ -279,6 +284,10 @@ func New(dependencies Dependencies) http.Handler {
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/activate", a.tenantLifecycleAction("activate"))
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/decommission", a.tenantLifecycleAction("decommission"))
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromQuery, false)).Get("/v1/entitlements", a.getEntitlement)
+	if dependencies.EventIngress != nil {
+		// Authenticated by the delivery signature alone: no bearer token, no scope, and this is the only route that accepts it.
+		r.Post("/v1/integration/events", EventIngressHandler{Receiver: *dependencies.EventIngress, Wake: dependencies.EventWake}.Receive)
+	}
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/context/resolve", a.resolveContext)
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/resolve", ResolverHandler{Service: a.resolution, ContextResolution: contextResolution}.Resolve)
 	// ADR-BCP-004/003 Runtime APIs (issue #74 sub-work item 6), deliberately

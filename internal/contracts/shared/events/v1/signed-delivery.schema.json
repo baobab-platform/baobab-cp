@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/events/v1/signed-delivery.schema.json",
+  "title": "Signed event delivery (HTTPS transport binding)",
+  "description": "How one canonical event envelope (envelope.schema.json) is carried over HTTPS from a producing engine to a consuming service, and how the consumer acknowledges it (docs/architecture/signed-event-delivery.md). The event is the contract; this is only one transport for it. The same envelope may later travel over a broker without change.",
+  "$defs": {
+    "keyId": {
+      "description": "Identifies the delivery key the sender signed with. The consumer looks the key up in its own configuration; the key id carries no secret and no authority beyond that lookup.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "timestamp": {
+      "description": "The sender's clock at signing, UTC, whole seconds, RFC 3339 with a literal Z. Signed again on every delivery attempt, so a retry is never rejected as stale merely because the first attempt was long ago.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"
+    },
+    "signature": {
+      "description": "<algorithm>=<lowercase hex>. Only hmac-sha256 is defined; the algorithm prefix is how a stronger scheme (asymmetric keys, workload identity) is introduced without changing the headers.",
+      "type": "string",
+      "pattern": "^hmac-sha256=[0-9a-f]{64}$"
+    },
+    "DeliveryHeaders": {
+      "description": "The three signature headers. The body is the exact bytes of one envelope, Content-Type application/cloudevents+json, at most 1 MiB. The signature is HMAC-SHA256 over the UTF-8 string  baobab-event-delivery-v1 LF <recipient> LF <key id> LF <timestamp> LF <lowercase hex SHA-256 of the body>  (LF = 0x0A, no trailing LF), keyed with the key's secret of at least 32 random bytes. <recipient> is the consumer's fixed service name (baobab-control-plane), so a signature made for one consumer is worthless at another.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Baobab-Key-Id", "Baobab-Timestamp", "Baobab-Signature"],
+      "properties": {
+        "Baobab-Key-Id": { "$ref": "#/$defs/keyId" },
+        "Baobab-Timestamp": { "$ref": "#/$defs/timestamp" },
+        "Baobab-Signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "DeliveryReceiptAccepted": {
+      "description": "The 202 answer: the first receipt of this (source, id), durably recorded.",
+      "allOf": [{ "$ref": "#/$defs/DeliveryReceipt" }, { "type": "object", "properties": { "status": { "const": "ACCEPTED" } } }]
+    },
+    "DeliveryReceiptDuplicate": {
+      "description": "The 200 answer: a redelivery of a (source, id) already accepted with identical content.",
+      "allOf": [{ "$ref": "#/$defs/DeliveryReceipt" }, { "type": "object", "properties": { "status": { "const": "DUPLICATE" } } }]
+    },
+    "DeliveryReceipt": {
+      "description": "A 2xx answer means the event has been durably accepted (recorded), never that it has been acted on. ACCEPTED is the first receipt of this (source, id) (202); DUPLICATE is a redelivery of an event already accepted with identical content (200). Each answer has its own schema below, so status cannot contradict the HTTP status. A sender treats both as delivered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "status", "received_at"],
+      "properties": {
+        "event_id": { "type": "string", "format": "uuid" },
+        "status": { "type": "string", "enum": ["ACCEPTED", "DUPLICATE"] },
+        "received_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SenderPolicy": {
+      "description": "Documented, machine-checked constants. Delivery is at-least-once: a sender retries until it receives a 2xx, a consumer deduplicates by the envelope's (source, id), the delivery identity envelope.schema.json defines. Replay window and retention are minimums a consumer must honour, and the retry horizon is a maximum a sender must honour.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replay_window_seconds", "receipt_retention_days", "max_retry_horizon_hours", "minimum_secret_bytes", "max_body_bytes", "permanent_failure_statuses"],
+      "properties": {
+        "replay_window_seconds": { "const": 300 },
+        "receipt_retention_days": { "const": 7 },
+        "max_retry_horizon_hours": {
+          "description": "A sender stops retrying an event, and dead-letters it, at most this long after its first attempt. It must stay below receipt retention, so a retry can never arrive after the consumer has forgotten the first acceptance and be taken for a new event. Re-publishing a dead letter later is a new delivery; applying an event is gated on its revision, so a late duplicate is harmless.",
+          "const": 72
+        },
+        "minimum_secret_bytes": { "const": 32 },
+        "max_body_bytes": { "const": 1048576 },
+        "permanent_failure_statuses": {
+          "description": "A sender dead-letters at once on these (a retry cannot change the answer); any other non-2xx is retried with backoff up to its attempt limit and then dead-lettered.",
+          "const": [400, 409, 413, 422]
+        }
+      }
+    }
+  }
+}

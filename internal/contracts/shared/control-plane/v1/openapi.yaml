@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.35.0
+  version: 1.36.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -15,6 +15,8 @@ info:
     name: Apache-2.0
     identifier: Apache-2.0
 tags:
+  - name: Event ingress
+    description: Signed delivery of engine events the Control Plane consumes (docs/architecture/signed-event-delivery.md).
   - name: Applications
     description: An applicant's own ClientApplications (ADR-BCP-017).
   - name: Admission
@@ -415,6 +417,82 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /integration/events:
+    post:
+      operationId: receiveEngineEvent
+      tags: [Event ingress]
+      summary: Receive one canonical engine event over signed HTTPS delivery
+      description: >-
+        The HTTPS transport binding of an engine's canonical event, not a business API
+        (docs/architecture/signed-event-delivery.md). The body is the exact bytes of one CloudEvents envelope
+        (events/v1/envelope.schema.json), and the three signature headers (events/v1/signed-delivery.schema.json) prove
+        that a holder of a registered delivery key sent exactly these bytes within the replay window. The Control Plane
+        verifies, in this order and before it parses or stores anything: the key id is registered for the sender and not
+        revoked, the timestamp is within 300 seconds of its clock, and the signature matches over the body digest. A bearer
+        token is neither required nor accepted: the sender is an engine's outbox dispatcher, not a workload identity, and
+        the signature, not the token, authenticates it.
+
+        Only an event type and producer listed in event-ingress.yaml is accepted (422 otherwise), its data must validate
+        against the payload schema its registry entry names (422 otherwise), and its source must be the producer's.
+        Delivery is at-least-once and the envelope's (source, id) is the idempotency boundary, as envelope.schema.json
+        defines delivery identity: the first receipt is 202 ACCEPTED, a redelivery with identical content is 200
+        DUPLICATE, and a (source, id) already received with different content is 409 EVENT_ID_CONFLICT. A sender stops
+        retrying within 72 hours, well inside the seven days receipts are kept. A 2xx means the event is durably recorded, never that it has been acted on: applying it
+        happens after the response, and an event for something the Control Plane does not yet know stays recorded and
+        pending. The event is a trigger to inspect authoritative state, not the state: acting on it never replaces the
+        Control Plane's own checks. Receipts are retained at least seven days. No failure answer, audit record or log
+        carries the signature, the key material or the event data.
+      security:
+        - signedEventDelivery: []
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/Traceparent"
+        - name: Baobab-Key-Id
+          in: header
+          required: true
+          schema:
+            $ref: ../../events/v1/signed-delivery.schema.json#/$defs/keyId
+        - name: Baobab-Timestamp
+          in: header
+          required: true
+          schema:
+            $ref: ../../events/v1/signed-delivery.schema.json#/$defs/timestamp
+        - name: Baobab-Signature
+          in: header
+          required: true
+          schema:
+            $ref: ../../events/v1/signed-delivery.schema.json#/$defs/signature
+      requestBody:
+        required: true
+        content:
+          application/cloudevents+json:
+            schema:
+              $ref: ../../events/v1/envelope.schema.json
+      responses:
+        "200":
+          description: A redelivery of an event already accepted with identical content. Delivered.
+          content:
+            application/json:
+              schema:
+                $ref: ../../events/v1/signed-delivery.schema.json#/$defs/DeliveryReceiptDuplicate
+        "202":
+          description: The event is durably recorded. It has not necessarily been applied.
+          content:
+            application/json:
+              schema:
+                $ref: ../../events/v1/signed-delivery.schema.json#/$defs/DeliveryReceiptAccepted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
   /resolve:
@@ -6746,6 +6824,14 @@ components:
       type: openIdConnect
       openIdConnectUrl: https://identity.baobab-platform.com/.well-known/openid-configuration
       description: Human administrator identity; issuer is environment-configured by the implementation.
+    signedEventDelivery:
+      type: apiKey
+      in: header
+      name: Baobab-Signature
+      description: >-
+        HMAC-SHA256 over the delivery metadata and the SHA-256 of the body, with Baobab-Key-Id and Baobab-Timestamp
+        (events/v1/signed-delivery.schema.json). Authenticates an engine's event dispatcher to the one operation that
+        receives engine events. It grants no scope, reads no tenant data and is not accepted anywhere else.
     workloadOidc:
       type: openIdConnect
       openIdConnectUrl: https://identity.baobab-platform.com/.well-known/openid-configuration

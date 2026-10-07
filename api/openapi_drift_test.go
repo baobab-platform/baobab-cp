@@ -15,6 +15,7 @@ import (
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
+	"github.com/baobab-platform/baobab-cp/internal/eventingress"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/service/application"
@@ -34,6 +35,7 @@ func operation(method, path string) string {
 func fullRouter(t *testing.T) chi.Routes {
 	t.Helper()
 	h := New(Dependencies{
+		EventIngress: &eventingress.Receiver{},
 		IamOrganisations: struct {
 			repository.IamOrganisationRepository
 		}{},
