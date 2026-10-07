@@ -30,6 +30,8 @@ func TestParseKeysIsStrict(t *testing.T) {
 		"a short secret":       registry(entry("erp-delivery-2026-10", "baobab-erp", 31, "")),
 		"a bad id":             registry(entry("ERP", "baobab-erp", 32, "")),
 		"a sender nobody has":  registry(entry("trade-delivery-2026", "baobab-trade", 32, "")),
+		"a second document":    append(registry(entry("erp-delivery-2026-10", "baobab-erp", 32, "")), registry(entry("erp-delivery-2026-11", "baobab-erp", 32, ""))...),
+		"trailing garbage":     append(registry(entry("erp-delivery-2026-10", "baobab-erp", 32, "")), []byte(" garbage")...),
 		"an unknown member":    registry(entry("erp-delivery-2026-10", "baobab-erp", 32, `,"admin":true`)),
 		"a non-base64 secret":  []byte(`[{"key_id":"erp-delivery-2026-10","sender":"baobab-erp","secret_b64":"!!"}]`),
 		"a url-safe base64 id": []byte(`[{"key_id":"erp-delivery-2026-10","sender":"baobab-erp","secret_b64":"` + strings.Repeat("-", 44) + `"}]`),

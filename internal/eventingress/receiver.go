@@ -74,6 +74,14 @@ func (r Receiver) Receive(ctx context.Context, h Headers, body []byte) (Receipt,
 	if err := contracts.Validate(contracts.MustSchema(schema.Ref), env.Data); err != nil {
 		return Receipt{}, &Rejection{Status: 422, Code: "EVENT_PAYLOAD_INVALID", Detail: "the event data does not satisfy its payload schema", Result: "invalid"}
 	}
+	// The tenant the receipt is recorded under and the tenant the data describes are one tenant: a delivery that names two is refused,
+	// so tenant-scoped processing and the durable evidence cannot disagree.
+	var data struct {
+		TenantID string `json:"tenant_id"`
+	}
+	if err := json.Unmarshal(env.Data, &data); err != nil || data.TenantID != env.TenantID {
+		return Receipt{}, &Rejection{Status: 422, Code: "EVENT_PAYLOAD_INVALID", Detail: "the event data names a tenant other than the envelope's", Result: "invalid"}
+	}
 	digest := sha256.Sum256(body)
 	receipt, err := r.Inbox.Accept(ctx, Event{Source: env.Source, ID: env.ID, Type: env.Type, TenantID: env.TenantID, KeyID: key.ID,
 		Body: body, BodySHA256: hex.EncodeToString(digest[:])})

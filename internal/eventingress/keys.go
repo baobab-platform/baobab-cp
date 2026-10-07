@@ -3,7 +3,9 @@ package eventingress
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -25,6 +27,10 @@ func ParseKeys(raw []byte, allowedSenders []string) (map[string]Key, error) {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&entries); err != nil {
 		return nil, fmt.Errorf("event delivery keys: %w", err)
+	}
+	// Exactly one document: anything after it (a second array, garbage) means a malformed rotation, never "the first one wins".
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("event delivery keys: unexpected data after the registry")
 	}
 	if len(entries) == 0 {
 		return nil, fmt.Errorf("event delivery keys: at least one key is required")

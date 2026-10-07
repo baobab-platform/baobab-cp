@@ -162,11 +162,12 @@ func TestOnlyAcceptedEventsFromTheirProducerAreRecorded(t *testing.T) {
 		"another dataschema": {func(e map[string]any) {
 			e["dataschema"] = "https://contracts.baobab-platform.com/erp/v1/provisioning-request.schema.json"
 		}, 422, "EVENT_NOT_ACCEPTED"},
-		"data that is not a provisioning state":  {func(e map[string]any) { e["data"] = map[string]any{"operation_id": "x"} }, 422, "EVENT_PAYLOAD_INVALID"},
-		"a state with an unknown member":         {func(e map[string]any) { e["data"].(map[string]any)["internal"] = "x" }, 422, "EVENT_PAYLOAD_INVALID"},
-		"a state with an impossible state value": {func(e map[string]any) { e["data"].(map[string]any)["state"] = "exploded" }, 422, "EVENT_PAYLOAD_INVALID"},
-		"an envelope with a legacy shape":        {func(e map[string]any) { delete(e, "specversion"); e["event_id"] = "x" }, 400, "EVENT_ENVELOPE_INVALID"},
-		"an envelope with no id":                 {func(e map[string]any) { delete(e, "id") }, 400, "EVENT_ENVELOPE_INVALID"},
+		"data that is not a provisioning state":       {func(e map[string]any) { e["data"] = map[string]any{"operation_id": "x"} }, 422, "EVENT_PAYLOAD_INVALID"},
+		"a state with an unknown member":              {func(e map[string]any) { e["data"].(map[string]any)["internal"] = "x" }, 422, "EVENT_PAYLOAD_INVALID"},
+		"data for another tenant than the envelope's": {func(e map[string]any) { e["data"].(map[string]any)["tenant_id"] = "tn_01k4someoneelse0000000000" }, 422, "EVENT_PAYLOAD_INVALID"},
+		"a state with an impossible state value":      {func(e map[string]any) { e["data"].(map[string]any)["state"] = "exploded" }, 422, "EVENT_PAYLOAD_INVALID"},
+		"an envelope with a legacy shape":             {func(e map[string]any) { delete(e, "specversion"); e["event_id"] = "x" }, 400, "EVENT_ENVELOPE_INVALID"},
+		"an envelope with no id":                      {func(e map[string]any) { delete(e, "id") }, 400, "EVENT_ENVELOPE_INVALID"},
 	} {
 		r := newRig(t)
 		_, rejection := r.deliver(provisioningEvent(t, c.change))
