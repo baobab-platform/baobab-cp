@@ -108,7 +108,7 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 		{"support-major", `UPDATE capability.provider_capability_support SET contract_versions=ARRAY[2] WHERE provider_id=$1::uuid`, `UPDATE capability.provider_capability_support SET contract_versions=ARRAY[1] WHERE provider_id=$1::uuid`, []any{provider}},
 		{"binding-major", `UPDATE capability.capability_binding SET contract_version='2' WHERE id=$1::uuid`, `UPDATE capability.capability_binding SET contract_version='1' WHERE id=$1::uuid`, []any{binding}},
 		{"support-revoked", `UPDATE capability.provider_capability_support SET status='RETIRED' WHERE provider_id=$1::uuid`, `UPDATE capability.provider_capability_support SET status='ACTIVE' WHERE provider_id=$1::uuid`, []any{provider}},
-		{"binding-revoked", `UPDATE capability.capability_binding SET status='REVOKED' WHERE id=$1::uuid`, `UPDATE capability.capability_binding SET status='ACTIVE' WHERE id=$1::uuid`, []any{binding}},
+		{"binding-revoked", `UPDATE capability.capability_binding SET status='RETIRED' WHERE id=$1::uuid`, `UPDATE capability.capability_binding SET status='ACTIVE' WHERE id=$1::uuid`, []any{binding}},
 		{"reference-revoked", `UPDATE mapping.external_reference SET status='archived' WHERE external_reference_id=$1`, `UPDATE mapping.external_reference SET status='active' WHERE external_reference_id=$1`, []any{refs["support"]}},
 	} {
 		t.Run(tc.name, func(t *testing.T) { exec(tc.change, tc.args...); defer exec(tc.restore, tc.args...); deny(now) })
