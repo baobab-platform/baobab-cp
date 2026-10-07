@@ -284,14 +284,15 @@ func New(dependencies Dependencies) http.Handler {
 	// PlatformContextHandler's doc comment for why.
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/platform-context/resolve", PlatformContextHandler{ContextResolution: contextResolution, Contexts: dependencies.Contexts, TTL: dependencies.PlatformContextTTL}.Resolve)
 	if validators, ok := dependencies.WorkloadRegistry.(auth.ValidatorRegistry); ok && dependencies.SubjectVerifiers != nil && dependencies.Contexts != nil && dependencies.Identities != nil {
-		validation := ContextValidationHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Validators: validators,
-			Subjects: dependencies.SubjectVerifiers, Tenants: dependencies.Store}
 		// Pre-activation provisioning authority (docs/architecture/context-authority-for-workloads.md section 13) is judged only
 		// when both the purpose registry and the provisioning sources exist; otherwise a provisioning context is never valid.
-		if purposes, ok := dependencies.WorkloadRegistry.(auth.ContextPurposeRegistry); ok && dependencies.Provisioning != nil {
-			validation.Purposes = purposes
-			validation.Provisioning = &provisioningAuthority{Provisionings: dependencies.Provisioning}
+		var purposes auth.ContextPurposeRegistry
+		var judge *provisioningAuthority
+		if registry, ok := dependencies.WorkloadRegistry.(auth.ContextPurposeRegistry); ok && dependencies.Provisioning != nil {
+			purposes, judge = registry, &provisioningAuthority{Provisionings: dependencies.Provisioning}
 		}
+		validation := ContextValidationHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Validators: validators,
+			Subjects: dependencies.SubjectVerifiers, Tenants: dependencies.Store, Purposes: purposes, Provisioning: judge}
 		r.With(a.authorize(a.workloadVerifier, "workload", auth.ContextValidateScope)).Post("/v1/platform-context/validate", validation.Validate)
 	}
 	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: runtimeOnly(dependencies.Contexts), Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
