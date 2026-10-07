@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
@@ -193,16 +194,20 @@ func TestValidateConfirmsAContextForItsOwner(t *testing.T) {
 	}
 	// Exactly the trusted facts a resource server needs: no legal entity, no
 	// principal, nothing the Control Plane resolved internally.
-	for _, key := range []string{"context_id", "tenant_id", "resolved_at", "expires_at", "market_id", "organisation_id"} {
+	for _, key := range []string{"context_id", "tenant_id", "resolved_at", "expires_at", "market_id", "organisation_id", "authority_purpose"} {
 		if _, ok := raw[key]; !ok {
 			t.Fatalf("response lacks %s: %v", key, raw)
 		}
 	}
-	if len(raw) != 6 || raw["context_id"] != f.owned || raw["tenant_id"] != "tn_validate" {
+	// authority_purpose is always stated, never implied; a RUNTIME answer carries no provisioning authority.
+	if len(raw) != 7 || raw["context_id"] != f.owned || raw["tenant_id"] != "tn_validate" || raw["authority_purpose"] != "RUNTIME" {
 		t.Fatalf("response: %v", raw)
 	}
 	if w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("a validation must not be cached: %q", w.Header().Get("Cache-Control"))
+	}
+	if err := contracts.Validate(platformContextValidationSchema, w.Body.Bytes()); err != nil {
+		t.Fatalf("response does not conform to control-plane/v1 PlatformContextValidation: %v", err)
 	}
 }
 

@@ -286,10 +286,16 @@ func New(dependencies Dependencies) http.Handler {
 	if validators, ok := dependencies.WorkloadRegistry.(auth.ValidatorRegistry); ok && dependencies.SubjectVerifiers != nil && dependencies.Contexts != nil && dependencies.Identities != nil {
 		validation := ContextValidationHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Validators: validators,
 			Subjects: dependencies.SubjectVerifiers, Tenants: dependencies.Store}
+		// Pre-activation provisioning authority (docs/architecture/context-authority-for-workloads.md section 13) is judged only
+		// when both the purpose registry and the provisioning sources exist; otherwise a provisioning context is never valid.
+		if purposes, ok := dependencies.WorkloadRegistry.(auth.ContextPurposeRegistry); ok && dependencies.Provisioning != nil {
+			validation.Purposes = purposes
+			validation.Provisioning = &provisioningAuthority{Provisionings: dependencies.Provisioning}
+		}
 		r.With(a.authorize(a.workloadVerifier, "workload", auth.ContextValidateScope)).Post("/v1/platform-context/validate", validation.Validate)
 	}
-	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
-	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve-batch", CapabilityResolveBatchHandler{Contexts: dependencies.Contexts, Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
+	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve", CapabilityResolveHandler{Contexts: runtimeOnly(dependencies.Contexts), Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
+	r.With(a.authorize(a.workloadVerifier, "workload", "context:resolve")).Post("/v1/capabilities/resolve-batch", CapabilityResolveBatchHandler{Contexts: runtimeOnly(dependencies.Contexts), Identities: dependencies.Identities, Service: capabilityResolution}.Resolve)
 	if caller, ok := dependencies.Identities.(repository.FederationIdentityReader); ok {
 		source := federationAuthorityHandler{
 			api:       a,
@@ -322,7 +328,7 @@ func New(dependencies Dependencies) http.Handler {
 	// distinct scope from the workload resolve endpoints above -- see
 	// CapabilityExplainHandler's doc comment for why it deliberately is not
 	// tenant-scoped to the calling principal.
-	r.With(a.authorize(a.adminVerifier, "human", "capabilities:explain"), a.requireAdminRole(nil, true)).Post("/v1/capabilities/explain", CapabilityExplainHandler{Contexts: dependencies.Contexts, Service: a.resolution}.Explain)
+	r.With(a.authorize(a.adminVerifier, "human", "capabilities:explain"), a.requireAdminRole(nil, true)).Post("/v1/capabilities/explain", CapabilityExplainHandler{Contexts: runtimeOnly(dependencies.Contexts), Service: a.resolution}.Explain)
 	// Canonical entities are platform-level registry resources (no tenant
 	// of their own to scope a "cp:tenant-admin" membership against), so
 	// they too are platform-admin only.
@@ -368,7 +374,7 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "operation:read")).Get("/v1/admin/operations/{operationID}", ops.get)
 	}
 	if dependencies.Mappings != nil {
-		mappings := mappingHandler{repo: dependencies.Mappings, contexts: dependencies.Contexts, identities: dependencies.Identities}
+		mappings := mappingHandler{repo: dependencies.Mappings, contexts: runtimeOnly(dependencies.Contexts), identities: dependencies.Identities}
 		write := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "mapping:write"), a.requireAdminRole(nil, true)}
 		approve := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "mapping:approve"), a.requireAdminRole(nil, true)}
 		read := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)}

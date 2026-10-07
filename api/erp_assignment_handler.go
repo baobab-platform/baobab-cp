@@ -213,6 +213,29 @@ func (h erpAssignmentHandler) provisioning(ctx context.Context, tenantID, key st
 
 // executable reports why the sources do not make an assignment that can drive provisioning, or "" when they do.
 func (h erpAssignmentHandler) executable(ctx context.Context, c repository.ConvergedProvisioning, desired convergence.DesiredState) string {
+	if reason := approvedPlanProblem(c, desired); reason != "" {
+		return reason
+	}
+	// Once execution has begun the registry has legitimately moved on, so only a plan not yet applied is re-planned
+	// for staleness.
+	if c.State == "PLANNED" && h.stale != nil {
+		stale, err := h.stale(ctx, c)
+		if err != nil {
+			return "the plan could not be evaluated for staleness"
+		}
+		if stale {
+			return "the plan is stale or expired; replan"
+		}
+	}
+	return ""
+}
+
+// approvedPlanProblem reports why the provisioning has no approved, current plan whose desired state it agrees with,
+// or "" when it has (ADR-BCP-021 sections 24 and 27: an approval binds the exact plan id, version and digest, and
+// an approved plan is immutable; ADR-SHARED-015 decision 4). It is the one definition of "approved plan" shared by
+// the ERP assignment projection and by pre-activation provisioning authority, so ERP's assignment read and the
+// Control Plane's context validation can never disagree about what has been approved.
+func approvedPlanProblem(c repository.ConvergedProvisioning, desired convergence.DesiredState) string {
 	switch {
 	case c.State == "CANCELLED" || c.State == "DEPROVISIONED":
 		return "the provisioning was withdrawn or deprovisioned"
@@ -231,17 +254,6 @@ func (h erpAssignmentHandler) executable(ctx context.Context, c repository.Conve
 		return "the desired state and the approved plan disagree on the desired state digest"
 	case desired.IsolationRequirement == "":
 		return "the frozen desired state has no isolation requirement"
-	}
-	// Once execution has begun the registry has legitimately moved on, so only a plan not yet applied is re-planned
-	// for staleness.
-	if c.State == "PLANNED" && h.stale != nil {
-		stale, err := h.stale(ctx, c)
-		if err != nil {
-			return "the plan could not be evaluated for staleness"
-		}
-		if stale {
-			return "the plan is stale or expired; replan"
-		}
 	}
 	return ""
 }

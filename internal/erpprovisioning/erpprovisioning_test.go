@@ -113,6 +113,10 @@ func (c *contexts) CreateContext(_ context.Context, ctx domain.Context) error {
 	if c.err != nil {
 		return c.err
 	}
+	// The real store validates before it inserts; a context the domain refuses must not reach a test as valid.
+	if err := ctx.Validate(); err != nil {
+		return err
+	}
 	c.created = append(c.created, ctx)
 	return nil
 }
@@ -179,6 +183,14 @@ func TestSubmitSendsTheApprovedTupleUnderTheProvisionersOwnContext(t *testing.T)
 	cx := r.ctx.created[0]
 	if cx.PrincipalID != "pr_provisioner" || cx.TenantID != tenant || cx.ExpiresAt == nil || !cx.ExpiresAt.After(cx.ResolvedAt) {
 		t.Fatalf("context must be tenant-bound, bounded and owned by the provisioner principal: %+v", cx)
+	}
+	// It is pre-activation authority, bound to exactly the approved plan, and never ordinary runtime authority.
+	if cx.Purpose() != domain.ContextPurposeTenantProvisioning || cx.IsRuntime() || cx.ProvisioningAuthority == nil ||
+		*cx.ProvisioningAuthority != (domain.ProvisioningAuthority{TenantProvisioningID: provisionID, PlanID: "plan_01k4zuribeans", PlanVersion: 2, PlanDigest: planDigest}) {
+		t.Fatalf("context must be a TENANT_PROVISIONING context bound to the approved plan: %+v", cx)
+	}
+	if cx.ExpiresAt.Sub(cx.ResolvedAt) > domain.MaxProvisioningContextLifetime {
+		t.Fatalf("a provisioning context lives at most 15 minutes: %v", cx.ExpiresAt.Sub(cx.ResolvedAt))
 	}
 	if got := r.ids.seen[0]; got != [2]string{issuer, subject} {
 		t.Fatalf("principal resolved for %v", got)
@@ -407,5 +419,17 @@ func TestACancelledCallerIsNotERPBeingDown(t *testing.T) {
 	time.Sleep(time.Millisecond)
 	if _, err = r.w.Client.Operation(short, operationID, "c"); !errors.Is(err, context.DeadlineExceeded) || Retryable(err) {
 		t.Fatalf("err=%v retryable=%v", err, Retryable(err))
+	}
+}
+
+func TestAProvisioningContextCannotOutliveFifteenMinutes(t *testing.T) {
+	r := newRig(t)
+	r.w.Context.TTL = 16 * time.Minute
+	if _, err := r.w.Submit(context.Background(), provisionID); err == nil || len(r.erp.posts) != 0 || len(r.ctx.created) != 0 {
+		t.Fatalf("a longer lifetime is a configuration error: nothing is recorded or sent (err=%v)", err)
+	}
+	r.w.Context.TTL = domain.MaxProvisioningContextLifetime
+	if _, err := r.w.Submit(context.Background(), provisionID); err != nil {
+		t.Fatalf("exactly 15 minutes is allowed: %v", err)
 	}
 }

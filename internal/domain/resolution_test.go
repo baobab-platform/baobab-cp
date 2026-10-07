@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -86,5 +87,56 @@ func TestNativeIdentityFollowsTheSharedGrammar(t *testing.T) {
 		if err := bad.Validate(); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+func provisioningContextFixture() Context {
+	now := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+	expires := now.Add(10 * time.Minute)
+	return Context{ID: "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a70", PrincipalID: "prn_provisioner", TenantID: "tn_01k4zuribeans", CorrelationID: "tp_1",
+		ResolvedAt: now, ExpiresAt: &expires,
+		Provenance:       map[string]ContextSource{"tenant_id": {Source: "tenant_provisioning", TrustLevel: TrustSystem}},
+		AuthorityPurpose: ContextPurposeTenantProvisioning,
+		ProvisioningAuthority: &ProvisioningAuthority{TenantProvisioningID: "tp_0199a1b2c3d4", PlanID: "plan_0199a1b2c3d4", PlanVersion: 2,
+			PlanDigest: "sha256:" + strings.Repeat("a", 64)}}
+}
+
+// A context with no recorded purpose is RUNTIME, and only a provisioning context carries a plan tuple.
+func TestContextAuthorityPurposeRules(t *testing.T) {
+	runtime := provisioningContextFixture()
+	runtime.AuthorityPurpose, runtime.ProvisioningAuthority = "", nil
+	if runtime.Purpose() != ContextPurposeRuntime || !runtime.IsRuntime() || runtime.Validate() != nil {
+		t.Fatalf("the zero purpose is RUNTIME: %v", runtime.Validate())
+	}
+	if c := provisioningContextFixture(); c.Validate() != nil || c.IsRuntime() {
+		t.Fatalf("a bound, bounded provisioning context is valid and not runtime: %v", c.Validate())
+	}
+	expires := func(c *Context, d time.Duration) { e := c.ResolvedAt.Add(d); c.ExpiresAt = &e }
+	for name, mutate := range map[string]func(*Context){
+		"runtime carrying a plan tuple": func(c *Context) { c.AuthorityPurpose = ContextPurposeRuntime },
+		"an unknown purpose":            func(c *Context) { c.AuthorityPurpose = "PENDING_TENANT" },
+		"no tuple":                      func(c *Context) { c.ProvisioningAuthority = nil },
+		"no provisioning id":            func(c *Context) { c.ProvisioningAuthority.TenantProvisioningID = "" },
+		"a malformed plan id":           func(c *Context) { c.ProvisioningAuthority.PlanID = "x" },
+		"plan version 0":                func(c *Context) { c.ProvisioningAuthority.PlanVersion = 0 },
+		"a malformed digest":            func(c *Context) { c.ProvisioningAuthority.PlanDigest = "sha256:short" },
+		"unbounded":                     func(c *Context) { c.ExpiresAt = nil },
+		"16 minutes":                    func(c *Context) { expires(c, 16*time.Minute) },
+		"a legal entity":                func(c *Context) { c.LegalEntityID = "ZURIBEANS-ZA" },
+		"an organisation":               func(c *Context) { c.OrganisationID = "org_1" },
+		"a market":                      func(c *Context) { c.MarketID = "mkt_1" },
+		"a country":                     func(c *Context) { c.CountryCode = "ZA" },
+		"a digital estate":              func(c *Context) { c.DigitalEstateID = "estate_1" },
+	} {
+		c := provisioningContextFixture()
+		mutate(&c)
+		if c.Validate() == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	at := provisioningContextFixture()
+	expires(&at, MaxProvisioningContextLifetime)
+	if at.Validate() != nil {
+		t.Fatalf("exactly 15 minutes is allowed: %v", at.Validate())
 	}
 }
