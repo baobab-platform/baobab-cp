@@ -30,15 +30,30 @@ type token string
 
 func (t token) Token(context.Context) (string, error) { return string(t), nil }
 
+// baselineFor is the resolution ERP answers for the effective Finance baseline of a legal entity.
+func baselineFor(entityID, currency string) map[string]any {
+	return map[string]any{
+		"reference": map[string]any{
+			"baseline_id": "fb_01k4zuribeansza", "legal_entity_id": entityID, "version": 3,
+			"digest": "sha256:" + strings.Repeat("9f", 32), "effective_from": "2026-04-01",
+			"authority": map[string]any{"engine_id": "baobab-erp", "system_of_record": "FINANCE_BASELINE"}},
+		"status": "EFFECTIVE", "functional_currency": currency, "resolved_at": "2026-10-07T07:00:00Z"}
+}
+
 type erpFake struct {
-	mu      sync.Mutex
-	posts   []http.Header
-	bodies  []map[string]any
-	gets    int
-	status  int
-	problem string
-	state   map[string]any
-	retry   string
+	mu sync.Mutex
+	// baselines answers getEffectiveFinanceBaseline per legal entity; baselineStatus/Problem make it refuse instead.
+	baselines       map[string]map[string]any
+	baselineStatus  int
+	baselineProblem string
+	baselineCalls   []string
+	posts           []http.Header
+	bodies          []map[string]any
+	gets            int
+	status          int
+	problem         string
+	state           map[string]any
+	retry           string
 }
 
 func newState(state string, revision int) map[string]any {
@@ -50,6 +65,21 @@ func (f *erpFake) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		if strings.HasPrefix(r.URL.Path, "/v1/legal-entities/") && strings.HasSuffix(r.URL.Path, "/effective-finance-baseline") && r.Method == http.MethodGet {
+			entityID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/legal-entities/"), "/effective-finance-baseline")
+			f.baselineCalls = append(f.baselineCalls, entityID+"?"+r.URL.RawQuery+"|"+r.Header.Get("Authorization"))
+			if f.baselineStatus >= 400 {
+				w.WriteHeader(f.baselineStatus)
+				_ = json.NewEncoder(w).Encode(map[string]any{"code": f.baselineProblem, "status": f.baselineStatus, "detail": "private detail must not travel"})
+				return
+			}
+			answer, ok := f.baselines[entityID]
+			if !ok {
+				answer = baselineFor(entityID, "ZAR")
+			}
+			_ = json.NewEncoder(w).Encode(answer)
+			return
+		}
 		if f.status >= 400 {
 			if f.retry != "" {
 				w.Header().Set("Retry-After", f.retry)
@@ -84,7 +114,7 @@ type source struct {
 func (s source) Authorised(context.Context, string) (Authorised, error) { return s.auth, s.err }
 
 func approved() Authorised {
-	return Authorised{TenantID: tenant, LegalEntityIDs: []string{entity}, Countries: []string{"ZA"}, Currencies: []string{"ZAR"},
+	return Authorised{TenantID: tenant, LegalEntityIDs: []string{entity}, Countries: []string{"ZA"},
 		Authority: Authority{TenantProvisioningID: provisionID, PlanID: "plan_01k4zuribeans", PlanVersion: 2, PlanDigest: planDigest}}
 }
 

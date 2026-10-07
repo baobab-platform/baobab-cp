@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/erp/v1/finance-baseline.schema.json",
+  "title": "ERP Finance baseline reference and resolution",
+  "description": "A Finance-approved accounting baseline of one legal entity is owned, approved and stored by ERP (ADR-ERP-008, ADR-ERP-019 sections 36-38). This schema defines only how other engines REFER to it and what ERP answers when asked to resolve a reference. Control Plane references a baseline; it never authors, stores or infers accounting configuration (a market's registry currency is a market fact, not a legal entity's functional currency). The accounting configuration itself is ERP's representation and is deliberately not part of this contract.",
+  "$ref": "#/$defs/FinanceBaselineResolution",
+  "$defs": {
+    "financeBaselineId": {
+      "type": "string",
+      "pattern": "^fb_[a-z0-9]+$",
+      "minLength": 6,
+      "maxLength": 63,
+      "description": "Identifier minted by the ERP boundary for one legal entity's baseline lineage. It is stable across versions; a version of it is what is approved and immutable. Never an iDempiere or ERPNext identifier."
+    },
+    "financeBaselineDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "SHA-256 of the canonical (RFC 8785) JSON of the approved baseline version exactly as ERP stores it, including the facts of its approval. The same approved version always has the same digest and any change to an approved baseline is a new version, so a digest names immutable approved content, never 'whatever finance configuration ERP currently has'. The representation hashed is ERP's and is not part of this contract; only its stability is."
+    },
+    "FinanceBaselineReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline_id", "legal_entity_id", "version", "digest", "effective_from", "authority"],
+      "description": "The exact approved baseline version a provisioning relies on. It is carried by the provisioning request and by a Control Plane provisioning record so that an audit can answer 'which Finance baseline caused this provisioning?'. It contains no accounting values.",
+      "properties": {
+        "baseline_id": { "$ref": "#/$defs/financeBaselineId" },
+        "legal_entity_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/legalEntityId" },
+        "version": { "$ref": "./domain.schema.json#/$defs/version" },
+        "digest": { "$ref": "#/$defs/financeBaselineDigest" },
+        "effective_from": { "type": "string", "format": "date", "description": "The first date on which this version is in force." },
+        "authority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engine_id", "system_of_record"],
+          "description": "Who owns the baseline. A reference to a baseline owned by anything else is refused.",
+          "properties": {
+            "engine_id": { "const": "baobab-erp" },
+            "system_of_record": { "const": "FINANCE_BASELINE" }
+          }
+        }
+      }
+    },
+    "FinanceBaselineStatus": {
+      "type": "string",
+      "enum": ["EFFECTIVE", "NOT_YET_EFFECTIVE", "SUPERSEDED", "WITHDRAWN"],
+      "description": "ERP's current standing of one approved version. EFFECTIVE: in force today. NOT_YET_EFFECTIVE: approved but effective_from is later. SUPERSEDED: a later approved version of the same lineage is in force. WITHDRAWN: Finance withdrew the approval."
+    },
+    "FinanceBaselineResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "status", "functional_currency", "resolved_at"],
+      "description": "ERP's authoritative answer for one baseline version. functional_currency is the only accounting value disclosed: it is what the provisioning request's functional_currencies must agree with. Resolution is read-only and has no side effects.",
+      "properties": {
+        "reference": { "$ref": "#/$defs/FinanceBaselineReference" },
+        "status": { "$ref": "#/$defs/FinanceBaselineStatus" },
+        "functional_currency": { "$ref": "./domain.schema.json#/$defs/currency" },
+        "resolved_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "examples": [
+    {
+      "reference": {
+        "baseline_id": "fb_01k4zuribeansza",
+        "legal_entity_id": "ZURIBEANS-ZA",
+        "version": 3,
+        "digest": "sha256:9f2c1d7e4b0a5c3e8d6f1a2b4c7e9d0f3a5b8c1e4d7f0a2b5c8e1d4f7a0b3c6e",
+        "effective_from": "2026-04-01",
+        "authority": { "engine_id": "baobab-erp", "system_of_record": "FINANCE_BASELINE" }
+      },
+      "status": "EFFECTIVE",
+      "functional_currency": "ZAR",
+      "resolved_at": "2026-10-07T12:00:00Z"
+    }
+  ]
+}

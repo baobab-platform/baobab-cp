@@ -2,12 +2,12 @@ contract_bundle:
   name: "baobab-platform-resolution"
   version: "1.0.0"
   source_repository: "baobab-platform/shared"
-  source_commit: dcd01ab1440fd94b4a709d9e59dbca8cb7f55b89
+  source_commit: 78b4e5ead3b7b2886f7421f2067d962922bebf7e
 schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: dcd01ab1440fd94b4a709d9e59dbca8cb7f55b89
+  commit: 78b4e5ead3b7b2886f7421f2067d962922bebf7e
 # This file previously listed 4 of the ~14 contracts this repository actually
 # implements against - see docs/reconciliation/shared-control-plane-audit.md
 # §6. It must declare every schema/policy file whose shape this repository's
@@ -96,6 +96,8 @@ contracts:
   - contracts/trade/v1/capabilities.yaml
   - contracts/erp/v1/capabilities.yaml
   - contracts/erp/v1/domain.schema.json
+  # Finance baseline reference and resolution (erp/v1 1.3.0): the Control Plane refers to the baseline, ERP owns it.
+  - contracts/erp/v1/finance-baseline.schema.json
   - contracts/erp/v1/provisioning-request.schema.json
   - contracts/erp/v1/provisioning-state.schema.json
   - contracts/buyer-organisation/v1/capabilities.yaml

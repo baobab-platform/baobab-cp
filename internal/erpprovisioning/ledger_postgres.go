@@ -2,8 +2,10 @@ package erpprovisioning
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -35,13 +37,18 @@ func (l PostgresLedger) Submitted(ctx context.Context, sub Submission, st State)
 	if err != nil {
 		return err
 	}
+	// The complete reference set, canonically ordered, exactly as submitted: an audit reads back what the request carried.
+	refs, err := json.Marshal(canonicalReferences(sub.FinanceBaselines))
+	if err != nil {
+		return err
+	}
 	// A replay of the same operation only advances its progress, through the
-	// same forward-only rule as Apply.
+	// same forward-only rule as Apply. A replay that names other references is not a replay.
 	var recorded string
 	err = l.DB.QueryRow(ctx, `
 		INSERT INTO provisioning.erp_submission (operation_id, tenant_provisioning_id, tenant_id, plan_id, plan_version,
-			plan_digest, legal_entity_ids, last_revision, last_state)
-		VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9)
+			plan_digest, legal_entity_ids, finance_baselines, last_revision, last_state)
+		VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)
 		ON CONFLICT (operation_id) DO UPDATE
 		   SET last_revision = GREATEST(provisioning.erp_submission.last_revision, EXCLUDED.last_revision),
 		       last_state = CASE WHEN EXCLUDED.last_revision > provisioning.erp_submission.last_revision
@@ -49,9 +56,10 @@ func (l PostgresLedger) Submitted(ctx context.Context, sub Submission, st State)
 		       updated_at = now()
 		 WHERE provisioning.erp_submission.tenant_provisioning_id = EXCLUDED.tenant_provisioning_id
 		   AND provisioning.erp_submission.plan_digest = EXCLUDED.plan_digest
+		   AND provisioning.erp_submission.finance_baselines = EXCLUDED.finance_baselines
 		RETURNING operation_id::text`,
 		st.OperationID, id, sub.TenantID, sub.Authority.PlanID, sub.Authority.PlanVersion, sub.Authority.PlanDigest,
-		sorted(sub.LegalEntityIDs), st.Revision, st.State).Scan(&recorded)
+		sorted(sub.LegalEntityIDs), refs, st.Revision, st.State).Scan(&recorded)
 	var pgErr *pgconn.PgError
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -97,14 +105,18 @@ func (l PostgresLedger) LatestForTenant(ctx context.Context, tenantID string) (S
 }
 
 const selectSubmission = `SELECT operation_id::text, tenant_provisioning_id::text, tenant_id, plan_id, plan_version, plan_digest,
-	legal_entity_ids, last_revision, last_state FROM provisioning.erp_submission`
+	legal_entity_ids, finance_baselines, last_revision, last_state FROM provisioning.erp_submission`
 
 func (PostgresLedger) scan(row pgx.Row) (Submission, error) {
 	var sub Submission
 	var provisioningUUID string
+	var refs []byte
 	if err := row.Scan(&sub.OperationID, &provisioningUUID, &sub.TenantID, &sub.Authority.PlanID, &sub.Authority.PlanVersion,
-		&sub.Authority.PlanDigest, &sub.LegalEntityIDs, &sub.LastRevision, &sub.LastState); err != nil {
+		&sub.Authority.PlanDigest, &sub.LegalEntityIDs, &refs, &sub.LastRevision, &sub.LastState); err != nil {
 		return Submission{}, err
+	}
+	if err := json.Unmarshal(refs, &sub.FinanceBaselines); err != nil {
+		return Submission{}, fmt.Errorf("recorded finance baselines: %w", err)
 	}
 	key, err := domain.FormatResourceID("tp", provisioningUUID)
 	if err != nil {
@@ -112,4 +124,12 @@ func (PostgresLedger) scan(row pgx.Row) (Submission, error) {
 	}
 	sub.TenantProvisioningID, sub.Authority.TenantProvisioningID = key, key
 	return sub, nil
+}
+
+// canonicalReferences orders a reference set by legal entity and never returns nil, so the stored JSON is a pure function of
+// the set (the same set always compares equal, an altered one never does).
+func canonicalReferences(in []FinanceBaselineReference) []FinanceBaselineReference {
+	out := append([]FinanceBaselineReference{}, in...)
+	sort.Slice(out, func(i, j int) bool { return out[i].LegalEntityID < out[j].LegalEntityID })
+	return out
 }
