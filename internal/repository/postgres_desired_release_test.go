@@ -245,9 +245,9 @@ func TestDesiredReleaseLifecycle(t *testing.T) {
 		ProviderID: canonicalProviderID, CapabilityKey: capabilityKey, ContractVersion: 1,
 		ReleaseID: attested, QualificationProfile: "ea-09/desired-release-test-v1",
 		Evidence: []certification.Evidence{{
-			Type: "INTEGRATION_TEST",
-			URI: "https://github.com/baobab-platform/baobab-cp/actions",
-			Digest: "sha256:" + strings.Repeat("a", 64),
+			Type:        "INTEGRATION_TEST",
+			URI:         "https://github.com/baobab-platform/baobab-cp/actions",
+			Digest:      "sha256:" + strings.Repeat("a", 64),
 			Description: "Production desired-release qualification.",
 		}},
 		Reason: "Qualified for the production desired-release test.",

@@ -186,7 +186,7 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 		Capabilities: []capabilitydomain.Capability{{
 			Key: capabilityKey, Name: "Approval test", DomainKey: "test",
 			Lifecycle: capabilitydomain.CapabilityLifecycleActive,
-			Maturity: capabilitydomain.CapabilityMaturitySupported,
+			Maturity:  capabilitydomain.CapabilityMaturitySupported,
 		}},
 		Provider: EngineRegistrationProvider{
 			ProviderKey: providerKey, Name: "Approval provider",
@@ -265,8 +265,8 @@ func TestEngineReleaseApprovalChangeset(t *testing.T) {
 		ProviderID: providerID, CapabilityKey: capabilityKey, ContractVersion: 1,
 		ReleaseID: attested, QualificationProfile: "ea-09/release-approval-test-v1",
 		Evidence: []certification.Evidence{{
-			Type: "INTEGRATION_TEST",
-			URI: "https://github.com/baobab-platform/baobab-cp/actions/runs/1",
+			Type:   "INTEGRATION_TEST",
+			URI:    "https://github.com/baobab-platform/baobab-cp/actions/runs/1",
 			Digest: "sha256:" + strings.Repeat("a", 64),
 		}},
 		Reason: "Production qualification passed.",

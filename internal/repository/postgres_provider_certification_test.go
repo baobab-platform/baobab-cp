@@ -59,7 +59,7 @@ func TestProviderCapabilityCertificationLifecycle(t *testing.T) {
 	definition := capabilitydomain.Capability{
 		Key: capabilityKey, Name: "Certification test", DomainKey: "test",
 		Lifecycle: capabilitydomain.CapabilityLifecycleActive,
-		Maturity: capabilitydomain.CapabilityMaturitySupported,
+		Maturity:  capabilitydomain.CapabilityMaturitySupported,
 	}
 	if _, err := repo.SyncCapabilityCatalogue(ctx, []CatalogueCapability{{
 		Capability: definition, ContractVersions: []int{1},
@@ -69,7 +69,7 @@ func TestProviderCapabilityCertificationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := repo.RegisterEngine(ctx, EngineRegistrationRecord{
-		Repository: engine,
+		Repository:   engine,
 		Capabilities: []capabilitydomain.Capability{definition},
 		Provider: EngineRegistrationProvider{
 			ProviderKey: providerKey, Name: "Certification test", ProviderType: "BAOBAB_ENGINE",
@@ -99,30 +99,30 @@ func TestProviderCapabilityCertificationLifecycle(t *testing.T) {
 		EngineID: engine, ReleaseVersion: "1.0.0",
 		Artifacts: []release.Artifact{{
 			ArtifactType: "OCI_IMAGE",
-			Repository: "ghcr.io/baobab-platform/" + engine,
-			Digest: "sha256:" + strings.Repeat("a", 56) + suffix[:8],
+			Repository:   "ghcr.io/baobab-platform/" + engine,
+			Digest:       "sha256:" + strings.Repeat("a", 56) + suffix[:8],
 		}},
 		ProviderSupport: []release.ProviderSupport{{
 			ProviderKey: providerKey, CapabilityKey: capabilityKey, ContractVersions: []int{1},
 		}},
 		CapabilityProviderDeclarationDigest: "sha256:" + strings.Repeat("d", 64),
-		SourceRevision: strings.Repeat("e", 40),
-		Reason: "Built from main.",
+		SourceRevision:                      strings.Repeat("e", 40),
+		Reason:                              "Built from main.",
 	}, recorder, now, actor)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	req := certification.RecordRequest{
-		ProviderID: providerID,
-		CapabilityKey: capabilityKey,
-		ContractVersion: 1,
-		ReleaseID: rel.ReleaseID,
+		ProviderID:           providerID,
+		CapabilityKey:        capabilityKey,
+		ContractVersion:      1,
+		ReleaseID:            rel.ReleaseID,
 		QualificationProfile: "ea-09/test-v1",
 		Evidence: []certification.Evidence{{
-			Type: "INTEGRATION_TEST",
-			URI: "https://github.com/baobab-platform/baobab-cp/actions/runs/1",
-			Digest: "sha256:" + strings.Repeat("b", 64),
+			Type:        "INTEGRATION_TEST",
+			URI:         "https://github.com/baobab-platform/baobab-cp/actions/runs/1",
+			Digest:      "sha256:" + strings.Repeat("b", 64),
 			Description: "PostgreSQL integration qualification.",
 		}},
 		Reason: "Qualification passed.",
@@ -156,8 +156,8 @@ func TestProviderCapabilityCertificationLifecycle(t *testing.T) {
 
 	conflict := req
 	conflict.Evidence = []certification.Evidence{{
-		Type: "SECURITY_REVIEW",
-		URI: "https://github.com/baobab-platform/baobab-cp/security",
+		Type:   "SECURITY_REVIEW",
+		URI:    "https://github.com/baobab-platform/baobab-cp/security",
 		Digest: "sha256:" + strings.Repeat("c", 64),
 	}}
 	if _, _, err := repo.RecordProviderCapabilityCertification(ctx, conflict, certifier, now, actor); !errors.Is(err, ErrCertificationConflict) {
@@ -226,15 +226,15 @@ func TestProviderCapabilityCertificationLifecycle(t *testing.T) {
 		EngineID: engine, ReleaseVersion: "1.1.0",
 		Artifacts: []release.Artifact{{
 			ArtifactType: "OCI_IMAGE",
-			Repository: "ghcr.io/baobab-platform/" + engine,
-			Digest: "sha256:" + strings.Repeat("f", 56) + suffix[:8],
+			Repository:   "ghcr.io/baobab-platform/" + engine,
+			Digest:       "sha256:" + strings.Repeat("f", 56) + suffix[:8],
 		}},
 		ProviderSupport: []release.ProviderSupport{{
 			ProviderKey: providerKey, CapabilityKey: capabilityKey, ContractVersions: []int{1},
 		}},
 		CapabilityProviderDeclarationDigest: "sha256:" + strings.Repeat("e", 64),
-		SourceRevision: strings.Repeat("f", 40),
-		Reason: "Built from main.",
+		SourceRevision:                      strings.Repeat("f", 40),
+		Reason:                              "Built from main.",
 	}, recorder, now.Add(4*time.Minute), actor)
 	if err != nil {
 		t.Fatalf("record newer release: %v", err)

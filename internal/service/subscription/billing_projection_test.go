@@ -433,9 +433,9 @@ func TestEnginesRegisterFromSharedRegistrations(t *testing.T) {
 		engine    string
 		simulated bool
 	}{
-		"baobab-pulse.core":                    {engine: "baobab-pulse", simulated: false},
+		"baobab-pulse.core":                      {engine: "baobab-pulse", simulated: false},
 		"baobab-subscriptions.temporary-billing": {engine: "baobab-subscriptions", simulated: true},
-		"baobab-payments.sandbox":               {engine: "baobab-payments", simulated: true},
+		"baobab-payments.sandbox":                {engine: "baobab-payments", simulated: true},
 	} {
 		var engineCode string
 		var supports int
