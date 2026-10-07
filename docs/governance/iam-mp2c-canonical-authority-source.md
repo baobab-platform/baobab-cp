@@ -52,3 +52,31 @@ Validation includes the mounted router's grant/lifecycle/strict-JSON/revocation
 negatives, service reference/digest/placement/freshness negatives and a real
 PostgreSQL 17 joined-source test in CI. Local tests without TEST_DATABASE_URL skip
 that database test; do not describe a skip as PostgreSQL evidence.
+
+
+## IAM-33-C1 owner-aware approval target evidence
+
+The target-registration and human approval-authority requests already carry the
+exact issuer/subject/principal/external identity in the accepted private wire.
+Both handlers now forward those fields into the authoritative target query.
+For canonical mappings, the query independently proves the CP owner instance
+and the IAM provider instance in the same environment; these identifiers must
+not be conflated. IAM-native target placement retains its existing equality
+requirement.
+
+Canonical target evidence additionally requires the registered reference's
+native ID to equal the exact external identity; the current active human
+principal must own that external identity under exact issuer/subject. Its
+fingerprint is recomputed using FederationIdentityDigest, and last verification
+must be within five minutes, with no future timestamp. Deleted/revoked/stale
+references, suspended principals, revoked identities, retired CP instances and
+wrong organisation/estate provider bindings deny.
+
+No schema migration or Shared contract extension is needed. These fields and
+owner semantics already exist. This remains non-approval evidence: the IAM
+maker/checker ledger separately binds permission to consume the exact target
+and fingerprint to its trust revision/snapshot/scope. Deploy the CP correction
+before the matching IAM composition. PostgreSQL 17 integration coverage is in
+TestFederationGovernanceTargetRegistrationRequiresCurrentTopologyAndScope.
+Local unit/race results without TEST_DATABASE_URL do not count as database or
+staging acceptance.
