@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	svcorg "github.com/baobab-platform/baobab-cp/internal/service/organisation"
 	"github.com/baobab-platform/baobab-cp/internal/service/subscription"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
+	"github.com/baobab-platform/baobab-cp/internal/workloadtoken"
 )
 
 func main() {
@@ -162,10 +164,17 @@ func main() {
 	var erpProvisioner provisioning.ERPProvisioning
 	var erpWorker *erpprovisioning.Worker
 	if cfg.ERPProvisioningURL != "" {
+		// Bearer token for ERP: a ready token in a file, or (federated workload) the platform-projected assertion exchanged at the
+		// identity provider (RFC 7523) and cached until shortly before it expires. Config guarantees exactly one is set.
+		var erpTokens erpprovisioning.TokenSource = billing.FileTokenSource{Path: cfg.ERPProvisionerTokenFile}
+		if cfg.ERPProvisionerAssertionFile != "" {
+			erpTokens = &workloadtoken.JWTBearer{TokenURL: cfg.ERPProvisionerTokenURL, ClientID: cfg.ERPProvisionerClientID,
+				AssertionFile: cfg.ERPProvisionerAssertionFile, Scope: strings.Fields(cfg.ERPProvisionerScope), Audience: cfg.ERPProvisionerAudience}
+		}
 		worker := erpprovisioning.Worker{
 			Source: erpprovisioning.PlanSource{Provisionings: resolverRepository},
 			Client: &erpprovisioning.Client{BaseURL: cfg.ERPProvisioningURL, HTTP: &http.Client{Timeout: 30 * time.Second},
-				Tokens: billing.FileTokenSource{Path: cfg.ERPProvisionerTokenFile}},
+				Tokens: erpTokens},
 			Context: erpprovisioning.ContextIssuer{Identities: resolverRepository, Contexts: resolverRepository,
 				Issuer: cfg.ERPProvisionerIssuer, Subject: cfg.ERPProvisionerSubject, TTL: cfg.ERPProvisioningContextTTL},
 			Ledger: erpprovisioning.PostgresLedger{DB: resolverRepository.Pool()},

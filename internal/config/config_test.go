@@ -164,3 +164,86 @@ func TestERPRecoverySettings(t *testing.T) {
 		})
 	}
 }
+
+func TestERPProvisionerTokenModes(t *testing.T) {
+	base := func(t *testing.T) {
+		validConfigEnv(t)
+		t.Setenv("ERP_PROVISIONING_URL", "https://erp.staging.example/v1")
+		t.Setenv("ERP_PROVISIONER_ISSUER", "https://issuer.staging.example")
+	}
+	federated := func(t *testing.T) {
+		base(t)
+		t.Setenv("ERP_PROVISIONER_ASSERTION_FILE", "/run/projected/assertion")
+		t.Setenv("ERP_PROVISIONER_TOKEN_URL", "https://issuer.staging.example/oauth2/token")
+		t.Setenv("ERP_PROVISIONER_CLIENT_ID", "baobab-cp-provisioning-evidence-workload")
+		t.Setenv("ERP_PROVISIONER_SUBJECT", "provisioner-evidence")
+	}
+
+	t.Run("a ready token file keeps working and keeps its default subject", func(t *testing.T) {
+		base(t)
+		t.Setenv("ERP_PROVISIONER_TOKEN_FILE", "/run/token")
+		cfg, err := Load()
+		if err != nil || cfg.ERPProvisionerAssertionFile != "" || cfg.ERPProvisionerSubject != "baobab-cp-provisioning-workload" {
+			t.Fatalf("%v %+v", err, cfg)
+		}
+	})
+	t.Run("the federated exchange is configured completely", func(t *testing.T) {
+		federated(t)
+		cfg, err := Load()
+		if err != nil || cfg.ERPProvisionerScope != "erp:provision" || cfg.ERPProvisionerSubject != "provisioner-evidence" || cfg.ERPProvisionerTokenFile != "" {
+			t.Fatalf("%v %+v", err, cfg)
+		}
+	})
+	t.Run("exactly one mode", func(t *testing.T) {
+		base(t) // neither
+		if _, err := Load(); err == nil {
+			t.Fatal("neither mode accepted")
+		}
+		federated(t)
+		t.Setenv("ERP_PROVISIONER_TOKEN_FILE", "/run/token") // both
+		if _, err := Load(); err == nil {
+			t.Fatal("both modes accepted")
+		}
+	})
+	t.Run("the federated subject has no default: it must be the assertion subject, not the logical client id", func(t *testing.T) {
+		federated(t)
+		t.Setenv("ERP_PROVISIONER_SUBJECT", "")
+		if _, err := Load(); err == nil {
+			t.Fatal("federated mode accepted without an explicit subject")
+		}
+	})
+	t.Run("an unsafe or incomplete exchange is refused at start", func(t *testing.T) {
+		for name, change := range map[string]func(*testing.T){
+			"plain-http": func(t *testing.T) {
+				t.Setenv("ERP_PROVISIONER_TOKEN_URL", "http://issuer.staging.example/oauth2/token")
+			},
+			"no-token-url": func(t *testing.T) { t.Setenv("ERP_PROVISIONER_TOKEN_URL", "") },
+			"no-client":    func(t *testing.T) { t.Setenv("ERP_PROVISIONER_CLIENT_ID", "") },
+			"wildcard":     func(t *testing.T) { t.Setenv("ERP_PROVISIONER_SCOPE", "erp:*") },
+			"no-issuer":    func(t *testing.T) { t.Setenv("ERP_PROVISIONER_ISSUER", "") },
+		} {
+			t.Run(name, func(t *testing.T) {
+				federated(t)
+				change(t)
+				if _, err := Load(); err == nil {
+					t.Fatal("accepted")
+				}
+			})
+		}
+	})
+	t.Run("exchange settings do not apply to a token-file deployment", func(t *testing.T) {
+		base(t)
+		t.Setenv("ERP_PROVISIONER_TOKEN_FILE", "/run/token")
+		t.Setenv("ERP_PROVISIONER_TOKEN_URL", "https://issuer.staging.example/oauth2/token")
+		if _, err := Load(); err == nil {
+			t.Fatal("stray exchange settings accepted")
+		}
+	})
+	t.Run("loopback http is allowed for local development", func(t *testing.T) {
+		federated(t)
+		t.Setenv("ERP_PROVISIONER_TOKEN_URL", "http://127.0.0.1:4444/oauth2/token")
+		if _, err := Load(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
