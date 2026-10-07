@@ -37,7 +37,7 @@ func TestEmbeddedCatalogue(t *testing.T) {
 	want := "billing.subscription.manage,billing.usage.record,commerce.cart.manage,commercial.quotation.manage," +
 		"commercial.rfq.manage,content.entry.resolve,customer.buyer-application.manage,customer.buyer-membership.manage," +
 		"finance.order-consequence.process,identity.authentication.perform,identity.workload-token.issue," +
-		"intelligence.evidence.search,intelligence.research-mission.manage," +
+		"intelligence.evidence.search,intelligence.research-mission.manage,inventory.availability.query," +
 		"payment.intent.cancel,payment.intent.create,payment.payment.authorize,payment.payment.capture,payment.refund.create," +
 		"regulations.decision.evaluate,regulations.evidence.assess,regulations.requirement.resolve"
 	if strings.Join(keys, ",") != want {

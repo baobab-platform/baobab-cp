@@ -9,7 +9,7 @@
     "tenant_id": { "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId", "description": "Must equal the tenant of the validated context; it names the tenant, it does not establish it." },
     "context_id": {
       "$ref": "../../control-plane/v1/domain.schema.json#/$defs/uuid",
-      "description": "The Control Plane PlatformContext that carries the tenant authority of this request. It is not a bearer credential: ERP validates it for the actual caller through Control Plane and uses only the tenant returned. It is authorisation evidence, not part of the request's identity, so it is excluded from idempotent replay. It is independent of control_plane_authority: a valid context never replaces the plan tuple, nor the tuple a context."
+      "description": "The Control Plane PlatformContext that carries the tenant authority of this request. It is not a bearer credential: ERP validates it for the actual caller through Control Plane and uses only the tenant returned. It is authorisation evidence, not part of the request's identity, so it is excluded from idempotent replay. It is independent of control_plane_authority: a valid context never replaces the plan tuple, nor the tuple a context. Provisioning acts for a tenant that is not yet ACTIVE, so it must be a TENANT_PROVISIONING context (control-plane/v1 ContextAuthorityPurpose) whose provisioning_authority equals control_plane_authority; a RUNTIME context is refused."
     },
     "control_plane_authority": {
       "type": "object",
