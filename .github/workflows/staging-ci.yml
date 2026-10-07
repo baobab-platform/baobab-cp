@@ -2,6 +2,7 @@ name: Staging Tagged Images
 on:
   push:
     tags: ['v*.*.*-staging']
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
