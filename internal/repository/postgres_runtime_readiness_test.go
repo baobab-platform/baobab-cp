@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,10 +51,23 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 	if err := db.QueryRow(ctx, `INSERT INTO capability.capability_binding(capability_id,engine_instance_id,scope_id,provider_id,binding_mode,status,contract_version,effective_from) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,'PRIMARY','ACTIVE','1',$5) RETURNING id::text`, capID, instance, scope, provider, now.Add(-time.Minute)).Scan(&binding); err != nil {
 		t.Fatal(err)
 	}
-	release := domain.NewUUIDv7()
-	exec(`INSERT INTO topology.engine_release(engine_release_id,engine_id,release_version,source_revision,declaration_digest,content_digest,status,recorded_by,recorded_at,reason,status_changed_by,status_changed_at,status_reason)
-	 VALUES($1::uuid,$2::uuid,$3,repeat('a',40),$4,$4,'APPROVED','test-readiness',$5,'construction fixture','test-readiness',$5,'construction approval')`, release, engine, "0.0.0-readiness-"+suffix, p.ArtifactDigest, now)
-	exec(`INSERT INTO topology.engine_release_artifact(engine_release_id,ordinal,artifact_type,repository,digest) VALUES($1::uuid,0,'OCI_IMAGE','ghcr.io/baobab-platform/baobab-iam',$2)`, release, p.ArtifactDigest)
+	var providerKey string
+	if err := db.QueryRow(ctx, `SELECT provider_key FROM capability.capability_provider WHERE provider_id=$1::uuid`, provider).Scan(&providerKey); err != nil {
+		t.Fatal(err)
+	}
+	var releases []string
+	createRelease := func(label, digest, key, capability string, major int) string {
+		id := domain.NewUUIDv7()
+		releases = append(releases, id)
+		exec(`INSERT INTO topology.engine_release(engine_release_id,engine_id,release_version,source_revision,declaration_digest,content_digest,status,recorded_by,recorded_at,reason,status_changed_by,status_changed_at,status_reason)
+	 VALUES($1::uuid,$2::uuid,$3,repeat('a',40),$4,$4,'APPROVED','test-readiness',$5,'construction fixture','test-readiness',$5,'construction approval')`, id, engine, "0.0.0-"+label+"-"+suffix, digest, now)
+		exec(`INSERT INTO topology.engine_release_artifact(engine_release_id,ordinal,artifact_type,repository,digest) VALUES($1::uuid,0,'OCI_IMAGE','ghcr.io/baobab-platform/baobab-iam',$2)`, id, digest)
+		if key != "" {
+			exec(`INSERT INTO topology.engine_release_provider_support(engine_release_id,ordinal,provider_key,capability_key,contract_versions) VALUES($1::uuid,0,$2,$3,ARRAY[$4::integer])`, id, key, capability, major)
+		}
+		return id
+	}
+	release := createRelease("readiness", p.ArtifactDigest, providerKey, "identity.authentication.perform", 1)
 	exec(`UPDATE topology.engine_instance SET desired_release_id=$1::uuid WHERE engine_instance_key=$2`, release, p.EngineInstanceID)
 	observe := func(key, digest string, at, expires time.Time) {
 		exec(`INSERT INTO topology.deployment_observation(observation_key,engine_instance_key,artifacts,environment,region,observed_at,expires_at,recorded_at,source)
@@ -74,13 +89,16 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 		}{
 			{`DELETE FROM topology.deployment_observation WHERE engine_instance_key=$1`, []any{p.EngineInstanceID}},
 			{`UPDATE topology.engine_instance SET desired_release_id=NULL WHERE engine_instance_key=$1`, []any{p.EngineInstanceID}},
-			{`DELETE FROM topology.engine_release_artifact WHERE engine_release_id=$1::uuid`, []any{release}},
-			{`DELETE FROM topology.engine_release WHERE engine_release_id=$1::uuid`, []any{release}},
 			{`DELETE FROM capability.capability_binding WHERE provider_id=$1::uuid`, []any{provider}},
 			{`DELETE FROM capability.capability_scope WHERE tenant_id=$1`, []any{tenant}},
 			{`DELETE FROM capability.provider_capability_support WHERE provider_id=$1::uuid`, []any{provider}},
 		} {
 			_, _ = tx.Exec(ctx, q.sql, q.args...)
+		}
+		for _, id := range releases {
+			_, _ = tx.Exec(ctx, `DELETE FROM topology.engine_release_provider_support WHERE engine_release_id=$1::uuid`, id)
+			_, _ = tx.Exec(ctx, `DELETE FROM topology.engine_release_artifact WHERE engine_release_id=$1::uuid`, id)
+			_, _ = tx.Exec(ctx, `DELETE FROM topology.engine_release WHERE engine_release_id=$1::uuid`, id)
 		}
 		_ = tx.Commit(ctx)
 	})
@@ -100,6 +118,50 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 			t.Fatalf("unsafe readiness accepted: %v", err)
 		}
 	}
+	allow()
+	// Keep registration/binding major 1 valid while changing the immutable
+	// declared support of a new approved release and exact matching deployment.
+	// A new profile is published for each artifact; no immutable row is edited.
+	baseProfile := p
+	for _, tc := range []struct {
+		label, key, capability string
+		major                  int
+	}{
+		{"undeclared", "", "", 0},
+		{"other-provider", providerKey + "-other", "identity.authentication.perform", 1},
+		{"other-capability", providerKey, "identity.workload-token.issue", 1},
+		{"other-major", providerKey, "identity.authentication.perform", 2},
+	} {
+		p.Revision++
+		p.ArtifactDigest = fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(suffix+tc.label)))
+		observation := baseProfile.CapabilityObservations[0]
+		evidence := *observation.Evidence
+		evidence.ArtifactDigest = p.ArtifactDigest
+		observation.Evidence = &evidence
+		caseReference := "ref_" + strings.ReplaceAll(tc.label, "-", "") + suffix
+		refs[tc.label] = caseReference
+		exec(`INSERT INTO mapping.external_reference(external_reference_id,system_namespace,engine_id,engine_instance_id,environment,native_entity_type,native_id,source_authority,status,first_seen_at,last_verified_at,fingerprint)
+		 SELECT $1,system_namespace,engine_id,engine_instance_id,environment,native_entity_type,$1,source_authority,'active',$2,$2,$3 FROM mapping.external_reference WHERE external_reference_id=$4`, caseReference, now, p.ArtifactDigest, refs["support"])
+		evidence.EvidenceReference = caseReference
+		p.CapabilityObservations = []IdentityRuntimeCapabilityObservation{observation}
+		id := createRelease(tc.label, p.ArtifactDigest, tc.key, tc.capability, tc.major)
+		if _, err := repo.RecordIdentityRuntimeProfile(ctx, p, "test-readiness", "staging", []string{"af-south-1"}, now); err != nil {
+			t.Fatal(err)
+		}
+		exec(`UPDATE topology.engine_instance SET desired_release_id=$1::uuid WHERE engine_instance_key=$2`, id, p.EngineInstanceID)
+		observe("dob_"+strings.ReplaceAll(tc.label, "-", "")+suffix, p.ArtifactDigest, now.Add(-3*time.Second), now.Add(time.Minute))
+		if _, err := read(now); !errors.Is(err, ErrFederationPlatformEvidenceNotFound) {
+			t.Fatalf("%s support drift accepted: %v", tc.label, err)
+		}
+	}
+	revision := p.Revision + 1
+	p = baseProfile
+	p.Revision = revision
+	if _, err := repo.RecordIdentityRuntimeProfile(ctx, p, "test-readiness", "staging", []string{"af-south-1"}, now); err != nil {
+		t.Fatal(err)
+	}
+	exec(`UPDATE topology.engine_instance SET desired_release_id=$1::uuid WHERE engine_instance_key=$2`, release, p.EngineInstanceID)
+	observe("dob_declarationrestored"+suffix, p.ArtifactDigest, now.Add(-3*time.Second), now.Add(time.Minute))
 	allow()
 	for _, tc := range []struct {
 		name, change, restore string
