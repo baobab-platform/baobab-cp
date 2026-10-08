@@ -372,6 +372,11 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		JOIN topology.engine_release_artifact desired_artifact
 		  ON desired_artifact.engine_release_id = desired.engine_release_id
 		 AND desired_artifact.digest = p.artifact_digest
+		JOIN topology.engine_release_provider_support release_support
+		  ON release_support.engine_release_id = desired.engine_release_id
+		 AND release_support.provider_key = cp.provider_key
+		 AND release_support.capability_key = cap.code
+		 AND 1 = ANY(release_support.contract_versions)
 		JOIN current_observation dep
 		  ON dep.observed_at <= $9
 		 AND $9 < dep.expires_at
