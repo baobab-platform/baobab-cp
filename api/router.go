@@ -92,6 +92,9 @@ type Dependencies struct {
 	// LA-04D activation is opt-in for nonproduction integration/staging only.
 	LegalActorLifecycleEnabled bool
 	LegalActorLifecycle        legalActorLifecycleStore
+	// LA-05A private assessment is separately off by default.
+	LegalActorAssessmentEnabled bool
+	LegalActorAssessment legalActorAssessmentStore
 	// Environment names the deployment (config.Config.Environment). Planning
 	// treats anything but development, test, integration or sandbox,
 	// including unset, as production: providers must then be permitted in
@@ -303,6 +306,19 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/legal-actor-mandates", mandates.propose)
 		r.With(a.authorize(a.adminVerifier, "human", "legal-actor-mandate:decide"), a.requireAdminRole(nil, true)).
 			Post("/v2/legal-actor-mandates/{mandateID}/decision", mandates.decide)
+	}
+	// LA-05A grants a fresh CP legal-actor FACT only, never downstream provider
+	// permission. No production endpoint until LA-05 consumer certification.
+	if dependencies.LegalActorAssessmentEnabled && dependencies.LegalActorAssessment != nil &&
+		dependencies.Contexts != nil && dependencies.Identities != nil &&
+		dependencies.WorkloadRegistry != nil {
+		switch dependencies.Environment {
+		case "development", "test", "integration", "sandbox", "staging":
+			h := legalActorAssessmentHandler{api: a, contexts: dependencies.Contexts,
+				identities: dependencies.Identities, store: dependencies.LegalActorAssessment}
+			r.With(a.authorize(a.workloadVerifier, "workload", "legal-actor:assess")).
+				Post("/internal/legal-actor/v1/assess", h.assess)
+		}
 	}
 	// No implicit production go-live. LA-05 consumer certification remains open.
 	lifecycleEnvironmentAllowed := false
