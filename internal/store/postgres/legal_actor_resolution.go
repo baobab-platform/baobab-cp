@@ -35,6 +35,7 @@ func (s *Store) ResolveOperatingLegalActor(ctx context.Context, request legalact
 		          AND lp.source_authority NOT IN ('shared-governance', 'control-plane-registration')
 		          AND lp.legal_status = 'ACTIVE'
 		          AND lp.verified_at IS NOT NULL
+		          AND lp.verified_at <= $3
 		          AND jsonb_array_length(lp.evidence_references) > 0
 		          AND lp.effective_from <= $3
 		          AND (lp.effective_to IS NULL OR lp.effective_to > $3)
