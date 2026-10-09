@@ -314,7 +314,7 @@ func New(dependencies Dependencies) http.Handler {
 		dependencies.WorkloadRegistry != nil {
 		switch dependencies.Environment {
 		case "development", "test", "integration", "sandbox", "staging":
-			h := legalActorAssessmentHandler{api: a, contexts: dependencies.Contexts,
+			h := legalActorAssessmentHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
 				identities: dependencies.Identities, store: dependencies.LegalActorAssessment}
 			r.With(a.authorize(a.workloadVerifier, "workload", "legal-actor:assess")).
 				Post("/internal/legal-actor/v1/assess", h.assess)
