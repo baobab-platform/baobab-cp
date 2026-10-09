@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Baobab-Platform Baobab Control Plane API
-  version: 1.36.0
+  version: 1.37.0
   description: >-
     The Control Plane's runtime and administrative API (ADR-BCP-022).
     Implementations live in baobab-platform/baobab-cp. Every adminOidc
@@ -2272,6 +2272,49 @@ paths:
   # authority and a registered principal.
   # ---------------------------------------------------------------------------
   /admission/applications:
+    post:
+      tags: [Admission]
+      operationId: createStaffAssistedApplication
+      summary: Open an assisted or founding-group DRAFT for an existing applicant
+      description: >-
+        A registered platform administrator with admission:review may create a
+        DRAFT application for an existing ACTIVE human applicant principal.
+        The command records staff-maker provenance and requires an independent
+        admission decider. ASSISTED_ENTERPRISE and INTERNAL_GROUP are admission
+        channels, not subscription classifications. No verification, approval,
+        organisation, tenancy, entitlements or production authorisation results.
+      security:
+        - adminOidc: [admission:review]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../../admission/v1/application.schema.json#/$defs/StaffApplicationCreateRequest
+      responses:
+        "201":
+          $ref: "#/components/responses/ClientApplication"
+        "200":
+          description: Idempotent replay of an earlier request
+          content:
+            application/json:
+              schema:
+                $ref: ../../admission/v1/application.schema.json#/$defs/ClientApplication
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     get:
       tags: [Admission]
       operationId: listAdmissionQueue
