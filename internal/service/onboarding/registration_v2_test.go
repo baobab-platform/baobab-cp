@@ -48,10 +48,23 @@ func TestOrganisationFirstPreIncorporationRegistration(t *testing.T) {
 		RequestedProducts:req.DesiredState.ProductRequirements,
 	}
 	registerMeta:=store.RequestMetadata{ActorID:registrar.PrincipalID,ActorType:"human",CorrelationID:domain.NewUUIDv7()}
-	operation,err:=db.RegisterTenantV2(e.ctx,"register-"+domain.NewUUIDv7(),registerMeta,
+    key:="register-"+domain.NewUUIDv7()
+	operation,err:=db.RegisterTenantV2(e.ctx,key,registerMeta,
 		cmd,e.svc.RegistrationStepV2(registrar,cmd))
 	if err!=nil{t.Fatalf("v2 governed registration: %v",err)}
 	if operation.TenantID!=cmd.TenantID{t.Fatalf("different tenant minted: %+v",operation)}
+    // Repeated HTTP commands mint a different provisional ID. The stable
+    // key and approved Organisation must return the original operation.
+    retry:=cmd
+    retry.TenantID=domain.NewTenantID()
+    replay,err:=db.RegisterTenantV2(e.ctx,key,registerMeta,retry,e.svc.RegistrationStepV2(registrar,retry))
+    if err!=nil||replay.OperationID!=operation.OperationID||replay.TenantID!=cmd.TenantID{
+        t.Fatalf("v2 retry was not idempotent: %+v %v",replay,err)
+    }
+    var duplicated int
+    if err=e.admin.QueryRow(e.ctx,`SELECT count(*) FROM tenants WHERE tenant_id=$1`,retry.TenantID).Scan(&duplicated);err!=nil||duplicated!=0{
+        t.Fatalf("replay created a second tenant: %d %v",duplicated,err)
+    }
 	stored,err:=db.GetTenant(e.ctx,cmd.TenantID)
 	if err!=nil{t.Fatal(err)}
 	if stored.PrimaryOrganisationID!=orgID||stored.LegalEntityID!=""{
