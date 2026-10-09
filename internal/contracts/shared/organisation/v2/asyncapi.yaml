@@ -15,6 +15,10 @@ channels:
     messages:
       mandateProposed: { $ref: "#/components/messages/MandateProposed" }
       mandateDecided: { $ref: "#/components/messages/MandateDecided" }
+      mandateActivated: { $ref: "#/components/messages/MandateActivated" }
+      mandateSuspended: { $ref: "#/components/messages/MandateSuspended" }
+      mandateRevoked: { $ref: "#/components/messages/MandateRevoked" }
+      mandateExpired: { $ref: "#/components/messages/MandateExpired" }
 operations:
   publishOperatingLegalActorMandate:
     action: send
@@ -37,3 +41,36 @@ components:
           - type: object
             properties:
               data: { $ref: "./legal-actor-mandate-events.schema.json#/$defs/MandateDecided" }
+
+    MandateActivated:
+      name: com.baobab-platform.control-plane.operating-legal-actor-mandate.activated.v1
+      payload:
+        allOf:
+          - $ref: ../../events/v1/envelope.schema.json
+          - type: object
+            properties:
+              data: { $ref: "./legal-actor-mandate-events.schema.json#/$defs/MandateActivated" }
+    MandateSuspended:
+      name: com.baobab-platform.control-plane.operating-legal-actor-mandate.suspended.v1
+      payload:
+        allOf:
+          - $ref: ../../events/v1/envelope.schema.json
+          - type: object
+            properties:
+              data: { $ref: "./legal-actor-mandate-events.schema.json#/$defs/MandateSuspended" }
+    MandateRevoked:
+      name: com.baobab-platform.control-plane.operating-legal-actor-mandate.revoked.v1
+      payload:
+        allOf:
+          - $ref: ../../events/v1/envelope.schema.json
+          - type: object
+            properties:
+              data: { $ref: "./legal-actor-mandate-events.schema.json#/$defs/MandateRevoked" }
+    MandateExpired:
+      name: com.baobab-platform.control-plane.operating-legal-actor-mandate.expired.v1
+      payload:
+        allOf:
+          - $ref: ../../events/v1/envelope.schema.json
+          - type: object
+            properties:
+              data: { $ref: "./legal-actor-mandate-events.schema.json#/$defs/MandateExpired" }
