@@ -85,6 +85,10 @@ type Dependencies struct {
 	// canonical Shared v2 registration endpoints. Default-off until the
 	// enterprise onboarding programme certifies its service interfaces.
 	OrganisationFirstV2 bool
+	// LA-04C: manual human maker/checker mandate intents, disabled by default.
+	// Approval is inert; migration 000104 still refuses ACTIVE.
+	LegalActorMandatesV2 bool
+	LegalActorMandates legalActorMandateStore
 	// Environment names the deployment (config.Config.Environment). Planning
 	// treats anything but development, test, integration or sandbox,
 	// including unset, as production: providers must then be permitted in
@@ -289,6 +293,13 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/tenant-onboarding/{requestID}/primary-organisation", a.prepareOrganisationV2)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).
 			Post("/v2/tenants", a.registerV2)
+	}
+	if dependencies.LegalActorMandatesV2 && dependencies.LegalActorMandates != nil {
+		mandates := legalActorMandateHandler{store: dependencies.LegalActorMandates, api: a}
+		r.With(a.authorize(a.adminVerifier, "human", "legal-actor-mandate:propose"), a.requireAdminRole(nil, true)).
+			Post("/v2/legal-actor-mandates", mandates.propose)
+		r.With(a.authorize(a.adminVerifier, "human", "legal-actor-mandate:decide"), a.requireAdminRole(nil, true)).
+			Post("/v2/legal-actor-mandates/{mandateID}/decision", mandates.decide)
 	}
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:bootstrap"), a.requireAdminRole(nil, true)).Post("/v1/tenants/bootstrap-registrations", a.bootstrapRegister)
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}", a.getTenant)
