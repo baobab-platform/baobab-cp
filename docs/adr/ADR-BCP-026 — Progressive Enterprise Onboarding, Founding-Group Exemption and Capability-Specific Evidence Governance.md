@@ -1,6 +1,7 @@
 # ADR-BCP-026 — Progressive Enterprise Onboarding, Founding-Group Exemption and Capability-Specific Evidence Governance
 
-**Status:** Proposed — for architecture and governance approval  
+**Status:** Accepted — Normative Platform Architecture (2026-10-09)  
+**Decision approval:** Accepted at the platform decision owner's direction on 2026-10-09. Implementation, security certification and individual legal-actor authorisations remain distinct downstream gates.  
 **Date:** 2026-10-09  
 **Decision owners:** Baobab Platform Architecture / Control Plane / Security / Nabhold Group Governance  
 **Primary repository:** baobab-platform/baobab-cp  
@@ -8,9 +9,9 @@
 **Runtime authority:** Baobab Control Plane, with domain-specific authorities retained by IAM, Subscriptions and engines  
 **Initial markets:** South Africa (ZA), Uganda (UG)  
 **Decision type:** Foundational amendment to admission, organisation identity, evidence applicability and founding-group onboarding  
-**Amends when accepted:** ADR-BCP-017 (admission preconditions and channels), ADR-BCP-018 (pre-incorporation representation and first-party eligibility), ADR-BCP-019 (progressive UX), ADR-BCP-020/021 (policy-based low-risk authorisation boundaries), ADR-BCP-023 (purpose-specific evidence and deferrals), and applicable onboarding provisions in BCP-TS-ONBOARDING-001  
+**Amends:** ADR-BCP-017 (admission preconditions and channels), ADR-BCP-018 (pre-incorporation representation and first-party eligibility), ADR-BCP-019 (progressive UX), ADR-BCP-020/021 (policy-based low-risk authorisation boundaries), ADR-BCP-023 (purpose-specific evidence and deferrals), and applicable onboarding provisions in BCP-TS-ONBOARDING-001  
 **Preserves:** ADR-BCP-003/005/009/011/024; ADR-SHARED-012/013/014/015; ADR-IAM-0033  
-**Implementation state:** Decision only. This ADR does not assert that amended contracts, code paths, tenant registrations or infrastructure already exist.
+**Implementation state:** Accepted architectural decision; implementation and operational acceptance remain outstanding. This ADR does not assert that amended Shared contracts, Control Plane code paths, tenant registrations or infrastructure already exist.
 
 ---
 
@@ -412,9 +413,9 @@ Include Go/PostgreSQL migration tests, contract generation/drift tests, IAM and 
 
 **Not decided:** Commercial subscription packaging, external pricing, payment monetisation, universal incorporation rules, enterprise-specific legal advice, waiver of regulatory obligations, or a production release date.
 
-## 19. Supersession and acceptance requirements
+## 19. Accepted amendment semantics and implementation approvals
 
-When accepted:
+As of acceptance on 2026-10-09, the following interpretations apply to future changes; Shared normative contracts and runtime implementations must still be amended and certified:
 - ADR-BCP-017 shall no longer be interpreted as requiring a fully verified corporate registration and comprehensive tax/employer evidence **for every type of applicant before any admission**. Its explicit admission, authorisation and provisioning separation otherwise stands.
 - ADR-BCP-018 shall be interpreted to allow an Organisation identity and governed first-party platform sponsorship without equating that to registered legal-person identity or verified corporate ownership.
 - ADR-BCP-023 shall treat evidence collection and deferral as named-policy, purpose, risk and capability dependent; its claim/evidence/verification invariants remain fully authoritative.
@@ -423,7 +424,7 @@ When accepted:
 - ADR-SHARED-015 remains the authority for provider-neutral desired-state provisioning and readiness.
 - Subscription charging and commercial packaging remain outside this amendment.
 
-Acceptance requires the named architecture and security owners to review the corresponding Shared contract consequences, the pre-incorporation legal actor model and the grace expiry policy. This Proposed ADR alone authorises no production bypass.
+**Implementation prerequisites:** Architecture and Security SHALL review the corresponding Shared contract changes, legal-actor boundaries, pre-incorporation representation, maker/checker flows and grace-expiry mechanics before implementation or production activation. Individual legal responsibilities and permits require applicable review. **Acceptance of this ADR alone authorises no production bypass, legal waiver, tenant registration, capability activation or provider provisioning.**
 
 ---
 
