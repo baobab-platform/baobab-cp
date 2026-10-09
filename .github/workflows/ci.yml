@@ -53,6 +53,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: LA04A temporary gofmt capture
+        run: |
+          for file in internal/service/legalactor/resolution.go internal/service/legalactor/resolution_test.go internal/store/postgres/legal_actor_mandate_test.go; do
+            [ -f "$file" ] || continue
+            gofmt -w "$file"
+            printf 'LA04A_FORMATTED_FILE:%s:' "$file"
+            base64 -w0 "$file"
+            printf '\n'
+          done
       - run: go test -race ./...
       - name: Test NBO founding-enterprise fixture guardrails
         run: python3 -m unittest discover -s scripts/showcase -p 'test_nbo_*.py'
