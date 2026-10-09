@@ -171,6 +171,12 @@ func TestLA02UpgradePreservesLegacyAndEnforcesPrimary(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM registry.tenant_primary_organisation_migration_review WHERE tenant_id=$1 AND resolved_at IS NULL", bootstrapID).Scan(&reviews); err != nil || reviews != 1 {
 		t.Fatalf("bootstrap must enter the reconciliation queue: %d %v", reviews, err)
 	}
+	// A legacy bootstrap without an enforced PRIMARY must not be able to
+	// clear its real legal actor through an UPDATE of only legal_entity_id.
+	// That UPDATE must trigger the same guard as changing enforcement itself.
+	if _, err := pool.Exec(ctx, "UPDATE tenants SET legal_entity_id=NULL WHERE tenant_id=$1", bootstrapID); err == nil {
+		t.Fatal("legacy bootstrap silently cleared legal actor while not enforcing PRIMARY")
+	}
 
 	// The old valid tenant's PRIMARY is preserved. Sharing a legal actor
 	// must never collapse two tenant identities.
