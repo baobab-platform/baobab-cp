@@ -249,6 +249,20 @@ func (s *Service) Fulfil(ctx context.Context, actor Actor, id string, raw []byte
 	}, actor.Audit)
 }
 
+// RegistrationStepV2 retains the existing maker/checker fulfilment lifecycle.
+// The storage transaction independently requires the reviewed PRIMARY
+// Organisation binding and verifies it at commit.
+func (s *Service) RegistrationStepV2(actor Actor, c domain.RegisterTenantV2) store.RegistrationStep {
+    return s.RegistrationStep(actor, domain.RegisterTenant{
+        TenantOnboardingRequestID:c.TenantOnboardingRequestID,
+        Basis:domain.RegistrationOnboarding,
+        TenantID:c.TenantID,
+        DisplayName:c.DisplayName,IsolationStrategy:c.IsolationStrategy,
+        ResidencyRegion:c.ResidencyRegion,
+        RequestedProducts:c.RequestedProducts,
+    })
+}
+
 // RegistrationStep fulfils request c.TenantOnboardingRequestID inside the
 // transaction that registers c's tenant (ADR-BCP-017 sections 22-24). There
 // is no other way to register a tenant for a customer: the request must be
