@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v2/context-resolution.schema.json",
+  "title": "Organisation-first context-resolution v2 (ADR-BCP-027)",
+  "description": "Entitlement context always resolves tenant plus PRIMARY Organisation; an optional legal actor is attached only through independently authorised role/market/activity resolution. V1 required entity_id output remains available to pinned consumers.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_id"
+      ],
+      "properties": {
+        "product_id": {
+          "$ref": "../v1/domain.schema.json#/$defs/productId"
+        }
+      },
+      "description": "Consumer never supplies tenant_id, organisation_id or legal_entity_id as an authority override."
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "organisation_id",
+        "lifecycle_status",
+        "product_id",
+        "entitled",
+        "cache_ttl_seconds",
+        "resolved_at",
+        "correlation_id"
+      ],
+      "properties": {
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "organisation_id": {
+          "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+        },
+        "entity_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId",
+          "description": "Optional legacy DEFAULT LegalEntity projection, not transaction legal responsibility."
+        },
+        "lifecycle_status": {
+          "type": "string",
+          "enum": [
+            "provisioning",
+            "active",
+            "suspended",
+            "decommissioning",
+            "decommissioned"
+          ]
+        },
+        "product_id": {
+          "$ref": "../v1/domain.schema.json#/$defs/productId"
+        },
+        "entitled": {
+          "const": true
+        },
+        "entitlement_tier": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 63
+        },
+        "cache_ttl_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        },
+        "resolved_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "correlation_id": {
+          "$ref": "../v1/domain.schema.json#/$defs/uuid"
+        },
+        "legal_actor_resolution": {
+          "$ref": "../../organisation/v2/legal-actor-mandate.schema.json#/$defs/LegalActorResolution"
+        }
+      }
+    }
+  }
+}
