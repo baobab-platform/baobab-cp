@@ -14,10 +14,10 @@ import (
 
 type inertMandateStore struct{}
 
-func (inertMandateStore) ProposeOperatingLegalActorMandate(context.Context, string, basestore.RequestMetadata, string, legalactor.ProposeCommand) (legalactor.CommandReceipt,error) {
+func (inertMandateStore) ProposeOperatingLegalActorMandate(context.Context, string, basestore.RequestMetadata, string, legalactor.ProposeCommand) (legalactor.CommandReceipt, error) {
 	return legalactor.CommandReceipt{}, errors.New("handler must not reach repository without authorization")
 }
-func (inertMandateStore) DecideOperatingLegalActorMandate(context.Context, string, basestore.RequestMetadata, string, string, legalactor.DecideCommand) (legalactor.CommandReceipt,error) {
+func (inertMandateStore) DecideOperatingLegalActorMandate(context.Context, string, basestore.RequestMetadata, string, string, legalactor.DecideCommand) (legalactor.CommandReceipt, error) {
 	return legalactor.CommandReceipt{}, errors.New("handler must not reach repository without authorization")
 }
 
@@ -28,9 +28,9 @@ func TestLA04CMandateRoutesDefaultOff(t *testing.T) {
 		"/v2/legal-actor-mandates/0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b/decision",
 	} {
 		w := httptest.NewRecorder()
-		handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost,url,strings.NewReader("{}")))
+		handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, url, strings.NewReader("{}")))
 		if w.Code != http.StatusNotFound {
-			t.Errorf("default-disabled mandate endpoint %s returned %d",url,w.Code)
+			t.Errorf("default-disabled mandate endpoint %s returned %d", url, w.Code)
 		}
 	}
 }
@@ -44,12 +44,12 @@ func TestLA04CMandateEndpointsRequireAdminToken(t *testing.T) {
 		"/v2/legal-actor-mandates",
 		"/v2/legal-actor-mandates/0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b/decision",
 	} {
-		req := httptest.NewRequest(http.MethodPost,url,strings.NewReader("{}"))
-		req.Header.Set("Authorization","Bearer invalid")
+		req := httptest.NewRequest(http.MethodPost, url, strings.NewReader("{}"))
+		req.Header.Set("Authorization", "Bearer invalid")
 		w := httptest.NewRecorder()
-		handler.ServeHTTP(w,req)
-		if w.Code!=http.StatusUnauthorized {
-			t.Errorf("mandate endpoint %s allowed invalid bearer: %d",url,w.Code)
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("mandate endpoint %s allowed invalid bearer: %d", url, w.Code)
 		}
 	}
 }
