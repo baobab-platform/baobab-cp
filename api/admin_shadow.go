@@ -63,6 +63,7 @@ var adminRoutePermissions = map[string]string{
 	"GET /v1/tenants/{tenantID}/platform-account-bindings":                          "platform-account.view",
 	"GET /v1/organisation-drift":                                                    "organisation.view",
 	"GET /v1/organisations/{organisationID}/audit":                                  "audit.view",
+	"POST /v1/admission/applications":                                               "application.review",
 	"GET /v1/admission/applications":                                                "application.review",
 	"GET /v1/admission/applications/{applicationID}":                                "application.review",
 	"GET /v1/admission/applications/{applicationID}/decision":                       "application.review",
