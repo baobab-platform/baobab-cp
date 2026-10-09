@@ -1,0 +1,572 @@
+# contracts/events/v1/event-registry.yaml
+#
+# The Canonical Event Registry (ADR-SHARED-018 SS3.3). Conforms to
+# event-registry.schema.json. It is the platform index of canonical event
+# types: it indexes the AsyncAPI definitions and does not replace them. The
+# payload schema of a type is the one its AsyncAPI message declares.
+#
+# Rules (scripts/event_contexts.py, run in Shared CI):
+#   - entries are unique and sorted by type, and correspond one to one with
+#     the messages of every contracts/*/v*/asyncapi.yaml;
+#   - the context is registered, not RESERVED, and a DEPRECATED context
+#     accepts only its frozen_types;
+#   - an ACTIVE, DEPRECATED or RETIRED type has exactly one producer, and
+#     that producer is a steward of its context; a PROPOSED type is a
+#     defined contract whose producer authority is not yet assigned;
+#   - the name follows the SS3.4 hygiene rules unless an already-published
+#     type carries an explicit naming_exception;
+#   - `supersedes` is the only place in contracts/ where a legacy
+#     com.nabhold.* type may appear.
+#
+# Producers are recorded only where Shared carries the evidence: a
+# package's stated runtime authority, the owner of the capability whose
+# related_events name the type, or an accepted ADR.
+
+schema:
+  name: baobab-event-registry
+  version: "1.0"
+
+events:
+  - type: com.baobab-platform.capability.binding.changed.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.binding.created.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.binding.retired.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.composition.updated.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.deprecated.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.grant.created.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.grant.revoked.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.grant.suspended.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.provider.registered.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.provider.retired.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.provider.suspended.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.registered.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.capability.retired.v1
+    asyncapi: contracts/capability/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.commercial.quotation.accepted.v1
+    asyncapi: contracts/quotation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.commercial.quotation.rejected.v1
+    asyncapi: contracts/quotation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.commercial.quotation.submitted.v1
+    asyncapi: contracts/quotation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.commercial.rfq.closed.v1
+    asyncapi: contracts/rfq/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.commercial.rfq.published.v1
+    asyncapi: contracts/rfq/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.client-application.approved.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.client-application.created.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.client-application.information-requested.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.client-application.rejected.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.client-application.submitted.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.client-application.withdrawn.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.corporate-relationship.activated.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.corporate-relationship.conflicted.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.corporate-relationship.ended.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.engine-instance.desired-release-changed.v1
+    asyncapi: contracts/topology/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.engine-instance.release-drift-detected.v1
+    asyncapi: contracts/topology/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.engine-release.recorded.v1
+    asyncapi: contracts/topology/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.engine-release.status-changed.v1
+    asyncapi: contracts/topology/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.legal-entity.verified.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.market-participation.created.v1
+    asyncapi: contracts/control-plane/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.market-participation.updated.v1
+    asyncapi: contracts/control-plane/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.operating-legal-actor-mandate.decided.v1
+    asyncapi: contracts/organisation/v2/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.operating-legal-actor-mandate.proposed.v1
+    asyncapi: contracts/organisation/v2/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.organisation.created.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.organisation.suspended.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.organisation.verified.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.platform-account-membership.changed.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.platform-account.created.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.platform-account.status-changed.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.platform-relationship.activated.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.platform-relationship.ended.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant-legal-entity-mapping.activated.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant-onboarding.authorised.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant-onboarding.cancelled.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant-onboarding.fulfilled.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant-onboarding.requested.v1
+    asyncapi: contracts/admission/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant-organisation-mapping.activated.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant-platform-account-binding.bound.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant-platform-account-binding.ended.v1
+    asyncapi: contracts/organisation/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant.provisioning-active.v1
+    asyncapi: contracts/control-plane/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant.provisioning-failed.v1
+    asyncapi: contracts/control-plane/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant.provisioning-ready.v1
+    asyncapi: contracts/control-plane/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant.provisioning-started.v1
+    asyncapi: contracts/control-plane/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.control-plane.tenant.provisioning-state-changed.v1
+    asyncapi: contracts/control-plane/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.credential.compromised.v1
+    asyncapi: contracts/identity-events/v1/asyncapi.yaml
+    producer: baobab-iam
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.customer.buyer-application-evidence.decided.v1
+    asyncapi: contracts/buyer-organisation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.customer.buyer-application.decision-recorded.v1
+    asyncapi: contracts/buyer-organisation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.customer.buyer-application.submitted.v1
+    asyncapi: contracts/buyer-organisation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.customer.buyer-commercial-profile.changed.v1
+    asyncapi: contracts/buyer-organisation/v1/asyncapi.yaml
+    producer: baobab-erp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.customer.buyer-erp-projection.requested.v1
+    asyncapi: contracts/buyer-organisation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+    naming_exception: >-
+      Already published before ADR-SHARED-018. It names an engine role and
+      reads as a command. Re-homing to a business fact is part of the
+      Trade/ERP compatibility stack; no new type may follow this pattern.
+  - type: com.baobab-platform.customer.buyer-membership.changed.v1
+    asyncapi: contracts/buyer-organisation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.customer.buyer-organisation.registered.v1
+    asyncapi: contracts/buyer-organisation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.customer.buyer-organisation.status-changed.v1
+    asyncapi: contracts/buyer-organisation/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.content-artifact.registered.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.document-relationship.created.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.document-version.created.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.document-version.issued.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.document-version.validity-changed.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.document-version.verification-changed.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.regulatory-evidence.offered.v1
+    asyncapi: contracts/regulatory-document-evidence/v1/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.trade-document.created.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.trade-document.issued.v1
+    asyncapi: contracts/trade-document/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.documents.trade-document.issued.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.trade-document.rejected.v1
+    asyncapi: contracts/trade-document/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.documents.trade-document.superseded.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.documents.trade-document.verified.v1
+    asyncapi: contracts/trade-document/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.documents.trade-document.voided.v2
+    asyncapi: contracts/trade-document/v2/asyncapi.yaml
+    producer: baobab-trade-docs
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.entitlement.revoked.v1
+    asyncapi: contracts/identity-events/v1/asyncapi.yaml
+    producer: baobab-iam
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.erp.business-partner.changed.v1
+    asyncapi: contracts/erp/v1/asyncapi.yaml
+    producer: baobab-erp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.erp.inventory.availability-changed.v1
+    asyncapi: contracts/erp/v1/asyncapi.yaml
+    producer: baobab-erp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.erp.invoice.changed.v1
+    asyncapi: contracts/erp/v1/asyncapi.yaml
+    producer: baobab-erp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.erp.order.consequence-changed.v1
+    asyncapi: contracts/erp/v1/asyncapi.yaml
+    producer: baobab-erp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.erp.payment.accounting-changed.v1
+    asyncapi: contracts/erp/v1/asyncapi.yaml
+    producer: baobab-erp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.erp.provisioning.changed.v1
+    asyncapi: contracts/erp/v1/asyncapi.yaml
+    producer: baobab-erp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.erp.warehouse.changed.v1
+    asyncapi: contracts/erp/v1/asyncapi.yaml
+    producer: baobab-erp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.identity.created.v1
+    asyncapi: contracts/identity-events/v1/asyncapi.yaml
+    producer: baobab-iam
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.identity.disabled.v1
+    asyncapi: contracts/identity-events/v1/asyncapi.yaml
+    producer: baobab-iam
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.identity.reactivated.v1
+    asyncapi: contracts/identity-events/v1/asyncapi.yaml
+    producer: baobab-iam
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.identity.suspended.v1
+    asyncapi: contracts/identity-events/v1/asyncapi.yaml
+    producer: baobab-iam
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.internal-trade.intercompany-transaction.initiated.v1
+    asyncapi: contracts/intercompany/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.internal-trade.intercompany-transaction.settled.v1
+    asyncapi: contracts/intercompany/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.inventory.inventory-ownership.recorded.v1
+    asyncapi: contracts/inventory-ownership/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.inventory.inventory-ownership.transferred.v1
+    asyncapi: contracts/inventory-ownership/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.market.trade-lane.activated.v1
+    asyncapi: contracts/trade-lane/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.market.trade-lane.suspended.v1
+    asyncapi: contracts/trade-lane/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.membership.revoked.v1
+    asyncapi: contracts/identity-events/v1/asyncapi.yaml
+    producer: baobab-iam
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.payments.payment.authorized.v1
+    asyncapi: contracts/payments/v1/asyncapi.yaml
+    producer: baobab-payments
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.payments.payment.cancelled.v1
+    asyncapi: contracts/payments/v1/asyncapi.yaml
+    producer: baobab-payments
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.payments.payment.captured.v1
+    asyncapi: contracts/payments/v1/asyncapi.yaml
+    producer: baobab-payments
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.payments.payment.created.v1
+    asyncapi: contracts/payments/v1/asyncapi.yaml
+    producer: baobab-payments
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.payments.payment.failed.v1
+    asyncapi: contracts/payments/v1/asyncapi.yaml
+    producer: baobab-payments
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.payments.payment.refunded.v1
+    asyncapi: contracts/payments/v1/asyncapi.yaml
+    producer: baobab-payments
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.procurement.procurement-request.approved.v1
+    asyncapi: contracts/procurement/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.procurement.procurement-request.converted.v1
+    asyncapi: contracts/procurement/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.procurement.procurement-request.created.v1
+    asyncapi: contracts/procurement/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.procurement.procurement-request.rejected.v1
+    asyncapi: contracts/procurement/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.product.entitlement-projection.updated.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.product.product-version.deprecated.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.product.product-version.published.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.product.product.created.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.product.product.deprecated.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.product.subscription.activated.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.product.subscription.cancelled.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.product.subscription.classified.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.product.subscription.created.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.product.subscription.suspended.v1
+    asyncapi: contracts/product/v1/asyncapi.yaml
+    producer: baobab-cp
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.regulations.document-requirements.determined.v1
+    asyncapi: contracts/regulatory-document-assessment/v1/asyncapi.yaml
+    producer: baobab-regulations
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.regulations.requirement-satisfaction.evaluated.v1
+    asyncapi: contracts/regulatory-document-assessment/v1/asyncapi.yaml
+    producer: baobab-regulations
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.session.revoked.v1
+    asyncapi: contracts/identity-events/v1/asyncapi.yaml
+    producer: baobab-iam
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.subscriptions.billing-subscription.created.v1
+    asyncapi: contracts/subscriptions/v1/asyncapi.yaml
+    producer: baobab-subscriptions
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.subscriptions.billing-subscription.resumed.v1
+    asyncapi: contracts/subscriptions/v1/asyncapi.yaml
+    producer: baobab-subscriptions
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.subscriptions.billing-subscription.suspended.v1
+    asyncapi: contracts/subscriptions/v1/asyncapi.yaml
+    producer: baobab-subscriptions
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.subscriptions.billing-subscription.terminated.v1
+    asyncapi: contracts/subscriptions/v1/asyncapi.yaml
+    producer: baobab-subscriptions
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.subscriptions.usage.recorded.v1
+    asyncapi: contracts/subscriptions/v1/asyncapi.yaml
+    producer: baobab-subscriptions
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.supplier-onboarding.application.decided.v1
+    asyncapi: contracts/supplier-onboarding/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.supplier-onboarding.application.submitted.v1
+    asyncapi: contracts/supplier-onboarding/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.supplier-onboarding.capability.verified.v1
+    asyncapi: contracts/supplier-onboarding/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.supplier-onboarding.kyb.decision-recorded.v1
+    asyncapi: contracts/supplier-onboarding/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.supplier-onboarding.kyb.evidence-recorded.v1
+    asyncapi: contracts/supplier-onboarding/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.supplier-onboarding.qualification.updated.v1
+    asyncapi: contracts/supplier-onboarding/v1/asyncapi.yaml
+    lifecycle: PROPOSED
+  - type: com.baobab-platform.trade.customer.projected.v1
+    asyncapi: contracts/erp/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.trade.order.placed.v1
+    asyncapi: contracts/erp/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.trade.shipment.created.v1
+    asyncapi: contracts/shipment/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.trade.shipment.delivered.v1
+    asyncapi: contracts/shipment/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.trade.shipment.status-changed.v1
+    asyncapi: contracts/shipment/v1/asyncapi.yaml
+    producer: baobab-trade
+    lifecycle: ACTIVE
+  - type: com.baobab-platform.workload.revoked.v1
+    asyncapi: contracts/identity-events/v1/asyncapi.yaml
+    producer: baobab-iam
+    lifecycle: ACTIVE

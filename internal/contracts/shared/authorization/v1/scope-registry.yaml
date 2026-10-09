@@ -629,3 +629,18 @@ scopes:
     audience: ["baobab-control-plane", "baobab-iam"]
     allowed_actors: ["human"]
     grants_authority: false
+
+  # LA-04C — transport admission only. Registered, not assigned.
+  - name: "legal-actor-mandate:propose"
+    description: "Privileged human-only submission of an inert, scoped legal-actor mandate proposal. Requires platform administration, a matching live PRIMARY Organisation and maker evidence; this scope is not legal authority or tenant access."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
+  - name: "legal-actor-mandate:decide"
+    description: "Privileged human-only independent approve/reject of an inert mandate proposal. Requires separate checker, verified legal-actor evidence and platform authority; this scope cannot activate a mandate or grant provider permissions."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false

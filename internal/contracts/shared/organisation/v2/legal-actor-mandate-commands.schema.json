@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/organisation/v2/legal-actor-mandate-commands.schema.json",
+  "title": "LA-04C governed operating legal actor mandate commands",
+  "description": "Privileged CP-only maker and independent checker commands; neither command activates a legal actor. All actual authority requires the separate LA-04D activation gate and provider readiness.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "ProposeMandateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "operating_organisation_id",
+        "responsible_legal_entity_id",
+        "roles",
+        "activity_scope",
+        "market_scope",
+        "authority_basis_reference",
+        "evidence_references",
+        "effective_from"
+      ],
+      "properties": {
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "domain.schema.json#/$defs/organisationId"
+        },
+        "responsible_legal_entity_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId"
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "legal-actor-mandate.schema.json#/$defs/legalActorRole"
+          }
+        },
+        "activity_scope": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 160
+          }
+        },
+        "market_scope": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          }
+        },
+        "capability_scope": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          }
+        },
+        "authority_basis_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "supersedes_mandate_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "DecideMandateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "decision_basis_reference",
+        "evidence_references"
+      ],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "APPROVE",
+            "REJECT"
+          ]
+        },
+        "decision_basis_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "legal_actor_verification_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "decision": {
+                "const": "APPROVE"
+              }
+            },
+            "required": [
+              "decision"
+            ]
+          },
+          "then": {
+            "required": [
+              "legal_actor_verification_reference"
+            ]
+          }
+        }
+      ]
+    },
+    "MandateCommandReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mandate_id",
+        "tenant_id",
+        "operating_organisation_id",
+        "status",
+        "command",
+        "recorded_at"
+      ],
+      "properties": {
+        "mandate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "domain.schema.json#/$defs/organisationId"
+        },
+        "status": {
+          "const": "PENDING"
+        },
+        "command": {
+          "type": "string",
+          "enum": [
+            "PROPOSE",
+            "APPROVE",
+            "REJECT"
+          ]
+        },
+        "decision_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

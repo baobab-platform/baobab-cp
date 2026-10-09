@@ -1,0 +1,39 @@
+asyncapi: 3.1.0
+info:
+  title: Baobab Platform governed operating legal-actor mandate commands
+  version: 1.0.0
+  description: >
+    ADR-BCP-027 LA-04C, Control Plane-owned transactional outbox events for an
+    inert mandate proposal and its independent checker decision. APPROVE in
+    a decision event is not mandate activation or provider legal authority.
+    Payloads contain identifiers and status only, never corporate registration
+    evidence, personally identifying data or statutory permissions.
+defaultContentType: application/json
+channels:
+  operatingLegalActorMandate:
+    address: baobab-platform.control-plane.operating-legal-actor-mandate.v1
+    messages:
+      mandateProposed: { $ref: "#/components/messages/MandateProposed" }
+      mandateDecided: { $ref: "#/components/messages/MandateDecided" }
+operations:
+  publishOperatingLegalActorMandate:
+    action: send
+    channel: { $ref: "#/channels/operatingLegalActorMandate" }
+components:
+  messages:
+    MandateProposed:
+      name: com.baobab-platform.control-plane.operating-legal-actor-mandate.proposed.v1
+      payload:
+        allOf:
+          - $ref: ../../events/v1/envelope.schema.json
+          - type: object
+            properties:
+              data: { $ref: "./legal-actor-mandate-events.schema.json#/$defs/MandateProposed" }
+    MandateDecided:
+      name: com.baobab-platform.control-plane.operating-legal-actor-mandate.decided.v1
+      payload:
+        allOf:
+          - $ref: ../../events/v1/envelope.schema.json
+          - type: object
+            properties:
+              data: { $ref: "./legal-actor-mandate-events.schema.json#/$defs/MandateDecided" }
