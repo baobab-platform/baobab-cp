@@ -44,7 +44,7 @@ ALTER TABLE tenants ALTER COLUMN primary_organisation_enforced SET NOT NULL;
 ALTER TABLE tenants ALTER COLUMN legal_entity_id DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS registry.tenant_primary_organisation_migration_review (
-    tenant_id varchar(63) PRIMARY KEY REFERENCES tenants(tenant_id),
+    tenant_id varchar(63) PRIMARY KEY REFERENCES tenants(tenant_id) ON DELETE CASCADE,
     reason text NOT NULL CHECK (reason IN ('MISSING_OR_INACTIVE_PRIMARY')),
     provenance text NOT NULL DEFAULT 'migration-000102-no-inferred-identity',
     discovered_at timestamptz NOT NULL DEFAULT now(),
