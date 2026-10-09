@@ -20,7 +20,7 @@ import (
 // against byte-for-byte Shared LA-01 schemas pinned in contracts.lock.yaml
 // and must never bypass existing privileged human authorisation.
 type organisationFirstRegistrationStore interface {
-    PrepareOnboardingOrganisation(context.Context,string,store.RequestMetadata,string,string,string,string)(string,error)
+    PrepareOnboardingOrganisation(context.Context,string,store.RequestMetadata,string,string,string,string,...string)(string,error)
     RegisterTenantV2(context.Context,string,store.RequestMetadata,domain.RegisterTenantV2,store.RegistrationStep)(domain.Operation,error)
 }
 var registrationV2Schema=contracts.MustSchema("control-plane/v2/tenant-registration.schema.json")
@@ -39,6 +39,7 @@ func (a *API) prepareOrganisationV2(w http.ResponseWriter,r *http.Request){
     var body struct {
         PolicyReference string `json:"identity_resolution_policy_reference"`
         EvidenceReference string `json:"evidence_reference"`
+        OrganisationID string `json:"organisation_id,omitempty"`
     }
     decoder:=json.NewDecoder(http.MaxBytesReader(w,r.Body,65536))
     decoder.DisallowUnknownFields()
@@ -57,8 +58,10 @@ func (a *API) prepareOrganisationV2(w http.ResponseWriter,r *http.Request){
     }
     reviewerID,_,ok:=resolveActor(w,r,a.identities,false);if !ok{return}
     principal,_:=auth.PrincipalFromContext(r.Context())
+    var selected []string
+    if body.OrganisationID!=""{selected=[]string{body.OrganisationID}}
     id,err:=db.PrepareOnboardingOrganisation(r.Context(),key,requestMetadata(r,principal),
-        reviewerID,chi.URLParam(r,"requestID"),body.PolicyReference,body.EvidenceReference)
+        reviewerID,chi.URLParam(r,"requestID"),body.PolicyReference,body.EvidenceReference,selected...)
     if err!=nil{
         if errors.Is(err,store.ErrIdempotencyConflict){
             problem(w,r,http.StatusConflict,"ORGANISATION_IDENTITY_CONFLICT","the approved identity binding differs from the reviewed source",false)
