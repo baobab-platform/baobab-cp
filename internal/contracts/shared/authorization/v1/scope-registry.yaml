@@ -659,3 +659,15 @@ scopes:
     allowed_actors: ["human"]
     privileged: true
     grants_authority: false
+
+  # LA-05A: CP authority fact transport only; use only for a CURRENT,
+  # principal-owned runtime PlatformContext. Does not grant provider actions.
+  - name: "legal-actor:assess"
+    description: >-
+      Private workload-only CP legal actor assessment for a bounded, previously
+      resolved canonical RUNTIME context owned by this workload. IAM token scope
+      alone is insufficient; no actor, tenant or mandate may be selected by the
+      requester and consumers must re-resolve before each legal action.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
