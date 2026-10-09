@@ -80,6 +80,7 @@ type Actor struct {
 
 type Service struct {
 	Repo        repository.AdmissionRepository
+	Principals  repository.IdentityRepository
 	Eligibility EligibilityEvaluator
 	Now         func() time.Time
 }
@@ -494,7 +495,7 @@ func (s *Service) Decide(ctx context.Context, decider Actor, id string, raw []by
 	if err != nil {
 		return domain.AdmissionDecision{}, err
 	}
-	if current.ApplicantPrincipalID == decider.PrincipalID {
+	if current.ApplicantPrincipalID == decider.PrincipalID || current.OpenedByStaffPrincipalID == decider.PrincipalID {
 		return domain.AdmissionDecision{}, ErrSelfDecision
 	}
 	requested := current.RequestedCountries()
@@ -548,7 +549,7 @@ func (s *Service) Decide(ctx context.Context, decider Actor, id string, raw []by
 		edit: func(app *domain.ClientApplication, _ time.Time) (repository.ApplicationChange, error) {
 			// Re-checked under the row lock: the applicant cannot change, but
 			// the check must not depend on the earlier read.
-			if app.ApplicantPrincipalID == decider.PrincipalID {
+			if app.ApplicantPrincipalID == decider.PrincipalID || app.OpenedByStaffPrincipalID == decider.PrincipalID {
 				return repository.ApplicationChange{}, ErrSelfDecision
 			}
 			summary := decision.Summary()
