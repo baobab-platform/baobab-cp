@@ -85,6 +85,16 @@ func (r *PostgresRepository) EnsureFirstPartyOperatingIdentity(
                  firstPartyID,orgID,identityClass,incorporationClaim,evidenceReference)
             if err!=nil{return err}
             outcome.OrganisationID=orgID
+            if err=r.recordOrganisationChange(ctx,tx,actor,events.OrganisationChange{
+                AuditAction:"first_party_organisation_identity.recognised",
+                Target:"organisation/"+orgID,
+                AuditPayload:map[string]any{
+                    "first_party_id":firstPartyID,
+                    "identity_class":identityClass,
+                    "incorporation_claim":incorporationClaim,
+                    "evidence_reference":evidenceReference,
+                },
+            });err!=nil{return err}
         default:
             return err
         }
