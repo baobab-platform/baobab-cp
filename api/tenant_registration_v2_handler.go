@@ -11,7 +11,6 @@ import (
     "github.com/baobab-platform/baobab-cp/internal/auth"
     "github.com/baobab-platform/baobab-cp/internal/contracts"
     "github.com/baobab-platform/baobab-cp/internal/domain"
-    "github.com/baobab-platform/baobab-cp/internal/repository"
     "github.com/baobab-platform/baobab-cp/internal/service/onboarding"
     "github.com/baobab-platform/baobab-cp/internal/store"
     "github.com/go-chi/chi/v5"
@@ -90,12 +89,10 @@ func (a *API) registerV2(w http.ResponseWriter,r *http.Request){
         problem(w,r,http.StatusBadRequest,"VALIDATION_FAILED",err.Error(),false)
         return
     }
-    principalID,_,ok:=resolveActor(w,r,a.identities,false);if !ok{return}
+    principalID,auditActor,ok:=resolveActor(w,r,a.identities,false);if !ok{return}
     principal,_:=auth.PrincipalFromContext(r.Context())
     step:=a.onboarding.RegistrationStepV2(onboarding.Actor{
-        PrincipalID:principalID,Audit:repository.AuditActor{
-            ActorID:principalID,CorrelationID:requestMetadata(r,principal).CorrelationID,
-        },
+        PrincipalID:principalID,Audit:auditActor,
     },command)
     operation,err:=db.RegisterTenantV2(r.Context(),key,requestMetadata(r,principal),command,step)
     switch{
