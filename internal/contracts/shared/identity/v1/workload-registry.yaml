@@ -328,6 +328,58 @@ workloads:
     rotation_owner: baobab-platform/baobab-subscriptions
     status: PROVISIONED
 
+  # LA-05G staging evidence profiles: PROVISIONED, not issued or ACTIVE.
+  # Shared registry entries express only maximum allowed transport scopes.
+  # Human mandate approvals, runtime PlatformContext ownership, issuer proof,
+  # provider readiness and service-specific execution grants remain separate.
+  baobab-trade-legal-actor-assessor-staging:
+    repository: baobab-platform/baobab-trade
+    owner: baobab-platform/baobab-trade
+    runtime: "trade seller-of-record PEP staging proof; no live checkout authority"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess"]
+    context_purposes: ["RUNTIME"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-trade
+    status: PROVISIONED
+
+  baobab-erp-legal-actor-assessor-staging:
+    repository: baobab-platform/baobab-erp
+    owner: baobab-platform/baobab-erp
+    runtime: "ERP invoice issuer/accounting PEP staging proof; no posting authority"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess"]
+    context_purposes: ["RUNTIME"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-erp
+    status: PROVISIONED
+
+  baobab-payments-legal-actor-assessor-staging:
+    repository: baobab-platform/baobab-payments
+    owner: baobab-platform/baobab-payments
+    runtime: "payments beneficiary/contracting-party PEP sandbox staging proof; no fund-moving authority"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess"]
+    context_purposes: ["RUNTIME"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-payments
+    status: PROVISIONED
+
+  baobab-trade-docs-legal-actor-assessor-staging:
+    repository: baobab-platform/baobab-trade-docs
+    owner: baobab-platform/baobab-trade-docs
+    runtime: "Trade Docs document issuer PEP reference staging only; no deployed issuer"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess"]
+    context_purposes: ["RUNTIME"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-trade-docs
+    status: PROVISIONED
+
   # MP2-C staging IAM authority consumer. It is distinct from browser,
   # administrator and provider-native identities and may call only the private
   # Control Plane federation authority surface. PROVISIONED until Hydra issues
