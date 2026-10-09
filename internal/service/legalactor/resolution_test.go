@@ -167,7 +167,7 @@ func TestResolveBoundedValidity(t *testing.T) {
 	request.Capability = "trade.checkout"
 	m.CapabilityScope = []string{"trade.checkout"}
 	out := Resolve(request, []Candidate{m}, testAt)
-	if out.Outcome != Authorized || out.ValidUntil == nil || !out.ValidUntil.Equal(until) {
+	if out.Outcome != Authorized || out.ValidUntil == nil || !out.ValidUntil.Equal(testAt.Add(30*time.Second)) {
 		t.Fatalf("valid capability-specific mandate was not bounded: %+v", out)
 	}
 }

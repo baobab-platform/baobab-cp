@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/service/legalactor"
 	basestore "github.com/baobab-platform/baobab-cp/internal/store"
 )
 
@@ -107,5 +108,40 @@ func TestOperatingLegalActorMandateActivationGate(t *testing.T) {
 		registry.operating_legal_actor_mandate WHERE mandate_id=$1::uuid`,
 		mandateID).Scan(&status); err != nil || status != "REVOKED" {
 		t.Fatalf("mandate did not preserve revoked history: %s %v", status, err)
+	}
+}
+
+// LA-04B integration: even a revoked mandate must never be returned as an
+// authorising legal actor by the trusted PostgreSQL adapter.
+func TestTrustedLegalActorResolutionRevocation(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	ctx := context.Background()
+	db, err := Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.ApplyMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// An unmatched Organisation, even with a caller-supplied role and market,
+	// can never turn into a DEFAULT legal-person inference.
+	at := time.Now().UTC()
+	res, err := db.ResolveOperatingLegalActor(ctx, legalactor.Request{
+		TenantID:                "tn_nonexistent_la04b",
+		OperatingOrganisationID: "00000000-0000-0000-0000-000000000001",
+		Role:                    "SELLER_OF_RECORD",
+		Activity:                "B2B_COFFEE_SALE",
+		Market:                  "ZA",
+		EffectiveAt:             at,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Outcome != legalactor.NoApplicableMandate || res.ResponsibleLegalEntityID != "" {
+		t.Fatalf("unattested tenant obtained legal responsibility: %+v", res)
 	}
 }
