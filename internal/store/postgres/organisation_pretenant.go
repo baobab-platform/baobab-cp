@@ -18,10 +18,10 @@ import (
 // reviewer distinct from both requester and authoriser, with case evidence.
 // It neither invents a LegalEntityProfile nor admits a new tenant. Replay of
 // exactly the same binding is idempotent.
-func (s *Store) PrepareOnboardingOrganisation(ctx context.Context, key string, metadata basestore.RequestMetadata, requestID, policyReference, evidenceReference string) (string, error) {
+func (s *Store) PrepareOnboardingOrganisation(ctx context.Context, key string, metadata basestore.RequestMetadata, reviewerPrincipalID, requestID, policyReference, evidenceReference string) (string, error) {
     requestUUID, err := domain.ParseResourceID(domain.TenantOnboardingRequestIDPrefix, requestID)
     if err != nil { return "", err }
-    if !domain.IsUUID(metadata.ActorID) || strings.TrimSpace(policyReference)=="" ||
+    if !domain.IsUUID(reviewerPrincipalID) || strings.TrimSpace(policyReference)=="" ||
        strings.TrimSpace(evidenceReference)=="" || strings.TrimSpace(key)=="" {
         return "", errors.New("independent reviewer, identity policy, evidence and idempotency key are mandatory")
     }
@@ -35,7 +35,7 @@ func (s *Store) PrepareOnboardingOrganisation(ctx context.Context, key string, m
       FROM admission.tenant_onboarding_request WHERE tenant_onboarding_request_id=$1::uuid
       FOR UPDATE`, requestUUID).Scan(&decision,&requested,&authorised,&name,&status)
     if err != nil { return "", fmt.Errorf("load authorised onboarding request: %w",err) }
-    if metadata.ActorID==requested || metadata.ActorID==authorised {
+    if reviewerPrincipalID==requested || reviewerPrincipalID==authorised {
         return "", errors.New("Organisation reviewer must be independent of requester and authoriser")
     }
 
@@ -47,7 +47,7 @@ func (s *Store) PrepareOnboardingOrganisation(ctx context.Context, key string, m
       Scan(&existing,&existingPolicy,&existingEvidence,&existingReviewer)
     if err==nil {
         if existingPolicy!=policyReference || existingEvidence!=evidenceReference ||
-            existingReviewer!=metadata.ActorID {
+            existingReviewer!=reviewerPrincipalID {
             return "", basestore.ErrIdempotencyConflict
         }
         if err=tx.Commit(ctx);err!=nil{return "",err}
@@ -73,7 +73,7 @@ func (s *Store) PrepareOnboardingOrganisation(ctx context.Context, key string, m
       (tenant_onboarding_request_id,organisation_id,admission_decision_id,
        reviewed_by,identity_resolution_policy_reference,evidence_reference)
       VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6)`,
-        requestUUID,orgID,decision,metadata.ActorID,policyReference,evidenceReference)
+        requestUUID,orgID,decision,reviewerPrincipalID,policyReference,evidenceReference)
     if err!=nil{return "",err}
     if err=s.recordOrganisationChange(ctx,tx,metadata,key,events.OrganisationChange{
         AuditAction:"organisation.created",
