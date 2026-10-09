@@ -138,7 +138,7 @@ func TestTrustedLegalActorResolutionRevocation(t *testing.T) {
 		Activity: "B2B_COFFEE_SALE",
 		Market: "ZA",
 		EffectiveAt: at,
-	}, at)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
