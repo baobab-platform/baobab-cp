@@ -8,7 +8,6 @@ import (
  "fmt"
  "time"
  "github.com/baobab-platform/baobab-cp/internal/domain"
- "github.com/baobab-platform/baobab-cp/internal/events"
  "github.com/baobab-platform/baobab-cp/internal/service/legalactor"
  basestore "github.com/baobab-platform/baobab-cp/internal/store"
  "github.com/jackc/pgx/v5"
