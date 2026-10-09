@@ -155,7 +155,9 @@ func TestLegalActorLifecycleGuardedActivationAndRevocation(t *testing.T) {
 	_, err = db.pool.Exec(ctx, `UPDATE registry.legal_entity_profile
 		SET evidence_references='["test/retracted"]'::jsonb
 		WHERE legal_entity_id=$1`, entity)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	afterWithdrawal, err := db.ResolveOperatingLegalActor(ctx, legalactor.Request{
 		TenantID: tenant, OperatingOrganisationID: org, Role: "SELLER_OF_RECORD",
 		Activity: "B2B_COFFEE_SALE", Market: "ZA", EffectiveAt: time.Now().UTC(),
@@ -166,7 +168,9 @@ func TestLegalActorLifecycleGuardedActivationAndRevocation(t *testing.T) {
 	_, err = db.pool.Exec(ctx, `UPDATE registry.legal_entity_profile
 		SET evidence_references='["test/official-legal-registry"]'::jsonb
 		WHERE legal_entity_id=$1`, entity)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	suspend := legalactor.LifecycleCommand{Action: "SUSPEND",
 		AuthorityBasisReference: "test/immediate-stop", EvidenceReferences: []string{"test/stop-case"}}
 	suspended, err := db.TransitionOperatingLegalActorMandate(ctx, "suspend-"+domain.NewUUIDv7(),
