@@ -154,7 +154,7 @@
           "format": "date-time"
         },
         "maximum_duration_months": {
-          "const": 12
+          "const": 24
         },
         "status": {
           "type": "string",
@@ -175,7 +175,7 @@
           }
         }
       },
-      "description": "12-calendar-month maximum is enforced by CP at runtime; this record is NOT evidence that a requirement was satisfied or a waiver of law."
+      "description": "24-calendar-month maximum must be enforced by CP at runtime (not by JSON Schema alone); this record is NOT evidence that a requirement was satisfied or a waiver of law."
     }
   }
 }
