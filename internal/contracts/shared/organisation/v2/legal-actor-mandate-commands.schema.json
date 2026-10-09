@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.baobab-platform.com/organisation/v2/legal-actor-mandate-commands.schema.json",
-  "title": "LA-04C governed operating legal actor mandate commands",
+  "title": "LA-04C/LA-04D governed legal actor mandate commands",
   "description": "Privileged CP-only maker and independent checker commands; neither command activates a legal actor. All actual authority requires the separate LA-04D activation gate and provider readiness.",
   "type": "object",
   "additionalProperties": false,
@@ -190,6 +190,87 @@
         "decision_id": {
           "type": "string",
           "format": "uuid"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "MandateLifecycleRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "authority_basis_reference",
+        "evidence_references"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "ACTIVATE",
+            "SUSPEND",
+            "REVOKE",
+            "EXPIRE"
+          ]
+        },
+        "authority_basis_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "MandateLifecycleReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mandate_id",
+        "tenant_id",
+        "operating_organisation_id",
+        "status",
+        "action",
+        "recorded_at"
+      ],
+      "properties": {
+        "mandate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "domain.schema.json#/$defs/organisationId"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ACTIVE",
+            "SUSPENDED",
+            "REVOKED",
+            "EXPIRED"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "ACTIVATE",
+            "SUSPEND",
+            "REVOKE",
+            "EXPIRE"
+          ]
         },
         "recorded_at": {
           "type": "string",
