@@ -53,17 +53,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: LA03 API formatting evidence (temporary)
-        run: |
-          for file in api/router.go api/tenant_registration_v2_handler.go api/tenant_registration_v2_test.go internal/store/postgres/store.go internal/service/onboarding/registration_v2_test.go; do
-            [ -f "$file" ] || continue
-            if [ -n "$(gofmt -l "$file")" ]; then
-              gofmt -w "$file"
-              printf 'LA03_API_FORMATTED_FILE:%s:' "$file"
-              base64 -w0 "$file"
-              printf '\n'
-            fi
-          done
       - run: go test -race ./...
       - name: Test NBO founding-enterprise fixture guardrails
         run: python3 -m unittest discover -s scripts/showcase -p 'test_nbo_*.py'
