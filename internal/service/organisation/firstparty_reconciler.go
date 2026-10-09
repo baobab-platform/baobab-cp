@@ -48,29 +48,35 @@ func (r *FirstPartyReconciler) Reconcile(ctx context.Context, reg FirstPartyRegi
 	}
 	report := FirstPartyReport{RegistryDigest: reg.Digest, ReconciledAt: now}
 	for _, entity := range reg.Entities {
-        run := FirstPartyEntityRun{LegalEntityID:entity.ID}
-        // LA-03: annotated Shared records express governed *business*
-        // identity, not verified legal incorporation. Do not call legacy
-        // ApplyFirstPartyGovernance (which verifies legal entities from a
-        // registry digest) or map an arbitrary tenant from a DEFAULT legal
-        // entity to this Organisation. A ZuriBeans tenant can legitimately
-        // use Nabhold as the responsible legal actor in LA-04.
-        if entity.IdentityClass!="" {
-            recogniser,ok:=r.Orgs.(interface{
-                EnsureFirstPartyOperatingIdentity(context.Context,string,string,string,string,string,time.Time,repository.AuditActor)(repository.GovernanceOutcome,error)
-            })
-            if !ok {return report,fmt.Errorf("Organisation repository lacks LA-03 first-party identity reconciliation")}
-            outcome,err:=recogniser.EnsureFirstPartyOperatingIdentity(ctx,
-                entity.ID,entity.LegalName,entity.IdentityClass,entity.IncorporationClaim,
-                reg.EvidenceReference(entity.ID),now,actor)
-            if err!=nil{return report,fmt.Errorf("reconcile operating identity %s: %w",entity.ID,err)}
-            run.Outcome=outcome
-            for _,d:=range outcome.Drift {report.Blocking=report.Blocking||d.Blocking}
-            report.Entities=append(report.Entities,run)
-            continue
-        }
-        // Legacy unannotated synthetic fixtures and old pinned registries
-        // retain their v1 behavior until deliberate contract cutover.
+		run := FirstPartyEntityRun{LegalEntityID: entity.ID}
+		// LA-03: annotated Shared records express governed *business*
+		// identity, not verified legal incorporation. Do not call legacy
+		// ApplyFirstPartyGovernance (which verifies legal entities from a
+		// registry digest) or map an arbitrary tenant from a DEFAULT legal
+		// entity to this Organisation. A ZuriBeans tenant can legitimately
+		// use Nabhold as the responsible legal actor in LA-04.
+		if entity.IdentityClass != "" {
+			recogniser, ok := r.Orgs.(interface {
+				EnsureFirstPartyOperatingIdentity(context.Context, string, string, string, string, string, time.Time, repository.AuditActor) (repository.GovernanceOutcome, error)
+			})
+			if !ok {
+				return report, fmt.Errorf("Organisation repository lacks LA-03 first-party identity reconciliation")
+			}
+			outcome, err := recogniser.EnsureFirstPartyOperatingIdentity(ctx,
+				entity.ID, entity.LegalName, entity.IdentityClass, entity.IncorporationClaim,
+				reg.EvidenceReference(entity.ID), now, actor)
+			if err != nil {
+				return report, fmt.Errorf("reconcile operating identity %s: %w", entity.ID, err)
+			}
+			run.Outcome = outcome
+			for _, d := range outcome.Drift {
+				report.Blocking = report.Blocking || d.Blocking
+			}
+			report.Entities = append(report.Entities, run)
+			continue
+		}
+		// Legacy unannotated synthetic fixtures and old pinned registries
+		// retain their v1 behavior until deliberate contract cutover.
 		outcome, err := r.Orgs.ApplyFirstPartyGovernance(ctx, repository.FirstPartyGovernance{
 			LegalEntityID: entity.ID, LegalName: entity.LegalName,
 			EvidenceReference: reg.EvidenceReference(entity.ID), At: now,
