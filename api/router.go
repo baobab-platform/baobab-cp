@@ -94,7 +94,7 @@ type Dependencies struct {
 	LegalActorLifecycle        legalActorLifecycleStore
 	// LA-05A private assessment is separately off by default.
 	LegalActorAssessmentEnabled bool
-	LegalActorAssessment legalActorAssessmentStore
+	LegalActorAssessment        legalActorAssessmentStore
 	// Environment names the deployment (config.Config.Environment). Planning
 	// treats anything but development, test, integration or sandbox,
 	// including unset, as production: providers must then be permitted in
