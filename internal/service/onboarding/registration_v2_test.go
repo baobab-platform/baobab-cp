@@ -156,7 +156,6 @@ func TestOrganisationFirstRegistrationRejectsUnreviewedActor(t *testing.T) {
 	}
 }
 
-
 // Concurrent identical requests must converge on one operation. The second
 // caller may mint another provisional tenant ID, but must never register it.
 func TestOrganisationFirstConcurrentRegistrationRetryConverges(t *testing.T) {
@@ -185,7 +184,7 @@ func TestOrganisationFirstConcurrentRegistrationRetryConverges(t *testing.T) {
 	key := "concurrent-register-" + domain.NewUUIDv7()
 	metadata := store.RequestMetadata{ActorID: registrar.PrincipalID, ActorType: "human", CorrelationID: domain.NewUUIDv7()}
 	type registrationResult struct {
-		op domain.Operation
+		op  domain.Operation
 		err error
 	}
 	results := make(chan registrationResult, 2)
@@ -194,9 +193,9 @@ func TestOrganisationFirstConcurrentRegistrationRetryConverges(t *testing.T) {
 			command := domain.RegisterTenantV2{
 				Basis: domain.RegistrationOnboarding, TenantOnboardingRequestID: req.ID,
 				OrganisationID: orgID, TenantID: domain.NewTenantID(),
-				DisplayName: req.DesiredState.DisplayName,
+				DisplayName:       req.DesiredState.DisplayName,
 				IsolationStrategy: req.DesiredState.IsolationStrategy,
-				ResidencyRegion: req.DesiredState.ResidencyRegion,
+				ResidencyRegion:   req.DesiredState.ResidencyRegion,
 				RequestedProducts: req.DesiredState.ProductRequirements,
 			}
 			op, err := db.RegisterTenantV2(e.ctx, key, metadata, command, e.svc.RegistrationStepV2(registrar, command))
