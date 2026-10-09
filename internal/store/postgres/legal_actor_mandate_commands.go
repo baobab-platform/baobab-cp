@@ -161,6 +161,7 @@ func (s *Store) ProposeOperatingLegalActorMandate(ctx context.Context, key strin
 		command.TenantID,command.OperatingOrganisationID).Scan(&primary)
 	if err!=nil{return empty,err}
 	if !primary{return empty,ErrLegalActorMandateAuthority}
+	if command.CapabilityScope == nil { command.CapabilityScope = []string{} }
 	id:=domain.NewUUIDv7()
 	at:=time.Now().UTC()
 	_,err=tx.Exec(ctx,`INSERT INTO registry.operating_legal_actor_mandate(
