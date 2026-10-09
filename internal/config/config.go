@@ -87,6 +87,8 @@ type Config struct {
 	// LA-04C privileged, nonactivating mandate proposal/review only.
 	// This must never override PostgreSQL's ACTIVE activation guard.
 	LegalActorMandateCommandsEnabled bool
+	// LA-04D allows only explicitly enabled nonproduction lifecycle operations.
+	LegalActorMandateLifecycleEnabled bool
 	// EnforcementRollback (ADMINISTRATIVE_ENFORCEMENT_ROLLBACK, comma-
 	// separated permission keys, or "*") returns permissions to the role
 	// decision at once, without a release. It can only return authority to
@@ -137,6 +139,7 @@ func Load() (Config, error) {
 	c.PlatformContextTTL = ttl
 	c.Environment = strings.ToLower(strings.TrimSpace(os.Getenv("BAOBAB_ENVIRONMENT")))
 	c.LegalActorMandateCommandsEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("LEGAL_ACTOR_MANDATE_COMMANDS_ENABLED")), "true")
+	c.LegalActorMandateLifecycleEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("LEGAL_ACTOR_MANDATE_LIFECYCLE_ENABLED")), "true")
 	c.FederationSourceEngineInstanceID = os.Getenv("FEDERATION_SOURCE_ENGINE_INSTANCE_ID")
 	c.WorkloadRegistryFile = strings.TrimSpace(os.Getenv("WORKLOAD_REGISTRY_FILE"))
 	if c.FederationSourceEngineInstanceID != "" {
