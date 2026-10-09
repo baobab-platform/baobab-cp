@@ -1,5 +1,9 @@
 # FE-00: CP Console discovery and architecture lock
 
+> **Historical snapshot (26 September 2026).** This is preserved as an audit record, not the current Console
+> readiness matrix. Backend APIs, IAM architecture and onboarding decisions have changed. See the
+> [9 October 2026 rebaseline](fe-00-refresh-2026-10-09.md) before selecting another frontend gate.
+
 - **Gate:** FE-00 of the CP Console implementation prompt, which is ADR-BCP-019 §119 Gate CPFE-00 ("Architecture and
   Contract Lock").
 - **Status:** Complete for this audit. It must be re-run before each later gate starts, because the matrices below
