@@ -20,7 +20,7 @@ import (
 // against byte-for-byte Shared LA-01 schemas pinned in contracts.lock.yaml
 // and must never bypass existing privileged human authorisation.
 type organisationFirstRegistrationStore interface {
-    PrepareOnboardingOrganisation(context.Context,string,store.RequestMetadata,string,string,string)(string,error)
+    PrepareOnboardingOrganisation(context.Context,string,store.RequestMetadata,string,string,string,string)(string,error)
     RegisterTenantV2(context.Context,string,store.RequestMetadata,domain.RegisterTenantV2,store.RegistrationStep)(domain.Operation,error)
 }
 var registrationV2Schema=contracts.MustSchema("control-plane/v2/tenant-registration.schema.json")
