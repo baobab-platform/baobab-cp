@@ -1,196 +1,147 @@
-# Baobab Control Plane (`baobab-cp`)
+# Baobab Control Plane
 
-> The authoritative source of tenant lifecycle, entitlement, and desired-state truth for the Baobab ecosystem.
+**Control Plane API + CP Console** · [Architecture decisions](docs/adr/index.md) · [Console implementation](docs/frontend/index.md) · [Shared contracts](https://github.com/baobab-platform/shared)
 
-**Status:** A4 — executable, fail-closed tenant context resolution (see [ADR-0004](docs/adr/0004-context-resolution-policy.md)).
-**Architecture:** [ADR-0003 — Multi-Tenant, Production-Ready Control Plane Architecture](docs/adr/0003-multi-tenant-control-plane-architecture.md)
+Baobab Control Plane (\`baobab-cp\`) owns the platform's **canonical organisation and tenant control state**: admission and onboarding, governed tenancy and relationships, capability entitlements, provisioning desired state, readiness, and platform administration. Its Go API is the authority; the co-located Next.js Console is a separately deployed human interface over that API.
 
----
+> **Readiness (9 October 2026):** The Go backend is under active implementation, with substantial runtime and API support. The CP Console has its foundation, design system and generated client, **but no production-ready authentication flow or operational workspace yet**. Neither a passing backend CI run nor the existence of a Console container certifies end-to-end production onboarding.
 
-## What this repository is
+## Repository at a glance
 
-`baobab-cp` decides *who a tenant is, what state they're in, and what they're entitled to use* — and reconciles that decision against reality. It does not process commerce, ERP, or research-intelligence business logic; those live in their own product engines and consume this repository's decisions over the network.
+| Component | Location | Responsibility | Current maturity |
+| --- | --- | --- | --- |
+| Control Plane API | \`api/\`, \`cmd/controlplane/\` | Authenticated APIs, authoritative policy checks and administrative commands | Substantial implementation; individual routes remain subject to runtime/contract verification |
+| Domain and persistence | \`internal/\` | Canonical state, lifecycle services, Postgres repositories, reconciler and events | Actively evolving; do not infer production acceptance |
+| Migrations | \`internal/store/postgres/migrations/\` | Versioned Postgres schema changes | Real migrations; run before the API |
+| CP Console | \`frontend/\` | Next.js App Router application, future confidential-client BFF | FE-01/02/05 foundations; no authenticated operator journeys |
+| Contract pin | \`contracts.lock.yaml\` | Exact authoritative \`shared\` revision | Enforced by contract and generated-client tests |
+| Architecture & programme | \`docs/adr/\`, \`docs/frontend/\` | Decisions, design constraints and progress | Consult accepted amendments and latest implementation evidence |
 
-If you are looking for:
-- **Commerce logic** → [`baobab-platform/baobab-trade`](https://github.com/baobab-platform/baobab-trade)
-- **ERP logic** → [`baobab-platform/baobab-erp`](https://github.com/baobab-platform/baobab-erp)
-- **Research intelligence** → [`baobab-platform/baobab-pulse`](https://github.com/baobab-platform/baobab-pulse)
-- **Canonical contracts** (schemas this repo implements against) → [`baobab-platform/shared`](https://github.com/baobab-platform/shared)
-- **Infrastructure provisioning** (Terraform, APISIX bootstrap, RabbitMQ/Postgres/Redis topology) → [`baobab-platform/infrastructure`](https://github.com/baobab-platform/infrastructure)
-- **Local dev container image** → [`baobab-platform/baobab-dev`](https://github.com/baobab-platform/baobab-dev)
+### Architecture and authority
 
-...you want one of those repositories instead. This one is intentionally narrow.
+\`\`\`text
+                    Baobab IAM
+                identity / federation
+                         |
+                    authenticated
+                         v
+ Browser -- secure session --> CP Console / BFF (Next.js)
+                                     |
+                               server-only API
+                                     v
+                         Control Plane API (Go)
+                         organisation / tenancy
+                         authority / provisioning
+                         registry / operations
+                                     |
+                             PostgreSQL 17
+                                     |
+                     canonical events / integrations
+                                     |
+                Trade · ERP · CMS · Pulse · other engines
 
-## Responsibilities
+   shared = canonical contract authority
+   infrastructure = deployment / infrastructure authority
+\`\`\`
 
-| Owns | Does not own |
-|---|---|
-| Tenant lifecycle (provision, suspend, reinstate, decommission) | Business data of any kind |
-| Tenancy hierarchy metadata (Tenant Group → Tenant → Business Unit → Function → Team) | UI / end-user surfaces |
-| Product entitlements per tenant | Infrastructure provisioning mechanics (that's `baobab-platform/infrastructure`) |
-| Desired-state reconciliation (APISIX routes, per-tenant Postgres boundaries) | Canonical contract *definitions* (that's `baobab-platform/shared` — this repo implements against them) |
-| Auditable provisioning history | Product-specific integrations |
-| Lifecycle/entitlement event publication | — |
-| Authenticated tenant-context resolution for product engines | — |
+The diagram describes the intended Console session boundary; its OIDC login, callback, session, logout and token custody **are not yet implemented in the frontend**. The browser must never hold privileged API credentials or call privileged CP endpoints directly.
 
-## Architecture at a glance
+### What CP owns — and what it does not
 
-```
-                     ┌────────────────────────────----┐
-                     │        baobab-platform/shared          │
-                     │  canonical contracts (OpenAPI, │
-                     │  AsyncAPI, JSON Schema)        │
-                     └───────────────┬────────────----┘
-                                     │ implements
-┌────────────────────────────────────▼────────────────────────────────────-┐
-│                              baobab-cp                                   │
-│                                                                          │
-│   API layer (REST)         Reconciler loop         Event outbox          │
-│   /v1/context/resolve      desired vs actual        → RabbitMQ           │
-│   /v1/tenants              → APISIX / Postgres                           │
-│   /v1/entitlements                                                       │
-│                                                                          │
-│                    PostgreSQL (authoritative)                            │
-└───────────┬──────────────────────────────────────────┬──────────────────-┘
-            │ resolves context for                     │ provisioned by
-            ▼                                            ▼
-┌───────────────────────────-┐                 ┌────────────────────────────-┐
-│ baobab-trade / baobab-erp  │                 │   baobab-platform/infrastructure    │
-│ baobab-pulse (consumers)   │                 │  Terraform · APISIX · RMQ   │
-└───────────────────────────-┘                 └────────────────────────────-┘
-```
+CP owns the governance and canonical state of **Organisations, their authorised relationships, Platform Accounts, Tenants, Markets, entitlements and capability topology**. It records desired-state plans, approvals, execution operations, readiness, drift, audit and evidence/verification decisions through its bounded APIs. It manages platform-side authority without replacing IAM's authentication authority.
 
-See [ADR-0003](docs/adr/0003-multi-tenant-control-plane-architecture.md) for the full rationale, including why REST over gRPC for v1, why fail-closed context resolution is a contract not an implementation detail, and why a bespoke reconciler rather than a full Kubernetes operator at this stage.
+CP **does not** own commerce orders and catalogues (Trade), financial accounting and ERP transactions (ERP), content (CMS), market intelligence (Pulse), subscription pricing/billing authority (Subscriptions), or production infrastructure execution (Infrastructure). CP also does not declare Shared's canonical schemas.
 
-## Tech stack
+In particular:
 
-| Concern | Choice | Why |
-|---|---|---|
-| Language / runtime | Go | [ADR-0001](docs/adr/0001-go-control-plane-runtime.md) |
-| HTTP | `net/http` + `chi` router | minimal, idiomatic, no framework lock-in |
-| Database | PostgreSQL 17 via `pgx` | authoritative store; matches `baobab-platform/infrastructure`'s provisioned topology |
-| Migrations | plain SQL, embedded and applied by a small in-repo runner (`internal/store/postgres/migrate.go`) | reviewable diffs, no external migration-tool dependency |
-| Messaging | RabbitMQ + transactional outbox — **planned, not yet implemented** | see [the audit](docs/reconciliation/shared-control-plane-audit.md#5-event-architecture) for current status |
-| Gateway integration | APISIX Admin API client — **planned, not yet implemented** | control plane will reconcile routes it owns |
-| AuthN | OIDC (admin API); infrastructure-terminated mTLS + OIDC workload tokens | see ADR-0003 §7 |
-| Observability | OpenTelemetry (traces, metrics, logs) | org-wide observability contract (`baobab-platform/shared`) |
-| Config | environment variables, validated at startup | 12-factor, container-friendly |
-| Testing | standard `testing`; a real-PostgreSQL integration test package exists (`internal/repository/postgres_integration_test.go`) | real dependencies over mocks-only where practical |
-| CI/CD | reusable workflows from `baobab-platform/shared` | org-wide standardisation |
-| Container | multi-stage Dockerfile, distroless final stage | minimal attack surface |
+- **Organisation, LegalEntity, CorporateGroup, PlatformAccount and Tenant are distinct.** A group relationship is not an access grant.
+- Admission approval, authorised onboarding, provisioning, readiness and activation are **distinct lifecycle decisions**.
+- A subscription or approved plan does not by itself prove a healthy provider, a deployed engine or an active tenant.
+- [ADR-BCP-026](docs/adr/ADR-BCP-026%20%E2%80%94%20Progressive%20Enterprise%20Onboarding%2C%20Founding-Group%20Exemption%20and%20Capability-Specific%20Evidence%20Governance.md) and [ADR-BCP-027](docs/adr/ADR-BCP-027%20%E2%80%94%20Organisation-First%20Tenancy%2C%20Operating%20Business%2C%20Trading%20Style%20and%20Legal-Actor%20Responsibility%20Model.md) set the *new* organisation-first/progressive-onboarding target. Their acceptance is not proof that every migration, authorisation and operational gate is complete.
+- Engine-specific IDs, provider choices and grants are **derived from authorised intent**, never supplied as authoritative user preferences.
 
-## Repository structure
+## Current implementation and Console backlog
 
-```
-baobab-cp/
-├── api/                          # HTTP layer: router, handlers, middleware (chi)
-├── cmd/
-│   ├── controlplane/             # API server entrypoint
-│   └── migrate/                  # migration-runner entrypoint
-├── internal/
-│   ├── auth/                     # OIDC token verification, principal context
-│   ├── config/                   # startup configuration + validation
-│   ├── domain/                   # core domain model, framework-free
-│   ├── reconcile/                # desired-state reconciliation loop
-│   ├── repository/                # mapping/capability/topology repository (Postgres + in-memory)
-│   ├── resolver/                  # context/mapping/capability resolution pipeline
-│   ├── service/                   # application services (canonical entity, resolution)
-│   └── store/
-│       ├── postgres/               # tenant/entitlement store + embedded SQL migrations
-│       └── store.go                # TenantStore interface
-├── docs/
-│   ├── adr/                        # this repo's local ADR register
-│   ├── architecture/
-│   ├── reconciliation/             # audit of this repo against baobab-platform/shared
-│   └── security/
-├── Dockerfile
-├── Makefile
-├── go.mod
-├── .env.example
-└── README.md
-```
+The backend includes API/domain work for admission, organisation resolution, tenant registration/onboarding, markets, mappings, subscriptions/classification, capability registry and resolution, provider topology, changesets, AdministrativeGrants/effective authority, durable operations, evidence/verification, engine releases and deployment observations. **Presence of handlers is not a blanket claim that all programmes have completed production certification**; consult the current tests and accepted ADRs for each operation.
 
-`internal/domain` contains no framework or infrastructure imports — it is the part of this
-codebase that should be easiest to test and hardest to accidentally couple to a specific
-database or transport. There is currently no `pkg/contracts` (generated `baobab-platform/shared`
-clients) or dedicated `internal/events`/`internal/gateway` package — RabbitMQ publication
-and the APISIX admin client are not yet implemented; see
-[`docs/reconciliation/shared-control-plane-audit.md`](docs/reconciliation/shared-control-plane-audit.md)
-for the current gap list.
+The Console currently has:
 
-## Getting started
+- Next.js 16 / React 19 / TypeScript strict with Node.js 24, pnpm workspace and an independent Dockerfile.
+- Owned accessible UI primitives, semantic status tokens, component tests and a non-production \`/design-system\` showcase.
+- An OpenAPI-generated client from the pinned Shared contract, server-only CP client, fail-closed unsupported-operation handling and Console CI.
+- A placeholder \`/\` page: **no live operational dashboard, admission review or tenant administration**.
 
-```bash
+Next gates are (1) refresh the FE-00 architecture and API/authority matrix, (2) finish IAM confidential-client integration and FE-03 browser/BFF session security, (3) build the contextual shell and authority-aware navigation, then (4) deliver the applicant → admission → onboarding → provisioning → readiness vertical slice. No fake production APIs or browser-owned administrative authority.
+
+See the [Console overview](docs/frontend/index.md), [dated FE-00 rebaseline](docs/frontend/fe-00-refresh-2026-10-09.md) and [frontend developer guide](frontend/README.md).
+
+## Technology and runtime boundaries
+
+| Area | Implemented choice |
+| --- | --- |
+| Backend | Go (\`go.mod\` declares Go 1.27), \`net/http\` / chi, pgx |
+| Primary state | PostgreSQL 17 |
+| Migrations | In-repository SQL migration runner |
+| Identity | OIDC-verified admin/workload identities; IAM is the identity authority |
+| Events | Event ingress/outbox and provider integrations as bounded runtime facilities; verify deployment and delivery readiness separately |
+| Console | Next.js 16, React 19, strict TypeScript, Node 24, pnpm |
+| CI | GitHub Actions for Go and Console, plus Shared contract enforcement |
+| Infrastructure | Containers and separate deployment topology in \`baobab-platform/infrastructure\` |
+
+Never assume a local RabbitMQ, APISIX or Postgres container represents the production deployment.
+
+## Get started — Go API
+
+A recent Go toolchain compatible with \`go.mod\`, Docker with Compose and PostgreSQL 17 are required.
+
+\`\`\`bash
 git clone https://github.com/baobab-platform/baobab-cp.git
 cd baobab-cp
 cp .env.example .env
-make dev-up      # starts local Postgres 17 + RabbitMQ via this repo's docker-compose.yml
-make migrate
-make run
-```
+make dev-up       # local PostgreSQL and RabbitMQ for development
+make migrate      # apply the embedded SQL migrations
+make run          # API, default :8080
+\`\`\`
 
-Run tests:
+Set real local-development OIDC configuration in \`.env\` (see the example); the server may require additional environment and workload configuration for particular runtime profiles. Never use the example credentials in a deployed environment.
 
-```bash
-make test              # unit tests
-make test-integration  # runs the *_integration_test.go suites against `make dev-up`'s Postgres
-```
+\`\`\`bash
+make test
+make test-integration   # requires the documented Postgres test environment
+make lint
+\`\`\`
 
-### Local topology options
+If you need the sibling Infrastructure Compose topology rather than this repository's developer stand-in, consult \`make dev-up-infra\` and \`make dev-env-infra\` in the [Makefile](Makefile).
 
-`make dev-up` starts a standalone Postgres+RabbitMQ pair defined in this repo's own
-`docker-compose.yml` — self-contained, no other repo required, good for day-to-day
-iteration. Its database/user name (`baobab_control`) and RabbitMQ vhost (`nabhold`)
-deliberately match what `baobab-platform/infrastructure`'s own compose topology provisions for
-this repo, so switching between the two options below doesn't require renaming
-anything in your `.env` beyond the password.
+## Get started — CP Console
 
-To instead run against the real topology this repo talks to in shared/staging
-environments — useful before relying on behavior that's specific to that setup (real
-credential rotation, the shared RabbitMQ vhost, eventually APISIX route reconciliation):
+Use Node.js 24 and Corepack. Run commands from the **repository root** because it owns the pnpm workspace.
 
-```bash
-git clone https://github.com/baobab-platform/infrastructure.git ../infrastructure  # sibling clone
-cd ../infrastructure/compose && cp .env.example .env   # then edit in real dev secrets
-cd ../../baobab-cp
-make dev-up-infra        # brings up baobab-platform/infrastructure's real postgresql + rabbitmq
-make dev-env-infra       # prints the DATABASE_URL/RABBITMQ_URL to paste into .env
-make migrate
-make run
-```
+\`\`\`bash
+make frontend-install
+CONSOLE_ENVIRONMENT=development CP_API_BASE_URL=http://localhost:8080 make frontend-dev
+# open http://localhost:3000
+make frontend-typecheck frontend-lint frontend-test frontend-build
+make frontend-image
+\`\`\`
 
-`INFRASTRUCTURE_DIR` (default `../infrastructure`) overrides where these targets look for
-that repo if it isn't cloned as a sibling directory. `make dev-down-infra` /
-`make dev-logs-infra` mirror the standalone targets.
+This runs the **Console foundation and its placeholder**, not an authenticated administrative application. Its \`/healthz\` endpoint is liveness, **not platform readiness**. The frontend must not be exposed as a working administration experience before FE-03 and protected-route tests are complete.
 
-## Relationship with other repositories
+## Related repositories
 
-| Repository | Relationship |
-|---|---|
-| `baobab-platform/shared` | Contract source of truth. `baobab-cp` implements the OpenAPI/AsyncAPI schemas defined there; it never redefines them locally. |
-| `baobab-platform/infrastructure` | Provisions the Postgres, RabbitMQ, and APISIX instances `baobab-cp` depends on and reconciles against. `baobab-cp` never provisions its own infrastructure. |
-| `baobab-platform/baobab-trade` | Will consume the implemented `POST /v1/context/resolve` boundary in PR A5; it must fail closed if unresolved or its 15-second success cache expires. Consumer, not a dependency of this repo. |
-| `baobab-platform/baobab-erp` | Contract-level consumer of canonical identifiers; does not yet call this repo's context-resolution API directly (open question — see ADR-0003 §14). |
-| `baobab-platform/baobab-pulse` | Consumer of tenant/entitlement context (integration not yet established — repository is pre-Foundation). |
-| `baobab-platform/baobab-dev` | Provides this repository's local/CI development container image. |
-| Digital-estate frontends (`baobab-platform/nabhold`, `zuribeans`, `thamani`, `equator-estate`) | Consume Baobab exclusively through product-engine APIs; do not call `baobab-cp` directly in the general case. |
+| Repository | Contract/operational relationship |
+| --- | --- |
+| [shared](https://github.com/baobab-platform/shared) | Owns canonical OpenAPI, event and JSON contracts; CP pins and implements them |
+| [baobab-iam](https://github.com/baobab-platform/baobab-iam) | Authentication, issuer and federation; CP evaluates administrative authority |
+| [baobab-subscriptions](https://github.com/baobab-platform/baobab-subscriptions) | Subscription and commercial domain authority; CP consumes governed entitlements |
+| [baobab-trade](https://github.com/baobab-platform/baobab-trade) | Commerce engine; consumes scoped platform context and capabilities |
+| [baobab-erp](https://github.com/baobab-platform/baobab-erp) | ERP engine; independent operational data and accounting authority |
+| [baobab-cms](https://github.com/baobab-platform/baobab-cms) | Content engine |
+| [baobab-pulse](https://github.com/baobab-platform/baobab-pulse) | Intelligence engine |
+| [infrastructure](https://github.com/baobab-platform/infrastructure) | Staging/production infrastructure, deployment and operational evidence |
 
-## Security
+## Documentation, contribution and security
 
-- The implemented `/v1/context/resolve` boundary requires infrastructure-terminated mutual TLS plus a scoped workload token carrying canonical tenant and service identity.
-- Secrets are never committed. `.env` is for local development only and must never contain production credentials — see [SECURITY.md](SECURITY.md).
-- Every provisioning and lifecycle-transition action is written to an append-only audit log before being acknowledged.
+Start with the [ADR register](docs/adr/index.md). Read the **accepted** BCP-017 through BCP-027 decisions and amendments, plus the applicable Shared contracts, before changing a governed lifecycle. The [FE-00 historical snapshot](docs/frontend/fe-00-architecture-lock.md) is not a current readiness report.
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Changes to `/v1/context/resolve`'s contract (including its fail-closed behaviour) require an ADR, not just a PR — it is depended upon by production consumers.
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
-
-## Foundation 4
-
-Codespaces uses the v1.2.6 full profile with a temporary Go feature until a
-native Go profile is published. The SHA-pinned `foundation` workflow enforces
-contract compatibility, reproducibility, ownership, and security scanning.
+For changes: [CONTRIBUTING.md](CONTRIBUTING.md). For vulnerabilities: [SECURITY.md](SECURITY.md). See [LICENSE](LICENSE). Sensitive evidence, secrets, bearer tokens and live tenant information must not enter test fixtures, screenshots or the browser bundle.
