@@ -49,6 +49,40 @@
         "received_at": { "type": "string", "format": "date-time" }
       }
     },
+    "eventIngressMetric": {
+      "type": "string",
+      "enum": [
+        "event_ingress_receipts_total",
+        "event_ingress_rejections_total",
+        "event_processing_total",
+        "event_pending_age_seconds",
+        "event_delivery_key_reload_failures_total"
+      ],
+      "description": "The metrics a consumer of signed event delivery exposes, in Prometheus form. event_ingress_receipts_total counts deliveries that reached a verdict on recording (result: accepted, duplicate, conflict). event_ingress_rejections_total counts deliveries refused before recording (reason_code). event_processing_total counts recorded events by what processing did (outcome: applied, retried, dead_lettered). event_pending_age_seconds is the age of the oldest event still pending, per event_type (a gauge: a backlog is visible before anything is lost). event_delivery_key_reload_failures_total counts delivery key registry reloads that failed and left the last valid registry in force (no labels)."
+    },
+    "eventIngressMetricLabel": {
+      "type": "string",
+      "enum": ["result", "reason_code", "outcome", "event_type"],
+      "description": "The only label names these metrics may carry, each from a closed vocabulary: eventIngressResult, eventIngressReasonCode, eventProcessingOutcome, and eventIngressEventType. No event id, source, tenant, key id, signature, digest, operation or any secret is ever a label: a label with unbounded values makes a metric both costly and a leak."
+    },
+    "eventIngressResult": {
+      "type": "string",
+      "enum": ["accepted", "duplicate", "conflict"]
+    },
+    "eventIngressReasonCode": {
+      "type": "string",
+      "description": "Why a delivery was refused before recording, one value per answer a sender can act on. Every authentication failure is one value (unauthenticated), exactly as every authentication failure is one answer.",
+      "enum": ["malformed", "unauthenticated", "too_large", "not_accepted", "payload_invalid", "unavailable"]
+    },
+    "eventIngressEventType": {
+      "type": "string",
+      "description": "The values of the event_type label: exactly the event types the consumer accepts (control-plane/v1 event-ingress.yaml, accepted), a closed list that grows only by a versioned contract change. A type the consumer does not accept is refused as not_accepted and is never a label value.",
+      "enum": ["com.baobab-platform.erp.provisioning.changed.v1"]
+    },
+    "eventProcessingOutcome": {
+      "type": "string",
+      "enum": ["applied", "retried", "dead_lettered"]
+    },
     "SenderPolicy": {
       "description": "Documented, machine-checked constants. Delivery is at-least-once: a sender retries until it receives a 2xx, a consumer deduplicates by the envelope's (source, id), the delivery identity envelope.schema.json defines. Replay window and retention are minimums a consumer must honour, and the retry horizon is a maximum a sender must honour.",
       "type": "object",

@@ -144,6 +144,12 @@
 # the resource-server proof described above. Removing one: move the canonical
 # lifecycle to a non-active state before provider-side authority can continue,
 # so no live credential survives a canonical suspension/revocation/retirement.
+#
+# One deliberate exception to "ACTIVE only after the proof": baobab-cp-provisioning-evidence-workload
+# (FB-05, owner ruling 2026-10-07) is the identity that PRODUCES the proof, in the staging
+# evidence environment only. It is ACTIVE so the proof can run, the production identity it
+# mirrors stays PROVISIONED, and scripts/validate-erp-contracts.rb pins it exactly so the
+# exception cannot spread to another workload, scope or environment.
 
 schema:
   name: baobab-platform-workload-registry
@@ -280,6 +286,36 @@ workloads:
     credential_type: federated_workload_token
     rotation_owner: baobab-platform/baobab-cp
     status: PROVISIONED
+
+  # FB-05 evidence provisioner (owner ruling 2026-10-07). The Control Plane's
+  # provisioning execution worker as it runs in the STAGING evidence
+  # environment, and nowhere else. It exists so the end-to-end proof listed in
+  # the header can be produced without weakening anything in production:
+  # baobab-cp-provisioning-workload above stays PROVISIONED, keeps its
+  # production environment and is untouched. Staging evidence must never reuse
+  # production credentials or claim production activation, so this is a
+  # separate identity: a credential issued for staging cannot authenticate as
+  # the production worker (environment isolation, ADR-0007 section 102), and a
+  # production credential cannot authenticate as this one.
+  # It is ACTIVE by ruling, not by promotion: the registry's PROVISIONED ->
+  # ACTIVE rule governs real runtime identities, and this identity's only
+  # purpose is to carry the evidence run, in an environment that holds no
+  # tenant data of record. It holds exactly the one scope and the one context
+  # purpose its production counterpart does, no static secret, and no
+  # context:resolve or context:validate. The credential is a short-lived
+  # platform-projected token; its lifetime is bounded by the issuer and the
+  # Context it presents is bounded to 15 minutes (control-plane/v1).
+  baobab-cp-provisioning-evidence-workload:
+    repository: baobab-platform/baobab-cp
+    owner: baobab-platform/baobab-cp
+    runtime: "baobab-cp tenant provisioning execution worker, staging evidence environment only"
+    environment: staging
+    allowed_audiences: ["baobab-erp"]
+    allowed_scopes: ["erp:provision"]
+    context_purposes: ["TENANT_PROVISIONING"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-cp
+    status: ACTIVE
 
   baobab-subscriptions-workload:
     repository: baobab-platform/baobab-subscriptions

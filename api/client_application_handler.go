@@ -109,6 +109,8 @@ func (h clientApplicationHandler) fail(w http.ResponseWriter, r *http.Request, e
 		problem(w, r, http.StatusForbidden, "SELF_DECISION_FORBIDDEN", err.Error(), false)
 	case errors.Is(err, application.ErrMarketScope):
 		problem(w, r, http.StatusUnprocessableEntity, "MARKET_SCOPE_EXCEEDED", err.Error(), false)
+	case errors.Is(err, application.ErrApplicantNotRegistered):
+		problem(w, r, http.StatusUnprocessableEntity, "APPLICANT_PRINCIPAL_UNAVAILABLE", "the applicant must have an active registered human principal", false)
 	case errors.Is(err, application.ErrNotInternalEligible):
 		problem(w, r, http.StatusUnprocessableEntity, "NOT_INTERNAL_ELIGIBLE", err.Error(), false)
 	default:
@@ -141,6 +143,30 @@ func (h clientApplicationHandler) create(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	app, replayed, err := h.svc.Create(r.Context(), actor, raw, key)
+	status := http.StatusCreated
+	if replayed {
+		status = http.StatusOK
+	}
+	h.respond(w, r, status, app, err)
+}
+
+// staffCreate is an authenticated platform operation, never the anonymous
+// applicant-creation route. Identity and maker authority come from the server.
+func (h clientApplicationHandler) staffCreate(w http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get("Idempotency-Key")
+	if key != "" && (len(key) < 16 || len(key) > 128) {
+		problem(w, r, http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 128 characters", false)
+		return
+	}
+	operator, ok := h.actor(w, r, false)
+	if !ok {
+		return
+	}
+	raw, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	app, replayed, err := h.svc.CreateForStaff(r.Context(), operator, raw, key)
 	status := http.StatusCreated
 	if replayed {
 		status = http.StatusOK

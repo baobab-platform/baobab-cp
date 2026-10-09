@@ -79,7 +79,7 @@ type AdmissionRepository interface {
 }
 
 const clientApplicationColumns = `a.client_application_id::text, a.reference, a.status, a.application_channel, a.version,
-	a.applicant_principal_id::text, COALESCE(a.assigned_reviewer::text, ''), a.organisation_profile, a.requirements,
+	a.applicant_principal_id::text, COALESCE(a.opened_by_staff_principal_id::text, ''), COALESCE(a.assigned_reviewer::text, ''), a.organisation_profile, a.requirements,
 	a.requested_markets, a.evidence, a.information_requests, a.created_at, a.updated_at, a.submitted_at, a.closed_at,
 	d.admission_decision_id::text, d.decision, d.decided_at, d.reason`
 
@@ -95,7 +95,7 @@ func scanClientApplication(row pgx.Row) (domain.ClientApplication, error) {
 		decidedAt                             *time.Time
 	)
 	if err := row.Scan(&rowID, &a.Reference, &a.Status, &a.Channel, &a.Version, &a.ApplicantPrincipalID,
-		&a.AssignedReviewer, &a.OrganisationProfile, &a.Requirements, &markets, &evidence, &requests,
+		&a.OpenedByStaffPrincipalID, &a.AssignedReviewer, &a.OrganisationProfile, &a.Requirements, &markets, &evidence, &requests,
 		&a.CreatedAt, &a.UpdatedAt, &a.SubmittedAt, &a.ClosedAt, &decisionRow, &decision, &decidedAt, &decisionReason); err != nil {
 		return a, err
 	}
@@ -157,10 +157,10 @@ func (r *PostgresRepository) CreateClientApplication(ctx context.Context, applic
 		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO admission.client_application (client_application_id, reference, status, application_channel, version,
-				applicant_principal_id, organisation_profile, requirements, requested_markets, evidence, information_requests,
+				applicant_principal_id, opened_by_staff_principal_id, organisation_profile, requirements, requested_markets, evidence, information_requests,
 				create_idempotency_key, create_request_hash, created_at, updated_at)
-			VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $14)`,
-			rowID, reference, app.Status, app.Channel, app.Version, app.ApplicantPrincipalID, jsonDoc(app.OrganisationProfile, "{}"),
+			VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid, $7::uuid, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13, $14, $15, $15)`,
+			rowID, reference, app.Status, app.Channel, app.Version, app.ApplicantPrincipalID, nullable(app.OpenedByStaffPrincipalID), jsonDoc(app.OrganisationProfile, "{}"),
 			jsonDoc(app.Requirements, "{}"), markets, evidence, requests, nullable(idempotencyKey), nullable(requestHash), app.CreatedAt); err != nil {
 			return err
 		}
