@@ -4,9 +4,14 @@ The Baobab Control Plane Console is the administrative frontend defined by ADR-B
 application that runs as its own container and reaches the Go Control Plane API only from the server. The browser
 never calls the Control Plane directly, and never holds a token.
 
-Gates FE-01 (foundation: tooling, configuration, build, image and CI), FE-02 (design system) and FE-05 (generated
-Control Plane client and drift CI) are in place. Authentication, the shell and every workspace arrive in later gates
-(`docs/frontend/fe-00-architecture-lock.md` §9). No page shows Control Plane data yet.
+Gates FE-01 (foundation), FE-02 (design system) and FE-05 (generated typed client and drift CI) are implemented.
+**As of 9 October 2026, there is no FE-03 OIDC/BFF browser session, protected Console shell or operating
+workspace.** The home page is intentionally a placeholder; it is not a production administrative application.
+The backend has since implemented many administrative APIs that September's [historical FE-00 snapshot]
+(../docs/frontend/fe-00-architecture-lock.md) called missing. Use the [current FE-00 rebaseline]
+(../docs/frontend/fe-00-refresh-2026-10-09.md) before starting the next gate. IAM provider-neutral federation
+and progressive organisation-first onboarding must be reconciled with ADR-IAM-0033 and ADR-BCP-026/027;
+no identity, authority or production readiness is inferred from a successfully rendered page.
 
 ## Stack
 
