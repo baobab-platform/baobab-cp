@@ -53,6 +53,16 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: LA03 temporary gofmt capture
+        run: |
+          gofmt -l cmd internal > /tmp/la03-gofmt-list
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            gofmt -w "$file"
+            printf 'LA03_FORMATTED_FILE:%s:' "$file"
+            base64 -w0 "$file"
+            printf '\n'
+          done < /tmp/la03-gofmt-list
       - run: go test -race ./...
       - name: Test NBO founding-enterprise fixture guardrails
         run: python3 -m unittest discover -s scripts/showcase -p 'test_nbo_*.py'
