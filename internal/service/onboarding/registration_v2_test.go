@@ -86,7 +86,7 @@ func TestOrganisationFirstRegistrationRejectsUnreviewedActor(t *testing.T) {
 	if _,err=e.svc.Authorise(e.ctx,authoriser,req.ID,reason);err!=nil{t.Fatal(err)}
 	org,err:=db.PrepareOnboardingOrganisation(e.ctx,"pre-"+domain.NewUUIDv7(),
 		store.RequestMetadata{ActorID:reviewer.PrincipalID,ActorType:"human",CorrelationID:domain.NewUUIDv7()},
-		req.ID,"policy/org-v2","evidence/review-v2")
+		reviewer.PrincipalID,req.ID,"policy/org-v2","evidence/review-v2")
 	if err!=nil{t.Fatal(err)}
 	cmd:=domain.RegisterTenantV2{
 		Basis:domain.RegistrationOnboarding,TenantOnboardingRequestID:req.ID,
