@@ -55,7 +55,7 @@ jobs:
           cache: true
       - name: LA03 API formatting evidence (temporary)
         run: |
-          for file in api/router.go api/tenant_registration_v2_handler.go api/tenant_registration_v2_test.go; do
+          for file in api/router.go api/tenant_registration_v2_handler.go api/tenant_registration_v2_test.go internal/store/postgres/store.go internal/service/onboarding/registration_v2_test.go; do
             [ -f "$file" ] || continue
             if [ -n "$(gofmt -l "$file")" ]; then
               gofmt -w "$file"
