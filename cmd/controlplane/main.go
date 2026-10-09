@@ -89,7 +89,7 @@ func main() {
 	// ADR-BCP-017: INTERNAL classification is evaluated by the Control Plane
 	// from governed relationships on the default platform.
 	eligibility := &svcorg.EligibilityResolver{Orgs: resolverRepository}
-	applications := &application.Service{Repo: resolverRepository, Eligibility: eligibility}
+	applications := &application.Service{Repo: resolverRepository, Principals: resolverRepository, Eligibility: eligibility}
 	classifications := &subscription.Classifier{Repo: resolverRepository, Admissions: resolverRepository, Orgs: resolverRepository,
 		Memberships: resolverRepository, Eligibility: eligibility}
 	// ADR-SHARED-017 gate G-CP-2: the capability registry converges on
