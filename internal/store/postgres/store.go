@@ -240,7 +240,14 @@ func (s *Store) registerTenant(ctx context.Context, key string, metadata basesto
             var verifiedOrg string
             err=tx.QueryRow(ctx,`SELECT organisation_id::text FROM registry.legal_entity_profile
                 WHERE legal_entity_id=$1 AND verification_state='VERIFIED'
-                  AND (effective_to IS NULL OR effective_to>clock_timestamp())`,c.LegalEntityID).Scan(&verifiedOrg)
+                  AND source_authority NOT IN ('shared-governance','control-plane-registration')
+                  AND (effective_to IS NULL OR effective_to>clock_timestamp())
+                  AND NOT EXISTS (
+                    SELECT 1 FROM registry.first_party_organisation_identity fp
+                    WHERE fp.organisation_id=registry.legal_entity_profile.organisation_id
+                      AND fp.identity_class='OPERATING_BUSINESS'
+                      AND fp.incorporation_claim='NOT_INCORPORATED'
+                  )`,c.LegalEntityID).Scan(&verifiedOrg)
             if err!=nil||verifiedOrg!=v2.OrganisationID {
                 return domain.Operation{},errors.New("default legal actor requires verified, same-Organisation LegalEntity; other legal actors need LA-04 mandate")
             }
