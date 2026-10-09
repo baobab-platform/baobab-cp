@@ -59,4 +59,6 @@ jobs:
       - name: Prove founding-enterprise fixture dry-run has no side effects
         run: python3 scripts/showcase/nbo_apply.py --manifest docs/showcase/fixtures/nabhold-group-v1.json
       - run: go vet ./...
+      - name: Diagnose unformatted Go source
+        run: gofmt -l cmd internal
       - run: test -z "$(gofmt -l cmd internal)"
