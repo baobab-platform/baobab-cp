@@ -91,7 +91,7 @@ type Dependencies struct {
 	LegalActorMandates   legalActorMandateStore
 	// LA-04D activation is opt-in for nonproduction integration/staging only.
 	LegalActorLifecycleEnabled bool
-	LegalActorLifecycle legalActorLifecycleStore
+	LegalActorLifecycle        legalActorLifecycleStore
 	// Environment names the deployment (config.Config.Environment). Planning
 	// treats anything but development, test, integration or sandbox,
 	// including unset, as production: providers must then be permitted in
