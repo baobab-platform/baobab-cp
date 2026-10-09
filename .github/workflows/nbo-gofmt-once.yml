@@ -1,0 +1,27 @@
+name: NBO one-time Go formatting
+on:
+  push:
+    branches: [feat/nbo-01-admission-and-nbo-00-baseline]
+    paths: [.github/workflows/nbo-gofmt-once.yml]
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          ref: feat/nbo-01-admission-and-nbo-00-baseline
+      - name: Format bounded NBO Go changes with gofmt
+        run: |
+          gofmt -w api/client_application_handler.go api/client_application_handler_test.go api/admin_shadow.go api/router.go internal/service/application/staff.go internal/service/application/staff_test.go internal/service/application/service.go internal/domain/admission.go internal/repository/postgres_admission.go internal/auth/workload_registry_test.go internal/store/postgres/migrate.go internal/store/postgres/migrate_test.go cmd/controlplane/main.go
+      - name: Commit formatted sources on NBO branch
+        run: |
+          git add api internal cmd/controlplane/main.go
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'style(nbo-01): gofmt bounded admission implementation'
+            git push origin HEAD:refs/heads/feat/nbo-01-admission-and-nbo-00-baseline
+          fi
