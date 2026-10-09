@@ -126,4 +126,40 @@ func TestLegalActorMandateGovernanceRejectAndReplay(t *testing.T) {
 	if status != "PENDING" {
 		t.Fatalf("decision improperly activated mandate: %s", status)
 	}
+
+	// Independent, synthetic verification exercises the APPROVE branch.
+	// The approved CHECKER decision STILL cannot make this legal mandate ACTIVE.
+	_, err = db.pool.Exec(ctx, `UPDATE registry.legal_entity_profile
+		SET verification_state='VERIFIED', legal_status='ACTIVE',
+			source_authority='synthetic-external-registry-test',
+			evidence_references='["test/official-registry"]'::jsonb,
+			verified_by=$2, verified_at=clock_timestamp(), updated_at=clock_timestamp()
+		WHERE legal_entity_id=$1`, entity, checker)
+	if err != nil {
+		t.Fatalf("set synthetic verified legal profile: %v", err)
+	}
+	approvedIntent, err := db.ProposeOperatingLegalActorMandate(ctx,
+		"la04c-approved-proposal-"+domain.NewUUIDv7(), makerMeta, maker, intent)
+	if err != nil {
+		t.Fatalf("create proposal with independently verified legal profile: %v", err)
+	}
+	approvalCommand := legalactor.DecideCommand{
+		Decision: "APPROVE", DecisionBasisReference: "test/independent-review",
+		EvidenceReferences: []string{"test/official-registry"},
+		LegalActorVerificationReference: "test/official-registry",
+	}
+	approval, err := db.DecideOperatingLegalActorMandate(ctx,
+		"la04c-approved-decision-"+domain.NewUUIDv7(),
+		checkerMeta, checker, approvedIntent.MandateID, approvalCommand)
+	if err != nil {
+		t.Fatalf("approve evidence-backed mandate without activating: %v", err)
+	}
+	if approval.Command != "APPROVE" || approval.DecisionID == "" || approval.Status != "PENDING" {
+		t.Fatalf("approved intent incorrectly became active: %+v", approval)
+	}
+	if err = db.pool.QueryRow(ctx,
+		`SELECT status FROM registry.operating_legal_actor_mandate WHERE mandate_id=$1::uuid`,
+		approvedIntent.MandateID).Scan(&status); err != nil || status != "PENDING" {
+		t.Fatalf("SQL activation gate violated by checker: %s %v", status, err)
+	}
 }
