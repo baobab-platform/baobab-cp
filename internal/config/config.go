@@ -89,7 +89,7 @@ type Config struct {
 	LegalActorMandateCommandsEnabled bool
 	// LA-04D allows only explicitly enabled nonproduction lifecycle operations.
 	LegalActorMandateLifecycleEnabled bool
-	LegalActorAssessmentEnabled bool
+	LegalActorAssessmentEnabled       bool
 	// EnforcementRollback (ADMINISTRATIVE_ENFORCEMENT_ROLLBACK, comma-
 	// separated permission keys, or "*") returns permissions to the role
 	// decision at once, without a release. It can only return authority to
