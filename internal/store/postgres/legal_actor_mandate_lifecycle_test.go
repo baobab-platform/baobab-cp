@@ -117,6 +117,7 @@ func TestLegalActorLifecycleGuardedActivationAndRevocation(t *testing.T) {
 	if err != nil || resolution.Outcome != legalactor.Authorized || resolution.MandateID != first {
 		t.Fatalf("trusted active mandate resolution failure %+v %v", resolution, err)
 	}
+	intent.SupersedesMandateID = first
 	second := createApproved()
 	if _, err = db.TransitionOperatingLegalActorMandate(ctx, "conflict-"+domain.NewUUIDv7(),
 		meta(operator), operator, second, activation); err == nil {
