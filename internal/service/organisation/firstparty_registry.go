@@ -27,6 +27,8 @@ type FirstPartyEntity struct {
 	ID        string
 	LegalName string
 	Role      string
+    IdentityClass string
+    IncorporationClaim string
 }
 
 // FirstPartyRegistry is a parsed Shared legal-entity registry. Digest is the
@@ -63,6 +65,8 @@ func ParseFirstPartyRegistry(raw []byte) (FirstPartyRegistry, error) {
 			ID        string `yaml:"id"`
 			LegalName string `yaml:"legal_name"`
 			Role      string `yaml:"role"`
+            IdentityClass string `yaml:"identity_class"`
+            IncorporationClaim string `yaml:"incorporation_claim"`
 		} `yaml:"entities"`
 	}
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
@@ -87,8 +91,30 @@ func ParseFirstPartyRegistry(raw []byte) (FirstPartyRegistry, error) {
 		if e.LegalName == "" {
 			return FirstPartyRegistry{}, fmt.Errorf("first-party registry: %s has no legal_name", e.ID)
 		}
+        // Legacy registries without annotations are readable for historical
+        // compatibility. Explicitly annotated identities cannot claim
+        // a separately incorporated LegalEntity solely from group status.
+        if (e.IdentityClass=="") != (e.IncorporationClaim=="") {
+            return FirstPartyRegistry{},fmt.Errorf("first-party registry: %s requires identity_class and incorporation_claim together",e.ID)
+        }
+        if e.IdentityClass!="" {
+            if e.IdentityClass!="OPERATING_BUSINESS" && e.IdentityClass!="LEGAL_PERSON" {
+                return FirstPartyRegistry{},fmt.Errorf("first-party registry: %s invalid identity_class",e.ID)
+            }
+            switch e.IncorporationClaim {
+            case "NOT_INCORPORATED","REGISTERED_CLAIMED","REGISTERED_EVIDENCED":
+            default:
+                return FirstPartyRegistry{},fmt.Errorf("first-party registry: %s invalid incorporation_claim",e.ID)
+            }
+            if e.IdentityClass=="OPERATING_BUSINESS" && e.IncorporationClaim!="NOT_INCORPORATED"{
+                return FirstPartyRegistry{},fmt.Errorf("first-party registry: %s cannot claim incorporation as an operating business",e.ID)
+            }
+        }
 		seen[e.ID] = true
-		reg.Entities = append(reg.Entities, FirstPartyEntity{ID: e.ID, LegalName: e.LegalName, Role: e.Role})
+		reg.Entities = append(reg.Entities, FirstPartyEntity{
+            ID:e.ID,LegalName:e.LegalName,Role:e.Role,
+            IdentityClass:e.IdentityClass,IncorporationClaim:e.IncorporationClaim,
+        })
 	}
 	return reg, nil
 }
