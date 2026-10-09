@@ -2,7 +2,7 @@
 
 **Control Plane API + CP Console** · [Architecture decisions](docs/adr/index.md) · [Console implementation](docs/frontend/index.md) · [Shared contracts](https://github.com/baobab-platform/shared)
 
-Baobab Control Plane (\`baobab-cp\`) owns the platform's **canonical organisation and tenant control state**: admission and onboarding, governed tenancy and relationships, capability entitlements, provisioning desired state, readiness, and platform administration. Its Go API is the authority; the co-located Next.js Console is a separately deployed human interface over that API.
+Baobab Control Plane (`baobab-cp`) owns the platform's **canonical organisation and tenant control state**: admission and onboarding, governed tenancy and relationships, capability entitlements, provisioning desired state, readiness, and platform administration. Its Go API is the authority; the co-located Next.js Console is a separately deployed human interface over that API.
 
 > **Readiness (9 October 2026):** The Go backend is under active implementation, with substantial runtime and API support. The CP Console has its foundation, design system and generated client, **but no production-ready authentication flow or operational workspace yet**. Neither a passing backend CI run nor the existence of a Console container certifies end-to-end production onboarding.
 
@@ -10,16 +10,16 @@ Baobab Control Plane (\`baobab-cp\`) owns the platform's **canonical organisatio
 
 | Component | Location | Responsibility | Current maturity |
 | --- | --- | --- | --- |
-| Control Plane API | \`api/\`, \`cmd/controlplane/\` | Authenticated APIs, authoritative policy checks and administrative commands | Substantial implementation; individual routes remain subject to runtime/contract verification |
-| Domain and persistence | \`internal/\` | Canonical state, lifecycle services, Postgres repositories, reconciler and events | Actively evolving; do not infer production acceptance |
-| Migrations | \`internal/store/postgres/migrations/\` | Versioned Postgres schema changes | Real migrations; run before the API |
-| CP Console | \`frontend/\` | Next.js App Router application, future confidential-client BFF | FE-01/02/05 foundations; no authenticated operator journeys |
-| Contract pin | \`contracts.lock.yaml\` | Exact authoritative \`shared\` revision | Enforced by contract and generated-client tests |
-| Architecture & programme | \`docs/adr/\`, \`docs/frontend/\` | Decisions, design constraints and progress | Consult accepted amendments and latest implementation evidence |
+| Control Plane API | `api/`, `cmd/controlplane/` | Authenticated APIs, authoritative policy checks and administrative commands | Substantial implementation; individual routes remain subject to runtime/contract verification |
+| Domain and persistence | `internal/` | Canonical state, lifecycle services, Postgres repositories, reconciler and events | Actively evolving; do not infer production acceptance |
+| Migrations | `internal/store/postgres/migrations/` | Versioned Postgres schema changes | Real migrations; run before the API |
+| CP Console | `frontend/` | Next.js App Router application, future confidential-client BFF | FE-01/02/05 foundations; no authenticated operator journeys |
+| Contract pin | `contracts.lock.yaml` | Exact authoritative `shared` revision | Enforced by contract and generated-client tests |
+| Architecture & programme | `docs/adr/`, `docs/frontend/` | Decisions, design constraints and progress | Consult accepted amendments and latest implementation evidence |
 
 ### Architecture and authority
 
-\`\`\`text
+```text
                     Baobab IAM
                 identity / federation
                          |
@@ -42,7 +42,7 @@ Baobab Control Plane (\`baobab-cp\`) owns the platform's **canonical organisatio
 
    shared = canonical contract authority
    infrastructure = deployment / infrastructure authority
-\`\`\`
+```
 
 The diagram describes the intended Console session boundary; its OIDC login, callback, session, logout and token custody **are not yet implemented in the frontend**. The browser must never hold privileged API credentials or call privileged CP endpoints directly.
 
@@ -67,9 +67,9 @@ The backend includes API/domain work for admission, organisation resolution, ten
 The Console currently has:
 
 - Next.js 16 / React 19 / TypeScript strict with Node.js 24, pnpm workspace and an independent Dockerfile.
-- Owned accessible UI primitives, semantic status tokens, component tests and a non-production \`/design-system\` showcase.
+- Owned accessible UI primitives, semantic status tokens, component tests and a non-production `/design-system` showcase.
 - An OpenAPI-generated client from the pinned Shared contract, server-only CP client, fail-closed unsupported-operation handling and Console CI.
-- A placeholder \`/\` page: **no live operational dashboard, admission review or tenant administration**.
+- A placeholder `/` page: **no live operational dashboard, admission review or tenant administration**.
 
 Next gates are (1) refresh the FE-00 architecture and API/authority matrix, (2) finish IAM confidential-client integration and FE-03 browser/BFF session security, (3) build the contextual shell and authority-aware navigation, then (4) deliver the applicant → admission → onboarding → provisioning → readiness vertical slice. No fake production APIs or browser-owned administrative authority.
 
@@ -79,53 +79,53 @@ See the [Console overview](docs/frontend/index.md), [dated FE-00 rebaseline](doc
 
 | Area | Implemented choice |
 | --- | --- |
-| Backend | Go (\`go.mod\` declares Go 1.27), \`net/http\` / chi, pgx |
+| Backend | Go (`go.mod` declares Go 1.27), `net/http` / chi, pgx |
 | Primary state | PostgreSQL 17 |
 | Migrations | In-repository SQL migration runner |
 | Identity | OIDC-verified admin/workload identities; IAM is the identity authority |
 | Events | Event ingress/outbox and provider integrations as bounded runtime facilities; verify deployment and delivery readiness separately |
 | Console | Next.js 16, React 19, strict TypeScript, Node 24, pnpm |
 | CI | GitHub Actions for Go and Console, plus Shared contract enforcement |
-| Infrastructure | Containers and separate deployment topology in \`baobab-platform/infrastructure\` |
+| Infrastructure | Containers and separate deployment topology in `baobab-platform/infrastructure` |
 
 Never assume a local RabbitMQ, APISIX or Postgres container represents the production deployment.
 
 ## Get started — Go API
 
-A recent Go toolchain compatible with \`go.mod\`, Docker with Compose and PostgreSQL 17 are required.
+A recent Go toolchain compatible with `go.mod`, Docker with Compose and PostgreSQL 17 are required.
 
-\`\`\`bash
+```bash
 git clone https://github.com/baobab-platform/baobab-cp.git
 cd baobab-cp
 cp .env.example .env
 make dev-up       # local PostgreSQL and RabbitMQ for development
 make migrate      # apply the embedded SQL migrations
 make run          # API, default :8080
-\`\`\`
+```
 
-Set real local-development OIDC configuration in \`.env\` (see the example); the server may require additional environment and workload configuration for particular runtime profiles. Never use the example credentials in a deployed environment.
+Set real local-development OIDC configuration in `.env` (see the example); the server may require additional environment and workload configuration for particular runtime profiles. Never use the example credentials in a deployed environment.
 
-\`\`\`bash
+```bash
 make test
 make test-integration   # requires the documented Postgres test environment
 make lint
-\`\`\`
+```
 
-If you need the sibling Infrastructure Compose topology rather than this repository's developer stand-in, consult \`make dev-up-infra\` and \`make dev-env-infra\` in the [Makefile](Makefile).
+If you need the sibling Infrastructure Compose topology rather than this repository's developer stand-in, consult `make dev-up-infra` and `make dev-env-infra` in the [Makefile](Makefile).
 
 ## Get started — CP Console
 
 Use Node.js 24 and Corepack. Run commands from the **repository root** because it owns the pnpm workspace.
 
-\`\`\`bash
+```bash
 make frontend-install
 CONSOLE_ENVIRONMENT=development CP_API_BASE_URL=http://localhost:8080 make frontend-dev
 # open http://localhost:3000
 make frontend-typecheck frontend-lint frontend-test frontend-build
 make frontend-image
-\`\`\`
+```
 
-This runs the **Console foundation and its placeholder**, not an authenticated administrative application. Its \`/healthz\` endpoint is liveness, **not platform readiness**. The frontend must not be exposed as a working administration experience before FE-03 and protected-route tests are complete.
+This runs the **Console foundation and its placeholder**, not an authenticated administrative application. Its `/healthz` endpoint is liveness, **not platform readiness**. The frontend must not be exposed as a working administration experience before FE-03 and protected-route tests are complete.
 
 ## Related repositories
 
