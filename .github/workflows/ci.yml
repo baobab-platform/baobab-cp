@@ -59,14 +59,4 @@ jobs:
       - name: Prove founding-enterprise fixture dry-run has no side effects
         run: python3 scripts/showcase/nbo_apply.py --manifest docs/showcase/fixtures/nabhold-group-v1.json
       - run: go vet ./...
-      - name: LA02 temporary formatting diagnostics
-        run: |
-          gofmt -l cmd internal > /tmp/la02-gofmt-list
-          while IFS= read -r file; do
-            [ -n "$file" ] || continue
-            gofmt -w "$file"
-            printf 'LA02_FORMATTED_FILE:%s:' "$file"
-            base64 -w0 "$file"
-            printf '\n'
-          done < /tmp/la02-gofmt-list
       - run: test -z "$(gofmt -l cmd internal)"
