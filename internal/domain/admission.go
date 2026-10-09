@@ -188,6 +188,7 @@ type ClientApplication struct {
 	Channel              ApplicationChannel    `json:"application_channel"`
 	Version              int64                 `json:"version"`
 	ApplicantPrincipalID string                `json:"applicant_principal_id"`
+	OpenedByStaffPrincipalID string            `json:"opened_by_staff_principal_id,omitempty"`
 	AssignedReviewer     string                `json:"assigned_reviewer,omitempty"`
 	OrganisationProfile  json.RawMessage       `json:"organisation_profile"`
 	Requirements         json.RawMessage       `json:"requirements"`
