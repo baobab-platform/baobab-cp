@@ -191,7 +191,7 @@ func TestLegalActorLifecycleGuardedActivationAndRevocation(t *testing.T) {
 	}
 	expiry := legalactor.LifecycleCommand{Action: "EXPIRE",
 		AuthorityBasisReference: "test/natural-expiry",
-		EvidenceReferences: []string{"test/expiry-evidence"}}
+		EvidenceReferences:      []string{"test/expiry-evidence"}}
 	if _, err := db.TransitionOperatingLegalActorMandate(ctx, "invalid-expiry-"+domain.NewUUIDv7(),
 		meta(revoker), revoker, second, expiry); err == nil {
 		t.Fatal("open-ended mandate was marked expired without an effective_to")
