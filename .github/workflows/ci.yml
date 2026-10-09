@@ -53,6 +53,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: LA04D final test gofmt capture
+        run: |
+          gofmt -w internal/store/postgres/legal_actor_mandate_lifecycle_test.go
+          printf 'LA04D_TEST_FMT:'
+          base64 -w0 internal/store/postgres/legal_actor_mandate_lifecycle_test.go
+          printf '\n'
       - run: go test -race ./...
       - name: Test NBO founding-enterprise fixture guardrails
         run: python3 -m unittest discover -s scripts/showcase -p 'test_nbo_*.py'
