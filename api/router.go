@@ -88,7 +88,7 @@ type Dependencies struct {
 	// LA-04C: manual human maker/checker mandate intents, disabled by default.
 	// Approval is inert; migration 000104 still refuses ACTIVE.
 	LegalActorMandatesV2 bool
-	LegalActorMandates legalActorMandateStore
+	LegalActorMandates   legalActorMandateStore
 	// Environment names the deployment (config.Config.Environment). Planning
 	// treats anything but development, test, integration or sandbox,
 	// including unset, as production: providers must then be permitted in
