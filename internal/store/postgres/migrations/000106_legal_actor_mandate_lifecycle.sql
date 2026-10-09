@@ -142,6 +142,20 @@ BEGIN
       RAISE EXCEPTION 'PRIMARY Organisation or independent legal actor verification not current'
         USING ERRCODE='check_violation';
     END IF;
+    -- Supersession is a reviewed identity transition, never an implicit
+    -- change of responsibility or a cross-tenant reference. The nominated
+    -- predecessor must have the SAME tenant and operating Organisation and
+    -- already be terminal/non-authorising before a successor activates.
+    IF OLD.supersedes_mandate_id IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM registry.operating_legal_actor_mandate predecessor
+      WHERE predecessor.mandate_id=OLD.supersedes_mandate_id
+        AND predecessor.tenant_id=OLD.tenant_id
+        AND predecessor.operating_organisation_id=OLD.operating_organisation_id
+        AND predecessor.status IN ('SUSPENDED','REVOKED','EXPIRED')
+    ) THEN
+      RAISE EXCEPTION 'supersession requires same-tenant terminal predecessor'
+        USING ERRCODE='check_violation';
+    END IF;
     -- Strictly reject overlapping roles x activity x markets x time x
     -- capability (empty capability scope is a wildcard). Do not
     -- automatically revoke or mutate a superseded prior mandate.
