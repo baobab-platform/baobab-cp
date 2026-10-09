@@ -13,7 +13,10 @@ import (
 // ResolveOperatingLegalActor is for CP-internal trusted context/PEP code only.
 // It never takes a caller-selected legal actor or mandate identifier. It also
 // refuses to use an unattested, expired or absent PRIMARY Organisation.
-func (s *Store) ResolveOperatingLegalActor(ctx context.Context, request legalactor.Request, evaluatedAt time.Time) (legalactor.Resolution, error) {
+func (s *Store) ResolveOperatingLegalActor(ctx context.Context, request legalactor.Request) (legalactor.Resolution, error) {
+	// Authority evaluation uses CP's current clock, never a caller-supplied
+	// evaluation timestamp that could resurrect an expired mandate.
+	evaluatedAt := time.Now().UTC()
 	// Invalid requests must never reach PostgreSQL's UUID cast. They have
 	// the same non-authorising outcome as an absent mandate.
 	denied := legalactor.Resolve(request, nil, evaluatedAt)
