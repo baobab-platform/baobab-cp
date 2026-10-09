@@ -77,7 +77,7 @@ func (c RegisterTenantV2) Validate() error {
 	}
 	return (RegisterTenant{
 		TenantOnboardingRequestID: c.TenantOnboardingRequestID,
-		TenantID: c.TenantID, Basis: c.Basis,
+		TenantID:                  c.TenantID, Basis: c.Basis,
 		DisplayName: c.DisplayName, IsolationStrategy: c.IsolationStrategy,
 		ResidencyRegion: c.ResidencyRegion, RequestedProducts: c.RequestedProducts,
 		Metadata: c.Metadata,
