@@ -54,5 +54,9 @@ jobs:
           go-version-file: go.mod
           cache: true
       - run: go test -race ./...
+      - name: Test NBO founding-enterprise fixture guardrails
+        run: python3 -m unittest discover -s scripts/showcase -p 'test_nbo_*.py'
+      - name: Prove founding-enterprise fixture dry-run has no side effects
+        run: python3 scripts/showcase/nbo_apply.py --manifest docs/showcase/fixtures/nabhold-group-v1.json
       - run: go vet ./...
       - run: test -z "$(gofmt -l cmd internal)"
