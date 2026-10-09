@@ -77,8 +77,7 @@ entities:
   - id: TEST-FIRSTPARTY
     legal_name: Test Operating Name
     role: subsidiary
-    `+claim+"
-"
+    `+claim+"\n"
         if _,err:=ParseFirstPartyRegistry([]byte(src));err==nil{
             t.Errorf("%s accepted",name)
         }
