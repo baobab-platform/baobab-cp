@@ -39,6 +39,25 @@ Capabilities requiring a legal actor SHALL resolve a **purpose-, role-, market- 
 
 This ADR changes **identity and responsibility modelling**, not statutory legal duties, commercial subscription prices or provider readiness requirements.
 
+### 1.1 Founding-group declared incorporation and legal actor status (2026-10-09)
+
+The current first-party onboarding programme SHALL use the following **group-governance declarations**. They are not independent legal-verification decisions or automatically valid operating mandates.
+
+| Business | Separately incorporated today? | Identity and group relationship | Responsibility during transition |
+|---|---|---|---|
+| Nabhold Group Africa | Group declares South African incorporation | Holding company/founding principal | Own legal obligations; may assume specific authorised operating-business roles |
+| ZuriBeans | **No** | Independently operating trade business formerly Nabhold cross-border trade unit | Nabhold is proposed responsible legal actor only for documented authorised role/market/activity combinations |
+| Equator & Estate Co. | **No** | Independently operating property/construction/hospitality business awaiting incorporation | Nabhold is proposed responsible legal actor only for documented authorised role/market/activity combinations |
+| Thamani Global | Group declares CIPC registration | Independently incorporated Nabhold subsidiary; former logistics-unit history | Ordinarily its own legal actor for new business; Nabhold affiliation does not transfer legal liability automatically |
+
+**Terminology:** ZuriBeans and Equator & Estate Co. SHALL be treated as *founding operating businesses* rather than represented as legally incorporated subsidiaries. Thamani may be described as a declared incorporated subsidiary; official registration and corporate ownership/control SHALL be independently supported before being marked VERIFIED.
+
+**Specific, not blanket responsibility:** The group intends Nabhold to assume "most responsibility" for the two unincorporated businesses. That intention SHALL become a matrix of separately governed mandates for each role (e.g. contracting party, legal issuer, importer/exporter, employer, property owner, seller, payment beneficiary), activity, market, effective window, representative authority, supporting evidence, restrictions and revocation. No authority for property title, building permits, import/export permissions or third-party settlement is inferred from sponsorship or a default legal-entity mapping.
+
+**Operational autonomy:** Each business retains its own PRIMARY Organisation, justified tenant, digital estate, IAM scope and market choices. Sharing the Nabhold LegalEntity for approved roles SHALL NOT share tenant data access, automatically make intercompany transactions, or reassign an independent operating business's primary Organisation.
+
+**Evidence and migration:** The stable first-party IDs in Shared remain intact for compatibility. Audit old LegalEntityProfiles and VERIFIED records against the actual claims/evidence. Correct status only through governed, logged and history-preserving transitions. Never generate a fictitious incorporated person for ZuriBeans or Equator & Estate.
+
 ## 2. Historical and commercial context
 
 Nabhold originally planned independently operated **business units** under the Nabhold legal name. Its cross-border trade business unit became **ZuriBeans**; logistics operations evolved into **Thamani**, which now has a broader independent business identity. These are meaningful stages in the same business evolution:
@@ -424,7 +443,7 @@ Implement reuse-first operating mandate policy under Shared/CP, with signed/appr
 Update IAM projection, Trade seller/merchant contexts, ERP company/finance baselines, document issuance, payments where present, digital estates and legal-person enforcement. Capability-by-capability readiness; do not pretend unavailable provider integrations are live.
 
 ### LA-06 — Founding-group registration and demonstration
-Onboard Nabhold, ZuriBeans, Thamani and Equator & Estate Co. from the actual legal/evidence status, each with governed Organisation and independently justified tenant. Use Nabhold's legal actor for ZuriBeans only after an authorised mandate and confirmation that Nabhold may legitimately undertake the requested activities in the specific markets. Do not infer that Thamani must use Nabhold's actor if Thamani is already legally established for those activities.
+Onboard Nabhold, ZuriBeans, Thamani and Equator & Estate Co. from the declared 2026-10-09 operating/legal-status baseline, independently verifying claims as required. **ZuriBeans and Equator & Estate are not separately incorporated**: register each as its own operating Organisation (and justified Tenant) without an invented incorporated LegalEntity. Nabhold may be selected for specifically authorised activities of each operating business only with an explicit, scoped operating mandate and actual legal/provider permission. **Thamani is declared CIPC-registered and a Nabhold subsidiary**: preserve its separate incorporated identity and responsibility, verifying the two claims separately; do not route its new transactions through Nabhold merely because it was historically a logistics unit. Keep founding sponsorship, INTERNAL eligibility and statutory identity evidence distinct.
 
 ### LA-07 — Cutover, rollback and operational acceptance
 Certify historical/legal attribution, RLS/tenant isolation, multi-provider operational behavior, reconciliation, expiry, restore, failures and cross-market scenarios. Change/suspend only impacted capabilities on a missing legal actor; never destroy a tenant to correct a legal reference.
@@ -458,6 +477,12 @@ Certify historical/legal attribution, RLS/tenant isolation, multi-provider opera
 | LA-T23 | Attempt client-supplied unbound legal_entity_id override | Rejected |
 | LA-T24 | Missing legal-actor evidence on an unrelated catalogue draft | Draft may proceed if otherwise eligible |
 | LA-T25 | Contract/source lock incompatible with changed schema | CI contract-drift gate fails until corrected |
+
+| LA-T26 | Equator & Estate uses approved Nabhold legal actor for one scoped property/service activity | Its own Organisation remains PRIMARY; unrelated roles and markets remain restricted |
+| LA-T27 | Thamani declares CIPC registration and Nabhold control | Both status claims retain independent evidence and review paths |
+| LA-T28 | Nabhold legal actor serves ZuriBeans and Equator & Estate tenants | Two separate mandate scopes; no IAM or data crossover; correct accounting attribution |
+| LA-T29 | First-party registry names unincorporated business | Registry identity recognised without automatic company-incorporation VERIFIED |
+| LA-T30 | Required property/permit or cross-border authority absent | Block only dependent activity; preserve unrelated permitted tenant capabilities |
 
 Include PostgreSQL migration/rollback, Go unit/integration/concurrency, Shared JSON Schema, OpenAPI generation/drift, IAM audience/context/isolation, ERP/Trade contract and digital-estate browser tests. A green mock-only test is not live regulatory or provider acceptance.
 
