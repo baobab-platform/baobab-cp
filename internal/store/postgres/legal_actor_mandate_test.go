@@ -111,7 +111,6 @@ func TestOperatingLegalActorMandateActivationGate(t *testing.T) {
 	}
 }
 
-
 // LA-04B integration: even a revoked mandate must never be returned as an
 // authorising legal actor by the trusted PostgreSQL adapter.
 func TestTrustedLegalActorResolutionRevocation(t *testing.T) {
@@ -132,12 +131,12 @@ func TestTrustedLegalActorResolutionRevocation(t *testing.T) {
 	// can never turn into a DEFAULT legal-person inference.
 	at := time.Now().UTC()
 	res, err := db.ResolveOperatingLegalActor(ctx, legalactor.Request{
-		TenantID: "tn_nonexistent_la04b",
+		TenantID:                "tn_nonexistent_la04b",
 		OperatingOrganisationID: "00000000-0000-0000-0000-000000000001",
-		Role: "SELLER_OF_RECORD",
-		Activity: "B2B_COFFEE_SALE",
-		Market: "ZA",
-		EffectiveAt: at,
+		Role:                    "SELLER_OF_RECORD",
+		Activity:                "B2B_COFFEE_SALE",
+		Market:                  "ZA",
+		EffectiveAt:             at,
 	})
 	if err != nil {
 		t.Fatal(err)
