@@ -43,10 +43,10 @@ func TestLA05AssessmentRejectsUntrustedAndCrossContext(t *testing.T){
  cases:=[]struct{name string; scope bool; market string; runtime bool; expired bool; owner bool; expected int}{
   {"valid-but-denied",true,"ZA",true,false,true,http.StatusOK},
   {"wrong-market",true,"UG",true,false,true,http.StatusForbidden},
-  {"expired",true,"ZA",true,true,true,http.StatusForbidden},
+  {"expired",true,"ZA",true,true,true,http.StatusNotFound},
   {"unowned-context",true,"ZA",true,false,false,http.StatusNotFound},
   {"unscoped-workload",false,"ZA",true,false,true,http.StatusForbidden},
-  {"provisioning-context",true,"ZA",false,false,true,http.StatusForbidden},
+  {"provisioning-context",true,"ZA",false,false,true,http.StatusNotFound},
  }
  for _,tc:=range cases {
   t.Run(tc.name,func(t *testing.T){
@@ -64,10 +64,13 @@ func TestLA05AssessmentRejectsUntrustedAndCrossContext(t *testing.T){
    org:=domain.NewUUIDv7()
    ctx:=domain.Context{ID:domain.NewUUIDv7(),PrincipalID:principal.ID,
     TenantID:"tn_la05a",OrganisationID:org,CountryCode:"ZA",
-    MarketID:"market-za",ResolvedAt:now.Add(-time.Minute),ExpiresAt:&expiry}
+    MarketID:"market-za",CorrelationID:domain.NewUUIDv7(),ResolvedAt:now.Add(-2*time.Minute),ExpiresAt:&expiry}
    if !tc.runtime{ctx.AuthorityPurpose=domain.ContextPurposeTenantProvisioning}
    if !tc.owner{ctx.PrincipalID=domain.NewPrincipalID()}
-   if err:=repo.CreateContext(context.Background(),ctx);err!=nil{t.Fatal(err)}
+   // Simulate an already-persisted historical context. The API must not
+   // redeem provisioning authority or expired contexts, even if a raw
+   // store contains a row that would now fail runtime context creation.
+   repo.Contexts[ctx.ID]=ctx
    stub:=&legalActorAssessorFixture{outcome:legalactor.Resolution{
     Outcome:legalactor.NoApplicableMandate,EvaluatedAt:now,PolicyReference:legalactor.PolicyReference}}
    handler:=New(Dependencies{
