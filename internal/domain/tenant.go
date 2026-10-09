@@ -45,9 +45,10 @@ type RegisterTenant struct {
 }
 
 // RegisterTenantV2 is the Organisation-first command shape from Shared LA-01.
-// No endpoint currently decodes it: LA-03 must independently attest the
-// AUTHORISED onboarding request, PRIMARY Organisation and optional DEFAULT
-// LegalEntity before persisting. The old RegisterTenant remains strict v1.
+// The feature-gated v2 endpoint decodes it. Storage independently attests
+// the AUTHORISED onboarding request, reviewed PRIMARY Organisation and any
+// optional VERIFIED same-Organisation DEFAULT LegalEntity. The old command
+// remains strict v1.
 type RegisterTenantV2 struct {
 	TenantOnboardingRequestID string            `json:"tenant_onboarding_request_id"`
 	OrganisationID            string            `json:"organisation_id"`
