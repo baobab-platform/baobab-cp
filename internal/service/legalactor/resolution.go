@@ -11,54 +11,54 @@ import (
 type Outcome string
 
 const (
-	Authorized Outcome = "AUTHORIZED"
+	Authorized          Outcome = "AUTHORIZED"
 	NoApplicableMandate Outcome = "NO_APPLICABLE_MANDATE"
-	Ambiguous Outcome = "AMBIGUOUS"
-	RevokedOrExpired Outcome = "REVOKED_OR_EXPIRED"
-	ActorNotVerified Outcome = "ACTOR_NOT_VERIFIED"
+	Ambiguous           Outcome = "AMBIGUOUS"
+	RevokedOrExpired    Outcome = "REVOKED_OR_EXPIRED"
+	ActorNotVerified    Outcome = "ACTOR_NOT_VERIFIED"
 )
 
 const PolicyReference = "ADR-BCP-027/LA-04A/fail-closed-legal-actor-resolution"
 
 type Request struct {
-	TenantID string
+	TenantID                string
 	OperatingOrganisationID string
-	Role string
-	Activity string
-	Market string
-	Capability string
-	EffectiveAt time.Time
+	Role                    string
+	Activity                string
+	Market                  string
+	Capability              string
+	EffectiveAt             time.Time
 }
 
 type Candidate struct {
-	MandateID string
-	TenantID string
-	OperatingOrganisationID string
-	ResponsibleLegalEntityID string
-	Roles []string
-	ActivityScope []string
-	MarketScope []string
-	CapabilityScope []string
-	Status string
-	AuthorityBasisReference string
-	EvidenceReferences []string
+	MandateID                       string
+	TenantID                        string
+	OperatingOrganisationID         string
+	ResponsibleLegalEntityID        string
+	Roles                           []string
+	ActivityScope                   []string
+	MarketScope                     []string
+	CapabilityScope                 []string
+	Status                          string
+	AuthorityBasisReference         string
+	EvidenceReferences              []string
 	LegalActorVerificationReference string
-	EffectiveFrom time.Time
-	EffectiveTo *time.Time
-	CreatedBy string
-	ApprovedBy string
-	ApprovedAt *time.Time
-	ActorVerified bool
+	EffectiveFrom                   time.Time
+	EffectiveTo                     *time.Time
+	CreatedBy                       string
+	ApprovedBy                      string
+	ApprovedAt                      *time.Time
+	ActorVerified                   bool
 }
 
 type Resolution struct {
-	Outcome Outcome
-	EvaluatedAt time.Time
-	PolicyReference string
-	MandateID string
+	Outcome                  Outcome
+	EvaluatedAt              time.Time
+	PolicyReference          string
+	MandateID                string
 	ResponsibleLegalEntityID string
-	EvidenceReferences []string
-	ValidUntil *time.Time
+	EvidenceReferences       []string
+	ValidUntil               *time.Time
 }
 
 // Resolve evaluates trusted candidates at the server's present evaluation
@@ -71,8 +71,8 @@ type Resolution struct {
 // only by a trusted CP repository, not by a browser or engine-supplied claim.
 func Resolve(request Request, candidates []Candidate, evaluatedAt time.Time) Resolution {
 	result := Resolution{
-		Outcome: NoApplicableMandate,
-		EvaluatedAt: evaluatedAt.UTC(),
+		Outcome:         NoApplicableMandate,
+		EvaluatedAt:     evaluatedAt.UTC(),
 		PolicyReference: PolicyReference,
 	}
 	if !validRequest(request, evaluatedAt) {
