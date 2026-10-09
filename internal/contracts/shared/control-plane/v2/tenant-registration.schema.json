@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v2/tenant-registration.schema.json",
+  "title": "Organisation-first governed tenant registration v2 (ADR-BCP-026/027)",
+  "description": "CP registers a tenant only from an AUTHORISED TenantOnboardingRequest. CP attests the approved PRIMARY Organisation, then atomically establishes PRIMARY mapping. LegalEntity is optional and server-attested if supplied; it must never select or redefine the primary Organisation. V1 commands and their pins remain unchanged.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "tenant_onboarding_request_id": {
+      "$ref": "../../admission/v1/onboarding.schema.json#/$defs/tenantOnboardingRequestId"
+    },
+    "organisation_id": {
+      "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+    },
+    "legal_entity_id": {
+      "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId",
+      "description": "Optional compatibility DEFAULT projection. CP must attest identity and approved mapping; may not be treated as automatic legal-actor permission."
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "isolation_strategy": {
+      "type": "string",
+      "enum": [
+        "schema_per_tenant",
+        "row_level_security"
+      ]
+    },
+    "residency_region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}-[a-z]+-[0-9]+$"
+    },
+    "requested_products": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "../v1/domain.schema.json#/$defs/productId"
+      },
+      "default": []
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 255
+      },
+      "maxProperties": 20,
+      "default": {}
+    }
+  },
+  "$defs": {},
+  "required": [
+    "tenant_onboarding_request_id",
+    "organisation_id",
+    "display_name",
+    "isolation_strategy",
+    "residency_region"
+  ]
+}
