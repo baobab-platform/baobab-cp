@@ -11,7 +11,8 @@
 **Decision type:** Foundational amendment to admission, organisation identity, evidence applicability and founding-group onboarding  
 **Amends:** ADR-BCP-017 (admission preconditions and channels), ADR-BCP-018 (pre-incorporation representation and first-party eligibility), ADR-BCP-019 (progressive UX), ADR-BCP-020/021 (policy-based low-risk authorisation boundaries), ADR-BCP-023 (purpose-specific evidence and deferrals), and applicable onboarding provisions in BCP-TS-ONBOARDING-001  
 **Preserves:** ADR-BCP-003/005/009/011/024; ADR-SHARED-012/013/014/015; ADR-IAM-0033  
-**Implementation state:** Accepted architectural decision; implementation and operational acceptance remain outstanding. This ADR does not assert that amended Shared contracts, Control Plane code paths, tenant registrations or infrastructure already exist.
+**Implementation state:** Accepted architectural decision; phased contracts and runtime work are underway. Acceptance does not certify founding documentary deferrals or production onboarding.
+**Amendment A1 (2026-10-09):** The decision owner revised the one-time founding-group documentary grace maximum from **12 to 24 calendar months**, prospective for the unimplemented PEO-02 runtime. This amendment does not change the start instant, scope, independent approval, statutory/provider boundaries or anti-reset rule. Previously issued deferrals, if any, require individually authorised review rather than automatic extension.
 
 ---
 
@@ -28,7 +29,7 @@ The new onboarding design shall be **business-first, progressively evidenced, ca
 ## 2. Decision summary
 
 1. **First-party eligibility:** Nabhold Group Africa and its legitimately sponsored founding-group businesses may enter a governed internal onboarding path without supplying every ordinary documentary item up front. This exemption is an admission/evidence-process policy, not an assertion that incorporation or regulatory obligations are satisfied.
-2. **Twelve-month evidence grace:** Each eligible founding-group organisation may receive a one-time, bounded 12-calendar-month deferral for specifically enumerated *platform documentary requirements*, starting on its effective provisional approval date. Legal requirements and service-provider obligations remain effective.
+2. **Twenty-four-month evidence grace:** Each eligible founding-group organisation may receive a one-time, bounded 24-calendar-month deferral for specifically enumerated *platform documentary requirements*, starting on its effective provisional approval date. Legal requirements and service-provider obligations remain effective.
 3. **Progressive external admission:** External enterprises shall not need a universally complete company-registration, PAYE, UIF, VAT or other documentary pack simply to create an account and request eligible low-risk services. Evidence is asked for in context when necessary.
 4. **Separate decisions:** Identity acceptance, admission, canonical reconciliation, evidence verification, legal status, contract authority, subscription classification, entitlement, provisioning, service eligibility and activation remain separate authoritative decisions.
 5. **Risk-proportionate workflow:** Low-risk standard paths may eventually be policy-authorised and automated if an independently approved policy and auditable non-applicant authority are in place. Elevated-risk changes, founding-group sponsorship and exceptions retain appropriate human review and separation of duties.
@@ -59,7 +60,7 @@ The new onboarding design shall be **business-first, progressively evidenced, ca
 | Minimum identity | Authenticated sponsor and accountable administrator | Authenticated applicant and accountable representative |
 | Evidence at admission | Identity, sponsorship and minimum lawful authority; other platform documents may be deferred | Purpose-limited minimum data; requirements evaluated by legal form, activity, market, product/provider |
 | Group eligibility | Verified governed relationship OR specifically authorised, expiring founding sponsorship for *admission* | Ordinary external PlatformRelationship |
-| Documentary deferral | Explicit one-time 12-month bounded first-party policy | Not inherently a 12-month obligation; applicability determines whether evidence is ever required |
+| Documentary deferral | Explicit one-time 24-month bounded first-party policy | Not inherently a 24-month obligation; applicability determines whether evidence is ever required |
 | Subscription | Existing INTERNAL classification only if the current authoritative eligibility policy authorises it | Existing canonical types; pricing decision out of scope |
 | Approval | Recorded first-party sponsorship; independent consequential authorisations | Policy-driven low-risk path or reviewed elevated-risk path |
 | Activation | Only eligible, provisioned capabilities | Same provider, IAM, tenancy and readiness standards |
@@ -111,17 +112,17 @@ For a pre-incorporation business:
 
 Shared and CP shall design a generic supportable legal-actor boundary for sole proprietors and other lawful enterprise forms, instead of a founding-group special case.
 
-## 6. Twelve-month founding-group evidence grace
+## 6. Twenty-four-month founding-group evidence grace
 
-The 12-month period SHALL apply to a *named, approved list of deferrable platform evidence requirements*, not to an organisation's legal existence or applicable statutory duties.
+The 24-month period SHALL apply to a *named, approved list of deferrable platform evidence requirements*, not to an organisation's legal existence or applicable statutory duties.
 
 **Start:** effective timestamp of first approved provisional onboarding for the organisation.  
-**Duration:** 12 calendar months, using an explicit timezone/UTC instant for enforcement.  
-**Expiry:** anniversary of that approval; calculated and persisted deterministically.  
+**Duration:** 24 calendar months, using an explicit timezone/UTC instant for enforcement.  
+**Expiry:** the twenty-fourth calendar-month anniversary of that approval; calculated and persisted deterministically (including month-end and leap-day cases).  
 **No reset:** re-application, re-provisioning, renaming, moving markets or changing administrators shall not restart it.  
 **No automatic renewal:** extension, if permitted, requires an independent exceptional decision with specific scope and a new time limit.
 
-Suggested review milestones: months 3, 6 and 9, with month 12 as the expiry checkpoint. These are review targets, not a substitute for runtime expiry validation.
+Suggested review milestones: months 6, 12 and 18, with month 24 as the expiry checkpoint. These are review targets, not a substitute for runtime expiry validation.
 
 The deferral record shall include the governed organisation, requirement IDs, source policy and version, missing/document statuses, admitting actor, distinct authoriser, justification, restriction set, start, expiry, review schedule, evidence/provenance, revocation, remediation and audit history.
 
@@ -142,7 +143,7 @@ scope: INTERNAL_GROUP
 sponsorship:
   independent_authorisation: required
 documentary_deferral:
-  duration: P12M
+  duration: P24M
   start: first_provisional_approval
   renew_automatically: false
   items: explicitly_approved_requirement_ids
@@ -155,7 +156,7 @@ restrictions:
   cross_tenant_access: prohibited
   production_readiness: normal_gates
 reviews:
-  months: [3, 6, 9, 12]
+  months: [6, 12, 18, 24]
 ~~~
 
 This is a policy illustration, NOT an authorised Shared schema or a new enum contract.
@@ -339,7 +340,7 @@ No changes shall be described as implemented until tests and code evidence demon
 |---|---|---|
 | PEO-00 | Audit current Shared/CP/IAM/Subscriptions and unblock legal-actor model | Implementation/contract delta matrix |
 | PEO-01 | Accept ADR, specify Shared policy and evidence-applicability contracts | Contract tests, versioning and drift gate |
-| PEO-02 | Implement 12-month founding sponsorship/evidence deferral with authority, reviews and expiry | Migrations, API, policy and time-bound tests |
+| PEO-02 | Implement 24-month founding sponsorship/evidence deferral with authority, reviews and expiry | Migrations, API, policy and time-bound tests |
 | PEO-03 | Improve self-service admission and legal-form-specific evidence, preserving appropriate SoD | API integration and UI tests |
 | PEO-04 | Register Nabhold and all named subsidiaries with truthful verification/relationship state | Idempotent controlled onboarding fixtures, registry evidence |
 | PEO-05 | Authorise tenant desired state, IAM and eligible providers per subsidiary | End-to-end operations, isolation and readiness evidence |
@@ -359,9 +360,12 @@ The following tests are minimum exit criteria:
 | PEO-T03 | Payroll or regulated provider capability later enabled | New requirements evaluated before restricted operation |
 | PEO-T04 | ZuriBeans pre-incorporation application | Organisation claim recorded; no fake verified corporate entity |
 | PEO-T05 | First-party sponsor attests affiliated business | Independent authority recorded; not treated as proof of corporate control |
-| PEO-T06 | Grace is approved for selected requirements | Exact 12-month deadline; outstanding claims stay outstanding |
-| PEO-T07 | Grace reaches month 12 | Runtime denies deferral reliance; targeted reassessment and governed restriction |
+| PEO-T06 | Grace is approved for selected requirements | Exact 24-calendar-month deadline; outstanding claims stay outstanding |
+| PEO-T07 | Grace reaches month 24 | Runtime denies deferral reliance; targeted reassessment and governed restriction |
 | PEO-T08 | Rename/reapply/re-provision | Original deadline does not reset |
+| PEO-T08A | Reach the twelfth month of a valid 24-month deferral | Deferral remains bounded and in force only for explicitly listed requirements; statutory/provider gates still apply |
+| PEO-T08B | Existing pre-amendment 12-month deferral, if any | No automatic extension without independent recorded approval and policy migration |
+| PEO-T08C | Month-end/leap-day start or expired 24-month record | Anniversary expiry is deterministic in UTC; no calendar rollover or replay extends the deadline |
 | PEO-T09 | Statutory/provider check applies to payment settlement | First-party grace cannot waive it |
 | PEO-T10 | Parent attempts sibling tenant access | Denied |
 | PEO-T11 | First-party sponsor loses authority or subsidiary exits group | Review/reclassification/revocation; preserve historical Tenant ID |
