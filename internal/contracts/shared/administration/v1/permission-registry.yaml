@@ -442,3 +442,19 @@ permissions:
     delegable: false
     read_only: false
     description: "Suspend or terminally revoke federation trust or approval at the exact target scope. Current authority is required even for an emergency or the original maker."
+
+  # LA-04C: governed, independent nonactivating decisions.
+  - key: legal-actor-mandate.propose
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Propose an evidence-backed operating legal-actor mandate for one Tenant and its canonical PRIMARY Organisation; never activate, approve or infer a company from first-party status."
+  - key: legal-actor-mandate.decide
+    domain: ORGANISATION
+    risk_class: CRITICAL
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Independent nonactivating approval/rejection with legal actor verification and reviewer evidence. Maker-checker separation enforced at database layer; ACTIVE still forbidden until LA-04D."
