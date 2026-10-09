@@ -120,6 +120,10 @@ DECLARE
     t tenants%ROWTYPE;
     valid_primaries integer;
     projection text;
+    -- now() is the transaction START time, which precedes mapping
+    -- effective_from written inside the registration transaction.
+    -- Evaluate temporal eligibility at the actual deferred check time.
+    evaluation_at timestamptz := clock_timestamp();
 BEGIN
     SELECT * INTO t FROM tenants WHERE tenant_id = p_tenant_id;
     IF NOT FOUND OR NOT t.primary_organisation_enforced THEN
@@ -132,8 +136,8 @@ BEGIN
     JOIN registry.canonical_entity ce ON ce.canonical_entity_id = m.organisation_id
     WHERE m.tenant_id = p_tenant_id
       AND m.mapping_role = 'PRIMARY_ORGANISATION' AND m.status = 'ACTIVE'
-      AND m.effective_from <= now()
-      AND (m.effective_to IS NULL OR m.effective_to > now())
+      AND m.effective_from <= evaluation_at
+      AND (m.effective_to IS NULL OR m.effective_to > evaluation_at)
       AND op.status = 'ACTIVE'
       AND ce.entity_type IN ('ORGANISATION','BUYER_ORGANISATION','SUPPLIER_ORGANISATION');
 
