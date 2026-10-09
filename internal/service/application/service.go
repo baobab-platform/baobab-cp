@@ -35,7 +35,7 @@ var (
 	// ErrVersionConflict: the application changed since the caller read it.
 	ErrVersionConflict = errors.New("the application has changed; reload it and retry")
 	// ErrSelfDecision: nobody decides their own application (ADR-BCP-020 section 39).
-	ErrSelfDecision = errors.New("an applicant cannot decide their own application")
+	ErrSelfDecision = errors.New("an applicant or staff maker cannot decide their own application")
 	// ErrMarketScope: an approval may only cover markets the application requested.
 	ErrMarketScope = errors.New("the approved market scope must lie within the requested markets")
 	// ErrNotInternalEligible: the named organisation is not INTERNAL-eligible now.
