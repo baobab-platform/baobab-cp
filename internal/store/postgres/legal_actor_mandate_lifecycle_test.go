@@ -182,6 +182,42 @@ func TestLegalActorLifecycleGuardedActivationAndRevocation(t *testing.T) {
 		meta(operator), operator, second, activation); err == nil {
 		t.Fatal("suspended mandate resurrected; requires new approved proposal")
 	}
+	afterSuspend, err := db.ResolveOperatingLegalActor(ctx, legalactor.Request{
+		TenantID: tenant, OperatingOrganisationID: org, Role: "SELLER_OF_RECORD",
+		Activity: "B2B_COFFEE_SALE", Market: "ZA", EffectiveAt: time.Now().UTC(),
+	})
+	if err != nil || afterSuspend.Outcome == legalactor.Authorized {
+		t.Fatalf("suspended mandate retained authority: %+v %v", afterSuspend, err)
+	}
+	expiry := legalactor.LifecycleCommand{Action: "EXPIRE",
+		AuthorityBasisReference: "test/natural-expiry",
+		EvidenceReferences: []string{"test/expiry-evidence"}}
+	if _, err := db.TransitionOperatingLegalActorMandate(ctx, "invalid-expiry-"+domain.NewUUIDv7(),
+		meta(revoker), revoker, second, expiry); err == nil {
+		t.Fatal("open-ended mandate was marked expired without an effective_to")
+	}
+	// An already elapsed pending mandate may be formally archived without
+	// a checker decision; its expiry never produces an ACTIVE window.
+	expiredIntent := intent
+	expiredIntent.SupersedesMandateID = ""
+	expiredIntent.EffectiveFrom = time.Now().UTC().Add(-2 * time.Hour)
+	ended := time.Now().UTC().Add(-time.Hour)
+	expiredIntent.EffectiveTo = &ended
+	expiredProposal, err := db.ProposeOperatingLegalActorMandate(ctx,
+		"expired-intent-"+domain.NewUUIDv7(), meta(maker), maker, expiredIntent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expired, err := db.TransitionOperatingLegalActorMandate(ctx,
+		"archive-expired-"+domain.NewUUIDv7(), meta(revoker), revoker,
+		expiredProposal.MandateID, expiry)
+	if err != nil || expired.Status != "EXPIRED" {
+		t.Fatalf("natural expiry failed %+v %v", expired, err)
+	}
+	if _, err := db.TransitionOperatingLegalActorMandate(ctx, "expired-activate-"+domain.NewUUIDv7(),
+		meta(operator), operator, expiredProposal.MandateID, activation); err == nil {
+		t.Fatal("expired mandate was resurrected")
+	}
 	var eventCount int
 	if err = db.pool.QueryRow(ctx, `SELECT count(*) FROM messaging.outbox
  WHERE aggregate_type='legal-actor-mandate' AND aggregate_id=$1`, first).
