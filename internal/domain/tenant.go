@@ -54,8 +54,6 @@ type RegisterTenantV2 struct {
 	LegalEntityID             string            `json:"legal_entity_id,omitempty"`
 	TenantID                  string            `json:"-"`
 	Basis                     string            `json:"-"`
-	BootstrapReason           string            `json:"-"`
-	BootstrapEvidenceReference string           `json:"-"`
 	DisplayName               string            `json:"display_name"`
 	IsolationStrategy         string            `json:"isolation_strategy"`
 	ResidencyRegion           string            `json:"residency_region"`
@@ -66,6 +64,11 @@ type RegisterTenantV2 struct {
 // Validate enforces v2 identity shape without creating any legal person.
 // Admission authorization and source verification require LA-03 runtime.
 func (c RegisterTenantV2) Validate() error {
+	// Shared control-plane/v2/tenant-registration requires an AUTHORISED
+	// TenantOnboardingRequest. Legacy bootstrap remains a separate v1 route.
+	if c.Basis != RegistrationOnboarding {
+		return errors.New("v2 tenant registration requires an authorised onboarding request")
+	}
 	if !IsUUID(c.OrganisationID) {
 		return errors.New("organisation_id must be a canonical Organisation UUID")
 	}
@@ -75,8 +78,6 @@ func (c RegisterTenantV2) Validate() error {
 	return (RegisterTenant{
 		TenantOnboardingRequestID: c.TenantOnboardingRequestID,
 		TenantID: c.TenantID, Basis: c.Basis,
-		BootstrapReason: c.BootstrapReason,
-		BootstrapEvidenceReference: c.BootstrapEvidenceReference,
 		DisplayName: c.DisplayName, IsolationStrategy: c.IsolationStrategy,
 		ResidencyRegion: c.ResidencyRegion, RequestedProducts: c.RequestedProducts,
 		Metadata: c.Metadata,
