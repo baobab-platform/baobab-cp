@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v2/platform-context.schema.json",
+  "title": "Organisation-first platform context v2 (ADR-BCP-027)",
+  "description": "Versioned extension of existing authoritative runtime and provisioning contexts. Only Control Plane derives/attests primary Organisation; no client-selected legal entity or cross-tenant permission. V1 context contracts remain immutable for pinned consumers.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "PlatformContextResolveRequest": {
+      "$ref": "../v1/platform-context.schema.json#/$defs/PlatformContextResolveRequest",
+      "description": "No new client authority. CP must resolve canonical PRIMARY Organisation even when caller omits an Organisation hint."
+    },
+    "PlatformContext": {
+      "allOf": [
+        {
+          "$ref": "../v1/platform-context.schema.json#/$defs/PlatformContext"
+        },
+        {
+          "type": "object",
+          "required": [
+            "organisation_id"
+          ],
+          "properties": {
+            "organisation_id": {
+              "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+            }
+          }
+        }
+      ],
+      "description": "RUNTIME context with mandatory attested PRIMARY Organisation, never inferred from DEFAULT LegalEntity."
+    },
+    "PlatformContextValidateRequest": {
+      "$ref": "../v1/platform-context.schema.json#/$defs/PlatformContextValidateRequest"
+    },
+    "PlatformContextValidation": {
+      "allOf": [
+        {
+          "$ref": "../v1/platform-context.schema.json#/$defs/PlatformContextValidation"
+        },
+        {
+          "type": "object",
+          "required": [
+            "organisation_id"
+          ],
+          "properties": {
+            "organisation_id": {
+              "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+            }
+          }
+        }
+      ],
+      "description": "Resource-server validation of bounded principal/tenant/PRIMARY Organisation authority, including TENANT_PROVISIONING constraints from v1."
+    }
+  }
+}
