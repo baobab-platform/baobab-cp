@@ -100,6 +100,10 @@ func Resolve(request Request, candidates []Candidate, evaluatedAt time.Time) Res
 		if mandate.Status != "ACTIVE" {
 			continue
 		}
+		if evaluatedAt.Before(mandate.EffectiveFrom) ||
+			request.EffectiveAt.Before(mandate.EffectiveFrom) {
+			continue
+		}
 		if !effectiveAt(mandate, evaluatedAt) ||
 			!effectiveAt(mandate, request.EffectiveAt) {
 			hasRevokedOrExpired = true
@@ -161,7 +165,7 @@ func contains(values []string, target string) bool {
 func validRequest(request Request, evaluatedAt time.Time) bool {
 	if request.TenantID == "" || request.OperatingOrganisationID == "" ||
 		request.Activity == "" || request.EffectiveAt.IsZero() ||
-		evaluatedAt.IsZero() || !knownRole(request.Role) {
+		evaluatedAt.IsZero() || request.EffectiveAt.After(evaluatedAt) || !knownRole(request.Role) {
 		return false
 	}
 	if len(request.Market) != 2 {
