@@ -79,3 +79,19 @@ CREATE CONSTRAINT TRIGGER tenant_onboarding_organisation_match
     AFTER UPDATE ON admission.tenant_onboarding_request
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION admission.tenant_onboarding_organisation_match();
+
+-- First-party registry entries are internal operating identities, not
+-- automatic incorporation evidence. This table maps a stable Shared id to
+-- its separately reviewable canonical Organisation identity.
+CREATE TABLE registry.first_party_organisation_identity (
+    first_party_id varchar(63) PRIMARY KEY,
+    organisation_id uuid NOT NULL UNIQUE
+       REFERENCES registry.organisation_profile(canonical_entity_id),
+    identity_class text NOT NULL
+       CHECK (identity_class IN ('LEGAL_PERSON','OPERATING_BUSINESS')),
+    incorporation_claim text NOT NULL
+       CHECK (incorporation_claim IN ('NOT_INCORPORATED','REGISTERED_CLAIMED','REGISTERED_EVIDENCED')),
+    registry_evidence_reference text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (identity_class <> 'OPERATING_BUSINESS' OR incorporation_claim='NOT_INCORPORATED')
+);
