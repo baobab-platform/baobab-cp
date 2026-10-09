@@ -73,6 +73,28 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
+  - name: "content:entry:resolve"
+    description: >-
+      Allows an authenticated workload to invoke content.entry.resolve at the
+      baobab-cms resource-server audience. It grants no tenant authority: the
+      CMS must redeem the supplied PlatformContext against the actual caller
+      through the Control Plane. It reads PUBLISHED entries only. It is not
+      content:entry:preview.
+    audience: ["baobab-cms"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "content:entry:preview"
+    description: >-
+      Additionally allows reading unpublished (DRAFT) entries through
+      content.entry.resolve with preview_mode true. It is required in
+      addition to content:entry:resolve, never instead of it, and grants no
+      tenant authority. Issue it only to workloads that serve editorial
+      preview.
+    audience: ["baobab-cms"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
   - name: "intelligence:evidence:search"
     description: >-
       Allows an authenticated workload to invoke
