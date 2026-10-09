@@ -329,9 +329,10 @@ workloads:
 	}
 }
 
-// The real Shared registry: the provisioner is the only workload that lists the purpose, and while it is PROVISIONED the
-// Control Plane honours none of it.
-func TestSharedRegistryProvisionerPurposeIsAllocatedNotActive(t *testing.T) {
+// The real Shared registry has one narrowly approved FB-05 staging-evidence
+// principal, distinct from the production provisioner. Its staging authority
+// must not accidentally activate production provisioning or another workload.
+func TestSharedRegistryProvisionerPurposeIsScopedToApprovedEvidence(t *testing.T) {
 	dir := os.Getenv("SHARED_CONTRACTS_DIR")
 	if dir == "" {
 		t.Skip("SHARED_CONTRACTS_DIR not set; skipping baobab-platform/shared contract-compatibility test")
@@ -343,9 +344,16 @@ func TestSharedRegistryProvisionerPurposeIsAllocatedNotActive(t *testing.T) {
 	if registry.AllowsContextPurpose("baobab-cp-provisioning-workload", ContextPurposeTenantProvisioning) {
 		t.Fatal("the provisioner is PROVISIONED: allocating a purpose is not activating it")
 	}
+	const evidence = "baobab-cp-provisioning-evidence-workload"
+	if !registry.IsActive(evidence) || !registry.AllowsContextPurpose(evidence, ContextPurposeTenantProvisioning) {
+		t.Fatal("the separately allocated staging evidence workload must retain its bounded purpose")
+	}
+	if !registry.AllowsScope(evidence, "erp:provision") || registry.AllowsScope(evidence, "tenant:bootstrap") {
+		t.Fatal("staging evidence workload has unexpected scope allocation")
+	}
 	for client := range registry.active {
-		if registry.AllowsContextPurpose(client, ContextPurposeTenantProvisioning) {
-			t.Fatalf("%s must not hold TENANT_PROVISIONING", client)
+		if registry.AllowsContextPurpose(client, ContextPurposeTenantProvisioning) && client != evidence {
+			t.Fatalf("%s is not the approved staging-evidence workload", client)
 		}
 	}
 }
