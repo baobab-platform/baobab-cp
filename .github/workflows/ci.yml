@@ -53,14 +53,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: LA04D temporary exact Go formatting capture
-        run: |
-          for file in internal/service/legalactor/lifecycle.go internal/store/postgres/legal_actor_mandate_lifecycle.go internal/store/postgres/legal_actor_mandate_lifecycle_evidence.go internal/store/postgres/legal_actor_mandate_lifecycle_test.go api/legal_actor_mandate_lifecycle_handler.go api/legal_actor_mandate_lifecycle_handler_test.go api/router.go internal/config/config.go cmd/controlplane/main.go; do
-            gofmt -w "$file"
-            printf 'LA04D_FORMATTED_FILE:%s:' "$file"
-            base64 -w0 "$file"
-            printf '\n'
-          done
       - run: go test -race ./...
       - name: Test NBO founding-enterprise fixture guardrails
         run: python3 -m unittest discover -s scripts/showcase -p 'test_nbo_*.py'
