@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/admission/v2/onboarding.schema.json",
+  "title": "Organisation-bound governed Tenant onboarding v2 (ADR-BCP-026/027)",
+  "description": "TenantOnboardingRequest v2 binds one approved AdmissionDecision to a pre-tenant PRIMARY Organisation before provisioning. Retains v1 maker/checker lifecycle and desired-state product semantics. Distinct from legal-actor mandates and company verification.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "TenantOnboardingRequestV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_onboarding_request_id",
+        "client_application_id",
+        "admission_decision_id",
+        "organisation_id",
+        "status",
+        "desired_state",
+        "reason",
+        "correlation_id",
+        "requested_by",
+        "requested_at",
+        "identity_resolution_policy_reference"
+      ],
+      "properties": {
+        "tenant_onboarding_request_id": {
+          "$ref": "../v1/onboarding.schema.json#/$defs/tenantOnboardingRequestId"
+        },
+        "client_application_id": {
+          "$ref": "../v1/application.schema.json#/$defs/clientApplicationId"
+        },
+        "admission_decision_id": {
+          "$ref": "../v1/decision.schema.json#/$defs/admissionDecisionId"
+        },
+        "organisation_id": {
+          "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+        },
+        "identity_resolution_policy_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "status": {
+          "$ref": "../v1/onboarding.schema.json#/$defs/onboardingRequestStatus"
+        },
+        "desired_state": {
+          "$ref": "../v1/onboarding.schema.json#/$defs/OnboardingDesiredState"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "requested_by": {
+          "$ref": "../v1/application.schema.json#/$defs/principalId"
+        },
+        "requested_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "authorised_by": {
+          "$ref": "../v1/application.schema.json#/$defs/principalId"
+        },
+        "authorised_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "authorisation_policy_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "fulfilled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "cancelled_by": {
+          "$ref": "../v1/application.schema.json#/$defs/principalId"
+        },
+        "cancelled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "cancellation_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "default_legal_entity_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId"
+        },
+        "default_mapping_authority_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "dependentRequired": {
+        "default_legal_entity_id": [
+          "default_mapping_authority_reference"
+        ],
+        "default_mapping_authority_reference": [
+          "default_legal_entity_id"
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "REQUESTED"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "authorised_by"
+                  ]
+                },
+                {
+                  "required": [
+                    "authorised_at"
+                  ]
+                },
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "fulfilled_at"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "AUTHORISED"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "authorised_by",
+              "authorised_at",
+              "authorisation_policy_reference"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "tenant_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "fulfilled_at"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "FULFILLED"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "authorised_by",
+              "authorised_at",
+              "authorisation_policy_reference",
+              "tenant_id",
+              "fulfilled_at"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "CANCELLED"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "cancelled_by",
+              "cancelled_at",
+              "cancellation_reason"
+            ],
+            "not": {
+              "required": [
+                "tenant_id"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
