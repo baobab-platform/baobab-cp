@@ -9,34 +9,34 @@ var testAt = time.Date(2026, time.October, 9, 12, 0, 0, 0, time.UTC)
 
 func testRequest() Request {
 	return Request{
-		TenantID: "tn_zuribeans",
+		TenantID:                "tn_zuribeans",
 		OperatingOrganisationID: "org_zuribeans",
-		Role: "SELLER_OF_RECORD",
-		Activity: "B2B_COFFEE_SALE",
-		Market: "ZA",
-		EffectiveAt: testAt,
+		Role:                    "SELLER_OF_RECORD",
+		Activity:                "B2B_COFFEE_SALE",
+		Market:                  "ZA",
+		EffectiveAt:             testAt,
 	}
 }
 
 func testMandate() Candidate {
 	approvedAt := testAt.Add(-time.Hour)
 	return Candidate{
-		MandateID: "aef48e41-6cbd-4406-8d4a-8a1da4677b45",
-		TenantID: "tn_zuribeans",
-		OperatingOrganisationID: "org_zuribeans",
-		ResponsibleLegalEntityID: "NABHOLD",
-		Roles: []string{"SELLER_OF_RECORD"},
-		ActivityScope: []string{"B2B_COFFEE_SALE"},
-		MarketScope: []string{"ZA"},
-		Status: "ACTIVE",
-		AuthorityBasisReference: "governance/approved-nabhold-za-seller",
-		EvidenceReferences: []string{"verification/legal-actor"},
+		MandateID:                       "aef48e41-6cbd-4406-8d4a-8a1da4677b45",
+		TenantID:                        "tn_zuribeans",
+		OperatingOrganisationID:         "org_zuribeans",
+		ResponsibleLegalEntityID:        "NABHOLD",
+		Roles:                           []string{"SELLER_OF_RECORD"},
+		ActivityScope:                   []string{"B2B_COFFEE_SALE"},
+		MarketScope:                     []string{"ZA"},
+		Status:                          "ACTIVE",
+		AuthorityBasisReference:         "governance/approved-nabhold-za-seller",
+		EvidenceReferences:              []string{"verification/legal-actor"},
 		LegalActorVerificationReference: "registry/verified-company",
-		EffectiveFrom: testAt.Add(-2 * time.Hour),
-		CreatedBy: "maker",
-		ApprovedBy: "independent-checker",
-		ApprovedAt: &approvedAt,
-		ActorVerified: true,
+		EffectiveFrom:                   testAt.Add(-2 * time.Hour),
+		CreatedBy:                       "maker",
+		ApprovedBy:                      "independent-checker",
+		ApprovedAt:                      &approvedAt,
+		ActorVerified:                   true,
 	}
 }
 
@@ -58,7 +58,7 @@ func TestResolveAuthorisedScopedLegalActor(t *testing.T) {
 
 func TestResolveLegalActorStrictScope(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		change func(*Request, *Candidate)
 	}{
 		{"other tenant", func(r *Request, _ *Candidate) { r.TenantID = "tn_ea" }},
@@ -120,7 +120,7 @@ func TestResolveOverlappingMandatesAmbiguous(t *testing.T) {
 
 func TestResolveNeverTreatsDeclarationAsActorVerification(t *testing.T) {
 	tests := []struct {
-		name string
+		name   string
 		change func(*Candidate)
 	}{
 		{"unverified actor", func(m *Candidate) { m.ActorVerified = false }},
