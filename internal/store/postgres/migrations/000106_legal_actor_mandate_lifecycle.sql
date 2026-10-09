@@ -25,6 +25,13 @@ CREATE TRIGGER operating_legal_actor_mandate_transition_immutable
 BEFORE UPDATE OR DELETE ON registry.operating_legal_actor_mandate_transition
 FOR EACH ROW EXECUTE FUNCTION registry.operating_legal_actor_mandate_transition_immutable();
 
+-- Extend the LA-04C replay ledger without permitting mutation of historic rows.
+ALTER TABLE registry.operating_legal_actor_mandate_command
+  DROP CONSTRAINT operating_legal_actor_mandate_command_command_kind_check;
+ALTER TABLE registry.operating_legal_actor_mandate_command
+  ADD CONSTRAINT operating_legal_actor_mandate_command_command_kind_check
+  CHECK (command_kind IN ('PROPOSE','DECIDE','LIFECYCLE'));
+
 -- Adapt original append-only guard only for fields populated as a governed
 -- consequence of the independent decision at first activation.
 CREATE OR REPLACE FUNCTION registry.operating_legal_actor_mandate_history_guard()
