@@ -167,7 +167,7 @@ func (s *Store) registerTenant(ctx context.Context, key string, metadata basesto
         payload,_=json.Marshal(struct{
           Command domain.RegisterTenant
           PrimaryOrganisationID string `json:"organisation_id"`
-        }{c,v2.OrganisationID})
+        }{identityForHash,v2.OrganisationID})
     }
 	sum := sha256.Sum256(payload)
 	hash := hex.EncodeToString(sum[:])
