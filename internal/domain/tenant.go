@@ -86,11 +86,6 @@ func (c RegisterTenantV2) Validate() error {
 
 type Tenant struct {
 	TenantID          string            `json:"tenant_id"`
-	// PrimaryOrganisationID is derived from the authoritative PRIMARY mapping,
-	// never the DEFAULT legal actor. Excluded from v1 JSON until LA-03 versioning.
-	PrimaryOrganisationID string         `json:"-"`
-	// LegalEntityID is a nullable compatibility projection in PostgreSQL.
-	// An empty string means no DEFAULT; v1 registration still requires one.
 	LegalEntityID     string            `json:"legal_entity_id"`
 	DisplayName       string            `json:"display_name"`
 	IsolationStrategy string            `json:"isolation_strategy"`
@@ -99,6 +94,10 @@ type Tenant struct {
 	DesiredState      string            `json:"desired_state"`
 	ObservedState     string            `json:"observed_state"`
 	Revision          int64             `json:"revision"`
+
+	// PrimaryOrganisationID is derived from the authoritative PRIMARY mapping,
+	// never the DEFAULT legal actor. Excluded from v1 JSON until LA-03 versioning.
+	PrimaryOrganisationID string `json:"-"`
 }
 
 type EntitlementQuery struct {
