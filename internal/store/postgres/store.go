@@ -149,14 +149,18 @@ func (s *Store) registerTenant(ctx context.Context, key string, metadata basesto
 		(c.Basis == domain.RegistrationOnboarding && step == nil) {
 		return domain.Operation{}, basestore.ErrRegistrationBasis
 	}
-	// The hash covers the basis and its justification too, so replaying a
-	// key with a different request, reason or evidence is a conflict.
+	// The hash covers all applicant/authority fields. The server-minted
+    // TenantID must NOT participate in v2 request idempotency: an HTTP retry
+    // necessarily mints a new provisional ID before the prior operation is
+    // looked up. Keep the old v1 hash unchanged for existing keys.
+    identityForHash:=c
+    if v2!=nil{identityForHash.TenantID=""}
 	payload, _ := json.Marshal(struct {
 		domain.RegisterTenant
 		Basis    string `json:"basis"`
 		Reason   string `json:"bootstrap_reason,omitempty"`
 		Evidence string `json:"evidence_reference,omitempty"`
-	}{c, c.Basis, c.BootstrapReason, c.BootstrapEvidenceReference})
+	}{identityForHash, c.Basis, c.BootstrapReason, c.BootstrapEvidenceReference})
     // The Organisation binding is part of v2 idempotency identity; it must
     // not be replayable with a different reviewed operating business.
     if v2!=nil{
