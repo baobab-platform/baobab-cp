@@ -126,18 +126,55 @@ func (s *Store) UpdateTenantLifecycle(ctx context.Context, tenantID string, next
 	return nil
 }
 func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basestore.RequestMetadata, c domain.RegisterTenant, step basestore.RegistrationStep) (domain.Operation, error) {
+	return s.registerTenant(ctx, key, metadata, c, nil, step)
+}
+
+// RegisterTenantV2 implements the internal Organisation-first transactional
+// registration boundary. It requires the independent, immutable binding
+// established by PrepareOnboardingOrganisation. HTTP exposure is a separate,
+// versioned and authenticated CP API change; old v1 commands remain strict.
+func (s *Store) RegisterTenantV2(ctx context.Context, key string, metadata basestore.RequestMetadata, c domain.RegisterTenantV2, step basestore.RegistrationStep) (domain.Operation, error) {
+	if err := c.Validate(); err != nil {
+		return domain.Operation{}, err
+	}
+	if step == nil {
+		return domain.Operation{}, basestore.ErrRegistrationBasis
+	}
+	return s.registerTenant(ctx, key, metadata, domain.RegisterTenant{
+		TenantOnboardingRequestID: c.TenantOnboardingRequestID,
+		Basis:                     domain.RegistrationOnboarding, TenantID: c.TenantID, LegalEntityID: c.LegalEntityID,
+		DisplayName: c.DisplayName, IsolationStrategy: c.IsolationStrategy,
+		ResidencyRegion: c.ResidencyRegion, RequestedProducts: c.RequestedProducts, Metadata: c.Metadata,
+	}, &c, step)
+}
+
+func (s *Store) registerTenant(ctx context.Context, key string, metadata basestore.RequestMetadata, c domain.RegisterTenant, v2 *domain.RegisterTenantV2, step basestore.RegistrationStep) (domain.Operation, error) {
 	if (c.Basis != domain.RegistrationOnboarding && c.Basis != domain.RegistrationBootstrap) ||
 		(c.Basis == domain.RegistrationOnboarding && step == nil) {
 		return domain.Operation{}, basestore.ErrRegistrationBasis
 	}
-	// The hash covers the basis and its justification too, so replaying a
-	// key with a different request, reason or evidence is a conflict.
+	// The hash covers all applicant/authority fields. The server-minted
+	// TenantID must NOT participate in v2 request idempotency: an HTTP retry
+	// necessarily mints a new provisional ID before the prior operation is
+	// looked up. Keep the old v1 hash unchanged for existing keys.
+	identityForHash := c
+	if v2 != nil {
+		identityForHash.TenantID = ""
+	}
 	payload, _ := json.Marshal(struct {
 		domain.RegisterTenant
 		Basis    string `json:"basis"`
 		Reason   string `json:"bootstrap_reason,omitempty"`
 		Evidence string `json:"evidence_reference,omitempty"`
-	}{c, c.Basis, c.BootstrapReason, c.BootstrapEvidenceReference})
+	}{identityForHash, c.Basis, c.BootstrapReason, c.BootstrapEvidenceReference})
+	// The Organisation binding is part of v2 idempotency identity; it must
+	// not be replayable with a different reviewed operating business.
+	if v2 != nil {
+		payload, _ = json.Marshal(struct {
+			Command               domain.RegisterTenant
+			PrimaryOrganisationID string `json:"organisation_id"`
+		}{identityForHash, v2.OrganisationID})
+	}
 	sum := sha256.Sum256(payload)
 	hash := hex.EncodeToString(sum[:])
 	action := "tenant.registration.requested"
@@ -160,6 +197,17 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 		return domain.Operation{}, err
 	}
 	defer tx.Rollback(ctx)
+	// A simultaneous retry must wait for the original registration commit
+	// before checking the key. Otherwise both transactions can observe no
+	// operation and race to attach the same reviewed Organisation.
+	// The namespace and hash are advisory only; request_hash is still checked
+	// after acquiring the lock, so a hash collision grants no authority.
+	if v2 != nil {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+			"tenant-registration-v2/"+key); err != nil {
+			return domain.Operation{}, fmt.Errorf("serialize v2 tenant registration retry: %w", err)
+		}
+	}
 	var op domain.Operation
 	var prior string
 	err = tx.QueryRow(ctx, `SELECT operation_id::text,tenant_id,state,revision,created_at,updated_at,request_hash FROM provisioning_operations WHERE idempotency_key=$1`, key).Scan(&op.OperationID, &op.TenantID, &op.State, &op.Revision, &op.CreatedAt, &op.UpdatedAt, &prior)
@@ -181,8 +229,54 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return domain.Operation{}, err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO legal_entities(legal_entity_id)VALUES($1)ON CONFLICT DO NOTHING`, c.LegalEntityID); err != nil {
-		return domain.Operation{}, err
+	if v2 != nil {
+		// The exact Organisation is bound to THIS AUTHORISED onboarding
+		// request by an independent reviewer. The referenced canonical
+		// entity must still exist and remain unassigned at registration.
+		var approvedID, requestStatus string
+		requestUUID, parseErr := domain.ParseResourceID(domain.TenantOnboardingRequestIDPrefix, c.TenantOnboardingRequestID)
+		if parseErr != nil {
+			return domain.Operation{}, parseErr
+		}
+		err = tx.QueryRow(ctx, `SELECT b.organisation_id::text,r.status
+            FROM admission.tenant_onboarding_organisation b
+            JOIN admission.tenant_onboarding_request r
+              ON r.tenant_onboarding_request_id=b.tenant_onboarding_request_id
+            JOIN registry.organisation_profile op ON op.canonical_entity_id=b.organisation_id
+            JOIN registry.canonical_entity ce ON ce.canonical_entity_id=b.organisation_id
+            WHERE b.tenant_onboarding_request_id=$1::uuid
+              AND op.status='ACTIVE' AND ce.entity_type='ORGANISATION'
+              AND ce.tenant_id IS NULL
+            FOR UPDATE OF r,ce`, requestUUID).Scan(&approvedID, &requestStatus)
+		if err != nil {
+			return domain.Operation{}, fmt.Errorf("missing reviewed, unassigned Organisation binding: %w", err)
+		}
+		if requestStatus != "AUTHORISED" || approvedID != v2.OrganisationID {
+			return domain.Operation{}, errors.New("tenant Organisation differs from authorised, reviewed identity binding")
+		}
+		// A separate incorporated LegalEntity may only be attached here
+		// when actually VERIFIED and owned by the *same* Organisation.
+		// Parent-as-seller mandates for ZuriBeans/Equator remain LA-04.
+		if c.LegalEntityID != "" {
+			var verifiedOrg string
+			err = tx.QueryRow(ctx, `SELECT organisation_id::text FROM registry.legal_entity_profile
+                WHERE legal_entity_id=$1 AND verification_state='VERIFIED'
+                  AND source_authority NOT IN ('shared-governance','control-plane-registration')
+                  AND (effective_to IS NULL OR effective_to>clock_timestamp())
+                  AND NOT EXISTS (
+                    SELECT 1 FROM registry.first_party_organisation_identity fp
+                    WHERE fp.organisation_id=registry.legal_entity_profile.organisation_id
+                      AND fp.identity_class='OPERATING_BUSINESS'
+                      AND fp.incorporation_claim='NOT_INCORPORATED'
+                  )`, c.LegalEntityID).Scan(&verifiedOrg)
+			if err != nil || verifiedOrg != v2.OrganisationID {
+				return domain.Operation{}, errors.New("default legal actor requires verified, same-Organisation LegalEntity; other legal actors need LA-04 mandate")
+			}
+		}
+	} else {
+		if _, err = tx.Exec(ctx, `INSERT INTO legal_entities(legal_entity_id)VALUES($1)ON CONFLICT DO NOTHING`, c.LegalEntityID); err != nil {
+			return domain.Operation{}, err
+		}
 	}
 	// c.Metadata is a nil map on every request that omits "metadata" (it has
 	// no default in domain.RegisterTenant), and pgx's jsonb codec sends a nil
@@ -193,13 +287,17 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 	// but cannot silently bypass this transaction's Organisation mapping.
 	if _, err = tx.Exec(ctx, `INSERT INTO tenants(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region,metadata,
 		registration_basis,bootstrap_reason,bootstrap_evidence_reference,primary_organisation_enforced)
-		VALUES($1,$2,$3,$4,$5,COALESCE($6,'{}'::jsonb),$7,NULLIF($8,''),NULLIF($9,''),true)`, c.TenantID, c.LegalEntityID, c.DisplayName,
+		VALUES($1,NULLIF($2,''),$3,$4,$5,COALESCE($6,'{}'::jsonb),$7,NULLIF($8,''),NULLIF($9,''),true)`, c.TenantID, c.LegalEntityID, c.DisplayName,
 		c.IsolationStrategy, c.ResidencyRegion, c.Metadata, c.Basis, c.BootstrapReason, c.BootstrapEvidenceReference); err != nil {
 		return domain.Operation{}, err
 	}
 	// ADR-BCP-018: ensure organisation canonical entity, profile, and default
 	// tenant_legal_entity_mapping in the same registration transaction.
-	if err = s.insertOrganisationOnRegister(ctx, tx, c, metadata, key); err != nil {
+	if v2 != nil {
+		if err = s.insertOrganisationOnRegisterV2(ctx, tx, *v2, metadata, key); err != nil {
+			return domain.Operation{}, err
+		}
+	} else if err = s.insertOrganisationOnRegister(ctx, tx, c, metadata, key); err != nil {
 		return domain.Operation{}, err
 	}
 	for _, product := range c.RequestedProducts {

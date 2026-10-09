@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/organisation/v2/pre-tenant-admission.schema.json",
+  "title": "Organisation Identity Before Tenant Registration (ADR-BCP-027)",
+  "description": "Canonical Organisation identity is resolved/created after approved admission, before a Tenant exists; separate from a legally verified company profile. Existing v1 OrganisationAdmissionRequest is tenant-first and remains unchanged.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "PreTenantOrganisationResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "admission_decision_id",
+        "identity",
+        "resolution_outcome",
+        "evaluated_at",
+        "source_authority"
+      ],
+      "properties": {
+        "admission_decision_id": {
+          "$ref": "../../admission/v1/decision.schema.json#/$defs/admissionDecisionId"
+        },
+        "identity": {
+          "$ref": "../../admission/v2/business-identity.schema.json#/$defs/BusinessIdentity"
+        },
+        "resolution_outcome": {
+          "type": "string",
+          "enum": [
+            "NEW_ORGANISATION",
+            "EXISTING_ORGANISATION",
+            "QUARANTINED"
+          ]
+        },
+        "organisation_id": {
+          "$ref": "domain.schema.json#/$defs/organisationId"
+        },
+        "candidate_organisation_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "domain.schema.json#/$defs/organisationId"
+          }
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_authority": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "verification_state": {
+          "$ref": "../v1/domain.schema.json#/$defs/verificationState"
+        },
+        "evidence_references": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "resolution_outcome": {
+                "enum": [
+                  "NEW_ORGANISATION",
+                  "EXISTING_ORGANISATION"
+                ]
+              }
+            },
+            "required": [
+              "resolution_outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "organisation_id"
+            ],
+            "not": {
+              "required": [
+                "candidate_organisation_ids"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "resolution_outcome": {
+                "const": "QUARANTINED"
+              }
+            },
+            "required": [
+              "resolution_outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "candidate_organisation_ids"
+            ],
+            "not": {
+              "required": [
+                "organisation_id"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "This record does not carry tenant_id, legal_entity_id or platform capability grants; ambiguity quarantines."
+    },
+    "TenantPrimaryOrganisation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "primary_organisation_id",
+        "primary_mapping_id",
+        "effective_from",
+        "mapping_status"
+      ],
+      "properties": {
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "primary_organisation_id": {
+          "$ref": "domain.schema.json#/$defs/organisationId"
+        },
+        "primary_mapping_id": {
+          "$ref": "../v1/domain.schema.json#/$defs/tenantOrganisationMappingId"
+        },
+        "mapping_status": {
+          "const": "ACTIVE"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "default_legal_entity_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId"
+        },
+        "default_legal_entity_mapping_id": {
+          "$ref": "../v1/domain.schema.json#/$defs/tenantLegalEntityMappingId"
+        }
+      },
+      "dependentRequired": {
+        "default_legal_entity_id": [
+          "default_legal_entity_mapping_id"
+        ],
+        "default_legal_entity_mapping_id": [
+          "default_legal_entity_id"
+        ]
+      },
+      "description": "Exactly one authoritative PRIMARY Organisation. Optional DEFAULT LegalEntity is a compatibility projection, not identity or permission."
+    }
+  }
+}

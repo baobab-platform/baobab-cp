@@ -81,6 +81,10 @@ type Dependencies struct {
 	// /v1/tenants/bootstrap-registrations, which registers a tenant that
 	// predates the admission workflow. Off unless explicitly configured.
 	TenantBootstrapRegistration bool
+	// OrganisationFirstV2 exposes the reviewed pre-tenant Organisation and
+	// canonical Shared v2 registration endpoints. Default-off until the
+	// enterprise onboarding programme certifies its service interfaces.
+	OrganisationFirstV2 bool
 	// Environment names the deployment (config.Config.Environment). Planning
 	// treats anything but development, test, integration or sandbox,
 	// including unset, as production: providers must then be permitted in
@@ -217,7 +221,8 @@ type API struct {
 	// without it, registration fails closed.
 	onboarding *onboarding.Service
 	// tenantBootstrap enables the migration-only bootstrap registration.
-	tenantBootstrap bool
+	tenantBootstrap     bool
+	organisationFirstV2 bool
 	// grants and environment feed shadow evaluation of role-guarded
 	// routes against AdministrativeGrants (ADR-BCP-020 section 144). With
 	// no grants reader, shadow evaluation is off.
@@ -244,7 +249,8 @@ type API struct {
 func New(dependencies Dependencies) http.Handler {
 	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships,
 		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration,
-		grants: dependencies.AdministrativeGrants, environment: dependencies.Environment, platformAccounts: dependencies.PlatformAccounts, markets: dependencies.Markets, verification: dependencies.Verification}
+		organisationFirstV2: dependencies.OrganisationFirstV2,
+		grants:              dependencies.AdministrativeGrants, environment: dependencies.Environment, platformAccounts: dependencies.PlatformAccounts, markets: dependencies.Markets, verification: dependencies.Verification}
 	catalogue, err := administration.DefaultCatalogue()
 	if err != nil {
 		panic(err)
@@ -278,6 +284,12 @@ func New(dependencies Dependencies) http.Handler {
 	// request, or, for a tenant that predates admission, by the
 	// migration-only bootstrap route.
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants", a.register)
+	if a.organisationFirstV2 {
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).
+			Post("/v2/tenant-onboarding/{requestID}/primary-organisation", a.prepareOrganisationV2)
+		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).
+			Post("/v2/tenants", a.registerV2)
+	}
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:bootstrap"), a.requireAdminRole(nil, true)).Post("/v1/tenants/bootstrap-registrations", a.bootstrapRegister)
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}", a.getTenant)
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(tenantIDFromPath, false)).Post("/v1/tenants/{tenantID}/suspend", a.tenantLifecycleAction("suspend"))
