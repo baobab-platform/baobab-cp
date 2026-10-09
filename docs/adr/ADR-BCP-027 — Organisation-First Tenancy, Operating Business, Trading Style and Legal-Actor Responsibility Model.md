@@ -1,6 +1,7 @@
 # ADR-BCP-027 — Organisation-First Tenancy, Operating Business, Trading Style and Legal-Actor Responsibility Model
 
-**Status:** Proposed — subject to architecture, security and legal-governance approval  
+**Status:** Accepted — Normative Platform Architecture (2026-10-09)  
+**Decision approval:** Accepted at the platform decision owner's direction on 2026-10-09. Independent approval of each real operating mandate and implementation/security certification remain required.  
 **Date:** 2026-10-09  
 **Decision owners:** Baobab Platform Architecture / Nabhold Group Governance / Control Plane / Enterprise Integration / Security  
 **Primary repository:** \`baobab-platform/baobab-cp\`  
@@ -12,10 +13,10 @@
 **Commerce authority:** \`baobab-platform/baobab-trade\` (MedusaJS), within approved seller/contracting context  
 **Initial markets:** South Africa, Uganda  
 **Decision type:** Foundational amendment and compatibility migration for \`legal_entity_id\`, trading businesses and independent tenants  
-**Refines (upon acceptance):** ADR-BCP-004, ADR-BCP-012, ADR-BCP-017, ADR-BCP-018, ADR-BCP-019, ADR-BCP-023, ADR-BCP-024 and BCP-TS-ONBOARDING-001; Shared tenancy and registration contracts  
-**Related proposal:** ADR-BCP-026 — Progressive Enterprise Onboarding, Founding-Group Exemption and Capability-Specific Evidence Governance (Proposed at drafting time). This decision is independently reviewable; where both are accepted they shall be read together.  
+**Refines:** ADR-BCP-004, ADR-BCP-012, ADR-BCP-017, ADR-BCP-018, ADR-BCP-019, ADR-BCP-023, ADR-BCP-024 and BCP-TS-ONBOARDING-001; Shared tenancy and registration contracts  
+**Related accepted decision:** ADR-BCP-026 — Progressive Enterprise Onboarding, Founding-Group Exemption and Capability-Specific Evidence Governance. Both accepted decisions SHALL be read together, with Shared contract changes and runtime certification still outstanding.  
 **Retains:** ADR-BCP-003/005/009/011, ADR-BCP-020/021/022, ADR-SHARED-012/013/014/015, ADR-IAM-0033; existing isolation, explicit entitlement, governance and approval controls.  
-**Implementation status:** DESIGN PROPOSAL ONLY; no source code, schema or live tenant is modified by the ADR.
+**Implementation status:** Accepted design decision only; implementing contracts, migrations, code, real operating mandates and live tenant changes are pending. This ADR does not itself modify runtime state.
 
 ---
 
@@ -38,6 +39,25 @@ The old \`Tenant.LegalEntityID\` and \`tenants.legal_entity_id\` SHALL be evolve
 Capabilities requiring a legal actor SHALL resolve a **purpose-, role-, market- and time-bound legal responsibility mapping** (the \`OperatingLegalActorMandate\` conceptual boundary below) in addition to tenant/organisation context. Ambiguous, expired, unevidenced or unauthorised mappings SHALL fail closed for the affected action, not automatically for unrelated tenant capabilities.
 
 This ADR changes **identity and responsibility modelling**, not statutory legal duties, commercial subscription prices or provider readiness requirements.
+
+### 1.1 Founding-group declared incorporation and legal actor status (2026-10-09)
+
+The current first-party onboarding programme SHALL use the following **group-governance declarations**. They are not independent legal-verification decisions or automatically valid operating mandates.
+
+| Business | Separately incorporated today? | Identity and group relationship | Responsibility during transition |
+|---|---|---|---|
+| Nabhold Group Africa | Group declares South African incorporation | Holding company/founding principal | Own legal obligations; may assume specific authorised operating-business roles |
+| ZuriBeans | **No** | Independently operating trade business formerly Nabhold cross-border trade unit | Nabhold is proposed responsible legal actor only for documented authorised role/market/activity combinations |
+| Equator & Estate Co. | **No** | Independently operating property/construction/hospitality business awaiting incorporation | Nabhold is proposed responsible legal actor only for documented authorised role/market/activity combinations |
+| Thamani Global | Group declares CIPC registration | Independently incorporated Nabhold subsidiary; former logistics-unit history | Ordinarily its own legal actor for new business; Nabhold affiliation does not transfer legal liability automatically |
+
+**Terminology:** ZuriBeans and Equator & Estate Co. SHALL be treated as *founding operating businesses* rather than represented as legally incorporated subsidiaries. Thamani may be described as a declared incorporated subsidiary; official registration and corporate ownership/control SHALL be independently supported before being marked VERIFIED.
+
+**Specific, not blanket responsibility:** The group intends Nabhold to assume "most responsibility" for the two unincorporated businesses. That intention SHALL become a matrix of separately governed mandates for each role (e.g. contracting party, legal issuer, importer/exporter, employer, property owner, seller, payment beneficiary), activity, market, effective window, representative authority, supporting evidence, restrictions and revocation. No authority for property title, building permits, import/export permissions or third-party settlement is inferred from sponsorship or a default legal-entity mapping.
+
+**Operational autonomy:** Each business retains its own PRIMARY Organisation, justified tenant, digital estate, IAM scope and market choices. Sharing the Nabhold LegalEntity for approved roles SHALL NOT share tenant data access, automatically make intercompany transactions, or reassign an independent operating business's primary Organisation.
+
+**Evidence and migration:** The stable first-party IDs in Shared remain intact for compatibility. Audit old LegalEntityProfiles and VERIFIED records against the actual claims/evidence. Correct status only through governed, logged and history-preserving transitions. Never generate a fictitious incorporated person for ZuriBeans or Equator & Estate.
 
 ## 2. Historical and commercial context
 
@@ -115,7 +135,7 @@ Existing ADR-BCP-004 defines optional BusinessUnits and says they should not bec
 10. An operational business may have an isolated tenant even where its seller/invoice issuer is another legal entity.
 11. ERP financial postings require an actual responsible legal actor and valid finance baseline; a business unit/tenant never substitutes for a legal entity.
 12. Previous legal responsibility is not retroactively changed by subsequent incorporation, rebranding or revised mappings.
-13. No universal 12-month legal waiver exists: the proposed ADR-BCP-026 defers specific *platform evidence*, not law or provider conditions.
+13. No universal 12-month legal waiver exists: ADR-BCP-026 defers specific *platform evidence*, not law or provider conditions.
 14. The zero-priced founding-group INTERNAL classification remains subject to its own authoritative policy; trading under Nabhold does not create a shortcut to INTERNAL eligibility.
 15. Provider health, subscription, IAM and tenant readiness remain separate from legal-person status.
 
@@ -424,7 +444,7 @@ Implement reuse-first operating mandate policy under Shared/CP, with signed/appr
 Update IAM projection, Trade seller/merchant contexts, ERP company/finance baselines, document issuance, payments where present, digital estates and legal-person enforcement. Capability-by-capability readiness; do not pretend unavailable provider integrations are live.
 
 ### LA-06 — Founding-group registration and demonstration
-Onboard Nabhold, ZuriBeans, Thamani and Equator & Estate Co. from the actual legal/evidence status, each with governed Organisation and independently justified tenant. Use Nabhold's legal actor for ZuriBeans only after an authorised mandate and confirmation that Nabhold may legitimately undertake the requested activities in the specific markets. Do not infer that Thamani must use Nabhold's actor if Thamani is already legally established for those activities.
+Onboard Nabhold, ZuriBeans, Thamani and Equator & Estate Co. from the declared 2026-10-09 operating/legal-status baseline, independently verifying claims as required. **ZuriBeans and Equator & Estate are not separately incorporated**: register each as its own operating Organisation (and justified Tenant) without an invented incorporated LegalEntity. Nabhold may be selected for specifically authorised activities of each operating business only with an explicit, scoped operating mandate and actual legal/provider permission. **Thamani is declared CIPC-registered and a Nabhold subsidiary**: preserve its separate incorporated identity and responsibility, verifying the two claims separately; do not route its new transactions through Nabhold merely because it was historically a logistics unit. Keep founding sponsorship, INTERNAL eligibility and statutory identity evidence distinct.
 
 ### LA-07 — Cutover, rollback and operational acceptance
 Certify historical/legal attribution, RLS/tenant isolation, multi-provider operational behavior, reconciliation, expiry, restore, failures and cross-market scenarios. Change/suspend only impacted capabilities on a missing legal actor; never destroy a tenant to correct a legal reference.
@@ -459,6 +479,12 @@ Certify historical/legal attribution, RLS/tenant isolation, multi-provider opera
 | LA-T24 | Missing legal-actor evidence on an unrelated catalogue draft | Draft may proceed if otherwise eligible |
 | LA-T25 | Contract/source lock incompatible with changed schema | CI contract-drift gate fails until corrected |
 
+| LA-T26 | Equator & Estate uses approved Nabhold legal actor for one scoped property/service activity | Its own Organisation remains PRIMARY; unrelated roles and markets remain restricted |
+| LA-T27 | Thamani declares CIPC registration and Nabhold control | Both status claims retain independent evidence and review paths |
+| LA-T28 | Nabhold legal actor serves ZuriBeans and Equator & Estate tenants | Two separate mandate scopes; no IAM or data crossover; correct accounting attribution |
+| LA-T29 | First-party registry names unincorporated business | Registry identity recognised without automatic company-incorporation VERIFIED |
+| LA-T30 | Required property/permit or cross-border authority absent | Block only dependent activity; preserve unrelated permitted tenant capabilities |
+
 Include PostgreSQL migration/rollback, Go unit/integration/concurrency, Shared JSON Schema, OpenAPI generation/drift, IAM audience/context/isolation, ERP/Trade contract and digital-estate browser tests. A green mock-only test is not live regulatory or provider acceptance.
 
 ## 14. Authority, legal review and non-goals
@@ -485,7 +511,7 @@ For any proposed live trading-as arrangement, obtain recorded organisational aut
 | Remove legal_entity_id from every engine and transaction | Rejected | Destroys legal, accounting and settlement attribution |
 | **Organisation-first Tenant plus scoped legal-actor mandate and nullable compatibility projection** | **Chosen** | Preserves operating autonomy, genuine legal responsibility, lifecycle continuity and cross-engine integrity |
 
-## 16. Amendments to existing architecture, if accepted
+## 16. Accepted architectural amendments (implementation pending)
 
 1. **ADR-BCP-004:** Clarify that BusinessUnits are usually subdivisions, but an independently governed operating Organisation can have a separate Tenant even while a parent LegalEntity is legally responsible.
 2. **ADR-BCP-012:** Preserve transaction classification based on actual legal actors, not tenants/brands, and require provenance for cross-tenant same-legal-entity transactions.
@@ -494,11 +520,11 @@ For any proposed live trading-as arrangement, obtain recorded organisational aut
 5. **ADR-BCP-019:** Represent operating entity, trading name, legal actor and documentary standing separately to applicants and administrators.
 6. **ADR-BCP-023:** First-party governance evidence verifies only the specific assertion it supports. Correct inappropriate automatic promotion of unrelated legal incorporation claims.
 7. **ADR-BCP-024:** Organisation kind and tenant attestation remain authoritative; legal-actor attestation is additive rather than a way around them.
-8. **Proposed ADR-BCP-026:** Implement its progressive and founding grace via real Organisation-first tenants, without treating a first-party registry entry as incorporation proof.
+8. **ADR-BCP-026:** Implement its progressive and founding grace via real Organisation-first tenants, without treating a first-party registry entry as incorporation proof.
 9. **Shared tenancy and registration contracts:** Replace perpetual tenant-to-default-legal-entity obligation with mandatory primary Organisation, conditional legal-actor relationships and versioned compatibility.
 10. **ADR-SHARED-015:** Desired-state plans, approvals, provider selection, readiness, observed state and drift remain authoritative, not replaced by a special-case registration.
 
-**Acceptance prerequisite:** Architecture and Security must approve the identity/mapping and consumer migration; Nabhold legal/corporate governance must approve any specific trading-as/legal-actor mandate. The ADR alone does not implement these changes.
+**Implementation prerequisites:** Architecture and Security SHALL review and approve the detailed identity/mapping migration and affected consumer integration before deploying changes. Nabhold legal/corporate governance SHALL approve each real trading-as/legal-actor mandate with the required market/activity evidence. **Acceptance of this ADR does not certify, deploy or authorise an operating mandate, legal incorporation, tenant access or production transaction.**
 
 ---
 
