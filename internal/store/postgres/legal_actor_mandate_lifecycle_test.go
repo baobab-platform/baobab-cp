@@ -89,6 +89,12 @@ func TestLegalActorLifecycleGuardedActivationAndRevocation(t *testing.T) {
 	activation := legalactor.LifecycleCommand{Action: "ACTIVATE",
 		AuthorityBasisReference: "test/third-person-activation", EvidenceReferences: []string{"test/activation-acceptance"}}
 	first := createApproved()
+	if _, err := db.pool.Exec(ctx, `UPDATE registry.operating_legal_actor_mandate
+		SET status='ACTIVE', approved_by=$2::uuid, approved_at=clock_timestamp(),
+		legal_actor_verification_reference='test/official-legal-registry'
+		WHERE mandate_id=$1::uuid`, first, checker); err == nil {
+		t.Fatal("direct SQL activation bypassed transition history and third human operator")
+	}
 	if _, err = db.TransitionOperatingLegalActorMandate(ctx, "selfactivate-"+domain.NewUUIDv7(),
 		meta(checker), checker, first, activation); err == nil {
 		t.Fatal("independent checker activated own decision")
@@ -143,6 +149,23 @@ func TestLegalActorLifecycleGuardedActivationAndRevocation(t *testing.T) {
 	if err != nil || newActive.Status != "ACTIVE" {
 		t.Fatalf("successor after revoke %+v %v", newActive, err)
 	}
+	// An ACTIVE row is not authorising if its checker-approved verification
+	// reference disappears from the independently verified legal profile.
+	_, err = db.pool.Exec(ctx, `UPDATE registry.legal_entity_profile
+		SET evidence_references='["test/retracted"]'::jsonb
+		WHERE legal_entity_id=$1`, entity)
+	if err != nil { t.Fatal(err) }
+	afterWithdrawal, err := db.ResolveOperatingLegalActor(ctx, legalactor.Request{
+		TenantID: tenant, OperatingOrganisationID: org, Role: "SELLER_OF_RECORD",
+		Activity: "B2B_COFFEE_SALE", Market: "ZA", EffectiveAt: time.Now().UTC(),
+	})
+	if err != nil || afterWithdrawal.Outcome == legalactor.Authorized {
+		t.Fatalf("removed verification evidence retained actor authority: %+v %v", afterWithdrawal, err)
+	}
+	_, err = db.pool.Exec(ctx, `UPDATE registry.legal_entity_profile
+		SET evidence_references='["test/official-legal-registry"]'::jsonb
+		WHERE legal_entity_id=$1`, entity)
+	if err != nil { t.Fatal(err) }
 	suspend := legalactor.LifecycleCommand{Action: "SUSPEND",
 		AuthorityBasisReference: "test/immediate-stop", EvidenceReferences: []string{"test/stop-case"}}
 	suspended, err := db.TransitionOperatingLegalActorMandate(ctx, "suspend-"+domain.NewUUIDv7(),
