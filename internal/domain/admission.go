@@ -182,24 +182,24 @@ type DecisionSummary struct {
 // JSON documents: the Control Plane validates them against Shared and
 // never interprets them as canonical state (section 7).
 type ClientApplication struct {
-	ID                   string                `json:"client_application_id"`
-	Reference            string                `json:"reference"`
-	Status               ApplicationStatus     `json:"status"`
-	Channel              ApplicationChannel    `json:"application_channel"`
-	Version              int64                 `json:"version"`
-	ApplicantPrincipalID string                `json:"applicant_principal_id"`
-	OpenedByStaffPrincipalID string            `json:"opened_by_staff_principal_id,omitempty"`
-	AssignedReviewer     string                `json:"assigned_reviewer,omitempty"`
-	OrganisationProfile  json.RawMessage       `json:"organisation_profile"`
-	Requirements         json.RawMessage       `json:"requirements"`
-	RequestedMarkets     []RequestedMarket     `json:"requested_markets"`
-	Evidence             []ApplicationEvidence `json:"evidence"`
-	InformationRequests  []InformationRequest  `json:"information_requests"`
-	Decision             *DecisionSummary      `json:"decision,omitempty"`
-	CreatedAt            time.Time             `json:"created_at"`
-	UpdatedAt            time.Time             `json:"updated_at"`
-	SubmittedAt          *time.Time            `json:"submitted_at,omitempty"`
-	ClosedAt             *time.Time            `json:"closed_at,omitempty"`
+	ID                       string                `json:"client_application_id"`
+	Reference                string                `json:"reference"`
+	Status                   ApplicationStatus     `json:"status"`
+	Channel                  ApplicationChannel    `json:"application_channel"`
+	Version                  int64                 `json:"version"`
+	ApplicantPrincipalID     string                `json:"applicant_principal_id"`
+	OpenedByStaffPrincipalID string                `json:"opened_by_staff_principal_id,omitempty"`
+	AssignedReviewer         string                `json:"assigned_reviewer,omitempty"`
+	OrganisationProfile      json.RawMessage       `json:"organisation_profile"`
+	Requirements             json.RawMessage       `json:"requirements"`
+	RequestedMarkets         []RequestedMarket     `json:"requested_markets"`
+	Evidence                 []ApplicationEvidence `json:"evidence"`
+	InformationRequests      []InformationRequest  `json:"information_requests"`
+	Decision                 *DecisionSummary      `json:"decision,omitempty"`
+	CreatedAt                time.Time             `json:"created_at"`
+	UpdatedAt                time.Time             `json:"updated_at"`
+	SubmittedAt              *time.Time            `json:"submitted_at,omitempty"`
+	ClosedAt                 *time.Time            `json:"closed_at,omitempty"`
 }
 
 // ApplicantView is what the applicant sees: internal assignment is omitted.

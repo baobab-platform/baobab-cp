@@ -153,25 +153,25 @@ func (h clientApplicationHandler) create(w http.ResponseWriter, r *http.Request)
 // staffCreate is an authenticated platform operation, never the anonymous
 // applicant-creation route. Identity and maker authority come from the server.
 func (h clientApplicationHandler) staffCreate(w http.ResponseWriter, r *http.Request) {
-    key := r.Header.Get("Idempotency-Key")
-    if key != "" && (len(key) < 16 || len(key) > 128) {
-        problem(w, r, http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 128 characters", false)
-        return
-    }
-    operator, ok := h.actor(w, r, false)
-    if !ok {
-        return
-    }
-    raw, ok := readBody(w, r)
-    if !ok {
-        return
-    }
-    app, replayed, err := h.svc.CreateForStaff(r.Context(), operator, raw, key)
-    status := http.StatusCreated
-    if replayed {
-        status = http.StatusOK
-    }
-    h.respond(w, r, status, app, err)
+	key := r.Header.Get("Idempotency-Key")
+	if key != "" && (len(key) < 16 || len(key) > 128) {
+		problem(w, r, http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 128 characters", false)
+		return
+	}
+	operator, ok := h.actor(w, r, false)
+	if !ok {
+		return
+	}
+	raw, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	app, replayed, err := h.svc.CreateForStaff(r.Context(), operator, raw, key)
+	status := http.StatusCreated
+	if replayed {
+		status = http.StatusOK
+	}
+	h.respond(w, r, status, app, err)
 }
 
 func (h clientApplicationHandler) listMine(w http.ResponseWriter, r *http.Request) {
