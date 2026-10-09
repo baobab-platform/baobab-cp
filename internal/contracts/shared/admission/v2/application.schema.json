@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/admission/v2/application.schema.json",
+  "title": "Progressive ClientApplication v2 (ADR-BCP-026)",
+  "description": "Versioned replacement for v1 submitted-application incorporation fields. DRAFT may be incomplete. SUBMITTED/UNDER_REVIEW/APPROVED require legitimate business identity and at least one market, not a universal company registration number. This is NOT an implemented CP route.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "ClientApplicationV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "client_application_id",
+        "reference",
+        "status",
+        "application_channel",
+        "version",
+        "applicant_principal_id",
+        "requirements",
+        "requested_markets",
+        "evidence",
+        "information_requests",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "client_application_id": {
+          "$ref": "../v1/application.schema.json#/$defs/clientApplicationId"
+        },
+        "reference": {
+          "$ref": "../v1/application.schema.json#/$defs/applicationReference"
+        },
+        "status": {
+          "$ref": "../v1/application.schema.json#/$defs/applicationStatus"
+        },
+        "application_channel": {
+          "$ref": "../v1/application.schema.json#/$defs/applicationChannel"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "applicant_principal_id": {
+          "$ref": "../v1/application.schema.json#/$defs/principalId"
+        },
+        "assigned_reviewer": {
+          "$ref": "../v1/application.schema.json#/$defs/principalId"
+        },
+        "business_identity": {
+          "$ref": "business-identity.schema.json#/$defs/BusinessIdentity"
+        },
+        "requirements": {
+          "$ref": "../v1/application.schema.json#/$defs/BusinessRequirements"
+        },
+        "requested_markets": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "../v1/application.schema.json#/$defs/requestedMarket"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "../v1/application.schema.json#/$defs/ApplicationEvidence"
+          }
+        },
+        "information_requests": {
+          "type": "array",
+          "items": {
+            "$ref": "../v1/application.schema.json#/$defs/InformationRequest"
+          }
+        },
+        "decision": {
+          "$ref": "../v1/application.schema.json#/$defs/DecisionSummary"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "submitted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "closed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "opened_by_staff_principal_id": {
+          "$ref": "../v1/application.schema.json#/$defs/principalId"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "SUBMITTED",
+                  "VALIDATING",
+                  "INFORMATION_REQUIRED",
+                  "UNDER_REVIEW",
+                  "APPROVED",
+                  "REJECTED",
+                  "CANCELLED"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "submitted_at",
+              "business_identity"
+            ],
+            "properties": {
+              "requested_markets": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "APPROVED",
+                  "REJECTED"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "decision",
+              "closed_at"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "decision"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "application_channel": {
+                "enum": [
+                  "INTERNAL_GROUP",
+                  "ASSISTED_ENTERPRISE"
+                ]
+              }
+            },
+            "required": [
+              "application_channel"
+            ]
+          },
+          "then": {
+            "required": [
+              "opened_by_staff_principal_id"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "opened_by_staff_principal_id"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ClientApplicationDraftUpdateV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "business_identity": {
+          "$ref": "business-identity.schema.json#/$defs/BusinessIdentity"
+        },
+        "requirements": {
+          "$ref": "../v1/application.schema.json#/$defs/BusinessRequirements"
+        },
+        "requested_markets": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "../v1/application.schema.json#/$defs/requestedMarket"
+          }
+        }
+      },
+      "description": "Authenticated applicant changes the business draft; cannot assert applicant_principal_id, application_channel, proof of verification, subscription type, Tenant or LegalEntity ID."
+    }
+  }
+}
