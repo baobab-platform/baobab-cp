@@ -592,6 +592,7 @@ func New(dependencies Dependencies) http.Handler {
 		}
 
 		review := []func(http.Handler) http.Handler{a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)}
+		r.With(review...).Post("/v1/admission/applications", apps.staffCreate)
 		r.With(review...).Get("/v1/admission/applications", apps.queue)
 		r.With(review...).Get("/v1/admission/applications/{applicationID}", apps.get)
 		r.With(review...).Get("/v1/admission/applications/{applicationID}/decision", apps.getDecision)
