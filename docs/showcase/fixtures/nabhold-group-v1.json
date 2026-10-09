@@ -1,0 +1,73 @@
+{
+  "programme": "founding-enterprise-showcase",
+  "fixture_version": 1,
+  "disclaimer": "Business-reported claims only. No record is registry verified, legally incorporated by this fixture, admitted, tenant-provisioned or permitted to trade.",
+  "organisations": [
+    {
+      "fixture_key": "NABHOLD",
+      "name": "Nabhold Group Africa",
+      "admission_channel": "INTERNAL_GROUP",
+      "reported_incorporation": "REGISTERED_CLAIM_ZA",
+      "jurisdiction_claim": "ZA",
+      "parent_fixture_key": null,
+      "market_interests": [
+        "ZA"
+      ],
+      "requirements": {
+        "requires_accounting": true,
+        "notes": "Group administration; no automatic subsidiary data access."
+      }
+    },
+    {
+      "fixture_key": "ZURIBEANS",
+      "name": "ZuriBeans",
+      "admission_channel": "INTERNAL_GROUP",
+      "reported_incorporation": "REGISTRATION_APPLICATION_PENDING",
+      "jurisdiction_claim": null,
+      "parent_fixture_key": "NABHOLD",
+      "market_interests": [
+        "ZA",
+        "UG"
+      ],
+      "requirements": {
+        "operates_b2b": true,
+        "trades_cross_border": true,
+        "manages_inventory": true,
+        "requires_supplier_management": true,
+        "notes": "Market intent only; no legal presence, imports or exports authorised."
+      }
+    },
+    {
+      "fixture_key": "THAMANI-GLOBAL",
+      "name": "Thamani Global",
+      "admission_channel": "INTERNAL_GROUP",
+      "reported_incorporation": "REGISTERED_CLAIM_ZA",
+      "jurisdiction_claim": "ZA",
+      "parent_fixture_key": "NABHOLD",
+      "market_interests": [
+        "ZA",
+        "UG"
+      ],
+      "requirements": {
+        "operates_b2c": true,
+        "sells_online": true,
+        "manages_inventory": true,
+        "notes": "B2C and shipping/logistics business intent. Uganda incorporation pending; no live carrier or payment authority."
+      }
+    },
+    {
+      "fixture_key": "EQUATOR-ESTATE",
+      "name": "Equator & Estate Co.",
+      "admission_channel": "INTERNAL_GROUP",
+      "reported_incorporation": "UNVERIFIED",
+      "jurisdiction_claim": null,
+      "parent_fixture_key": "NABHOLD",
+      "market_interests": [
+        "ZA"
+      ],
+      "requirements": {
+        "notes": "Property, construction and hospitality business intent; status and licences unverified."
+      }
+    }
+  ]
+}
