@@ -197,6 +197,17 @@ func (s *Store) registerTenant(ctx context.Context, key string, metadata basesto
 		return domain.Operation{}, err
 	}
 	defer tx.Rollback(ctx)
+	// A simultaneous retry must wait for the original registration commit
+	// before checking the key. Otherwise both transactions can observe no
+	// operation and race to attach the same reviewed Organisation.
+	// The namespace and hash are advisory only; request_hash is still checked
+	// after acquiring the lock, so a hash collision grants no authority.
+	if v2 != nil {
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+			"tenant-registration-v2/"+key); err != nil {
+			return domain.Operation{}, fmt.Errorf("serialize v2 tenant registration retry: %w", err)
+		}
+	}
 	var op domain.Operation
 	var prior string
 	err = tx.QueryRow(ctx, `SELECT operation_id::text,tenant_id,state,revision,created_at,updated_at,request_hash FROM provisioning_operations WHERE idempotency_key=$1`, key).Scan(&op.OperationID, &op.TenantID, &op.State, &op.Revision, &op.CreatedAt, &op.UpdatedAt, &prior)
