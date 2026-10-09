@@ -188,9 +188,12 @@ func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basesto
 	// no default in domain.RegisterTenant), and pgx's jsonb codec sends a nil
 	// map as SQL NULL rather than "{}" - COALESCE keeps that from tripping the
 	// NOT NULL DEFAULT '{}' constraint on tenants.metadata.
+	// The governed Store path always opts in to strict PRIMARY integrity.
+	// Direct historical bootstrap fixtures remain staged for LA-03 review,
+	// but cannot silently bypass this transaction's Organisation mapping.
 	if _, err = tx.Exec(ctx, `INSERT INTO tenants(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region,metadata,
-		registration_basis,bootstrap_reason,bootstrap_evidence_reference)
-		VALUES($1,$2,$3,$4,$5,COALESCE($6,'{}'::jsonb),$7,NULLIF($8,''),NULLIF($9,''))`, c.TenantID, c.LegalEntityID, c.DisplayName,
+		registration_basis,bootstrap_reason,bootstrap_evidence_reference,primary_organisation_enforced)
+		VALUES($1,$2,$3,$4,$5,COALESCE($6,'{}'::jsonb),$7,NULLIF($8,''),NULLIF($9,''),true)`, c.TenantID, c.LegalEntityID, c.DisplayName,
 		c.IsolationStrategy, c.ResidencyRegion, c.Metadata, c.Basis, c.BootstrapReason, c.BootstrapEvidenceReference); err != nil {
 		return domain.Operation{}, err
 	}
