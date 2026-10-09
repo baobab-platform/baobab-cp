@@ -44,8 +44,52 @@ type RegisterTenant struct {
 	Metadata                   map[string]string `json:"metadata,omitempty"`
 }
 
+// RegisterTenantV2 is the Organisation-first command shape from Shared LA-01.
+// No endpoint currently decodes it: LA-03 must independently attest the
+// AUTHORISED onboarding request, PRIMARY Organisation and optional DEFAULT
+// LegalEntity before persisting. The old RegisterTenant remains strict v1.
+type RegisterTenantV2 struct {
+	TenantOnboardingRequestID string            `json:"tenant_onboarding_request_id"`
+	OrganisationID            string            `json:"organisation_id"`
+	LegalEntityID             string            `json:"legal_entity_id,omitempty"`
+	TenantID                  string            `json:"-"`
+	Basis                     string            `json:"-"`
+	BootstrapReason           string            `json:"-"`
+	BootstrapEvidenceReference string           `json:"-"`
+	DisplayName               string            `json:"display_name"`
+	IsolationStrategy         string            `json:"isolation_strategy"`
+	ResidencyRegion           string            `json:"residency_region"`
+	RequestedProducts         []string          `json:"requested_products,omitempty"`
+	Metadata                  map[string]string `json:"metadata,omitempty"`
+}
+
+// Validate enforces v2 identity shape without creating any legal person.
+// Admission authorization and source verification require LA-03 runtime.
+func (c RegisterTenantV2) Validate() error {
+	if !IsUUID(c.OrganisationID) {
+		return errors.New("organisation_id must be a canonical Organisation UUID")
+	}
+	if c.LegalEntityID != "" && !IsCanonicalLegalEntityID(c.LegalEntityID) {
+		return errors.New("legal_entity_id must be a canonical identifier when supplied; aliases are v1-only")
+	}
+	return (RegisterTenant{
+		TenantOnboardingRequestID: c.TenantOnboardingRequestID,
+		TenantID: c.TenantID, Basis: c.Basis,
+		BootstrapReason: c.BootstrapReason,
+		BootstrapEvidenceReference: c.BootstrapEvidenceReference,
+		DisplayName: c.DisplayName, IsolationStrategy: c.IsolationStrategy,
+		ResidencyRegion: c.ResidencyRegion, RequestedProducts: c.RequestedProducts,
+		Metadata: c.Metadata,
+	}).validateCommon()
+}
+
 type Tenant struct {
 	TenantID          string            `json:"tenant_id"`
+	// PrimaryOrganisationID is derived from the authoritative PRIMARY mapping,
+	// never the DEFAULT legal actor. Excluded from v1 JSON until LA-03 versioning.
+	PrimaryOrganisationID string         `json:"-"`
+	// LegalEntityID is a nullable compatibility projection in PostgreSQL.
+	// An empty string means no DEFAULT; v1 registration still requires one.
 	LegalEntityID     string            `json:"legal_entity_id"`
 	DisplayName       string            `json:"display_name"`
 	IsolationStrategy string            `json:"isolation_strategy"`
@@ -137,6 +181,18 @@ func TransitionLifecycle(from, to LifecycleStatus) (LifecycleStatus, bool) {
 }
 
 func (c RegisterTenant) Validate() error {
+	// Preserve the v1 contract's mandatory legal-entity input. A new command
+	// must opt into v2 rather than accidentally relaxing existing endpoints.
+	if !ValidLegalEntityID(c.LegalEntityID) {
+		return errors.New("legal_entity_id must be a canonical legal-entity identifier (e.g. THAMANI-GLOBAL) or an accepted legacy alias")
+	}
+	return c.validateCommon()
+}
+
+// validateCommon carries lifecycle and isolation requirements shared by v1
+// and the future Organisation-first v2 command without fabricating any
+// placeholder legal entity for validation.
+func (c RegisterTenant) validateCommon() error {
 	switch c.Basis {
 	case RegistrationOnboarding:
 		if _, err := ParseResourceID(TenantOnboardingRequestIDPrefix, c.TenantOnboardingRequestID); err != nil {
@@ -157,9 +213,6 @@ func (c RegisterTenant) Validate() error {
 		}
 	default:
 		return errors.New("a tenant is registered only for an onboarding request or as a bootstrap tenant")
-	}
-	if !ValidLegalEntityID(c.LegalEntityID) {
-		return errors.New("legal_entity_id must be a canonical legal-entity identifier (e.g. THAMANI-GLOBAL) or an accepted legacy alias")
 	}
 	if !ValidTenantID(c.TenantID) {
 		// TenantID is minted by NewTenantID before Validate runs, so this
