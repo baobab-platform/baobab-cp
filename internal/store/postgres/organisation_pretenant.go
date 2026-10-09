@@ -18,12 +18,20 @@ import (
 // reviewer distinct from both requester and authoriser, with case evidence.
 // It neither invents a LegalEntityProfile nor admits a new tenant. Replay of
 // exactly the same binding is idempotent.
-func (s *Store) PrepareOnboardingOrganisation(ctx context.Context, key string, metadata basestore.RequestMetadata, reviewerPrincipalID, requestID, policyReference, evidenceReference string) (string, error) {
+func (s *Store) PrepareOnboardingOrganisation(ctx context.Context, key string, metadata basestore.RequestMetadata, reviewerPrincipalID, requestID, policyReference, evidenceReference string, reviewedExistingOrganisation ...string) (string, error) {
     requestUUID, err := domain.ParseResourceID(domain.TenantOnboardingRequestIDPrefix, requestID)
     if err != nil { return "", err }
     if !domain.IsUUID(reviewerPrincipalID) || strings.TrimSpace(policyReference)=="" ||
        strings.TrimSpace(evidenceReference)=="" || strings.TrimSpace(key)=="" {
         return "", errors.New("independent reviewer, identity policy, evidence and idempotency key are mandatory")
+    }
+    var selected string
+    if len(reviewedExistingOrganisation)>1 {
+        return "",errors.New("only one reviewed existing Organisation may be supplied")
+    }
+    if len(reviewedExistingOrganisation)==1 {
+        selected=reviewedExistingOrganisation[0]
+        if !domain.IsUUID(selected) {return "",errors.New("existing Organisation ID must be canonical UUID")}
     }
     tx, err := s.pool.Begin(ctx)
     if err != nil { return "", err }
@@ -47,7 +55,8 @@ func (s *Store) PrepareOnboardingOrganisation(ctx context.Context, key string, m
       Scan(&existing,&existingPolicy,&existingEvidence,&existingReviewer)
     if err==nil {
         if existingPolicy!=policyReference || existingEvidence!=evidenceReference ||
-            existingReviewer!=reviewerPrincipalID {
+            existingReviewer!=reviewerPrincipalID ||
+            (selected!=""&&selected!=existing) {
             return "", basestore.ErrIdempotencyConflict
         }
         if err=tx.Commit(ctx);err!=nil{return "",err}
@@ -56,29 +65,58 @@ func (s *Store) PrepareOnboardingOrganisation(ctx context.Context, key string, m
     if !errors.Is(err,pgx.ErrNoRows){return "",err}
     if status!="AUTHORISED" { return "", errors.New("Organisation can be bound only to AUTHORISED onboarding") }
 
-    orgID:=domain.NewUUIDv7()
-    // A recognised applicant name is a claim, not independent incorporation
-    // evidence. Organisation owns no Tenant or legal-entity reference yet.
-    _,err=tx.Exec(ctx,`INSERT INTO registry.canonical_entity
-      (canonical_entity_id,entity_type,status)
-      VALUES($1::uuid,'ORGANISATION','active')`,orgID)
-    if err!=nil{return "",err}
-    _,err=tx.Exec(ctx,`INSERT INTO registry.organisation_profile
-      (canonical_entity_id,display_name,verification_state,source_authority,status,effective_from,
-       evidence_references)
-      VALUES($1::uuid,$2,'UNVERIFIED','control-plane-approved-admission','ACTIVE',$3,
-        jsonb_build_array($4::text))`,orgID,name,time.Now().UTC(),evidenceReference)
-    if err!=nil{return "",err}
+    orgID:=selected
+    created:=false
+    if selected=="" {
+        orgID=domain.NewUUIDv7()
+        // A first-time operating applicant receives an UNVERIFIED identity
+        // and no fabricated LegalEntityProfile.
+        _,err=tx.Exec(ctx,`INSERT INTO registry.canonical_entity
+          (canonical_entity_id,entity_type,status)
+          VALUES($1::uuid,'ORGANISATION','active')`,orgID)
+        if err!=nil{return "",err}
+        _,err=tx.Exec(ctx,`INSERT INTO registry.organisation_profile
+          (canonical_entity_id,display_name,verification_state,source_authority,status,effective_from,
+           evidence_references)
+          VALUES($1::uuid,$2,'UNVERIFIED','control-plane-approved-admission','ACTIVE',$3,
+            jsonb_build_array($4::text))`,orgID,name,time.Now().UTC(),evidenceReference)
+        if err!=nil{return "",err}
+        created=true
+    } else {
+        // Reuse an existing stable *first-party* operating Organisation
+        // only when the reviewer explicitly selected its UUID and its
+        // registered business name matches the approved application name.
+        // Never guess or merge by a display-name search.
+        var trusted string
+        err=tx.QueryRow(ctx,`SELECT i.organisation_id::text
+          FROM registry.first_party_organisation_identity i
+          JOIN registry.canonical_entity ce
+            ON ce.canonical_entity_id=i.organisation_id
+          JOIN registry.organisation_profile op
+            ON op.canonical_entity_id=i.organisation_id
+          WHERE i.organisation_id=$1::uuid
+            AND ce.entity_type='ORGANISATION'
+            AND ce.tenant_id IS NULL
+            AND op.status='ACTIVE'
+            AND lower(btrim(op.display_name))=lower(btrim($2))`,
+          selected,name).Scan(&trusted)
+        if err!=nil || trusted!=selected{
+            return "",errors.New("reviewed first-party Organisation identity does not match applicant")
+        }
+    }
     _,err=tx.Exec(ctx,`INSERT INTO admission.tenant_onboarding_organisation
       (tenant_onboarding_request_id,organisation_id,admission_decision_id,
        reviewed_by,identity_resolution_policy_reference,evidence_reference)
       VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6)`,
         requestUUID,orgID,decision,reviewerPrincipalID,policyReference,evidenceReference)
     if err!=nil{return "",err}
+    action:="organisation_identity.bound"
+    eventType:=""
+    if created {action="organisation.created";eventType=events.OrganisationCreated}
     if err=s.recordOrganisationChange(ctx,tx,metadata,key,events.OrganisationChange{
-        AuditAction:"organisation.created",
+        AuditAction:action,
         Target:"organisation/"+orgID,AggregateType:"organisation",AggregateID:orgID,
-        EventType:events.OrganisationCreated,
+        EventType:eventType,
         Data:map[string]any{"organisation_id":orgID,"verification_state":"UNVERIFIED",
             "source_authority":"control-plane-approved-admission","effective_from":events.Timestamp(time.Now().UTC())},
         AuditPayload:map[string]any{"onboarding_request_id":requestID,
