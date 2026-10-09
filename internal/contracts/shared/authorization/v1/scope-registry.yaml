@@ -644,3 +644,18 @@ scopes:
     allowed_actors: ["human"]
     privileged: true
     grants_authority: false
+
+  # LA-04D scopes grant transport admission only, not statutory permission.
+  - name: "legal-actor-mandate:activate"
+    description: "Human platform operator for independently checked, evidence-backed legal-actor mandate activation; not the maker or checker, and not self-executing authority."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
+  - name: "legal-actor-mandate:terminate"
+    description: "Human platform operator to immediately suspend, revoke or expire a scoped legal actor mandate, without granting or restoring authority."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false

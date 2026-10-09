@@ -80,7 +80,7 @@ func TestOperatingLegalActorMandateActivationGate(t *testing.T) {
 	var mandateID string
 	activeArgs := append(append([]any(nil), params...), "ACTIVE")
 	if err := db.pool.QueryRow(ctx, insert, activeArgs...).Scan(&mandateID); err == nil ||
-		!strings.Contains(err.Error(), "operating_legal_actor_mandate_activation_gate") {
+		!strings.Contains(err.Error(), "legal mandate insert must be PENDING") {
 		t.Fatalf("ACTIVE without governed activation route was not blocked by dedicated gate: %v", err)
 	}
 
@@ -100,14 +100,14 @@ func TestOperatingLegalActorMandateActivationGate(t *testing.T) {
 
 	if _, err := db.pool.Exec(ctx, `UPDATE registry.operating_legal_actor_mandate
 		SET status='REVOKED', revoked_at=$2
-		WHERE mandate_id=$1::uuid`, mandateID, time.Now().UTC()); err != nil {
-		t.Fatalf("revocation of inert mandate failed: %v", err)
+		WHERE mandate_id=$1::uuid`, mandateID, time.Now().UTC()); err == nil {
+		t.Fatal("direct SQL revocation bypassed LA-04D governed transition")
 	}
 	var status string
 	if err := db.pool.QueryRow(ctx, `SELECT status FROM
 		registry.operating_legal_actor_mandate WHERE mandate_id=$1::uuid`,
-		mandateID).Scan(&status); err != nil || status != "REVOKED" {
-		t.Fatalf("mandate did not preserve revoked history: %s %v", status, err)
+		mandateID).Scan(&status); err != nil || status != "PENDING" {
+		t.Fatalf("unauthorised mutation changed inert mandate: %s %v", status, err)
 	}
 }
 

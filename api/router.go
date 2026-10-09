@@ -89,6 +89,9 @@ type Dependencies struct {
 	// Approval is inert; migration 000104 still refuses ACTIVE.
 	LegalActorMandatesV2 bool
 	LegalActorMandates   legalActorMandateStore
+	// LA-04D activation is opt-in for nonproduction integration/staging only.
+	LegalActorLifecycleEnabled bool
+	LegalActorLifecycle        legalActorLifecycleStore
 	// Environment names the deployment (config.Config.Environment). Planning
 	// treats anything but development, test, integration or sandbox,
 	// including unset, as production: providers must then be permitted in
@@ -300,6 +303,19 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/legal-actor-mandates", mandates.propose)
 		r.With(a.authorize(a.adminVerifier, "human", "legal-actor-mandate:decide"), a.requireAdminRole(nil, true)).
 			Post("/v2/legal-actor-mandates/{mandateID}/decision", mandates.decide)
+	}
+	// No implicit production go-live. LA-05 consumer certification remains open.
+	lifecycleEnvironmentAllowed := false
+	switch dependencies.Environment {
+	case "development", "test", "integration", "sandbox", "staging":
+		lifecycleEnvironmentAllowed = true
+	}
+	if dependencies.LegalActorLifecycleEnabled && lifecycleEnvironmentAllowed && dependencies.LegalActorLifecycle != nil {
+		lifecycle := legalActorLifecycleHandler{store: dependencies.LegalActorLifecycle, api: a}
+		r.With(a.authorize(a.adminVerifier, "human", "legal-actor-mandate:activate"), a.requireAdminRole(nil, true)).
+			Post("/v2/legal-actor-mandates/{mandateID}/activate", lifecycle.activate)
+		r.With(a.authorize(a.adminVerifier, "human", "legal-actor-mandate:terminate"), a.requireAdminRole(nil, true)).
+			Post("/v2/legal-actor-mandates/{mandateID}/terminate", lifecycle.terminate)
 	}
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:bootstrap"), a.requireAdminRole(nil, true)).Post("/v1/tenants/bootstrap-registrations", a.bootstrapRegister)
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(tenantIDFromPath, false)).Get("/v1/tenants/{tenantID}", a.getTenant)

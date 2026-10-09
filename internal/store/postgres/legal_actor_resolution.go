@@ -40,6 +40,10 @@ func (s *Store) ResolveOperatingLegalActor(ctx context.Context, request legalact
 		          AND lp.verified_at IS NOT NULL
 		          AND lp.verified_at <= $3
 		          AND jsonb_array_length(lp.evidence_references) > 0
+		          AND EXISTS (
+		              SELECT 1 FROM jsonb_array_elements_text(lp.evidence_references) evidence
+		              WHERE evidence.value = m.legal_actor_verification_reference
+		          )
 		          AND lp.effective_from <= $3
 		          AND (lp.effective_to IS NULL OR lp.effective_to > $3)
 		          AND NOT EXISTS (

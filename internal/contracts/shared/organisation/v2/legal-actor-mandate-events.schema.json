@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.baobab-platform.com/organisation/v2/legal-actor-mandate-events.schema.json",
-  "title": "LA-04C mandate intent and checker decision event payloads",
+  "title": "LA-04C/LA-04D mandate governance and lifecycle event payloads",
   "description": "Non-activating records of maker proposal and checker decision. Payloads carry identifiers and status only, no evidence contents or legal verification claims.",
   "type": "object",
   "additionalProperties": false,
@@ -67,6 +67,106 @@
         "decision_id": {
           "type": "string",
           "format": "uuid"
+        }
+      }
+    },
+    "MandateActivated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mandate_id",
+        "tenant_id",
+        "operating_organisation_id",
+        "status"
+      ],
+      "properties": {
+        "mandate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "domain.schema.json#/$defs/organisationId"
+        },
+        "status": {
+          "const": "ACTIVE"
+        }
+      }
+    },
+    "MandateSuspended": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mandate_id",
+        "tenant_id",
+        "operating_organisation_id",
+        "status"
+      ],
+      "properties": {
+        "mandate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "domain.schema.json#/$defs/organisationId"
+        },
+        "status": {
+          "const": "SUSPENDED"
+        }
+      }
+    },
+    "MandateRevoked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mandate_id",
+        "tenant_id",
+        "operating_organisation_id",
+        "status"
+      ],
+      "properties": {
+        "mandate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "domain.schema.json#/$defs/organisationId"
+        },
+        "status": {
+          "const": "REVOKED"
+        }
+      }
+    },
+    "MandateExpired": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mandate_id",
+        "tenant_id",
+        "operating_organisation_id",
+        "status"
+      ],
+      "properties": {
+        "mandate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "domain.schema.json#/$defs/organisationId"
+        },
+        "status": {
+          "const": "EXPIRED"
         }
       }
     }

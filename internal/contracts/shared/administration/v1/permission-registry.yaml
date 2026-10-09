@@ -458,3 +458,19 @@ permissions:
     delegable: false
     read_only: false
     description: "Independent nonactivating approval/rejection with legal actor verification and reviewer evidence. Maker-checker separation enforced at database layer; ACTIVE still forbidden until LA-04D."
+
+  # LA-04D: activation requires third human + prior independent checker.
+  - key: legal-actor-mandate.activate
+    domain: ORGANISATION
+    risk_class: CRITICAL
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Third-party human operator activates only an independently approved, currently verified and non-overlapping mandate; never infers legal authority from parentage."
+  - key: legal-actor-mandate.terminate
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [PLATFORM]
+    delegable: false
+    read_only: false
+    description: "Immediately suspend, revoke or mark expired a mandate with immutable audit, outbox and no resurrection of the same record."

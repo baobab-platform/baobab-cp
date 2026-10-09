@@ -140,6 +140,7 @@ var canonicalMigrationNames = []string{
 	"000103_organisation_first_governed_onboarding.sql",
 	"000104_operating_legal_actor_mandate.sql",
 	"000105_operating_legal_actor_mandate_governance.sql",
+	"000106_legal_actor_mandate_lifecycle.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
