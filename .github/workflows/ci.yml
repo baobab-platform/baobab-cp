@@ -53,14 +53,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: LA04C final formatter capture
-        run: |
-          for file in internal/store/postgres/legal_actor_mandate_commands.go internal/store/postgres/legal_actor_mandate_commands_test.go; do
-            gofmt -w "$file"
-            printf 'LA04C_FMT:%s:' "$file"
-            base64 -w0 "$file"
-            printf '\n'
-          done
       - run: go test -race ./...
       - name: Test NBO founding-enterprise fixture guardrails
         run: python3 -m unittest discover -s scripts/showcase -p 'test_nbo_*.py'
