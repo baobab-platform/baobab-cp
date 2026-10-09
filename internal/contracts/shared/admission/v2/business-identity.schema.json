@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/admission/v2/business-identity.schema.json",
+  "title": "Progressive Business Identity / Admission Evidence (ADR-BCP-026/027)",
+  "description": "Admission-level business declarations for all legal forms, including pre-incorporation. Neither registration claims nor trading names automatically create a LegalEntity or grant capabilities; v1 ClientApplication stays unchanged until CP migrates.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "incorporationClaim": {
+      "type": "string",
+      "enum": [
+        "NOT_INCORPORATED",
+        "INCORPORATED_CLAIMED",
+        "UNKNOWN"
+      ],
+      "description": "Applicant declaration, NOT independent registration verification."
+    },
+    "BusinessIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operating_name",
+        "organisation_form",
+        "operating_country",
+        "incorporation_claim",
+        "authorised_representative"
+      ],
+      "properties": {
+        "operating_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "organisation_form": {
+          "$ref": "../../organisation/v1/domain.schema.json#/$defs/organisationForm"
+        },
+        "operating_country": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "incorporation_claim": {
+          "$ref": "#/$defs/incorporationClaim"
+        },
+        "legal_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "jurisdiction_of_incorporation": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "registration_identifiers": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 20,
+          "items": {
+            "$ref": "../v1/application.schema.json#/$defs/applicantIdentifier"
+          }
+        },
+        "trading_names": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        },
+        "authorised_representative": {
+          "$ref": "../v1/application.schema.json#/$defs/authorisedRepresentative"
+        },
+        "proposed_responsible_organisation_id": {
+          "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+        },
+        "declared_relationship_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "incorporation_claim": {
+                "const": "INCORPORATED_CLAIMED"
+              }
+            },
+            "required": [
+              "incorporation_claim"
+            ]
+          },
+          "then": {
+            "required": [
+              "legal_name",
+              "jurisdiction_of_incorporation",
+              "registration_identifiers"
+            ],
+            "properties": {
+              "registration_identifiers": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "incorporation_claim": {
+                "const": "NOT_INCORPORATED"
+              }
+            },
+            "required": [
+              "incorporation_claim"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "jurisdiction_of_incorporation"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "incorporation_claim": {
+                "const": "UNKNOWN"
+              }
+            },
+            "required": [
+              "incorporation_claim"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "jurisdiction_of_incorporation"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ProgressiveAdmissionIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "admission_decision_id",
+        "business_identity",
+        "requested_markets",
+        "identity_resolution_policy"
+      ],
+      "properties": {
+        "admission_decision_id": {
+          "$ref": "../../admission/v1/decision.schema.json#/$defs/admissionDecisionId"
+        },
+        "business_identity": {
+          "$ref": "#/$defs/BusinessIdentity"
+        },
+        "requested_markets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          }
+        },
+        "identity_resolution_policy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "first_party_sponsorship_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "description": "Governed approved-admission identity input, NOT proof of tenant creation or a legal-entity verification decision."
+    }
+  }
+}
