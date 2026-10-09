@@ -145,7 +145,7 @@ func TestLegalActorMandateGovernanceRejectAndReplay(t *testing.T) {
 	}
 	approvalCommand := legalactor.DecideCommand{
 		Decision: "APPROVE", DecisionBasisReference: "test/independent-review",
-		EvidenceReferences: []string{"test/official-registry"},
+		EvidenceReferences:              []string{"test/official-registry"},
 		LegalActorVerificationReference: "test/official-registry",
 	}
 	approval, err := db.DecideOperatingLegalActorMandate(ctx,
