@@ -31,7 +31,7 @@ func TestOrganisationFirstPreIncorporationRegistration(t *testing.T) {
 		"policy/organisation-identity-v2","evidence/independent-admission-review")
 	if err!=nil{t.Fatalf("review and prepare Organisation: %v",err)}
 	again,err:=db.PrepareOnboardingOrganisation(e.ctx,
-		"prepare-"+domain.NewUUIDv7(),reviewMeta,req.ID,
+		"prepare-"+domain.NewUUIDv7(),reviewMeta,reviewer.PrincipalID,req.ID,
 		"policy/organisation-identity-v2","evidence/independent-admission-review")
 	if err!=nil||again!=orgID{t.Fatalf("identity binding replay: %q %v",again,err)}
 	var legalCount int
