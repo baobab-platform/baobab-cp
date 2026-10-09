@@ -136,6 +136,7 @@ var canonicalMigrationNames = []string{
 	"000099_event_receipt.sql",
 	"000100_erp_submission_sweep.sql",
 	"000101_staff_application_maker.sql",
+	"000102_organisation_first_tenant_compatibility.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
