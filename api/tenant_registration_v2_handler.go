@@ -55,10 +55,10 @@ func (a *API) prepareOrganisationV2(w http.ResponseWriter,r *http.Request){
         problem(w,r,http.StatusBadRequest,"VALIDATION_FAILED","review policy and evidence are required",false)
         return
     }
-    _,_,ok=resolveActor(w,r,a.identities,false);if !ok{return}
+    reviewerID,_,ok:=resolveActor(w,r,a.identities,false);if !ok{return}
     principal,_:=auth.PrincipalFromContext(r.Context())
     id,err:=db.PrepareOnboardingOrganisation(r.Context(),key,requestMetadata(r,principal),
-        chi.URLParam(r,"requestID"),body.PolicyReference,body.EvidenceReference)
+        reviewerID,chi.URLParam(r,"requestID"),body.PolicyReference,body.EvidenceReference)
     if err!=nil{
         if errors.Is(err,store.ErrIdempotencyConflict){
             problem(w,r,http.StatusConflict,"ORGANISATION_IDENTITY_CONFLICT","the approved identity binding differs from the reviewed source",false)
