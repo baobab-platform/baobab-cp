@@ -35,6 +35,7 @@ func TestRegisterTenantV2Compatibility(t *testing.T) {
 		t.Fatalf("v2 canonical DEFAULT legal actor rejected: %v", err)
 	}
 	for name, change := range map[string]func(*RegisterTenantV2){
+		"bootstrap not a v2 route": func(c *RegisterTenantV2) { c.Basis = RegistrationBootstrap },
 		"empty primary": func(c *RegisterTenantV2) { c.OrganisationID = "" },
 		"legal alias as primary": func(c *RegisterTenantV2) { c.OrganisationID = "ZURIBEANS" },
 		"legacy legal alias": func(c *RegisterTenantV2) { c.LegalEntityID = "zuribeans_za" },
