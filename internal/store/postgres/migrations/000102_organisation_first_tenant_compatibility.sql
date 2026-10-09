@@ -86,7 +86,7 @@ BEGIN
 END;
 $$;
 CREATE TRIGGER tenants_primary_organisation_guard
-    BEFORE INSERT OR UPDATE OF primary_organisation_enforced ON tenants
+    BEFORE INSERT OR UPDATE OF primary_organisation_enforced, legal_entity_id, registration_basis ON tenants
     FOR EACH ROW EXECUTE FUNCTION registry.tenant_primary_enforcement_guard();
 
 -- Make every not-yet-migrated direct BOOTSTRAP row discoverable, even
