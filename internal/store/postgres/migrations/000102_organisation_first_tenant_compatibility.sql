@@ -64,7 +64,7 @@ ON CONFLICT (tenant_id) DO NOTHING;
 -- with non-NULL legal_entity_id is not certified: it remains in the review
 -- queue and MUST NOT be mistaken for a new Organisation-first provision.
 CREATE OR REPLACE FUNCTION registry.tenant_primary_enforcement_guard()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'INSERT' AND
       (NEW.registration_basis = 'ONBOARDING' OR NEW.legal_entity_id IS NULL) AND
@@ -84,7 +84,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$;
+$$;
 CREATE TRIGGER tenants_primary_organisation_guard
     BEFORE INSERT OR UPDATE OF primary_organisation_enforced ON tenants
     FOR EACH ROW EXECUTE FUNCTION registry.tenant_primary_enforcement_guard();
@@ -93,7 +93,7 @@ CREATE TRIGGER tenants_primary_organisation_guard
 -- if inserted after the migration. A privileged actor must reconcile and
 -- explicitly promote it to enforced mode with real PRIMARY provenance.
 CREATE OR REPLACE FUNCTION registry.record_legacy_tenant_primary_review()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.primary_organisation_enforced = false THEN
         INSERT INTO registry.tenant_primary_organisation_migration_review (
@@ -105,7 +105,7 @@ BEGIN
     END IF;
     RETURN NULL;
 END;
-$;
+$$;
 CREATE TRIGGER tenants_legacy_primary_review
     AFTER INSERT ON tenants
     FOR EACH ROW EXECUTE FUNCTION registry.record_legacy_tenant_primary_review();
