@@ -4,9 +4,12 @@
 -- The v1 API remains legal_entity_id-required until LA-03.
 --
 -- Legacy rows with no provable PRIMARY mapping are grandfathered explicitly
--- for investigation, not silently given an invented Organisation. All new
--- rows default to enforced PRIMARY integrity; legacy rows may only opt into
--- enforcement after a governed reconciliation.
+-- for investigation, not silently given an invented Organisation. Direct
+-- legacy/bootstrap writers with a real LegalEntity retain a temporary
+-- non-enforcing default; the governed Store.RegisterTenant path explicitly
+-- sets true. Any onboarding row, or any row with NULL legal projection,
+-- MUST enforce PRIMARY integrity. LA-03 retires this bootstrap compatibility
+-- window once remaining writers are migrated.
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS primary_organisation_enforced boolean;
 
 -- An already valid, in-effect mapping is the ONLY evidence eligible for
@@ -30,7 +33,10 @@ SET primary_organisation_enforced = (
 )
 WHERE primary_organisation_enforced IS NULL;
 
-ALTER TABLE tenants ALTER COLUMN primary_organisation_enforced SET DEFAULT true;
+-- Preserve old direct legacy BOOTSTRAP clients until LA-03. Production
+-- Store.RegisterTenant writes true explicitly; nullable/ONBOARDING commands
+-- cannot opt out via the guard below.
+ALTER TABLE tenants ALTER COLUMN primary_organisation_enforced SET DEFAULT false;
 ALTER TABLE tenants ALTER COLUMN primary_organisation_enforced SET NOT NULL;
 
 -- Nullable v2 compatibility projection; FK to real legal_entities remains.
@@ -53,26 +59,56 @@ FROM tenants t
 WHERE t.primary_organisation_enforced = false
 ON CONFLICT (tenant_id) DO NOTHING;
 
--- Prevent an operator/consumer bypassing enforced mode or creating an
--- ungoverned new legacy tenant by explicitly passing false.
+-- Fail closed for ONBOARDING and new defaultless operating tenants, and
+-- prevent any enforced tenant from downgrading. A direct legacy BOOTSTRAP
+-- with non-NULL legal_entity_id is not certified: it remains in the review
+-- queue and MUST NOT be mistaken for a new Organisation-first provision.
 CREATE OR REPLACE FUNCTION registry.tenant_primary_enforcement_guard()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql AS $
 BEGIN
-    IF TG_OP = 'INSERT' AND NEW.primary_organisation_enforced IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'new tenant must enforce PRIMARY Organisation'
+    IF TG_OP = 'INSERT' AND
+      (NEW.registration_basis = 'ONBOARDING' OR NEW.legal_entity_id IS NULL) AND
+      NEW.primary_organisation_enforced IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'onboarding or defaultless tenant must enforce PRIMARY Organisation'
             USING ERRCODE = 'check_violation';
     ELSIF TG_OP = 'UPDATE'
       AND OLD.primary_organisation_enforced = true
       AND NEW.primary_organisation_enforced IS DISTINCT FROM true THEN
         RAISE EXCEPTION 'cannot weaken PRIMARY Organisation enforcement'
             USING ERRCODE = 'check_violation';
+    ELSIF TG_OP = 'UPDATE'
+      AND (NEW.registration_basis = 'ONBOARDING' OR NEW.legal_entity_id IS NULL)
+      AND NEW.primary_organisation_enforced IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'onboarding or defaultless tenant cannot disable PRIMARY Organisation'
+            USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
 END;
-$$;
+$;
 CREATE TRIGGER tenants_primary_organisation_guard
     BEFORE INSERT OR UPDATE OF primary_organisation_enforced ON tenants
     FOR EACH ROW EXECUTE FUNCTION registry.tenant_primary_enforcement_guard();
+
+-- Make every not-yet-migrated direct BOOTSTRAP row discoverable, even
+-- if inserted after the migration. A privileged actor must reconcile and
+-- explicitly promote it to enforced mode with real PRIMARY provenance.
+CREATE OR REPLACE FUNCTION registry.record_legacy_tenant_primary_review()
+RETURNS trigger LANGUAGE plpgsql AS $
+BEGIN
+    IF NEW.primary_organisation_enforced = false THEN
+        INSERT INTO registry.tenant_primary_organisation_migration_review (
+            tenant_id, reason, provenance
+        ) VALUES (
+            NEW.tenant_id, 'MISSING_OR_INACTIVE_PRIMARY',
+            'migration-000102-legacy-bootstrap-compatibility'
+        ) ON CONFLICT (tenant_id) DO NOTHING;
+    END IF;
+    RETURN NULL;
+END;
+$;
+CREATE TRIGGER tenants_legacy_primary_review
+    AFTER INSERT ON tenants
+    FOR EACH ROW EXECUTE FUNCTION registry.record_legacy_tenant_primary_review();
 
 -- Deferred commit-time checks allow v1 registration to create a tenant,
 -- legal mapping and primary organisation mapping in the SAME transaction.
