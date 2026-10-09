@@ -52,7 +52,17 @@ func LoadFirstPartyRegistry(path string) (FirstPartyRegistry, error) {
 	if err != nil {
 		return FirstPartyRegistry{}, err
 	}
-	return ParseFirstPartyRegistry(raw)
+	registry, err := ParseFirstPartyRegistry(raw)
+    if err!=nil{return FirstPartyRegistry{},err}
+    // Runtime first-party reconciliation must consume the enriched Shared
+    // LA-01 governance declarations. The legacy unannotated parser is kept
+    // solely to read historical v1 fixtures, never as live authority.
+    for _,entity:=range registry.Entities{
+        if entity.IdentityClass==""{
+            return FirstPartyRegistry{},fmt.Errorf("first-party registry: %s missing LA-01 identity_class and incorporation_claim",entity.ID)
+        }
+    }
+    return registry,nil
 }
 
 // ParseFirstPartyRegistry is LoadFirstPartyRegistry for in-memory content.
