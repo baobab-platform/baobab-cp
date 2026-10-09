@@ -6,9 +6,9 @@
 
 ## Runtime decision boundary
 
-`Store.ResolveOperatingLegalActor(ctx, request, evaluatedAt)` is a **read-only internal CP adapter**:
+`Store.ResolveOperatingLegalActor(ctx, request)` is a **read-only internal CP adapter**:
 
-1. Select only mandates for exactly the requested Tenant and canonical operating Organisation; neither legal entity nor mandate may be chosen by the requester.
+1. Derive the evaluation timestamp from CP's server clock, never an external caller-provided time that could resurrect expired authority. Select only mandates for exactly the requested Tenant and canonical operating Organisation; neither legal entity nor mandate may be chosen by the requester.
 2. Require that Tenant's **live, in-effect PRIMARY_ORGANISATION mapping** to that exact Organisation. Historical/default LegalEntity mapping is not an identity substitute.
 3. Independently attest the candidate LegalEntityProfile as in-effect, VERIFIED, ACTIVE and evidence-backed; exclude registration-only and legacy first-party digest provenance and explicitly unincorporated operating-business identities.
 4. Apply LA-04A's role/activity/market/capability/time and approval separation-of-duties checks to CP persistence candidates. Multiple applicable ACTIVE records resolve to `AMBIGUOUS`, not a chosen issuer.
