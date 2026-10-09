@@ -63,9 +63,9 @@ func TestLA02UpgradePreservesLegacyAndEnforcesPrimary(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if _, err := tx.Exec(ctx, `INSERT INTO tenants
 		(tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region,
-		 registration_basis, bootstrap_reason, bootstrap_evidence_reference)
+		 registration_basis, bootstrap_reason, bootstrap_evidence_reference,primary_organisation_enforced)
 		VALUES($1,NULL,'ZuriBeans','row_level_security','af-south-1','BOOTSTRAP',
-		 'Migration integration verification only','test-la02-internal')`, newTenant); err != nil { tx.Rollback(ctx); t.Fatal(err) }
+		 'Migration integration verification only','test-la02-internal',true)`, newTenant); err != nil { tx.Rollback(ctx); t.Fatal(err) }
 	insertCanonicalOrgTx(t, ctx, tx, newTenant, newOrg)
 	if _, err := tx.Exec(ctx, `INSERT INTO registry.tenant_organisation_mapping
 		(tenant_id, organisation_id, mapping_role, status, effective_from, provenance)
@@ -86,9 +86,9 @@ func TestLA02UpgradePreservesLegacyAndEnforcesPrimary(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	if _, err := badTx.Exec(ctx, `INSERT INTO tenants
 		(tenant_id, legal_entity_id, display_name, isolation_strategy, residency_region,
-		 registration_basis, bootstrap_reason, bootstrap_evidence_reference)
+		 registration_basis, bootstrap_reason, bootstrap_evidence_reference,primary_organisation_enforced)
 		VALUES($1,NULL,'Unmapped Business','row_level_security','af-south-1','BOOTSTRAP',
-		 'Unmapped tenant must not be accepted','test-la02-negative')`, badTenant); err != nil { t.Fatal(err) }
+		 'Unmapped tenant must not be accepted','test-la02-negative',true)`, badTenant); err != nil { t.Fatal(err) }
 	if err := badTx.Commit(ctx); err == nil {
 		t.Fatal("missing PRIMARY mapping was accepted")
 	}
@@ -112,6 +112,25 @@ func TestLA02UpgradePreservesLegacyAndEnforcesPrimary(t *testing.T) {
 	// explicit mapping. Existing historical DEFAULT remains unchanged.
 	if _, err := pool.Exec(ctx, "UPDATE tenants SET legal_entity_id=$2 WHERE tenant_id=$1", newTenant, actor); err == nil {
 		t.Fatal("new tenant acquired a fictitious DEFAULT projection")
+	}
+
+	// Legacy/bootstrap writers with a real actor can still stage a row for
+	// migration; it is NOT considered a certified, Organisation-first tenant.
+	bootstrapID := domain.NewTenantID()
+	if _, err := pool.Exec(ctx, `INSERT INTO tenants
+		(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region,
+		 registration_basis,bootstrap_reason,bootstrap_evidence_reference)
+		VALUES($1,$2,'Old-style bootstrap','row_level_security','af-south-1',
+		 'BOOTSTRAP','Privileged historical bootstrap compatibility','review-needed')`,
+		bootstrapID, actor); err != nil {
+		t.Fatalf("historical bootstrap compatibility lost: %v", err)
+	}
+	var staged bool
+	if err := pool.QueryRow(ctx, "SELECT primary_organisation_enforced FROM tenants WHERE tenant_id=$1", bootstrapID).Scan(&staged); err != nil || staged {
+		t.Fatalf("legacy bootstrap cannot be silently certified: %v %v", staged, err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM registry.tenant_primary_organisation_migration_review WHERE tenant_id=$1 AND resolved_at IS NULL", bootstrapID).Scan(&reviews); err != nil || reviews != 1 {
+		t.Fatalf("bootstrap must enter the reconciliation queue: %d %v", reviews, err)
 	}
 
 	// The old valid tenant's PRIMARY is preserved. Sharing a legal actor
