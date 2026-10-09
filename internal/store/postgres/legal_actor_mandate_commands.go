@@ -55,7 +55,7 @@ func (s *Store) mandateCommandReplay(ctx context.Context, tx pgx.Tx, kind, key, 
 		return nil, err
 	}
 	if priorHash != digest || priorActor != actorID {
-		return nil, ErrLegalActorMandateConflict
+		return nil, fmt.Errorf("%w: %w", basestore.ErrIdempotencyConflict, ErrLegalActorMandateConflict)
 	}
 	var receipt legalactor.CommandReceipt
 	if err := json.Unmarshal(raw, &receipt); err != nil {
@@ -136,7 +136,7 @@ func (s *Store) mandateWriteEvidence(ctx context.Context, tx pgx.Tx,
 func (s *Store) ProposeOperatingLegalActorMandate(ctx context.Context, key string,
 	meta basestore.RequestMetadata, makerID string, command legalactor.ProposeCommand) (legalactor.CommandReceipt, error) {
 	var empty legalactor.CommandReceipt
-	if key == "" || makerID == "" || command.TenantID == "" || command.OperatingOrganisationID == "" ||
+	if key == "" || !domain.IsUUID(makerID) || meta.ActorID != makerID || meta.ActorType != "human" || !domain.IsUUID(meta.CorrelationID) || command.TenantID == "" || command.OperatingOrganisationID == "" ||
 		command.ResponsibleLegalEntityID == "" || len(command.Roles) == 0 || len(command.ActivityScope) == 0 ||
 		len(command.MarketScope) == 0 || len(command.EvidenceReferences) == 0 ||
 		command.AuthorityBasisReference == "" || command.EffectiveFrom.IsZero() {
@@ -224,7 +224,7 @@ func (s *Store) DecideOperatingLegalActorMandate(ctx context.Context, key string
 	meta basestore.RequestMetadata, checkerID, mandateID string,
 	command legalactor.DecideCommand) (legalactor.CommandReceipt, error) {
 	var empty legalactor.CommandReceipt
-	if key == "" || checkerID == "" || mandateID == "" ||
+	if key == "" || !domain.IsUUID(checkerID) || meta.ActorID != checkerID || meta.ActorType != "human" || !domain.IsUUID(meta.CorrelationID) || !domain.IsUUID(mandateID) ||
 		(command.Decision != "APPROVE" && command.Decision != "REJECT") ||
 		command.DecisionBasisReference == "" || len(command.EvidenceReferences) == 0 ||
 		(command.Decision == "APPROVE" && command.LegalActorVerificationReference == "") {
