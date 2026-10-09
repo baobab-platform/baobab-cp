@@ -133,6 +133,7 @@ func Resolve(request Request, candidates []Candidate, evaluatedAt time.Time) Res
 		strings.TrimSpace(m.LegalActorVerificationReference) == "" ||
 		m.ApprovedBy == "" || m.CreatedBy == "" ||
 		m.ApprovedBy == m.CreatedBy || m.ApprovedAt == nil ||
+		m.ApprovedAt.After(evaluatedAt) ||
 		!m.ActorVerified {
 		result.Outcome = ActorNotVerified
 		return result
@@ -141,10 +142,14 @@ func Resolve(request Request, candidates []Candidate, evaluatedAt time.Time) Res
 	result.MandateID = m.MandateID
 	result.ResponsibleLegalEntityID = m.ResponsibleLegalEntityID
 	result.EvidenceReferences = append([]string(nil), m.EvidenceReferences...)
-	if m.EffectiveTo != nil {
-		at := m.EffectiveTo.UTC()
-		result.ValidUntil = &at
+	// Shared requires valid_until even for open-ended mandates.
+	// An explicit end never extends a bounded decision. Revocation can
+	// happen before this timestamp, so consumers must re-resolve per action.
+	until := evaluatedAt.UTC().Add(30 * time.Second)
+	if m.EffectiveTo != nil && m.EffectiveTo.Before(until) {
+		until = m.EffectiveTo.UTC()
 	}
+	result.ValidUntil = &until
 	return result
 }
 
