@@ -35,14 +35,14 @@ func TestOperatingLegalActorMandateActivationGate(t *testing.T) {
 			ActorID: "la04-test", ActorType: "workload",
 			CorrelationID: domain.NewUUIDv7(),
 		}, domain.RegisterTenant{
-			TenantID: tenantID,
-			LegalEntityID: legalEntityID,
-			Basis: domain.RegistrationBootstrap,
-			BootstrapReason: "synthetic LA-04 mandate table test",
+			TenantID:                   tenantID,
+			LegalEntityID:              legalEntityID,
+			Basis:                      domain.RegistrationBootstrap,
+			BootstrapReason:            "synthetic LA-04 mandate table test",
 			BootstrapEvidenceReference: "test-fixture",
-			DisplayName: "LA-04 synthetic operating organisation",
-			IsolationStrategy: "row_level_security",
-			ResidencyRegion: "af-south-1",
+			DisplayName:                "LA-04 synthetic operating organisation",
+			IsolationStrategy:          "row_level_security",
+			ResidencyRegion:            "af-south-1",
 		}, nil)
 	if err != nil {
 		t.Fatalf("create test tenant: %v", err)
