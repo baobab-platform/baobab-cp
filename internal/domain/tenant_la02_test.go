@@ -10,14 +10,14 @@ import (
 // model. Validation alone confers no admission or legally binding mandate.
 func TestRegisterTenantV2Compatibility(t *testing.T) {
 	base := RegisterTenantV2{
-		Basis: RegistrationOnboarding,
+		Basis:                     RegistrationOnboarding,
 		TenantOnboardingRequestID: "tor_0190a1b2c3d4e5f60718293a4b5c6d7e",
-		OrganisationID: NewUUIDv7(),
-		TenantID: NewTenantID(),
-		DisplayName: "ZuriBeans",
-		IsolationStrategy: "schema_per_tenant",
-		ResidencyRegion: "af-south-1",
-		RequestedProducts: []string{"baobab-trade"},
+		OrganisationID:            NewUUIDv7(),
+		TenantID:                  NewTenantID(),
+		DisplayName:               "ZuriBeans",
+		IsolationStrategy:         "schema_per_tenant",
+		ResidencyRegion:           "af-south-1",
+		RequestedProducts:         []string{"baobab-trade"},
 	}
 	if err := base.Validate(); err != nil {
 		t.Fatalf("unincorporated v2 business rejected: %v", err)
@@ -35,13 +35,13 @@ func TestRegisterTenantV2Compatibility(t *testing.T) {
 		t.Fatalf("v2 canonical DEFAULT legal actor rejected: %v", err)
 	}
 	for name, change := range map[string]func(*RegisterTenantV2){
-		"bootstrap not a v2 route": func(c *RegisterTenantV2) { c.Basis = RegistrationBootstrap },
-		"empty primary": func(c *RegisterTenantV2) { c.OrganisationID = "" },
-		"legal alias as primary": func(c *RegisterTenantV2) { c.OrganisationID = "ZURIBEANS" },
-		"legacy legal alias": func(c *RegisterTenantV2) { c.LegalEntityID = "zuribeans_za" },
+		"bootstrap not a v2 route":      func(c *RegisterTenantV2) { c.Basis = RegistrationBootstrap },
+		"empty primary":                 func(c *RegisterTenantV2) { c.OrganisationID = "" },
+		"legal alias as primary":        func(c *RegisterTenantV2) { c.OrganisationID = "ZURIBEANS" },
+		"legacy legal alias":            func(c *RegisterTenantV2) { c.LegalEntityID = "zuribeans_za" },
 		"missing authorised onboarding": func(c *RegisterTenantV2) { c.TenantOnboardingRequestID = "" },
-		"invalid residency": func(c *RegisterTenantV2) { c.ResidencyRegion = "ZA" },
-		"duplicate products": func(c *RegisterTenantV2) { c.RequestedProducts = []string{"baobab-trade", "baobab-trade"} },
+		"invalid residency":             func(c *RegisterTenantV2) { c.ResidencyRegion = "ZA" },
+		"duplicate products":            func(c *RegisterTenantV2) { c.RequestedProducts = []string{"baobab-trade", "baobab-trade"} },
 	} {
 		c := base
 		change(&c)
@@ -53,9 +53,9 @@ func TestRegisterTenantV2Compatibility(t *testing.T) {
 
 func TestRegisterTenantV1StillRequiresLegalEntity(t *testing.T) {
 	base := RegisterTenant{
-		Basis: RegistrationOnboarding,
+		Basis:                     RegistrationOnboarding,
 		TenantOnboardingRequestID: "tor_0190a1b2c3d4e5f60718293a4b5c6d7e",
-		TenantID: NewTenantID(), DisplayName: "ZuriBeans",
+		TenantID:                  NewTenantID(), DisplayName: "ZuriBeans",
 		IsolationStrategy: "schema_per_tenant", ResidencyRegion: "af-south-1",
 	}
 	if err := base.Validate(); err == nil {
