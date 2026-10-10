@@ -239,7 +239,8 @@ func (s *Store) ProposeDocumentaryReview(ctx context.Context, key string, meta b
 }
 func validateRestrictionScope(x ReviewRestriction) bool {
 	return len(x.RequirementID) >= 3 && len(x.CapabilityKey) >= 3 &&
-		len(x.MarketCode) == 2 && x.MarketCode == strings.ToUpper(x.MarketCode) &&
+		len(x.MarketCode) == 2 && x.MarketCode[0] >= 'A' && x.MarketCode[0] <= 'Z' &&
+		x.MarketCode[1] >= 'A' && x.MarketCode[1] <= 'Z' &&
 		!strings.ContainsAny(x.CapabilityKey, "* /?") &&
 		!strings.ContainsAny(x.RequirementID, "* /?")
 }
