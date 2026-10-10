@@ -126,7 +126,29 @@ func(s *Store)DecideFoundingGovernance(ctx context.Context,key string,meta bases
  if requireProgressiveHuman(meta,checkerID)!=nil||!domain.IsUUID(intentID)||
    len(key)<16||len(key)>128||strings.TrimSpace(decision.ReviewReference)==""||
    (decision.Decision!="APPROVE"&&decision.Decision!="REJECT"){return empty,ErrFoundingAuthority}
+ // Exact replay is allowed only to the same authenticated checker with
+ // the same idempotency key, intent and independently reviewed decision.
+ decisionRaw,err:=json.Marshal(struct{
+  IntentID string `json:"intent_id"`
+  Reviewer string `json:"reviewer"`
+  Decision FoundingDecisionInput `json:"decision"`
+ }{intentID,checkerID,decision})
+ if err!=nil{return empty,err}
+ digest:=fmt.Sprintf("%x",sha256.Sum256(decisionRaw))
  tx,err:=s.pool.Begin(ctx);if err!=nil{return empty,err};defer tx.Rollback(ctx)
+ var oldIntent,oldDigest string
+ var oldReceipt []byte
+ replayErr:=tx.QueryRow(ctx,`SELECT intent_id::text,request_digest,receipt
+ FROM admission.founding_governance_decision_command
+ WHERE actor_id=$1::uuid AND idempotency_key=$2`,checkerID,key).
+ Scan(&oldIntent,&oldDigest,&oldReceipt)
+ if replayErr==nil{
+  if oldIntent!=intentID||oldDigest!=digest{return empty,ErrFoundingAuthority}
+  var receipt FoundingCommandReceipt
+  if err=json.Unmarshal(oldReceipt,&receipt);err!=nil{return empty,err}
+  return receipt,nil
+ }
+ if !errors.Is(replayErr,pgx.ErrNoRows){return empty,replayErr}
  var kind,org,maker,status,grant string
  var data []byte
  err=tx.QueryRow(ctx,`SELECT kind,operating_organisation_id::text,proposed_by::text,
@@ -139,9 +161,16 @@ func(s *Store)DecideFoundingGovernance(ctx context.Context,key string,meta bases
  WHERE principal_id=$1::uuid AND actor_type='human')`,checkerID).Scan(&checkerHuman);err!=nil{return empty,err}
  if !checkerHuman{return empty,ErrFoundingAuthority}
  if status!="PENDING"{
-  // Never reuse an approved intent to grant again; idempotent callers may
-  // read their receipt but must not forge a distinct second authorisation.
-  return empty,ErrFoundingAuthority
+  // A concurrent successful first invocation may have won after our first
+  // read, while we waited for FOR UPDATE. Re-check the durable replay ledger.
+  replayErr=tx.QueryRow(ctx,`SELECT intent_id::text,request_digest,receipt
+   FROM admission.founding_governance_decision_command
+   WHERE actor_id=$1::uuid AND idempotency_key=$2`,checkerID,key).
+   Scan(&oldIntent,&oldDigest,&oldReceipt)
+  if replayErr!=nil||oldIntent!=intentID||oldDigest!=digest{return empty,ErrFoundingAuthority}
+  var receipt FoundingCommandReceipt
+  if err=json.Unmarshal(oldReceipt,&receipt);err!=nil{return empty,err}
+  return receipt,nil
  }
  now:=time.Now().UTC()
  next:="REJECTED"
@@ -211,6 +240,13 @@ func(s *Store)DecideFoundingGovernance(ctx context.Context,key string,meta bases
  if err=foundingAudit(ctx,tx,meta,"decided",intentID,kind,map[string]any{
  "decision":decision.Decision,"grant_id":grant,
  "review_reference":decision.ReviewReference});err!=nil{return empty,err}
+ receipt:=FoundingCommandReceipt{IntentID:intentID,Kind:kind,Status:next,GrantID:grant}
+ receiptData,err:=json.Marshal(receipt);if err!=nil{return empty,err}
+ _,err=tx.Exec(ctx,`INSERT INTO admission.founding_governance_decision_command
+  (actor_id,idempotency_key,intent_id,request_digest,receipt)
+  VALUES($1::uuid,$2,$3::uuid,$4,$5::jsonb)`,
+  checkerID,key,intentID,digest,receiptData)
+ if err!=nil{return empty,ErrFoundingAuthority}
  if err=tx.Commit(ctx);err!=nil{return empty,err}
- return FoundingCommandReceipt{IntentID:intentID,Kind:kind,Status:next,GrantID:grant},nil
+ return receipt,nil
 }
