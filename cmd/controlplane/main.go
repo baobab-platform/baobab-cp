@@ -211,6 +211,30 @@ func main() {
 			slog.Warn("founding governance expiry worker denied outside controlled nonproduction environments")
 		}
 	}
+	// PEO-02R: generate deterministic overdue month-6/12/18/24
+	// review checkpoints. Scheduling a review is not completing evidence,
+	// extending grace, granting capability or suspending a tenant.
+	if os.Getenv("PEO_FOUNDING_GOVERNANCE_ENABLED") == "true" &&
+		os.Getenv("PEO_FOUNDING_REVIEW_SCHEDULER_ENABLED") == "true" {
+		if api.OrganisationFirstV2PermittedIn(cfg.Environment) {
+			go func() {
+				ticker := time.NewTicker(time.Minute)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						if _, err := db.SweepFoundingDocumentaryReviews(ctx, 50); err != nil {
+							slog.Error("founding documentary reviews are overdue", "error", err)
+						}
+					}
+				}
+			}()
+		} else {
+			slog.Warn("founding documentary review scheduler denied outside controlled nonproduction")
+		}
+	}
 	// Applies approved provisioning plans as durable operations
 	// (ADR-SHARED-015). An executor that dies loses its lease and the
 	// operation is resumed by the next.
