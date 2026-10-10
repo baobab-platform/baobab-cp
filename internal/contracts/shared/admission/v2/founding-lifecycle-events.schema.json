@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/admission/v2/founding-lifecycle-events.schema.json",
+  "title": "PEO-02 founding sponsorship and documentary-deferral events",
+  "description": "Canonical identifiers and current lifecycle state only. A change notification is not a grant of authority; every consumer MUST recheck current CP sponsorship, documentary eligibility and policy at point of use.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "SponsorshipActivated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sponsorship_id",
+        "operating_organisation_id",
+        "status"
+      ],
+      "properties": {
+        "sponsorship_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "operating_organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "const": "ACTIVE"
+        }
+      }
+    },
+    "SponsorshipSuspended": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sponsorship_id",
+        "operating_organisation_id",
+        "status"
+      ],
+      "properties": {
+        "sponsorship_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "operating_organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "const": "SUSPENDED"
+        }
+      }
+    },
+    "SponsorshipRevoked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sponsorship_id",
+        "operating_organisation_id",
+        "status"
+      ],
+      "properties": {
+        "sponsorship_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "operating_organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "const": "REVOKED"
+        }
+      }
+    },
+    "DeferralActivated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deferral_id",
+        "organisation_id",
+        "status"
+      ],
+      "properties": {
+        "deferral_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "const": "ACTIVE"
+        }
+      }
+    },
+    "DeferralRevoked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deferral_id",
+        "organisation_id",
+        "status"
+      ],
+      "properties": {
+        "deferral_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "const": "REVOKED"
+        }
+      }
+    },
+    "SponsorshipExpired": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sponsorship_id",
+        "operating_organisation_id",
+        "status"
+      ],
+      "properties": {
+        "sponsorship_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "operating_organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "const": "EXPIRED"
+        }
+      }
+    },
+    "DeferralExpired": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deferral_id",
+        "organisation_id",
+        "status"
+      ],
+      "properties": {
+        "deferral_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "const": "EXPIRED"
+        }
+      }
+    }
+  }
+}
