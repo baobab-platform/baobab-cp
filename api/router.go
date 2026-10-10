@@ -100,6 +100,10 @@ type Dependencies struct {
 	// including unset, as production: providers must then be permitted in
 	// production (ADR-SHARED-011).
 	Environment string
+	// PEO-02 separate privileged and human-reviewed founding governance.
+	// Default off. Unavailable IAM authorisation or independent source means deny.
+	FoundingGovernanceEnabled bool
+	FoundingGovernance foundingGovernanceWriter
 	// PEO-03 v2 progressive drafts are deliberately independent of v1
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
@@ -627,6 +631,18 @@ func New(dependencies Dependencies) http.Handler {
 		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-drift", obs.drift)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/audit", obs.audit)
+	}
+	if dependencies.FoundingGovernanceEnabled && dependencies.FoundingGovernance != nil &&
+		(dependencies.Environment == "development" || dependencies.Environment == "test" ||
+		 dependencies.Environment == "integration" || dependencies.Environment == "sandbox" ||
+		 dependencies.Environment == "staging") {
+		founding := foundingGovernanceHandler{repo: dependencies.FoundingGovernance, api: a}
+		r.With(a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)).
+			Post("/v2/founding-governance/sponsorship-proposals", founding.propose("SPONSORSHIP"))
+		r.With(a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)).
+			Post("/v2/founding-governance/documentary-deferral-proposals", founding.propose("DOCUMENTARY_DEFERRAL"))
+		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
+			Post("/v2/founding-governance/intents/{intentID}/decision", founding.decide)
 	}
 	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&
 		(dependencies.Environment == "development" || dependencies.Environment == "test" ||
