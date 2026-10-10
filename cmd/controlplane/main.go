@@ -167,6 +167,31 @@ func main() {
 			}
 		}
 	}()
+	// PEO-02C: expiry reconciliation is allowed only in the controlled
+	// nonproduction environment family and only when founding governance is
+	// explicitly enabled. Current-time consuming PEPs deny expired grants
+	// immediately, regardless of sweep scheduling.
+	if os.Getenv("PEO_FOUNDING_GOVERNANCE_ENABLED") == "true" {
+		switch cfg.Environment {
+		case "development", "test", "integration", "sandbox", "staging":
+			go func() {
+				ticker := time.NewTicker(time.Minute)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						if _, err := db.SweepFoundingExpiry(ctx, 50); err != nil {
+							slog.Error("founding sponsorship/grace expiry reconciliation failed", "error", err)
+						}
+					}
+				}
+			}()
+		default:
+			slog.Warn("founding governance expiry worker denied outside controlled nonproduction environments")
+		}
+	}
 	// Applies approved provisioning plans as durable operations
 	// (ADR-SHARED-015). An executor that dies loses its lease and the
 	// operation is resumed by the next.
