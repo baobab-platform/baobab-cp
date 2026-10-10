@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/capability/certification"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
