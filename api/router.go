@@ -124,6 +124,9 @@ type Dependencies struct {
 	// (ADR-BCP-018 ORG-11). Nil skips them. Callers are resolved to
 	// registered Control Plane principals through Identities.
 	Classifications *subscription.Classifier
+	// PEO-02D: workload-only and nonproduction-only live INTERNAL PDP.
+	CurrentInternalAuthorityEnabled bool
+	CurrentInternalAuthorityClientID string
 	// Metrics is served on GET /metrics to workloads holding metrics:read.
 	// Nil serves nothing.
 	Metrics  *metrics.Registry
@@ -691,6 +694,17 @@ func New(dependencies Dependencies) http.Handler {
 			Patch("/v2/client-applications/{applicationID}", ph.update)
 		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
 			Post("/v2/client-applications/{applicationID}/submit", ph.submit)
+		// PEO-03 review read visibility is opt-in with the existing v2
+		// applicant routes. Staff requires a registered principal and
+		// explicit platform-wide review authority, not applicant scopes.
+		if _, ok := dependencies.ProgressiveApplications.(progressiveReviewReader); ok {
+			reviewers := []func(http.Handler) http.Handler{
+				a.authorize(a.adminVerifier, "human", "admission:review"),
+				a.requireAdminRole(nil, true),
+			}
+			r.With(reviewers...).Get("/v2/admin/client-applications", ph.reviewList)
+			r.With(reviewers...).Get("/v2/admin/client-applications/{applicationID}", ph.reviewGet)
+		}
 	}
 	if dependencies.ProgressiveBridgeEnabled && dependencies.ProgressiveBridge != nil &&
 		dependencies.ProgressiveApplicationsEnabled && peoRoutesPermittedIn(dependencies.Environment) {
@@ -769,6 +783,18 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(authorise...).Post("/v1/tenant-onboarding-requests/{requestID}/authorisation", ob.authorise())
 		r.With(request...).Post("/v1/tenant-onboarding-requests/{requestID}/cancellation", ob.cancel())
 		r.With(request...).Post("/v1/tenant-onboarding-requests/{requestID}/fulfilment", ob.fulfil())
+	}
+	if dependencies.Classifications != nil &&
+		dependencies.CurrentInternalAuthorityEnabled &&
+		dependencies.CurrentInternalAuthorityClientID != "" &&
+		peoRoutesPermittedIn(dependencies.Environment) {
+		authority := internalAuthorityHandler{
+			classifications: dependencies.Classifications,
+			clientID: dependencies.CurrentInternalAuthorityClientID,
+		}
+		r.With(a.authorize(a.workloadVerifier, "workload", "subscription:internal-authority")).
+			Get("/internal/subscriptions/v1/tenants/{tenantID}/product-subscriptions/{subscriptionID}/internal-authority",
+				authority.read)
 	}
 	if dependencies.Classifications != nil {
 		// ADR-BCP-018 ORG-11: classification is a privileged platform

@@ -122,7 +122,7 @@ func TestContextAuthorityPurposeRules(t *testing.T) {
 		"a malformed digest":            func(c *Context) { c.ProvisioningAuthority.PlanDigest = "sha256:short" },
 		"unbounded":                     func(c *Context) { c.ExpiresAt = nil },
 		"16 minutes":                    func(c *Context) { expires(c, 16*time.Minute) },
-		"a legal entity":                func(c *Context) { c.LegalEntityID = "ZURIBEANS-ZA" },
+		"a legal entity":                func(c *Context) { c.LegalEntityID = "LE-SYNTHZA01" },
 		"an organisation":               func(c *Context) { c.OrganisationID = "org_1" },
 		"a market":                      func(c *Context) { c.MarketID = "mkt_1" },
 		"a country":                     func(c *Context) { c.CountryCode = "ZA" },

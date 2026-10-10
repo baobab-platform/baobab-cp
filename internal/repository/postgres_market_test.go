@@ -84,7 +84,7 @@ func TestPostgresMarketRoundTrip(t *testing.T) {
 
 	now := time.Now().UTC()
 	assignment := domain.MarketAssignment{
-		ID: assignmentID, TenantID: tenantID, LegalEntityID: "ZURIBEANS-ZA", MarketID: marketID,
+		ID: assignmentID, TenantID: tenantID, LegalEntityID: "LE-SYNTHZA01", MarketID: marketID,
 		Capabilities:  []domain.MarketParticipationCapability{domain.MarketParticipationSelling, domain.MarketParticipationImporting},
 		EffectiveFrom: now.Add(-time.Hour),
 		Status:        domain.MarketParticipationActive, Source: domain.MarketParticipationSourceProvisioning, PolicyVersion: "1",
@@ -117,7 +117,7 @@ func TestPostgresMarketRoundTrip(t *testing.T) {
 	if len(assignments) != 1 {
 		t.Fatalf("expected exactly one market assignment for %s, got %+v", tenantID, assignments)
 	}
-	if assignments[0].LegalEntityID != "ZURIBEANS-ZA" {
+	if assignments[0].LegalEntityID != "LE-SYNTHZA01" {
 		t.Fatalf("expected legal_entity_id to round-trip, got %+v", assignments[0])
 	}
 	gotCapabilities := map[domain.MarketParticipationCapability]bool{}

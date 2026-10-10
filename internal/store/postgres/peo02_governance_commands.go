@@ -339,6 +339,14 @@ func (s *Store) DecideFoundingGovernance(ctx context.Context, key string, meta b
 		"review_reference": decision.ReviewReference}); err != nil {
 		return empty, err
 	}
+	// A positive grant is an immutable historical fact. Publish it in the
+	// same transaction as its independent review, audit and grant record.
+	// Rejected intents emit no positive lifecycle event.
+	if next == "APPROVED" {
+		if err = publishFoundingLifecycle(ctx, tx, meta, kind, grant, org, "", "ACTIVE"); err != nil {
+			return empty, err
+		}
+	}
 	receipt := FoundingCommandReceipt{IntentID: intentID, Kind: kind, Status: next, GrantID: grant}
 	receiptData, err := json.Marshal(receipt)
 	if err != nil {
