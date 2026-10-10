@@ -43,7 +43,7 @@ func TestPEO02EDurableRelayWithholdsPublicationUntilMatchingReceipt(t *testing.T
 	var outboxID string
 	var envelope []byte
 	err = db.pool.QueryRow(ctx, `SELECT id::text,payload FROM messaging.outbox
-		WHERE aggregate_id=$1::uuid AND event_type LIKE '%founding-sponsorship.suspended.v1'`,
+		WHERE aggregate_id=$1 AND event_type LIKE '%founding-sponsorship.suspended.v1'`,
 		grant).Scan(&outboxID, &envelope)
 	if err != nil {
 		t.Fatal(err)
