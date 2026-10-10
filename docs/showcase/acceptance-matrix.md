@@ -1,6 +1,6 @@
 # NBO Acceptance Matrix — implementation evidence
 
-**As of 2026-10-09; pending CI and shared contract merge.** Outcomes below indicate only evidence actually produced. Test names refer to code under [CP #289](https://github.com/baobab-platform/baobab-cp/pull/289), not a completed live showcase run.
+**As of 2026-10-09; Shared #255 and CP #289 have since merged (2026-10-09).** Outcomes below indicate only evidence actually produced. Test names refer to code under [CP #289](https://github.com/baobab-platform/baobab-cp/pull/289), not a completed live showcase run.
 
 | ID | Scenario | Implementation evidence | Current outcome |
 |---|---|---|---|

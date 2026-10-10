@@ -6,7 +6,7 @@ Use exactly: `IMPLEMENTED_AND_VERIFIED`, `IMPLEMENTED_NOT_INTEGRATED`, `PARTIALL
 | Capability | Assessment | Evidence | Remaining proof |
 |---|---|---|---|
 | Applicant self-service, immutable decision lifecycle | IMPLEMENTED_AND_VERIFIED | CP `internal/service/application/service_test.go`, `api/client_application_handler_test.go`, migrations 000050 | Live IAM/DB staging smoke still outstanding |
-| Staff-created INTERNAL_GROUP / assisted admission | PARTIALLY_IMPLEMENTED | Shared PR #255, CP PR #289; schema, API, maker tracking, migration 000101 and tests | Merge upstream contract, regenerate frontend client; CI and deployed smoke |
+| Staff-created INTERNAL_GROUP / assisted admission | PARTIALLY_IMPLEMENTED | Shared PR #255, CP PR #289; schema, API, maker tracking, migration 000101 and tests | Both PRs merged 2026-10-09; repin to current Shared main and run deployed smoke |
 | Verified legal existence and source-backed claims | PARTIALLY_IMPLEMENTED | CP `api/verification_handler.go`, OEV inventory; Shared PR #252 | Independent registry verification and operational evidence chain |
 | Time-bounded ComplianceException (maker/checker, revoke) | CONTRACT_ONLY | CP ADR-BCP-023 (ComplianceException); no demonstrated end-to-end runtime | Canonical boundary, durable policy, secure API, audited execution |
 | Corporate registry, claim lifecycle, group derivation | IMPLEMENTED_AND_VERIFIED | CP `internal/service/organisation/`, `internal/domain/corporate_group.go`, migration 000045+ | Nabhold claims and real verification not yet onboarded |
