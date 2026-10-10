@@ -112,6 +112,10 @@ type Dependencies struct {
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
 	ProgressiveApplications        progressiveApplicationWriter
+	// PEO-03B: separate opt-in for independent v2 admission decisions.
+	// It never reuses v1 decision/onboarding rows or confers tenant authority.
+	ProgressiveBridgeEnabled bool
+	ProgressiveBridge progressiveBridgeWriter
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -120,6 +124,9 @@ type Dependencies struct {
 	// (ADR-BCP-018 ORG-11). Nil skips them. Callers are resolved to
 	// registered Control Plane principals through Identities.
 	Classifications *subscription.Classifier
+	// PEO-02D: workload-only and nonproduction-only live INTERNAL PDP.
+	CurrentInternalAuthorityEnabled bool
+	CurrentInternalAuthorityClientID string
 	// Metrics is served on GET /metrics to workloads holding metrics:read.
 	// Nil serves nothing.
 	Metrics  *metrics.Registry
@@ -699,6 +706,30 @@ func New(dependencies Dependencies) http.Handler {
 			r.With(reviewers...).Get("/v2/admin/client-applications/{applicationID}", ph.reviewGet)
 		}
 	}
+	if dependencies.ProgressiveBridgeEnabled && dependencies.ProgressiveBridge != nil &&
+		dependencies.ProgressiveApplicationsEnabled && peoRoutesPermittedIn(dependencies.Environment) {
+		bridge := progressiveBridgeHandler{repo: dependencies.ProgressiveBridge, api: a}
+		review := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "admission:review"),
+			a.requireAdminRole(nil, true),
+		}
+		decide := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "admission:decide"),
+			a.requireAdminRole(nil, true),
+		}
+		request := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "onboarding:request"),
+			a.requireAdminRole(nil, true),
+		}
+		authorise := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "onboarding:authorise"),
+			a.requireAdminRole(nil, true),
+		}
+		r.With(review...).Post("/v2/admission/applications/{applicationID}/review", bridge.review)
+		r.With(decide...).Post("/v2/admission/reviews/{reviewID}/decision", bridge.decide)
+		r.With(request...).Post("/v2/admission/decisions/{decisionID}/onboarding-requests", bridge.request)
+		r.With(authorise...).Post("/v2/admission/onboarding-requests/{requestID}/authorisation", bridge.authorise)
+	}
 	if dependencies.Applications != nil {
 		// ADR-BCP-017: applicants reach only their own applications; review
 		// and decision are separate privileged scopes (ADR-BCP-020 34-35).
@@ -746,6 +777,18 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(authorise...).Post("/v1/tenant-onboarding-requests/{requestID}/authorisation", ob.authorise())
 		r.With(request...).Post("/v1/tenant-onboarding-requests/{requestID}/cancellation", ob.cancel())
 		r.With(request...).Post("/v1/tenant-onboarding-requests/{requestID}/fulfilment", ob.fulfil())
+	}
+	if dependencies.Classifications != nil &&
+		dependencies.CurrentInternalAuthorityEnabled &&
+		dependencies.CurrentInternalAuthorityClientID != "" &&
+		peoRoutesPermittedIn(dependencies.Environment) {
+		authority := internalAuthorityHandler{
+			classifications: dependencies.Classifications,
+			clientID: dependencies.CurrentInternalAuthorityClientID,
+		}
+		r.With(a.authorize(a.workloadVerifier, "workload", "subscription:internal-authority")).
+			Get("/internal/subscriptions/v1/tenants/{tenantID}/product-subscriptions/{subscriptionID}/internal-authority",
+				authority.read)
 	}
 	if dependencies.Classifications != nil {
 		// ADR-BCP-018 ORG-11: classification is a privileged platform

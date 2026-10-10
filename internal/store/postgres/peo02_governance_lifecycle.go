@@ -106,16 +106,16 @@ func (s *Store) TransitionFoundingGovernance(
 		return empty, ErrFoundingAuthority
 	}
 
-	var prior, proposedBy string
+	var prior, proposedBy, organisationID string
 	switch kind {
 	case "SPONSORSHIP":
-		err = tx.QueryRow(ctx, `SELECT status,proposed_by::text
+		err = tx.QueryRow(ctx, `SELECT status,proposed_by::text,operating_organisation_id::text
  FROM admission.founding_group_sponsorship WHERE sponsorship_id=$1::uuid FOR UPDATE`, targetID).
-			Scan(&prior, &proposedBy)
+			Scan(&prior, &proposedBy, &organisationID)
 	case "DOCUMENTARY_DEFERRAL":
-		err = tx.QueryRow(ctx, `SELECT status,proposed_by::text
+		err = tx.QueryRow(ctx, `SELECT status,proposed_by::text,organisation_id::text
  FROM admission.founding_documentary_deferral WHERE deferral_id=$1::uuid FOR UPDATE`, targetID).
-			Scan(&prior, &proposedBy)
+			Scan(&prior, &proposedBy, &organisationID)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return empty, ErrFoundingAuthority
@@ -149,6 +149,9 @@ func (s *Store) TransitionFoundingGovernance(
 		"previous_status": prior, "new_status": next, "reason": in.Reason,
 		"evidence_reference": in.EvidenceReference, "checker_id": checkerID,
 	}); err != nil {
+		return empty, err
+	}
+	if err = publishFoundingLifecycle(ctx, tx, meta, kind, targetID, organisationID, "", next); err != nil {
 		return empty, err
 	}
 	receipt := FoundingLifecycleReceipt{TargetID: targetID, Kind: kind, Status: next}
