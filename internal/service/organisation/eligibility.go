@@ -11,9 +11,16 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
+// FoundingSponsorshipPolicy is the authoritative current-time gate for
+// first-party operating businesses. A missing sponsor never becomes permission.
+type FoundingSponsorshipPolicy interface {
+	FoundingOperatingEligibility(context.Context, string, time.Time) (bool, bool, error)
+}
+
 // EligibilityResolver derives INTERNAL eligibility from persisted relationships.
 type EligibilityResolver struct {
-	Orgs repository.OrganisationRepository
+	Orgs        repository.OrganisationRepository
+	Sponsorship FoundingSponsorshipPolicy
 	// PlatformID selects the platform whose owners qualify; DefaultPlatformID when empty.
 	PlatformID string
 }
@@ -46,6 +53,18 @@ func (r *EligibilityResolver) InternalEligibilityBasis(ctx context.Context, orga
 	for _, pr := range prs {
 		if pr.PlatformID == platformID {
 			onPlatform = append(onPlatform, pr)
+		}
+	}
+	// A platform relationship is necessary but not sufficient for founding
+	// operating businesses. Re-evaluate the sponsor's VERIFIED authority at
+	// every classification and explanation read; do not trust event projections.
+	if r.Sponsorship != nil {
+		applies, eligible, err := r.Sponsorship.FoundingOperatingEligibility(ctx, organisationID, at)
+		if err != nil {
+			return nil, fmt.Errorf("check current founding sponsorship: %w", err)
+		}
+		if applies && !eligible {
+			return nil, nil
 		}
 	}
 	if len(onPlatform) == 0 {
