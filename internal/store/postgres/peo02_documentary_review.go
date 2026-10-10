@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
-	"github.com/jackc/pgx/v5"
 )
 
 type foundingReviewDue struct {
@@ -123,8 +122,16 @@ func (s *Store) FoundingDocumentaryReviewDue(ctx context.Context, limit int) ([]
 		return nil, err
 	}
 	defer rows.Close()
-	out, err := pgx.CollectRows(rows, pgx.RowToStructByName[foundingReviewDue])
-	if err != nil {
+	out := make([]foundingReviewDue, 0, limit)
+	for rows.Next() {
+		var item foundingReviewDue
+		if err = rows.Scan(&item.DeferralID, &item.OrganisationID,
+			&item.MilestoneMonths, &item.ScheduledAt); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	if err = rows.Err(); err != nil {
 		return nil, err
 	}
 	return out, nil
