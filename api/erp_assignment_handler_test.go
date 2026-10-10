@@ -95,7 +95,7 @@ func newErpSources() *erpSources {
 			MarketParticipation:  []convergence.DesiredMarket{{Market: "ZA", Activities: []string{"SELLING", "IMPORTING"}}},
 			IsolationRequirement: "row_level_security", DesiredStateDigest: plan.DesiredStateDigest,
 		},
-		profile: &domain.LegalEntityProfile{LegalEntityID: erpLegal, LegalName: "Synthetic venture South Africa (Pty) Ltd",
+		profile: &domain.LegalEntityProfile{LegalEntityID: erpLegal, LegalName: "Synthetic ZA Company (test only)",
 			JurisdictionOfIncorporation: "ZA", VerificationState: domain.VerificationVerified,
 			RegistrationIdentifiers: []domain.OrganisationIdentifier{{Type: "COMPANY_REGISTRATION", Value: "SYNTHETIC-REG-0001", Verified: true}}},
 	}
@@ -208,6 +208,18 @@ func TestErpAssignmentAbsenceIsNotFound(t *testing.T) {
 				t.Errorf("status = %d: %s", rec.Code, rec.Body)
 			}
 		})
+	}
+}
+
+// The actual ZA group legal actor is only proposed. An unverified NABHOLD
+// identity cannot be substituted for a synthetic VERIFIED test company.
+func TestErpAssignmentNeverTreatsProposedNabholdAsVerified(t *testing.T) {
+	s := newErpSources()
+	s.desired.LegalEntities = []string{"NABHOLD"}
+	s.profile = nil // no independent legal verification established
+	rec := erpRequest(t, s, erpWorkload(erpTenant), erpTenant, erpKey, "NABHOLD", false)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "ERP_ASSIGNMENT_CONFLICT") {
+		t.Fatalf("proposed Nabhold must not be attributed without verified CP legal profile: %d %s", rec.Code, rec.Body)
 	}
 }
 
