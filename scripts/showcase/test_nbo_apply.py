@@ -19,8 +19,12 @@ class NBOFixtureTest(unittest.TestCase):
         self.assertEqual(len(self.rows), 4)
         by_key = {org["fixture_key"]: org for org in self.rows}
         self.assertEqual(set(by_key), {"NABHOLD", "ZURIBEANS", "THAMANI-GLOBAL", "EQUATOR-ESTATE"})
-        self.assertEqual(by_key["ZURIBEANS"]["reported_incorporation"], "REGISTRATION_APPLICATION_PENDING")
+        self.assertEqual(by_key["ZURIBEANS"]["reported_incorporation"], "NOT_INCORPORATED")
+        self.assertEqual(by_key["EQUATOR-ESTATE"]["reported_incorporation"], "NOT_INCORPORATED")
+        self.assertIsNone(by_key["ZURIBEANS"]["jurisdiction_claim"])
         self.assertIsNone(by_key["EQUATOR-ESTATE"]["jurisdiction_claim"])
+        self.assertEqual(by_key["NABHOLD"]["reported_incorporation"], "REGISTERED_CLAIM_ZA")
+        self.assertEqual(by_key["THAMANI-GLOBAL"]["reported_incorporation"], "REGISTERED_CLAIM_ZA")
         for org in self.rows:
             self.assertNotIn("registration_identifier", org)
             self.assertNotIn("verified", org)

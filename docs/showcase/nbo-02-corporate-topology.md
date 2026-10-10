@@ -13,9 +13,9 @@ This **does not complete NBO-02 canonical registration**. It prepares idempotent
 
 ```mermaid
 flowchart TD
-    A["Nabhold Group Africa\nZA incorporation claimed"] -. "asserted parent; unverified" .-> B["ZuriBeans\nregistration application pending"]
-    A -. "asserted parent; unverified" .-> C["Thamani Global\nZA incorporation claimed"]
-    A -. "asserted parent; unverified" .-> D["Equator & Estate Co.\nlegal status unverified"]
+    A["NABHOLD GROUP AFRICA (Pty) Ltd\nZA, CIPC evidenced"] -. "sponsor / legal actor by mandate; unverified" .-> B["ZuriBeans\nnot incorporated"]
+    A -. "asserted parent; unverified" .-> C["THAMANI GLOBAL (Pty) Ltd\nZA, CIPC evidenced"]
+    A -. "sponsor / legal actor by mandate; unverified" .-> D["Equator & Estate Co.\nnot incorporated"]
 ```
 
 The dashed edges are **business-provided assertions**, not verified CP CorporateRelationships, derived CorporateGroupMemberships, PlatformRelationships, entitlements or IAM relationships.
@@ -50,9 +50,9 @@ The API mints `capp_...` IDs; a stable Idempotency-Key per fixture item ensures 
 | Concern | Current result |
 |---|---|
 | Nabhold and three subsidiary business claims | Declarative DRAFT input only |
-| ZA incorporation claimed for Nabhold/Thamani | Recorded only as application-scoped assertions if applied |
-| ZuriBeans pending application | No registration number fabricated |
-| Equator incorporation | Unverified and no jurisdiction guessed |
+| ZA incorporation of Nabhold/Thamani | CIPC evidence recorded in the Shared registry; applied only as application-scoped assertions until CP verifies |
+| ZuriBeans not incorporated | `NOT_INCORPORATED`; no registration number, jurisdiction or LegalEntityProfile fabricated |
+| Equator & Estate not incorporated | `NOT_INCORPORATED`; no registration number, jurisdiction or LegalEntityProfile fabricated |
 | Corporate ownership | Declarative **unverified** parent references, no authorised relationship edge written |
 | ZA and UG market participation | Intent represented, no legal presence/selling/exporting rights |
 | Canonical Organisation IDs | **Not minted** by fixture; require governed admission after independent decision |
