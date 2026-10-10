@@ -1,0 +1,21 @@
+name: Temporary PEO-02S final gofmt
+on:
+  push:
+    branches: [feat/peo02s-governed-documentary-review-decisions]
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: |
+          set -euo pipefail
+          gofmt -w internal/store/postgres/peo02_governed_documentary_reviews.go
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add internal/store/postgres/peo02_governed_documentary_reviews.go
+            git commit -m "style(peo-02s): canonical review revision gofmt"
+            git push origin HEAD:refs/heads/feat/peo02s-governed-documentary-review-decisions
+          fi
