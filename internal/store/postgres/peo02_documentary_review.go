@@ -84,7 +84,7 @@ func (s *Store) SweepFoundingDocumentaryReviews(ctx context.Context, limit int) 
 		payload, e := json.Marshal(map[string]any{
 			"deferral_id": item.DeferralID, "organisation_id": item.OrganisationID,
 			"milestone_month": item.MilestoneMonths,
-			"scheduled_at": item.ScheduledAt, "result": "REASSESSMENT_REQUIRED",
+			"scheduled_at":    item.ScheduledAt, "result": "REASSESSMENT_REQUIRED",
 		})
 		if e != nil {
 			return 0, e
