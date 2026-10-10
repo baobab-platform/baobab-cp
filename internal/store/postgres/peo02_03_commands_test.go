@@ -103,4 +103,21 @@ func TestPEO02MakerCheckerNeverCertifiesSyntheticSponsor(t *testing.T){
  if err=db.pool.QueryRow(ctx,`SELECT count(*) FROM admission.founding_group_sponsorship
   WHERE operating_organisation_id=$1::uuid`,orgs[0]).Scan(&grantCount);err!=nil{t.Fatal(err)}
  if grantCount!=0{t.Fatalf("synthetic grant materialised: %d",grantCount)}
+ reject:=FoundingDecisionInput{Decision:"REJECT",ReviewReference:"test/independent-checker-denial"}
+ rejectKey:="peo02-reject-"+domain.NewUUIDv7()
+ decision,err:=db.DecideFoundingGovernance(ctx,rejectKey,checkerMeta,checker,receipt.IntentID,reject)
+ if err!=nil||decision.Status!="REJECTED"||decision.GrantID!=""{t.Fatalf("checker rejection failed: %+v %v",decision,err)}
+ replayed,err:=db.DecideFoundingGovernance(ctx,rejectKey,checkerMeta,checker,receipt.IntentID,reject)
+ if err!=nil||replayed.IntentID!=receipt.IntentID||replayed.Status!="REJECTED"{
+  t.Fatalf("checker replay diverged: %+v %v",replayed,err)
+ }
+ if _,err=db.DecideFoundingGovernance(ctx,rejectKey,checkerMeta,checker,receipt.IntentID,
+  FoundingDecisionInput{Decision:"APPROVE",ReviewReference:reject.ReviewReference});err==nil{
+  t.Fatal("changed checker decision re-used a completed idempotency key")
+ }
+ var decisionEvents int
+ if err=db.pool.QueryRow(ctx,`SELECT count(*) FROM audit_events
+ WHERE target=$1 AND action IN ('founding_governance.proposed','founding_governance.decided')`,
+ "founding-governance/"+receipt.IntentID).Scan(&decisionEvents);err!=nil{t.Fatal(err)}
+ if decisionEvents!=2{t.Fatalf("expected one proposal and one checker decision audit, got %d",decisionEvents)}
 }
