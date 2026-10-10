@@ -14,5 +14,16 @@ CREATE TABLE admission.founding_lifecycle_command (
   UNIQUE (actor_id,idempotency_key),
   CHECK (target_kind='SPONSORSHIP' OR action='REVOKE')
 );
+-- Durable receipts are immutable. Corrections require a new reviewed command.
+CREATE FUNCTION admission.founding_lifecycle_immutable()
+RETURNS trigger LANGUAGE plpgsql AS $
+BEGIN
+  RAISE EXCEPTION 'founding lifecycle command history is append-only'
+    USING ERRCODE='check_violation';
+END $;
+CREATE TRIGGER founding_lifecycle_immutable BEFORE UPDATE OR DELETE
+ ON admission.founding_lifecycle_command FOR EACH ROW
+ EXECUTE FUNCTION admission.founding_lifecycle_immutable();
+
 CREATE INDEX founding_lifecycle_target_idx ON admission.founding_lifecycle_command(target_kind,target_id,recorded_at);
 REVOKE ALL ON admission.founding_lifecycle_command FROM PUBLIC;
