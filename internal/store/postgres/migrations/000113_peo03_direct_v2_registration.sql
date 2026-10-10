@@ -79,3 +79,30 @@ CREATE CONSTRAINT TRIGGER progressive_registration_primary_guard
  AFTER UPDATE ON admission.progressive_onboarding_request
  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
  EXECUTE FUNCTION admission.progressive_registration_primary_guard();
+
+-- Migration 000056 originally admitted only v1 FULFILLED requests. Preserve
+-- that guard but also accept this independently governed v2 lifecycle. A v2
+-- status alone is insufficient: the exact request must bind the active
+-- reviewed PRIMARY Organisation and an approved decision.
+CREATE OR REPLACE FUNCTION tenants_onboarding_fulfilled_check()
+RETURNS trigger LANGUAGE plpgsql AS $peo03$
+BEGIN
+ IF NEW.registration_basis='ONBOARDING' AND NOT (
+    EXISTS (SELECT 1 FROM admission.tenant_onboarding_request r
+            WHERE r.tenant_id=NEW.tenant_id AND r.status='FULFILLED')
+    OR EXISTS (
+       SELECT 1 FROM admission.progressive_onboarding_request o
+       JOIN admission.progressive_admission_decision d ON d.decision_id=o.decision_id
+       JOIN registry.tenant_organisation_mapping m
+         ON m.tenant_id=o.tenant_id
+        AND m.organisation_id=o.organisation_id
+       WHERE o.tenant_id=NEW.tenant_id AND o.status='FULFILLED'
+         AND d.decision='APPROVED'
+         AND m.mapping_role='PRIMARY_ORGANISATION' AND m.status='ACTIVE'
+    )
+ ) THEN
+   RAISE EXCEPTION 'tenant % has no valid FULFILLED v1 or v2 onboarding request',
+      NEW.tenant_id USING ERRCODE='check_violation';
+ END IF;
+ RETURN NULL;
+END $peo03$;
