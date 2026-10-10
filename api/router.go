@@ -715,6 +715,12 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(decide...).Post("/v2/admission/reviews/{reviewID}/decision", bridge.decide)
 		r.With(request...).Post("/v2/admission/decisions/{decisionID}/onboarding-requests", bridge.request)
 		r.With(authorise...).Post("/v2/admission/onboarding-requests/{requestID}/authorisation", bridge.authorise)
+		// PEO-03C: distinct from legacy /v2/tenants, consumes ONLY the
+		// independently authorised progressive onboarding request.
+		if a.organisationFirstV2 {
+			r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).
+				Post("/v2/admission/onboarding-requests/{requestID}/register-tenant", a.registerProgressiveV2)
+		}
 	}
 	if dependencies.Applications != nil {
 		// ADR-BCP-017: applicants reach only their own applications; review
