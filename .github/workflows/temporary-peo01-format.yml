@@ -1,0 +1,23 @@
+name: Temporary PEO-01 gofmt
+on:
+  push:
+    branches:
+      - feat/peo01-requirement-policy-binding-hardening
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Canonical Go formatting
+        run: |
+          set -euo pipefail
+          gofmt -w internal/service/progressive/policy.go internal/service/progressive/peo01_authority_binding_test.go
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add internal/service/progressive/policy.go internal/service/progressive/peo01_authority_binding_test.go
+            git commit -m "style(peo-01): apply canonical gofmt"
+            git push origin HEAD:refs/heads/feat/peo01-requirement-policy-binding-hardening
+          fi
