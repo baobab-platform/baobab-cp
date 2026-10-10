@@ -16,11 +16,11 @@ CREATE TABLE admission.founding_lifecycle_command (
 );
 -- Durable receipts are immutable. Corrections require a new reviewed command.
 CREATE FUNCTION admission.founding_lifecycle_immutable()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $fn$
 BEGIN
   RAISE EXCEPTION 'founding lifecycle command history is append-only'
     USING ERRCODE='check_violation';
-END $;
+END $fn$;
 CREATE TRIGGER founding_lifecycle_immutable BEFORE UPDATE OR DELETE
  ON admission.founding_lifecycle_command FOR EACH ROW
  EXECUTE FUNCTION admission.founding_lifecycle_immutable();
