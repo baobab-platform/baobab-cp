@@ -664,6 +664,17 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/founding-governance/documentary-deferral-proposals", founding.propose("DOCUMENTARY_DEFERRAL"))
 		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
 			Post("/v2/founding-governance/intents/{intentID}/decision", founding.decide)
+		// No generic grant mutation route. Each allow-listed transition is a
+		// fail-closed human decision; the production route family remains off.
+		if _, ok := dependencies.FoundingGovernance.(foundingGovernanceLifecycleWriter); ok {
+			decider := []func(http.Handler) http.Handler{
+				a.authorize(a.adminVerifier, "human", "admission:decide"),
+				a.requireAdminRole(nil, true),
+			}
+			r.With(decider...).Post("/v2/founding-governance/sponsorships/{grantID}/suspend", founding.transition("SPONSORSHIP", "SUSPEND"))
+			r.With(decider...).Post("/v2/founding-governance/sponsorships/{grantID}/revoke", founding.transition("SPONSORSHIP", "REVOKE"))
+			r.With(decider...).Post("/v2/founding-governance/documentary-deferrals/{grantID}/revoke", founding.transition("DOCUMENTARY_DEFERRAL", "REVOKE"))
+		}
 	}
 	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&
 		peoRoutesPermittedIn(dependencies.Environment) {
