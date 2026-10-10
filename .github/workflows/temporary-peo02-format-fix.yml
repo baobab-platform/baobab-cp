@@ -1,0 +1,23 @@
+name: Temporary PEO-02C Formatting
+on:
+  push:
+    branches:
+      - feat/peo02-lifecycle-outbox-and-policy-enforcement
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Apply canonical formatting to PEO-02 source/tests
+        run: |
+          set -euo pipefail
+          gofmt -w internal/store/postgres/peo02_lifecycle_outbox_test.go internal/store/postgres/peo02_lifecycle_outbox.go internal/store/postgres/peo02_expiry_sweep.go internal/store/postgres/peo02_founding_policy.go internal/store/postgres/progressive_admission_bridge_test.go
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add internal/store/postgres/peo02_lifecycle_outbox_test.go internal/store/postgres/peo02_lifecycle_outbox.go internal/store/postgres/peo02_expiry_sweep.go internal/store/postgres/peo02_founding_policy.go internal/store/postgres/progressive_admission_bridge_test.go
+            git commit -m "style(peo-02c): gofmt founding lifecycle contract tests"
+            git push origin HEAD:refs/heads/feat/peo02-lifecycle-outbox-and-policy-enforcement
+          fi
