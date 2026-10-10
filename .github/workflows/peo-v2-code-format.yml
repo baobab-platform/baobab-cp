@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - internal/store/postgres/progressive_applications.go
+      - internal/store/postgres/peo02_governance_commands.go
+      - api/peo02_governance_handler.go
       - api/progressive_application_handler.go
       - api/router.go
       - cmd/controlplane/main.go
@@ -24,13 +26,13 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Go canonical formatting
-        run: gofmt -w api/progressive_application_handler.go api/router.go cmd/controlplane/main.go internal/store/postgres/progressive_applications.go
+        run: gofmt -w api/progressive_application_handler.go api/peo02_governance_handler.go api/router.go cmd/controlplane/main.go internal/store/postgres/progressive_applications.go internal/store/postgres/peo02_governance_commands.go
       - name: Commit only formatting
         run: |
-          if git diff --quiet -- api/progressive_application_handler.go api/router.go cmd/controlplane/main.go internal/store/postgres/progressive_applications.go; then exit 0; fi
+          if git diff --quiet -- api/progressive_application_handler.go api/peo02_governance_handler.go api/router.go cmd/controlplane/main.go internal/store/postgres/progressive_applications.go internal/store/postgres/peo02_governance_commands.go; then exit 0; fi
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add api/progressive_application_handler.go api/router.go cmd/controlplane/main.go internal/store/postgres/progressive_applications.go
+          git add api/progressive_application_handler.go api/peo02_governance_handler.go api/router.go cmd/controlplane/main.go internal/store/postgres/progressive_applications.go internal/store/postgres/peo02_governance_commands.go
           git commit -m 'style(peo-03): format applicant v2 API and store'
           git push origin 'HEAD:refs/heads/feat/peo-02-03-progressive-admission-runtime'
