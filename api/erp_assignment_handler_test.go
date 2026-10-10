@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	erpTenant    = "tn_01k4zuribeans"
+	erpTenant    = "tn_01k4synthetic"
 	erpUUID      = "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b"
-	erpLegal     = "ZURIBEANS-ZA"
+	erpLegal     = "LE-SYNTHZA01"
 	erpInstance  = "ei_0199a1b2c3d47e8f"
 	erpPlanID    = "plan_0199a1b2c3d47e8f"
 	erpDigestHex = "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
@@ -91,13 +91,13 @@ func newErpSources() *erpSources {
 			DesiredStateVersion: 1, DesiredStateDigest: plan.DesiredStateDigest, Plan: plan,
 			Decision: &repository.PlanDecision{Decision: "APPROVED", PlanID: erpPlanID, PlanVersion: 3, PlanDigest: erpDigestHex}},
 		desired: convergence.DesiredState{
-			Tenant: convergence.DesiredTenant{TenantID: erpTenant, DisplayName: "Zuribeans"}, LegalEntities: []string{erpLegal, "ZURIBEANS-UG"},
+			Tenant: convergence.DesiredTenant{TenantID: erpTenant, DisplayName: "Synthetic venture"}, LegalEntities: []string{erpLegal, "LE-SYNTHUG01"},
 			MarketParticipation:  []convergence.DesiredMarket{{Market: "ZA", Activities: []string{"SELLING", "IMPORTING"}}},
 			IsolationRequirement: "row_level_security", DesiredStateDigest: plan.DesiredStateDigest,
 		},
-		profile: &domain.LegalEntityProfile{LegalEntityID: erpLegal, LegalName: "Zuribeans South Africa (Pty) Ltd",
+		profile: &domain.LegalEntityProfile{LegalEntityID: erpLegal, LegalName: "Synthetic venture South Africa (Pty) Ltd",
 			JurisdictionOfIncorporation: "ZA", VerificationState: domain.VerificationVerified,
-			RegistrationIdentifiers: []domain.OrganisationIdentifier{{Type: "COMPANY_REGISTRATION", Value: "2026/000000/07", Verified: true}}},
+			RegistrationIdentifiers: []domain.OrganisationIdentifier{{Type: "COMPANY_REGISTRATION", Value: "SYNTHETIC-REG-0001", Verified: true}}},
 	}
 }
 
