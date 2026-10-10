@@ -94,7 +94,7 @@ CREATE TABLE admission.progressive_bridge_command (
  idempotency_key text NOT NULL CHECK(length(idempotency_key) BETWEEN 16 AND 128),
  action text NOT NULL CHECK(action IN ('REVIEW','DECIDE','REQUEST','AUTHORISE')),
  target_id uuid NOT NULL,
- request_digest char(64) NOT NULL CHECK(request_digest ~ '^[0-9a-f]{64}
+ request_digest char(64) NOT NULL CHECK(length(request_digest)=64 AND request_digest ~ '^[0-9a-f]+'),
  receipt jsonb NOT NULL CHECK(jsonb_typeof(receipt)='object'),
  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  PRIMARY KEY(actor_id,idempotency_key)
