@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - internal/store/postgres/progressive_applications.go
-      - internal/store/postgres/peo02_governance_commands.go internal/store/postgres/peo02_03_commands_test.go
+      - internal/store/postgres/peo02_governance_commands.go
       - internal/store/postgres/peo02_03_commands_test.go
       - api/peo02_governance_handler.go
       - api/peo02_03_security_test.go
