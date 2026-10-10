@@ -97,7 +97,7 @@ func main() {
 	metrics.Default.Register(&metrics.CachedCollector{Collector: resolverrepo.TopologyMetricsCollector{Repo: resolverRepository}, TTL: 30 * time.Second})
 	// ADR-BCP-017: INTERNAL classification is evaluated by the Control Plane
 	// from governed relationships on the default platform.
-	eligibility := &svcorg.EligibilityResolver{Orgs: resolverRepository}
+	eligibility := &svcorg.EligibilityResolver{Orgs: resolverRepository, Sponsorship: db}
 	applications := &application.Service{Repo: resolverRepository, Principals: resolverRepository, Eligibility: eligibility}
 	classifications := &subscription.Classifier{Repo: resolverRepository, Admissions: resolverRepository, Orgs: resolverRepository,
 		Memberships: resolverRepository, Eligibility: eligibility}
