@@ -22,8 +22,8 @@ flowchart TD
 
 | Dependency | Owner | State as observed | Required handoff |
 |---|---|---|---|
-| Staff-assisted contract | Shared #255 | PR proposed | CI pass, merge, version/pin and generated client |
-| Governance and maker/checker implementation | CP #289 | PR proposed | migration, Go/PostgreSQL tests, review and CI |
+| Staff-assisted contract | Shared #255 | merged 2026-10-09 | pin CP to a Shared main that carries it (see `contracts.lock.yaml`) |
+| Governance and maker/checker implementation | CP #289 | merged 2026-10-09 | live deployment smoke and provider/IAM certification remain |
 | Nabhold and Thamani incorporation | Shared registry + corporate secretary / reviewer | CIPC certificates recorded (`REGISTERED_EVIDENCED`), sign-off pending | CP independent verification and sign-off; never auto-promote |
 | ZuriBeans incorporation | registrar/business | not incorporated; trades through Nabhold | Organisation only; Nabhold mandate per activity until incorporated |
 | Equator & Estate incorporation | corporate secretary | not incorporated; trades through Nabhold | Organisation only; Nabhold mandate per activity until incorporated |

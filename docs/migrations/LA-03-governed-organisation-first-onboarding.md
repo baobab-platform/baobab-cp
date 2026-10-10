@@ -35,6 +35,6 @@ Both v2 routes require the existing `tenant:write` human platform administrator 
 
 **LA-05:** IAM entitlement/context and Trade/ERP/payment/document integration; provider observed readiness and actual legal actor provenance. Existing v1 context consumers still require a default LegalEntity and must fail closed for defaultless v2 tenants until they deliberately migrate.
 
-**PEO-02/03:** founding sponsorship/Internal eligibility, 12-month named documentary deferral, legal-form-specific application UX and assisted/self-service submission. Unincorporated applicants cannot use existing strict v1 application submission unchanged.
+**PEO-02/03:** founding sponsorship/Internal eligibility, 24-calendar-month named documentary deferral (ADR-BCP-026 Amendment A1; a pre-amendment 12-month deferral is never extended automatically, PEO-T08B), legal-form-specific application UX and assisted/self-service submission. Unincorporated applicants cannot use existing strict v1 application submission unchanged.
 
 **LA-06/07:** real first-party registration, operational/legal verification, provider certification and production rollout after review of all dependencies.

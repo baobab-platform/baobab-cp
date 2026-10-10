@@ -87,8 +87,9 @@
 #                              revocable workloads may explicitly register the
 #                              same subject audience; registration for one
 #                              workload grants nothing to another. ERP validates
-#                              baobab-erp and Pulse validates baobab-pulse; each
-#                              relationship is explicit on its own entry.
+#                              baobab-erp, Pulse validates baobab-pulse and the
+#                              CMS validates baobab-cms; each relationship is
+#                              explicit on its own entry.
 #   context_purposes        -- optional. The Control Plane context authority
 #                              purposes (control-plane/v1 ContextAuthorityPurpose)
 #                              a context owned by this workload may carry.
@@ -161,8 +162,17 @@ workloads:
     owner: baobab-platform/baobab-cms
     runtime: "baobab-cms service"
     environment: production
+    # content.entry.resolve (content/v1): CMS is the resource server of the
+    # baobab-cms audience, so it validates the PlatformContext named by each
+    # caller against that caller through the Control Plane, presenting the
+    # caller's token as subject evidence. context:validate grants no
+    # tenant/business authority; validates_audiences binds this validator to
+    # the one subject audience it may present. Like the other validators this
+    # is a ceiling on what baobab-iam may issue, not activation: baobab-iam
+    # issuance and the resource-server proof follow.
     allowed_audiences: ["baobab-control-plane"]
-    allowed_scopes: ["context:resolve", "provider-migration:task"]
+    allowed_scopes: ["context:resolve", "context:validate", "provider-migration:task"]
+    validates_audiences: ["baobab-cms"]
     credential_type: client_credentials
     rotation_owner: baobab-platform/baobab-cms
     status: ACTIVE
@@ -243,6 +253,30 @@ workloads:
     credential_type: client_credentials
     rotation_owner: baobab-platform/zuribeans
     status: ACTIVE
+
+  # Nabhold corporate digital estate (NAB-GOLIVE-MP-001, release R0). The
+  # server-side runtime of the Nabhold estate resolves its own RUNTIME
+  # PlatformContext (context:resolve) and reads PUBLISHED corporate content
+  # from the CMS (content:entry:resolve, audience baobab-cms). It acts in the
+  # tenant of the Control Plane context it resolved; neither scope grants
+  # tenant authority, and no tenant_id is stamped on the client. It holds
+  # neither content:entry:preview (issue that only when editorial preview is
+  # served) nor context:validate (Nabhold is a caller, not a resource server),
+  # and no scope for any other engine: later releases add theirs explicitly.
+  # Registered PROVISIONED: this entry is a ceiling, and it is promoted to
+  # ACTIVE only after baobab-iam issues the credential, the CMS verifies it,
+  # the CMS validates the Context through the Control Plane, and the
+  # cross-tenant and not-the-owner negative tests pass.
+  nabhold-backend:
+    repository: baobab-platform/nabhold
+    owner: baobab-platform/nabhold
+    runtime: "nabhold server-side service (Next.js server components and route handlers)"
+    environment: production
+    allowed_audiences: ["baobab-control-plane", "baobab-cms"]
+    allowed_scopes: ["context:resolve", "content:entry:resolve"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/nabhold
+    status: PROVISIONED
 
   # Assessment §22 / EA-04: the Control Plane -> Subscriptions -> Payments
   # chain. Each identity is issued only for the one engine it calls, and is

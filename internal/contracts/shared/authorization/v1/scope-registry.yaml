@@ -68,7 +68,7 @@ scopes:
     grants_authority: false
 
   - name: "context:validate"
-    description: "Allows a registered resource server to ask the Control Plane whether a stored context belongs to the actual caller it authenticated, presenting that caller's token as subject evidence. It grants no business authority: the Control Plane judges the subject token's canonical principal against the context's owner, requires a bounded context, and only the audiences the validator is registered to validate (workload-registry validates_audiences) are accepted. It is not context:resolve (which creates a context) and creates nothing. Currently allocated to ERP and Pulse resource-server validators for their own registered audiences."
+    description: "Allows a registered resource server to ask the Control Plane whether a stored context belongs to the actual caller it authenticated, presenting that caller's token as subject evidence. It grants no business authority: the Control Plane judges the subject token's canonical principal against the context's owner, requires a bounded context, and only the audiences the validator is registered to validate (workload-registry validates_audiences) are accepted. It is not context:resolve (which creates a context) and creates nothing. Currently allocated to the ERP, Pulse and CMS resource-server validators for their own registered audiences."
     audience: ["baobab-control-plane"]
     allowed_actors: ["workload"]
     grants_authority: false
