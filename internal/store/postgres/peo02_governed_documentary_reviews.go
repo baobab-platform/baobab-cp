@@ -195,7 +195,9 @@ func (s *Store) ProposeDocumentaryReview(ctx context.Context, key string, meta b
 		}
 	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
-		"peo02s:checkpoint:"+deferral+":"+fmt.Sprint(m)); err != nil { return empty, err }
+		"peo02s:checkpoint:"+deferral+":"+fmt.Sprint(m)); err != nil {
+		return empty, err
+	}
 	// Another review at the same original milestone requires a previously
 	// adjudicated independent RETURN_FOR_REASSESSMENT appeal, never a retry.
 	revision := 1
@@ -210,21 +212,23 @@ func (s *Store) ProposeDocumentaryReview(ctx context.Context, key string, meta b
 	   LEFT JOIN admission.documentary_appeal_decision ad ON ad.appeal_id=a.appeal_id
 	   WHERE r.deferral_id=$1::uuid AND r.milestone_month=$2
 	   ORDER BY r.revision DESC LIMIT 1 FOR UPDATE OF r`,
-	   deferral,m).Scan(&priorRevision,&priorAppealID,&priorAppealOutcome)
-	if err==nil {
-		if priorAppealOutcome!="RETURN_FOR_REASSESSMENT" || priorAppealID=="" || priorRevision>=16 {
-			return empty,ErrDocumentaryReviewDenied
+		deferral, m).Scan(&priorRevision, &priorAppealID, &priorAppealOutcome)
+	if err == nil {
+		if priorAppealOutcome != "RETURN_FOR_REASSESSMENT" || priorAppealID == "" || priorRevision >= 16 {
+			return empty, ErrDocumentaryReviewDenied
 		}
-		revision=priorRevision+1
-		reopenedFrom=&priorAppealID
-	} else if !errors.Is(err,pgx.ErrNoRows) {return empty,err}
+		revision = priorRevision + 1
+		reopenedFrom = &priorAppealID
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return empty, err
+	}
 	var id string
 	err = tx.QueryRow(ctx, `INSERT INTO admission.documentary_review_intent
 	  (deferral_id,milestone_month,revision,reopened_from_appeal_id,
 	   organisation_id,proposed_by,idempotency_key,request_digest,assessment,policy_reference)
 	  VALUES($1::uuid,$2,$3,$4::uuid,$5::uuid,$6::uuid,$7,$8,$9::jsonb,$10)
 	  RETURNING review_id::text`,
-	  deferral,m,revision,reopenedFrom,sourceOrg,actor,key,digest,raw,policy).Scan(&id)
+		deferral, m, revision, reopenedFrom, sourceOrg, actor, key, digest, raw, policy).Scan(&id)
 	if err != nil {
 		return empty, err
 	}
