@@ -290,4 +290,3 @@ func currentDeploymentEvidenceSource(registry auth.ReporterRegistry, source, env
 	scope, ok := registry.Reporter(clientID)
 	return ok && scope.Allows(environment, region)
 }
-

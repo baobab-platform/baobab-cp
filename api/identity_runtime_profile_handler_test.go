@@ -182,16 +182,15 @@ func TestIdentityRuntimeProfileRouteRequiresTokenAndRegistryScope(t *testing.T) 
 	}
 }
 
-
 func TestFederationBindingRouteUsesExactFacetAndCurrentEvidenceSources(t *testing.T) {
 	now := time.Date(2026, 10, 4, 18, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
-		name             string
-		readerScope      bool
+		name              string
+		readerScope       bool
 		runtimeCapability string
-		revokeReporter   bool
-		wantStatus       int
-		wantReadCalls    int
+		revokeReporter    bool
+		wantStatus        int
+		wantReadCalls     int
 	}{
 		{name: "valid", readerScope: true, runtimeCapability: "OIDC_FEDERATION", wantStatus: http.StatusOK, wantReadCalls: 1},
 		{name: "reader scope absent from registry", runtimeCapability: "OIDC_FEDERATION", wantStatus: http.StatusForbidden},
@@ -211,8 +210,8 @@ func TestFederationBindingRouteUsesExactFacetAndCurrentEvidenceSources(t *testin
 			grant := administration.Grant{
 				GrantID: "agr_mp2cbinding", PrincipalID: caller.ID,
 				Permission: "security.federation.view",
-				Scope: administration.Scope{Level: administration.LevelPlatform},
-				GrantType: administration.TypeStanding, Source: administration.SourceDirect,
+				Scope:      administration.Scope{Level: administration.LevelPlatform},
+				GrantType:  administration.TypeStanding, Source: administration.SourceDirect,
 				RiskClass: administration.RiskLow, ValidFrom: now.Add(-time.Minute),
 				Status: administration.StatusActive, Version: 1,
 			}
@@ -245,22 +244,22 @@ func TestFederationBindingRouteUsesExactFacetAndCurrentEvidenceSources(t *testin
 			digest := "sha256:" + strings.Repeat("a", 64)
 			platform := &runtimeProfileRepoStub{
 				snapshot: repository.FederationPlatformSnapshot{
-					ProviderID:             "provider_aaaaaaaa",
-					EngineInstanceID:       "ei_aaaaaaaa",
-					Scope:                  repository.FederationPlatformScope{OrganisationID: caller.ID, EstateID: "estate_zuribeans"},
-					ProviderStatus:         "ACTIVE",
-					InstanceStatus:         "ACTIVE",
-					BindingStatus:          "ACTIVE",
-					RuntimeCapability:      "OIDC_FEDERATION",
-					SupportStatus:          "VERIFIED",
-					ArtifactDigest:         digest,
-					DeployedArtifactDigest: digest,
-					ProfileRevision:        1,
-					EvidenceExpiresAt:      now.Add(10 * time.Minute),
-					RuntimeEvidenceSource:  "workload:baobab-deployment-controller-staging",
+					ProviderID:               "provider_aaaaaaaa",
+					EngineInstanceID:         "ei_aaaaaaaa",
+					Scope:                    repository.FederationPlatformScope{OrganisationID: caller.ID, EstateID: "estate_zuribeans"},
+					ProviderStatus:           "ACTIVE",
+					InstanceStatus:           "ACTIVE",
+					BindingStatus:            "ACTIVE",
+					RuntimeCapability:        "OIDC_FEDERATION",
+					SupportStatus:            "VERIFIED",
+					ArtifactDigest:           digest,
+					DeployedArtifactDigest:   digest,
+					ProfileRevision:          1,
+					EvidenceExpiresAt:        now.Add(10 * time.Minute),
+					RuntimeEvidenceSource:    "workload:baobab-deployment-controller-staging",
 					DeploymentEvidenceSource: "workload:baobab-deployment-controller-staging",
-					EvidenceEnvironment:    "staging",
-					EvidenceRegion:         "af-south-1",
+					EvidenceEnvironment:      "staging",
+					EvidenceRegion:           "af-south-1",
 				},
 			}
 			if tc.revokeReporter {
