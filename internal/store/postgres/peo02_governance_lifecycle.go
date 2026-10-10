@@ -59,9 +59,9 @@ func (s *Store) TransitionFoundingGovernance(
 	// The command identity includes the exact object, expected state and
 	// evidentiary decision. Reusing a key with different intent is denied.
 	request := struct {
-		TargetID string `json:"target_id"`
-		Kind     string `json:"kind"`
-		Action   string `json:"action"`
+		TargetID string                 `json:"target_id"`
+		Kind     string                 `json:"kind"`
+		Action   string                 `json:"action"`
 		Input    FoundingLifecycleInput `json:"input"`
 	}{targetID, kind, action, in}
 	raw, err := json.Marshal(request)
