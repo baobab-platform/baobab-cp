@@ -247,3 +247,40 @@ func TestERPProvisionerTokenModes(t *testing.T) {
 		}
 	})
 }
+
+// LA-03B: the Organisation-first v2 routes are off unless explicitly enabled,
+// and the flag is read independently of the PEO route-family inputs.
+func TestOrganisationFirstV2IsOffUnlessExplicitlyEnabled(t *testing.T) {
+	validConfigEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+	if cfg.OrganisationFirstV2Enabled {
+		t.Fatal("ORGANISATION_FIRST_V2_ENABLED must default to false")
+	}
+	for _, value := range []string{"", "false", "0", "1", "yes", "on", "enabled", "truee"} {
+		t.Setenv("ORGANISATION_FIRST_V2_ENABLED", value)
+		cfg, err := Load()
+		if err != nil || cfg.OrganisationFirstV2Enabled {
+			t.Errorf("ORGANISATION_FIRST_V2_ENABLED=%q must not enable the routes (enabled=%v, err=%v)", value, cfg.OrganisationFirstV2Enabled, err)
+		}
+	}
+	for _, value := range []string{"true", "TRUE", " True "} {
+		t.Setenv("ORGANISATION_FIRST_V2_ENABLED", value)
+		cfg, err := Load()
+		if err != nil || !cfg.OrganisationFirstV2Enabled {
+			t.Errorf("ORGANISATION_FIRST_V2_ENABLED=%q must enable the flag (enabled=%v, err=%v)", value, cfg.OrganisationFirstV2Enabled, err)
+		}
+	}
+}
+
+func TestOrganisationFirstV2IgnoresThePEOFlags(t *testing.T) {
+	validConfigEnv(t)
+	t.Setenv("PEO_PROGRESSIVE_ADMISSION_ENABLED", "true")
+	t.Setenv("PEO_FOUNDING_GOVERNANCE_ENABLED", "true")
+	cfg, err := Load()
+	if err != nil || cfg.OrganisationFirstV2Enabled {
+		t.Fatalf("the PEO flags must not enable Organisation-first v2 (enabled=%v, err=%v)", cfg.OrganisationFirstV2Enabled, err)
+	}
+}

@@ -83,7 +83,11 @@ type Dependencies struct {
 	TenantBootstrapRegistration bool
 	// OrganisationFirstV2 exposes the reviewed pre-tenant Organisation and
 	// canonical Shared v2 registration endpoints. Default-off until the
-	// enterprise onboarding programme certifies its service interfaces.
+	// enterprise onboarding programme certifies its service interfaces, and
+	// mounted only where OrganisationFirstV2PermittedIn allows (never in
+	// production, nor in an unset or unknown environment, regardless of this
+	// flag). It is separate from ProgressiveApplicationsEnabled and
+	// FoundingGovernanceEnabled: enabling one family mounts none of the others.
 	OrganisationFirstV2 bool
 	// LA-04C: manual human maker/checker mandate intents, disabled by default.
 	// Approval is inert; migration 000104 still refuses ACTIVE.
@@ -274,6 +278,15 @@ func peoRoutesPermittedIn(environment string) bool {
 	return false
 }
 
+// OrganisationFirstV2PermittedIn reports whether the LA-03 Organisation-first
+// routes may be mounted in the named environment. It is the same explicit
+// nonproduction allow-list as the other opt-in v2 route families; an unset or
+// unknown environment is production-like and denied (ADR-BCP-027 section 12:
+// no production go-live before LA-07 operational certification).
+func OrganisationFirstV2PermittedIn(environment string) bool {
+	return peoRoutesPermittedIn(environment)
+}
+
 func New(dependencies Dependencies) http.Handler {
 	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships,
 		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration,
@@ -312,7 +325,7 @@ func New(dependencies Dependencies) http.Handler {
 	// request, or, for a tenant that predates admission, by the
 	// migration-only bootstrap route.
 	r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants", a.register)
-	if a.organisationFirstV2 {
+	if a.organisationFirstV2 && OrganisationFirstV2PermittedIn(dependencies.Environment) {
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).
 			Post("/v2/tenant-onboarding/{requestID}/primary-organisation", a.prepareOrganisationV2)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).
