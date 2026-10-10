@@ -164,7 +164,7 @@ func(s *Store)DecideFoundingGovernance(ctx context.Context,key string,meta bases
       AND jsonb_array_length(lp.evidence_references)>0)`,p.SponsorOrganisationID).Scan(&verified)
    if err!=nil{return empty,err}
    if !verified||now.Before(p.EffectiveFrom)||!now.Before(p.EffectiveTo){return empty,ErrFoundingAuthority}
-   _,err=tx.Exec(ctx,`INSERT INTO admission.founding_group_sponsorship
+   grantResult, execErr := tx.Exec(ctx,`INSERT INTO admission.founding_group_sponsorship
    (sponsorship_id,sponsor_organisation_id,operating_organisation_id,platform_id,
     status,scope,authority_basis_reference,evidence_references,proposed_by,
     approved_by,approved_at,effective_from,effective_to,provenance)
@@ -186,7 +186,7 @@ func(s *Store)DecideFoundingGovernance(ctx context.Context,key string,meta bases
    if approvedCount!=len(p.RequirementIDs){return empty,ErrFoundingAuthority}
    // Admission decision is immutable. The DB trigger verifies exact
    // INTERNAL_GROUP, original approved date, 24-month expiry and SoD.
-   _,err=tx.Exec(ctx,`INSERT INTO admission.founding_documentary_deferral
+   grantResult, execErr := tx.Exec(ctx,`INSERT INTO admission.founding_documentary_deferral
    (deferral_id,organisation_id,sponsorship_id,admission_decision_id,
     requirement_ids,policy_reference,approval_reference,proposed_by,
     approved_by,approved_at,effective_from,expires_at,maximum_duration_months,status)
@@ -197,7 +197,7 @@ func(s *Store)DecideFoundingGovernance(ctx context.Context,key string,meta bases
    p.PolicyReference,decision.ReviewReference,maker,checkerID,now)
   default: return empty,ErrFoundingAuthority
   }
-  if err!=nil{return empty,ErrFoundingAuthority}
+  if execErr != nil || grantResult.RowsAffected() != 1 { return empty, ErrFoundingAuthority }
   next="APPROVED"
  }
  _,err=tx.Exec(ctx,`UPDATE admission.founding_governance_intent
