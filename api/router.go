@@ -115,7 +115,7 @@ type Dependencies struct {
 	// PEO-03B: separate opt-in for independent v2 admission decisions.
 	// It never reuses v1 decision/onboarding rows or confers tenant authority.
 	ProgressiveBridgeEnabled bool
-	ProgressiveBridge progressiveBridgeWriter
+	ProgressiveBridge        progressiveBridgeWriter
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -715,6 +715,12 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(decide...).Post("/v2/admission/reviews/{reviewID}/decision", bridge.decide)
 		r.With(request...).Post("/v2/admission/decisions/{decisionID}/onboarding-requests", bridge.request)
 		r.With(authorise...).Post("/v2/admission/onboarding-requests/{requestID}/authorisation", bridge.authorise)
+		// PEO-03C: distinct from legacy /v2/tenants, consumes ONLY the
+		// independently authorised progressive onboarding request.
+		if a.organisationFirstV2 {
+			r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).
+				Post("/v2/admission/onboarding-requests/{requestID}/register-tenant", a.registerProgressiveV2)
+		}
 	}
 	if dependencies.Applications != nil {
 		// ADR-BCP-017: applicants reach only their own applications; review

@@ -126,7 +126,7 @@ func (s *Store) UpdateTenantLifecycle(ctx context.Context, tenantID string, next
 	return nil
 }
 func (s *Store) RegisterTenant(ctx context.Context, key string, metadata basestore.RequestMetadata, c domain.RegisterTenant, step basestore.RegistrationStep) (domain.Operation, error) {
-	return s.registerTenant(ctx, key, metadata, c, nil, step)
+	return s.registerTenant(ctx, key, metadata, c, nil, step, false)
 }
 
 // RegisterTenantV2 implements the internal Organisation-first transactional
@@ -145,10 +145,10 @@ func (s *Store) RegisterTenantV2(ctx context.Context, key string, metadata bases
 		Basis:                     domain.RegistrationOnboarding, TenantID: c.TenantID, LegalEntityID: c.LegalEntityID,
 		DisplayName: c.DisplayName, IsolationStrategy: c.IsolationStrategy,
 		ResidencyRegion: c.ResidencyRegion, RequestedProducts: c.RequestedProducts, Metadata: c.Metadata,
-	}, &c, step)
+	}, &c, step, false)
 }
 
-func (s *Store) registerTenant(ctx context.Context, key string, metadata basestore.RequestMetadata, c domain.RegisterTenant, v2 *domain.RegisterTenantV2, step basestore.RegistrationStep) (domain.Operation, error) {
+func (s *Store) registerTenant(ctx context.Context, key string, metadata basestore.RequestMetadata, c domain.RegisterTenant, v2 *domain.RegisterTenantV2, step basestore.RegistrationStep, progressive bool) (domain.Operation, error) {
 	if (c.Basis != domain.RegistrationOnboarding && c.Basis != domain.RegistrationBootstrap) ||
 		(c.Basis == domain.RegistrationOnboarding && step == nil) {
 		return domain.Operation{}, basestore.ErrRegistrationBasis
@@ -238,7 +238,10 @@ func (s *Store) registerTenant(ctx context.Context, key string, metadata basesto
 		if parseErr != nil {
 			return domain.Operation{}, parseErr
 		}
-		err = tx.QueryRow(ctx, `SELECT b.organisation_id::text,r.status
+		if progressive {
+			approvedID, requestStatus, err = s.verifyProgressiveRegistrationTx(ctx, tx, c, *v2, metadata)
+		} else {
+			err = tx.QueryRow(ctx, `SELECT b.organisation_id::text,r.status
             FROM admission.tenant_onboarding_organisation b
             JOIN admission.tenant_onboarding_request r
               ON r.tenant_onboarding_request_id=b.tenant_onboarding_request_id
@@ -248,6 +251,7 @@ func (s *Store) registerTenant(ctx context.Context, key string, metadata basesto
               AND op.status='ACTIVE' AND ce.entity_type='ORGANISATION'
               AND ce.tenant_id IS NULL
             FOR UPDATE OF r,ce`, requestUUID).Scan(&approvedID, &requestStatus)
+		}
 		if err != nil {
 			return domain.Operation{}, fmt.Errorf("missing reviewed, unassigned Organisation binding: %w", err)
 		}
