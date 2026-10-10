@@ -103,7 +103,7 @@ type Dependencies struct {
 	// PEO-03 v2 progressive drafts are deliberately independent of v1
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
-	ProgressiveApplications progressiveApplicationWriter
+	ProgressiveApplications        progressiveApplicationWriter
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -630,8 +630,8 @@ func New(dependencies Dependencies) http.Handler {
 	}
 	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&
 		(dependencies.Environment == "development" || dependencies.Environment == "test" ||
-		 dependencies.Environment == "integration" || dependencies.Environment == "sandbox" ||
-		 dependencies.Environment == "staging") {
+			dependencies.Environment == "integration" || dependencies.Environment == "sandbox" ||
+			dependencies.Environment == "staging") {
 		ph := progressiveApplicantHandler{repo: dependencies.ProgressiveApplications, api: a}
 		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
 			Post("/v2/client-applications", ph.create)
