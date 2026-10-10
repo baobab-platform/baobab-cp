@@ -88,3 +88,20 @@ CREATE TRIGGER progressive_onboarding_guard BEFORE UPDATE OR DELETE
 REVOKE ALL ON admission.progressive_admission_review FROM PUBLIC;
 REVOKE ALL ON admission.progressive_admission_decision FROM PUBLIC;
 REVOKE ALL ON admission.progressive_onboarding_request FROM PUBLIC;
+-- Exact replay journal: actor + key identifies one immutable command receipt.
+CREATE TABLE admission.progressive_bridge_command (
+ actor_id uuid NOT NULL REFERENCES identity.principal(principal_id),
+ idempotency_key text NOT NULL CHECK(length(idempotency_key) BETWEEN 16 AND 128),
+ action text NOT NULL CHECK(action IN ('REVIEW','DECIDE','REQUEST','AUTHORISE')),
+ target_id uuid NOT NULL,
+ request_digest char(64) NOT NULL CHECK(request_digest ~ '^[0-9a-f]{64}
+),
+ receipt jsonb NOT NULL CHECK(jsonb_typeof(receipt)='object'),
+ recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(actor_id,idempotency_key)
+);
+CREATE TRIGGER progressive_bridge_command_immutable BEFORE UPDATE OR DELETE
+ ON admission.progressive_bridge_command FOR EACH ROW
+ EXECUTE FUNCTION admission.progressive_bridge_immutable();
+REVOKE ALL ON admission.progressive_bridge_command FROM PUBLIC;
+
