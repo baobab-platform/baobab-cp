@@ -136,8 +136,34 @@ func EvaluateProgressiveEligibility(items []RequirementAssessment, deferred Foun
 	if len(items) == 0 {
 		return nil, errors.New("PEO-03: requirements policy assessment absent")
 	}
+	// The classification catalogue is a separate authoritative, versioned
+	// input. Applicant-supplied assessment claims cannot reclassify statutory
+	// or provider obligations as PLATFORM_DOCUMENTARY and obtain a deferral.
+	authorityByRequirement := make(map[string]string, len(classes))
+	for _, c := range classes {
+		if strings.TrimSpace(c.ID) == "" ||
+			(c.Authority != "PLATFORM_DOCUMENTARY" &&
+				c.Authority != "STATUTORY" && c.Authority != "PROVIDER") {
+			return nil, errors.New("PEO-01: untrusted or missing requirement authority")
+		}
+		if _, present := authorityByRequirement[c.ID]; present {
+			return nil, fmt.Errorf("PEO-01: duplicate requirement classification %q", c.ID)
+		}
+		authorityByRequirement[c.ID] = c.Authority
+	}
+	seen := make(map[string]bool, len(items))
+	expectedContext := items[0].ContextReference
 	out := make([]RequirementDecision, 0, len(items))
 	for _, v := range items {
+		if seen[v.RequirementID] || v.ContextReference != expectedContext ||
+			authorityByRequirement[v.RequirementID] == "" ||
+			authorityByRequirement[v.RequirementID] != v.Authority {
+			return nil, fmt.Errorf("PEO-01: duplicate, unbound or authority-mismatched assessment %q", v.RequirementID)
+		}
+		seen[v.RequirementID] = true
+		if v.EvidenceState == "APPROVED_EVIDENCE" && strings.TrimSpace(v.EvidenceReference) == "" {
+			return nil, fmt.Errorf("PEO-01: approved evidence must carry a source reference for %q", v.RequirementID)
+		}
 		if strings.TrimSpace(v.RequirementID) == "" || strings.TrimSpace(v.PolicyReference) == "" ||
 			strings.TrimSpace(v.ContextReference) == "" || v.EvaluatedAt.IsZero() ||
 			v.ValidUntil.IsZero() || v.EvaluatedAt.After(now) || !now.Before(v.ValidUntil) ||
