@@ -135,6 +135,7 @@ func bridgeInternalEligible(ctx context.Context, tx pgx.Tx, org string) (bool, e
 		  AND s.effective_from<=clock_timestamp() AND s.effective_to>clock_timestamp()
 		  AND fp.identity_class='LEGAL_PERSON' AND fp.incorporation_claim='REGISTERED_EVIDENCED'
 		  AND lp.verification_state='VERIFIED' AND lp.legal_status='ACTIVE'
+		  AND lp.source_authority NOT IN ('shared-governance','control-plane-registration')
 		  AND lp.verified_at<=clock_timestamp() AND lp.effective_from<=clock_timestamp()
 		  AND (lp.effective_to IS NULL OR lp.effective_to>clock_timestamp())
 		  AND jsonb_array_length(lp.evidence_references)>0)`, org).Scan(&ok)
