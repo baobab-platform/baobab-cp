@@ -146,6 +146,7 @@ var canonicalMigrationNames = []string{
 	"000109_peo02_governed_grace_commands.sql",
 	"000110_peo02_decision_idempotency.sql",
 	"000111_peo02_governed_revocation.sql",
+	"000112_peo03_v2_decision_bridge.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

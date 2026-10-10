@@ -112,6 +112,10 @@ type Dependencies struct {
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
 	ProgressiveApplications        progressiveApplicationWriter
+	// PEO-03B: separate opt-in for independent v2 admission decisions.
+	// It never reuses v1 decision/onboarding rows or confers tenant authority.
+	ProgressiveBridgeEnabled bool
+	ProgressiveBridge progressiveBridgeWriter
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -687,6 +691,30 @@ func New(dependencies Dependencies) http.Handler {
 			Patch("/v2/client-applications/{applicationID}", ph.update)
 		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
 			Post("/v2/client-applications/{applicationID}/submit", ph.submit)
+	}
+	if dependencies.ProgressiveBridgeEnabled && dependencies.ProgressiveBridge != nil &&
+		dependencies.ProgressiveApplicationsEnabled && peoRoutesPermittedIn(dependencies.Environment) {
+		bridge := progressiveBridgeHandler{repo: dependencies.ProgressiveBridge, api: a}
+		review := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "admission:review"),
+			a.requireAdminRole(nil, true),
+		}
+		decide := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "admission:decide"),
+			a.requireAdminRole(nil, true),
+		}
+		request := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "onboarding:request"),
+			a.requireAdminRole(nil, true),
+		}
+		authorise := []func(http.Handler) http.Handler{
+			a.authorize(a.adminVerifier, "human", "onboarding:authorise"),
+			a.requireAdminRole(nil, true),
+		}
+		r.With(review...).Post("/v2/admission/applications/{applicationID}/review", bridge.review)
+		r.With(decide...).Post("/v2/admission/reviews/{reviewID}/decision", bridge.decide)
+		r.With(request...).Post("/v2/admission/decisions/{decisionID}/onboarding-requests", bridge.request)
+		r.With(authorise...).Post("/v2/admission/onboarding-requests/{requestID}/authorisation", bridge.authorise)
 	}
 	if dependencies.Applications != nil {
 		// ADR-BCP-017: applicants reach only their own applications; review
