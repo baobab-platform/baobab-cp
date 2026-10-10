@@ -3,7 +3,7 @@
 **Decision basis:** Accepted ADR-BCP-026/027 and Shared LA-01.
 **Canonical Shared contracts:** `baobab-platform/shared` commit `5930dcf07d16cbb138fa98af0059d9a35e011114`.
 **Control Plane migrations:** 000102 (nullable compatibility) and 000103 (reviewed pre-tenant identity).
-**Runtime state:** v2 registration and preparation are feature-gated and **disabled by default**; not production acceptance, legal actor mandate or commerce authorization.
+**Runtime state:** v2 registration and preparation are feature-gated and **disabled by default**; LA-03B wires the gate into the server entry point (see *Controlled enablement*). Not production acceptance, legal actor mandate or commerce authorization.
 
 ## Executable journey
 
@@ -17,7 +17,19 @@
 
 ## Security / rollout
 
-Both v2 routes require the existing `tenant:write` human platform administrator authorization and role guard. The `OrganisationFirstV2` dependency flag defaults false and is not enabled by production config in this increment. A feature cutover needs reviewed versioned API publication, a live readiness/rollback decision, verification-case and corporate-record reconciliation, IAM integration and provider acceptance. This increment is intentionally **not** a route allowing self-service unincorporated applicants, a statutory documentary waiver or a payment/ERP company creation workflow.
+Both v2 routes require the existing `tenant:write` human platform administrator authorization and role guard. A feature cutover needs reviewed versioned API publication, a live readiness/rollback decision, verification-case and corporate-record reconciliation, IAM integration and provider acceptance. This increment is intentionally **not** a route allowing self-service unincorporated applicants, a statutory documentary waiver or a payment/ERP company creation workflow.
+
+## Controlled enablement (LA-03B)
+
+| Input | Effect |
+|---|---|
+| `ORGANISATION_FIRST_V2_ENABLED` (default unset, i.e. off) | Only the exact value `true` (case-insensitive) sets `config.Config.OrganisationFirstV2Enabled`, which `cmd/controlplane` passes to `api.Dependencies.OrganisationFirstV2`. |
+| `BAOBAB_ENVIRONMENT` | The router mounts the two routes only for `development`, `test`, `integration`, `sandbox` and `staging` (`api.OrganisationFirstV2PermittedIn`, the same allow-list as the other opt-in v2 families). `production`, an unset value and any unknown spelling are production-like and **stay closed whatever the flag says**. |
+
+- **Fail closed in production.** At startup the entry point logs whether the flag was honoured or ignored, but a denied environment is never an error: the routes are simply absent (404). Opening production requires LA-07 operational certification and a deliberate change to the allow-list, not a configuration value.
+- **Independent of the PEO route families.** `ORGANISATION_FIRST_V2_ENABLED` is separate from `PEO_PROGRESSIVE_ADMISSION_ENABLED` and `PEO_FOUNDING_GOVERNANCE_ENABLED`. Each family has its own readiness and activation; enabling one mounts none of the others (`TestOrganisationFirstV2IsIndependentOfThePEORouteFamilies`).
+- **No bypass.** The flag adds no authority. Every request still needs a human platform administrator with `tenant:write`, the onboarding service, Organisation-first persistence and an `AUTHORISED` TenantOnboardingRequest; the caller cannot supply `tenant_id`, a registration basis or bootstrap fields, and no legal entity is invented.
+- **What enabling it does not do.** It does not verify any legal identity, approve a legal-actor mandate, grant an INTERNAL entitlement or create a tenant. Real first-party onboarding still needs its own governance decisions.
 
 ## Tests / acceptance
 
@@ -28,6 +40,7 @@ Both v2 routes require the existing `tenant:write` human platform administrator 
 - Identical v2 HTTP retries are idempotent despite different provisional tenant IDs; no duplicate operation, outbox or tenant.
 - ZuriBeans, Equator & Estate and Thamani may be recognised as separate first-party business identities; unincorporated entities do not become VERIFIED legal persons.
 - No route exists unless explicitly enabled, and an unauthenticated principal cannot invoke either route.
+- LA-03B (`api/tenant_registration_v2_test.go`, `internal/config/config_test.go`): disabled in every environment by default; mounted only in the approved nonproduction environments; production, unset and unknown environments denied even with a valid administrator and the flag on; workload, scope-less and tenant-admin callers refused; independence from the PEO families; no bypass around an authorised TenantOnboardingRequest.
 
 ## Open downstream boundaries
 

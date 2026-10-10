@@ -90,6 +90,14 @@ type Config struct {
 	// LA-04D allows only explicitly enabled nonproduction lifecycle operations.
 	LegalActorMandateLifecycleEnabled bool
 	LegalActorAssessmentEnabled       bool
+	// OrganisationFirstV2Enabled mounts the LA-03 Organisation-first tenant
+	// onboarding routes (/v2/tenant-onboarding/.../primary-organisation and
+	// /v2/tenants). Default false (ORGANISATION_FIRST_V2_ENABLED). Even when
+	// true the router mounts them only in the approved nonproduction
+	// environments; production stays closed until LA-07 certification
+	// (ADR-BCP-027 section 12). It is independent of
+	// PEO_PROGRESSIVE_ADMISSION_ENABLED and PEO_FOUNDING_GOVERNANCE_ENABLED.
+	OrganisationFirstV2Enabled bool
 	// EnforcementRollback (ADMINISTRATIVE_ENFORCEMENT_ROLLBACK, comma-
 	// separated permission keys, or "*") returns permissions to the role
 	// decision at once, without a release. It can only return authority to
@@ -142,6 +150,7 @@ func Load() (Config, error) {
 	c.LegalActorMandateCommandsEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("LEGAL_ACTOR_MANDATE_COMMANDS_ENABLED")), "true")
 	c.LegalActorMandateLifecycleEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("LEGAL_ACTOR_MANDATE_LIFECYCLE_ENABLED")), "true")
 	c.LegalActorAssessmentEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("LEGAL_ACTOR_ASSESSMENT_ENABLED")), "true")
+	c.OrganisationFirstV2Enabled = strings.EqualFold(strings.TrimSpace(os.Getenv("ORGANISATION_FIRST_V2_ENABLED")), "true")
 	c.FederationSourceEngineInstanceID = os.Getenv("FEDERATION_SOURCE_ENGINE_INSTANCE_ID")
 	c.WorkloadRegistryFile = strings.TrimSpace(os.Getenv("WORKLOAD_REGISTRY_FILE"))
 	if c.FederationSourceEngineInstanceID != "" {
