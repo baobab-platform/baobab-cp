@@ -28,10 +28,14 @@ func publishFoundingLifecycle(ctx context.Context, tx pgx.Tx, meta basestore.Req
 		typ, definition = "com.baobab-platform.control-plane.founding-sponsorship.suspended.v1", "SponsorshipSuspended"
 	case "SPONSORSHIP/REVOKED":
 		typ, definition = "com.baobab-platform.control-plane.founding-sponsorship.revoked.v1", "SponsorshipRevoked"
+	case "SPONSORSHIP/EXPIRED":
+		typ, definition = "com.baobab-platform.control-plane.founding-sponsorship.expired.v1", "SponsorshipExpired"
 	case "DOCUMENTARY_DEFERRAL/ACTIVE":
 		typ, definition = "com.baobab-platform.control-plane.founding-documentary-deferral.activated.v1", "DeferralActivated"
 	case "DOCUMENTARY_DEFERRAL/REVOKED":
 		typ, definition = "com.baobab-platform.control-plane.founding-documentary-deferral.revoked.v1", "DeferralRevoked"
+	case "DOCUMENTARY_DEFERRAL/EXPIRED":
+		typ, definition = "com.baobab-platform.control-plane.founding-documentary-deferral.expired.v1", "DeferralExpired"
 	default:
 		return ErrFoundingAuthority
 	}
