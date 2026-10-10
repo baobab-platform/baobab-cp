@@ -74,6 +74,25 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	// PEO-02E is off by default and strictly nonproduction until
+	// an independent staging acceptance proves IAM credentials and durable ACK.
+	if os.Getenv("PEO_FOUNDING_DELIVERY_ENABLED") == "true" {
+		if !api.OrganisationFirstV2PermittedIn(cfg.Environment) {
+			slog.Error("PEO founding event relay cannot start outside controlled nonproduction")
+			os.Exit(1)
+		}
+		relay, relayErr := postgres.NewFoundingOutboxRelay(db,
+			os.Getenv("PEO_BILLING_EVENT_INBOX_URL"),
+			os.Getenv("PEO_BILLING_EVENT_TOKEN_FILE"))
+		if relayErr != nil {
+			slog.Error("PEO founding event delivery configuration refused", "error", relayErr)
+			os.Exit(1)
+		}
+		go relay.Run(ctx, 2*time.Second, func(err error) {
+			slog.Warn("PEO founding event remains pending for durable delivery", "reason", err)
+		})
+	}
+
 	resolverRepository, err := resolverrepo.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		slog.Error("resolver repository unavailable", "error", err)
