@@ -100,6 +100,10 @@ type Dependencies struct {
 	// including unset, as production: providers must then be permitted in
 	// production (ADR-SHARED-011).
 	Environment string
+	// PEO-03 v2 progressive drafts are deliberately independent of v1
+	// decisions and are disabled by default pending applicant journey proof.
+	ProgressiveApplicationsEnabled bool
+	ProgressiveApplications progressiveApplicationWriter
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -623,6 +627,20 @@ func New(dependencies Dependencies) http.Handler {
 		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-drift", obs.drift)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/audit", obs.audit)
+	}
+	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&
+		(dependencies.Environment == "development" || dependencies.Environment == "test" ||
+		 dependencies.Environment == "integration" || dependencies.Environment == "sandbox" ||
+		 dependencies.Environment == "staging") {
+		ph := progressiveApplicantHandler{repo: dependencies.ProgressiveApplications, api: a}
+		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
+			Post("/v2/client-applications", ph.create)
+		r.With(a.authorize(a.adminVerifier, "human", "application:read")).
+			Get("/v2/client-applications/{applicationID}", ph.get)
+		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
+			Patch("/v2/client-applications/{applicationID}", ph.update)
+		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
+			Post("/v2/client-applications/{applicationID}/submit", ph.submit)
 	}
 	if dependencies.Applications != nil {
 		// ADR-BCP-017: applicants reach only their own applications; review
