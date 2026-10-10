@@ -537,6 +537,15 @@ scopes:
     allowed_actors: ["human"]
     privileged: true
 
+  - name: "subscription:internal-authority"
+    description: >-
+      Allows an authenticated registered baobab-subscriptions workload to ask
+      Control Plane for a fresh, tenant- and ProductSubscription-bound INTERNAL
+      eligibility decision. This is a read-only policy check, never an
+      admission approval, identity verification or entitlement grant.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+
   - name: "subscription:read"
     description: >-
       A platform operator reads ProductSubscription classifications and their
@@ -575,6 +584,14 @@ scopes:
       a classified ProductSubscription (baobab-subscriptions,
       billing.subscription.manage). Tenant, legal entity and classification are
       asserted by the caller and never accepted from browsers.
+    audience: ["baobab-subscriptions"]
+    allowed_actors: ["workload"]
+
+  - name: "billing:observe"
+    description: >-
+      Authenticated Control Plane workload delivery of canonical founding
+      lifecycle invalidation events to the subscriptions durable inbox.
+      Receipt is not continuing INTERNAL eligibility or payment authority.
     audience: ["baobab-subscriptions"]
     allowed_actors: ["workload"]
 
