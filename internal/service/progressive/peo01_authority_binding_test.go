@@ -12,13 +12,13 @@ func TestPEO01RequirementAuthorityAndContextCannotBeOverridden(t *testing.T) {
 	deferment, classes, now := sample()
 	assessment := func(id, authority string) RequirementAssessment {
 		return RequirementAssessment{
-			RequirementID: id,
-			Authority: authority,
-			Applies: Required,
-			PolicyReference: "policy/peo01/approved-v2",
+			RequirementID:    id,
+			Authority:        authority,
+			Applies:          Required,
+			PolicyReference:  "policy/peo01/approved-v2",
 			ContextReference: "trusted-tenant-context-za",
-			EvaluatedAt: now.Add(-time.Minute),
-			ValidUntil: now.Add(time.Minute),
+			EvaluatedAt:      now.Add(-time.Minute),
+			ValidUntil:       now.Add(time.Minute),
 		}
 	}
 	platform := assessment(classes[0].ID, "PLATFORM_DOCUMENTARY")
@@ -29,7 +29,7 @@ func TestPEO01RequirementAuthorityAndContextCannotBeOverridden(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := []struct {
-		name string
+		name   string
 		mutate func([]RequirementAssessment, []DocumentaryRequirement) ([]RequirementAssessment, []DocumentaryRequirement)
 	}{
 		{"provider masquerades as platform documentary", func(items []RequirementAssessment, class []DocumentaryRequirement) ([]RequirementAssessment, []DocumentaryRequirement) {
