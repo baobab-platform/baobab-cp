@@ -3,6 +3,8 @@ package postgres
 import (
  "context"
  "errors"
+ "encoding/json"
+ "strings"
  "os"
  "testing"
  "time"
@@ -64,7 +66,7 @@ func TestPEO02MakerCheckerNeverCertifiesSyntheticSponsor(t *testing.T){
  orgs:=[]string{}
  for i:=0;i<2;i++{
   tenant:=domain.NewTenantID()
-  legal:="LE-"+domain.NewUUIDv7()[:10]
+  legal:="LE-"+strings.ToUpper(strings.ReplaceAll(domain.NewUUIDv7(),"-","")[:16])
   _,err=db.RegisterTenant(ctx,"peo02-bootstrap-"+domain.NewUUIDv7(),
    basestore.RequestMetadata{ActorID:"test-admin",ActorType:"workload",CorrelationID:domain.NewUUIDv7()},
    domain.RegisterTenant{TenantID:tenant,LegalEntityID:legal,
@@ -83,9 +85,22 @@ func TestPEO02MakerCheckerNeverCertifiesSyntheticSponsor(t *testing.T){
  PlatformID:"baobab",AuthorityBasisReference:"test/review-only",
  EvidenceReferences:[]string{"synthetic/unverified"},EffectiveFrom:now.Add(-time.Hour),
  EffectiveTo:now.Add(24*time.Hour)}
- // Store command validation does not grant anything based on an arbitrary
- // sponsorship label or an applicant's assertion.
+ // Store command validation never grants on an unverified label.
  raw:=[]byte(`{}`)
  if _,err=db.ProposeFoundingGovernance(ctx,"peo02-no-document-"+domain.NewUUIDv7(),meta,maker,"SPONSORSHIP",raw);err==nil{t.Fatal("empty sponsorship approved")}
- _=proposal
+ raw,err=json.Marshal(proposal);if err!=nil{t.Fatal(err)}
+ key:="peo02-proposal-"+domain.NewUUIDv7()
+ receipt,err:=db.ProposeFoundingGovernance(ctx,key,meta,maker,"SPONSORSHIP",raw)
+ if err!=nil||receipt.Status!="PENDING"{t.Fatalf("proposal rejected %+v %v",receipt,err)}
+ replay,err:=db.ProposeFoundingGovernance(ctx,key,meta,maker,"SPONSORSHIP",raw)
+ if err!=nil||replay.IntentID!=receipt.IntentID{t.Fatalf("replay mismatch %+v %v",replay,err)}
+ if _,err=db.ProposeFoundingGovernance(ctx,key,meta,maker,"SPONSORSHIP",[]byte(`{}`));err==nil{t.Fatal("changed intent replay accepted")}
+ same:=FoundingDecisionInput{ReviewReference:"test/fake",Decision:"APPROVE"}
+ if _,err=db.DecideFoundingGovernance(ctx,"peo02-self-"+domain.NewUUIDv7(),meta,maker,receipt.IntentID,same);err==nil{t.Fatal("self-approval accepted")}
+ checkerMeta:=basestore.RequestMetadata{ActorID:checker,ActorType:"human",CorrelationID:domain.NewUUIDv7()}
+ if _,err=db.DecideFoundingGovernance(ctx,"peo02-unverified-"+domain.NewUUIDv7(),checkerMeta,checker,receipt.IntentID,same);err==nil{t.Fatal("unverified synthetic sponsor was granted admission authority")}
+ var grantCount int
+ if err=db.pool.QueryRow(ctx,`SELECT count(*) FROM admission.founding_group_sponsorship
+  WHERE operating_organisation_id=$1::uuid`,orgs[0]).Scan(&grantCount);err!=nil{t.Fatal(err)}
+ if grantCount!=0{t.Fatalf("synthetic grant materialised: %d",grantCount)}
 }
