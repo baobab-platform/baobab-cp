@@ -258,18 +258,23 @@ func(s *Store) FileDocumentaryReviewAppeal(ctx context.Context,key string,meta b
  if errors.Is(err,pgx.ErrNoRows){return empty,ErrDocumentaryReviewDenied}
  if err!=nil{return empty,err}
  if actor==checker{return empty,ErrDocumentaryReviewDenied}
- var appealID string
+ if _,err=tx.Exec(ctx,`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
+  "peo02s:appeal:"+decisionID);err!=nil{return empty,err}
+ var appealID,priorActor,priorKey,priorReason,priorEvidence string
+ err=tx.QueryRow(ctx,`SELECT appeal_id::text,raised_by::text,idempotency_key,reason,evidence_reference
+   FROM admission.documentary_review_appeal WHERE decision_id=$1::uuid`,
+   decisionID).Scan(&appealID,&priorActor,&priorKey,&priorReason,&priorEvidence)
+ if err==nil {
+  if priorActor!=actor || priorKey!=key || priorReason!=in.Reason ||
+    priorEvidence!=in.EvidenceReference {return empty,ErrDocumentaryReviewDenied}
+  return ReviewReceipt{appealID,"FILED"},nil
+ }
+ if !errors.Is(err,pgx.ErrNoRows){return empty,err}
  err=tx.QueryRow(ctx,`INSERT INTO admission.documentary_review_appeal
     (decision_id,raised_by,idempotency_key,reason,evidence_reference)
-    VALUES($1::uuid,$2::uuid,$3,$4,$5)
-    ON CONFLICT (decision_id) DO UPDATE
-      SET reason=admission.documentary_review_appeal.reason
-    WHERE admission.documentary_review_appeal.raised_by=EXCLUDED.raised_by
-      AND admission.documentary_review_appeal.idempotency_key=EXCLUDED.idempotency_key
-      AND admission.documentary_review_appeal.reason=EXCLUDED.reason
-      AND admission.documentary_review_appeal.evidence_reference=EXCLUDED.evidence_reference
-    RETURNING appeal_id::text`,decisionID,actor,key,in.Reason,in.EvidenceReference).Scan(&appealID)
- if err!=nil{return empty,ErrDocumentaryReviewDenied}
+    VALUES($1::uuid,$2::uuid,$3,$4,$5) RETURNING appeal_id::text`,
+    decisionID,actor,key,in.Reason,in.EvidenceReference).Scan(&appealID)
+ if err!=nil{return empty,err}
  if err=foundingAudit(ctx,tx,meta,"documentary_appeal_filed",appealID,"DOCUMENTARY_APPEAL",
    map[string]any{"review_decision_id":decisionID});err!=nil{return empty,err}
  if err=tx.Commit(ctx);err!=nil{return empty,err}
