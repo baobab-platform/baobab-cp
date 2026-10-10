@@ -65,7 +65,7 @@ func TestPEO03CDirectRegistrationIsAtomicIdempotentAndPreservesV2Authority(t *te
 		people[1], app.ID, ProgressiveAdmissionReviewInput{
 			OrganisationID: org, EvidenceReference: "evidence/staging/review",
 			IdentityResolutionPolicyReference: "policy/staging/review",
-			SubscriptionType: "COMMERCIAL", MarketScope: []string{"ZA"},
+			SubscriptionType:                  "COMMERCIAL", MarketScope: []string{"ZA"},
 			ProductRequirements: []string{"baobab-trade"}, IsolationStrategy: "row_level_security",
 		})
 	if err != nil {
@@ -81,7 +81,7 @@ func TestPEO03CDirectRegistrationIsAtomicIdempotentAndPreservesV2Authority(t *te
 	}
 	request, err := db.RequestProgressiveOnboarding(ctx, "request-"+domain.NewUUIDv7(), meta(people[3]),
 		people[3], decision.ResourceID, ProgressiveOnboardingInput{
-			DisplayName: "Synthetic Independently Reviewed Business",
+			DisplayName:     "Synthetic Independently Reviewed Business",
 			ResidencyRegion: "af-south-1", Reason: "Synthetic direct v2 governed staging registration",
 			MarketParticipation: []domain.OnboardingMarketParticipation{{Market: "ZA", Activities: []string{"SELLING"}}},
 		})
@@ -91,7 +91,7 @@ func TestPEO03CDirectRegistrationIsAtomicIdempotentAndPreservesV2Authority(t *te
 	unauthorised := domain.RegisterTenantV2{
 		Basis: domain.RegistrationOnboarding, TenantOnboardingRequestID: request.ResourceID,
 		OrganisationID: org, TenantID: domain.NewTenantID(),
-		DisplayName: "Synthetic Independently Reviewed Business",
+		DisplayName:       "Synthetic Independently Reviewed Business",
 		IsolationStrategy: "row_level_security", ResidencyRegion: "af-south-1",
 		RequestedProducts: []string{"baobab-trade"},
 	}

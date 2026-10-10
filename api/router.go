@@ -115,7 +115,7 @@ type Dependencies struct {
 	// PEO-03B: separate opt-in for independent v2 admission decisions.
 	// It never reuses v1 decision/onboarding rows or confers tenant authority.
 	ProgressiveBridgeEnabled bool
-	ProgressiveBridge progressiveBridgeWriter
+	ProgressiveBridge        progressiveBridgeWriter
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.

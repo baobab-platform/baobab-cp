@@ -241,7 +241,7 @@ func (s *Store) registerTenant(ctx context.Context, key string, metadata basesto
 		if progressive {
 			approvedID, requestStatus, err = s.verifyProgressiveRegistrationTx(ctx, tx, c, *v2, metadata)
 		} else {
-		err = tx.QueryRow(ctx, `SELECT b.organisation_id::text,r.status
+			err = tx.QueryRow(ctx, `SELECT b.organisation_id::text,r.status
             FROM admission.tenant_onboarding_organisation b
             JOIN admission.tenant_onboarding_request r
               ON r.tenant_onboarding_request_id=b.tenant_onboarding_request_id

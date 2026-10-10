@@ -46,7 +46,7 @@ func (s *Store) RegisterProgressiveTenantV2(ctx context.Context, key string,
 	}
 	return s.registerTenant(ctx, key, metadata, domain.RegisterTenant{
 		TenantOnboardingRequestID: c.TenantOnboardingRequestID,
-		Basis: domain.RegistrationOnboarding, TenantID: c.TenantID, LegalEntityID: c.LegalEntityID,
+		Basis:                     domain.RegistrationOnboarding, TenantID: c.TenantID, LegalEntityID: c.LegalEntityID,
 		DisplayName: c.DisplayName, IsolationStrategy: c.IsolationStrategy,
 		ResidencyRegion: c.ResidencyRegion, RequestedProducts: c.RequestedProducts,
 		Metadata: c.Metadata,
