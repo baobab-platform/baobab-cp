@@ -50,8 +50,8 @@ func publishFoundingLifecycle(ctx context.Context, tx pgx.Tx, meta basestore.Req
 	}
 	env, err := events.New(events.Params{
 		Type: typ, Source: foundingEventSource,
-		Subject: "founding-governance/" + grantID,
-		DataSchema: foundingEventSchema + "#/$defs/" + definition,
+		Subject:       "founding-governance/" + grantID,
+		DataSchema:    foundingEventSchema + "#/$defs/" + definition,
 		CorrelationID: meta.CorrelationID, Data: data,
 	})
 	if err != nil {
@@ -62,7 +62,9 @@ func publishFoundingLifecycle(ctx context.Context, tx pgx.Tx, meta basestore.Req
 		return err
 	}
 	aggregate := "founding_group_sponsorship"
-	if kind == "DOCUMENTARY_DEFERRAL" { aggregate = "founding_documentary_deferral" }
+	if kind == "DOCUMENTARY_DEFERRAL" {
+		aggregate = "founding_documentary_deferral"
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO messaging.outbox
 	 (aggregate_type,aggregate_id,aggregate_version,event_type,tenant_id,correlation_id,payload)
 	 VALUES($1,$2,$3,$4,NULL,$5::uuid,$6::jsonb)`,

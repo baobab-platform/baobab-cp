@@ -19,7 +19,7 @@ type FoundingSponsorshipPolicy interface {
 
 // EligibilityResolver derives INTERNAL eligibility from persisted relationships.
 type EligibilityResolver struct {
-	Orgs repository.OrganisationRepository
+	Orgs        repository.OrganisationRepository
 	Sponsorship FoundingSponsorshipPolicy
 	// PlatformID selects the platform whose owners qualify; DefaultPlatformID when empty.
 	PlatformID string

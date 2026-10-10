@@ -74,19 +74,27 @@ func (h progressiveBridgeHandler) action(w http.ResponseWriter, r *http.Request,
 	switch stage {
 	case "review":
 		var v postgres.ProgressiveAdmissionReviewInput
-		if !decode(&v) { return }
+		if !decode(&v) {
+			return
+		}
 		result, err = h.repo.ReviewProgressiveAdmission(r.Context(), key, meta, actor, chi.URLParam(r, "applicationID"), v)
 	case "decide":
 		var v postgres.ProgressiveAdmissionDecisionInput
-		if !decode(&v) { return }
+		if !decode(&v) {
+			return
+		}
 		result, err = h.repo.DecideProgressiveAdmission(r.Context(), key, meta, actor, chi.URLParam(r, "reviewID"), v)
 	case "request":
 		var v postgres.ProgressiveOnboardingInput
-		if !decode(&v) { return }
+		if !decode(&v) {
+			return
+		}
 		result, err = h.repo.RequestProgressiveOnboarding(r.Context(), key, meta, actor, chi.URLParam(r, "decisionID"), v)
 	case "authorise":
 		var v postgres.ProgressiveAuthorisationInput
-		if !decode(&v) { return }
+		if !decode(&v) {
+			return
+		}
 		result, err = h.repo.AuthoriseProgressiveOnboarding(r.Context(), key, meta, actor, chi.URLParam(r, "requestID"), v)
 	default:
 		problem(w, r, http.StatusNotFound, "UNKNOWN_BRIDGE_STAGE", "unknown admission stage", false)
@@ -105,7 +113,15 @@ func (h progressiveBridgeHandler) action(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusAccepted, result)
 }
-func (h progressiveBridgeHandler) review(w http.ResponseWriter, r *http.Request) { h.action(w, r, "review") }
-func (h progressiveBridgeHandler) decide(w http.ResponseWriter, r *http.Request) { h.action(w, r, "decide") }
-func (h progressiveBridgeHandler) request(w http.ResponseWriter, r *http.Request) { h.action(w, r, "request") }
-func (h progressiveBridgeHandler) authorise(w http.ResponseWriter, r *http.Request) { h.action(w, r, "authorise") }
+func (h progressiveBridgeHandler) review(w http.ResponseWriter, r *http.Request) {
+	h.action(w, r, "review")
+}
+func (h progressiveBridgeHandler) decide(w http.ResponseWriter, r *http.Request) {
+	h.action(w, r, "decide")
+}
+func (h progressiveBridgeHandler) request(w http.ResponseWriter, r *http.Request) {
+	h.action(w, r, "request")
+}
+func (h progressiveBridgeHandler) authorise(w http.ResponseWriter, r *http.Request) {
+	h.action(w, r, "authorise")
+}
