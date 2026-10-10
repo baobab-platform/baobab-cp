@@ -6,10 +6,10 @@
 
 | Entity | Business declaration | Verification / activation consequence |
 |---|---|---|
-| Nabhold Group Africa | Reportedly incorporated in South Africa | Claim only, independently verify CIPC before attaching verified legal identity |
-| Thamani Global | Reportedly incorporated in South Africa; Uganda establishment pending | ZA incorporation claim only; UG intent cannot imply registered legal presence |
-| ZuriBeans | South African registration application pending | Represent an organisation/business claim; no fabricated registration number; Shared application SUBMITTED schema currently requires one identifier |
-| Equator & Estate Co. | Subsidiary/business unit asserted | Legal identity and corporate control unverified pending independent evidence |
+| NABHOLD GROUP AFRICA (Pty) Ltd | Incorporated in South Africa: CIPC COR 14.3 certificate, reg. 2026/029839/07, effective 2026-01-16 (Shared registry, `REGISTERED_EVIDENCED`) | Evidence recorded; sign-off pending and CP must independently verify before attaching a verified LegalEntityProfile. Shareholders and beneficial ownership are not established |
+| THAMANI GLOBAL (Pty) Ltd | Incorporated in South Africa: CIPC COR 14.3 certificate, reg. 2026/291672/07, registered 2026-04-09 (Shared registry, `REGISTERED_EVIDENCED`); Uganda establishment pending | Evidence recorded; reviewer sign-off pending and CP must independently verify. The certificate lists no shareholders, so the Nabhold subsidiary relationship is unverified. UG intent cannot imply registered legal presence |
+| ZuriBeans | Not incorporated (group declaration 2026-10-09; Shared registry `NOT_INCORPORATED`, `OPERATING_BUSINESS`). Trades through Nabhold until incorporated | Separate operating Organisation, no LegalEntityProfile, no registration number or jurisdiction. Nabhold acts only as scoped legal actor under an approved OperatingLegalActorMandate (ADR-BCP-026/027). Shared application SUBMITTED schema currently requires an identifier, so only a DRAFT is possible |
+| Equator & Estate Co. | Not incorporated (group declaration 2026-10-09; Shared registry `NOT_INCORPORATED`, `OPERATING_BUSINESS`). Trades through Nabhold until incorporated | Same treatment as ZuriBeans. No property, construction, hospitality, title or licensing permission is implied by group sponsorship or by the Nabhold mandate |
 
 ## Non-waivable boundaries
 

@@ -24,9 +24,9 @@ flowchart TD
 |---|---|---|---|
 | Staff-assisted contract | Shared #255 | PR proposed | CI pass, merge, version/pin and generated client |
 | Governance and maker/checker implementation | CP #289 | PR proposed | migration, Go/PostgreSQL tests, review and CI |
-| Nabhold incorporation claims | Shared #252 + corporate secretary | claimed, sign-off pending | verified source evidence; never auto-promote |
-| ZuriBeans incorporation | registrar/business | application reportedly pending | separate Organisation claim from legal existence |
-| Equator & Estate incorporation | corporate secretary | unverified | independently supported claim and verification |
+| Nabhold and Thamani incorporation | Shared registry + corporate secretary / reviewer | CIPC certificates recorded (`REGISTERED_EVIDENCED`), sign-off pending | CP independent verification and sign-off; never auto-promote |
+| ZuriBeans incorporation | registrar/business | not incorporated; trades through Nabhold | Organisation only; Nabhold mandate per activity until incorporated |
+| Equator & Estate incorporation | corporate secretary | not incorporated; trades through Nabhold | Organisation only; Nabhold mandate per activity until incorporated |
 | Verified control for INTERNAL subscriptions | CP governance + evidence owner | not evidenced for all subsidiaries | reviewed corporate basis and eligibility |
 | IAM external principal / membership | IAM #106 and staging operator | integration pending | successful issuer/audience revocation proof |
 | Subscription to ERP | Subscriptions → CP orchestration → ERP provider | integration pending | never direct Subscriptions-to-ERP write |
@@ -43,6 +43,6 @@ flowchart TD
 
 ## Open reconciliation decisions
 
-1. CP's existing admission contract requires at least one registration identifier to **submit** a ClientApplication. A pending-registration organisation such as ZuriBeans can be drafted, but cannot yet complete that ordinary submitted lifecycle without a truthful alternate policy/contract. Treat as a **contract/policy gap**: do not invent an incorporation identifier.
+1. CP's existing admission contract requires at least one registration identifier to **submit** a ClientApplication. An unincorporated organisation such as ZuriBeans can be drafted, but cannot yet complete that ordinary submitted lifecycle without a truthful alternate policy/contract. Treat as a **contract/policy gap**: do not invent an incorporation identifier.
 2. A full time-bound ComplianceException authority does not follow from the existence of ADR-BCP-023. Implement it separately, with explicit non-waivable restrictions.
 3. Corporate group membership and verified first-party ownership cannot be inferred from registry role: `subsidiary` is not `VERIFIED CONTROL`.

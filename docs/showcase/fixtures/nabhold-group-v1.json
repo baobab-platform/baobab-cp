@@ -5,7 +5,7 @@
   "organisations": [
     {
       "fixture_key": "NABHOLD",
-      "name": "Nabhold Group Africa",
+      "name": "NABHOLD GROUP AFRICA (Pty) Ltd",
       "admission_channel": "INTERNAL_GROUP",
       "reported_incorporation": "REGISTERED_CLAIM_ZA",
       "jurisdiction_claim": "ZA",
@@ -22,7 +22,7 @@
       "fixture_key": "ZURIBEANS",
       "name": "ZuriBeans",
       "admission_channel": "INTERNAL_GROUP",
-      "reported_incorporation": "REGISTRATION_APPLICATION_PENDING",
+      "reported_incorporation": "NOT_INCORPORATED",
       "jurisdiction_claim": null,
       "parent_fixture_key": "NABHOLD",
       "market_interests": [
@@ -34,12 +34,12 @@
         "trades_cross_border": true,
         "manages_inventory": true,
         "requires_supplier_management": true,
-        "notes": "Market intent only; no legal presence, imports or exports authorised."
+        "notes": "Market intent only; not incorporated. Trades only through Nabhold as scoped legal actor under an approved mandate; no legal presence, imports or exports authorised."
       }
     },
     {
       "fixture_key": "THAMANI-GLOBAL",
-      "name": "Thamani Global",
+      "name": "THAMANI GLOBAL (Pty) Ltd",
       "admission_channel": "INTERNAL_GROUP",
       "reported_incorporation": "REGISTERED_CLAIM_ZA",
       "jurisdiction_claim": "ZA",
@@ -59,14 +59,14 @@
       "fixture_key": "EQUATOR-ESTATE",
       "name": "Equator & Estate Co.",
       "admission_channel": "INTERNAL_GROUP",
-      "reported_incorporation": "UNVERIFIED",
+      "reported_incorporation": "NOT_INCORPORATED",
       "jurisdiction_claim": null,
       "parent_fixture_key": "NABHOLD",
       "market_interests": [
         "ZA"
       ],
       "requirements": {
-        "notes": "Property, construction and hospitality business intent; status and licences unverified."
+        "notes": "Property, construction and hospitality business intent; not incorporated. Trades only through Nabhold under an approved mandate; no licences or property permissions implied."
       }
     }
   ]

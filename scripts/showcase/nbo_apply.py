@@ -19,7 +19,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import UUID
 
 CHANNELS = frozenset({"ASSISTED_ENTERPRISE", "INTERNAL_GROUP"})
-INCORPORATION_CLAIMS = frozenset({"REGISTERED_CLAIM_ZA", "REGISTRATION_APPLICATION_PENDING", "UNVERIFIED"})
+INCORPORATION_CLAIMS = frozenset({"REGISTERED_CLAIM_ZA", "NOT_INCORPORATED", "UNVERIFIED"})
 BUSINESS_FLAGS = frozenset({
     "operates_b2b", "operates_b2c", "sells_online", "requires_accounting",
     "requires_procurement", "manages_inventory", "requires_supplier_management",
@@ -61,7 +61,7 @@ def validate_manifest(document: dict) -> list[dict]:
         if org["jurisdiction_claim"] not in (None, "ZA"):
             raise ValueError(f"{key}: unverified foreign jurisdiction is not declared")
         if org["reported_incorporation"] != "REGISTERED_CLAIM_ZA" and org["jurisdiction_claim"] is not None:
-            raise ValueError(f"{key}: pending/unverified incorporation cannot assert jurisdiction")
+            raise ValueError(f"{key}: unincorporated or unverified incorporation cannot assert jurisdiction")
         markets = org["market_interests"]
         if not isinstance(markets, list) or not markets or len(markets) != len(set(markets)) or not all(
             isinstance(m, str) and re.fullmatch(r"[A-Z]{2}", m) for m in markets

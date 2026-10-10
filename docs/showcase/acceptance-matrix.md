@@ -6,7 +6,7 @@
 |---|---|---|---|
 | NBO-T01 | Incomplete evidence request | staff DRAFT route and applicant draft tests | PARTIAL — DRAFT only; submission requires registration identifier |
 | NBO-T02 | Unverified registration number stays unverified | applicant JSON schema forbids `verified` on registration identifier | CODE_TEST; external verification unexecuted |
-| NBO-T03 | ZuriBeans registration pending | fixture claim, omitted ID and jurisdiction | FIXTURE_TEST |
+| NBO-T03 | ZuriBeans and Equator & Estate not incorporated | fixture claim `NOT_INCORPORATED`, omitted ID and jurisdiction | FIXTURE_TEST |
 | NBO-T04 | Claimed parent ownership grants no verified control | fixture creates no CorporateRelationship | FIXTURE_TEST; live cross-tenant not run |
 | NBO-T05 | Ineligible INTERNAL request refused | existing `TestInternalClassificationIsServerAuthoritative` | EXISTING_CODE_TEST; no Nabhold authoritative classification |
 | NBO-T06 | Eligible INTERNAL zero charge with metering | existing billing subsystem | BLOCKED_INTEGRATION |
