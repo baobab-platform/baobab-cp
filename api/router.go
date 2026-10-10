@@ -103,7 +103,7 @@ type Dependencies struct {
 	// PEO-02 separate privileged and human-reviewed founding governance.
 	// Default off. Unavailable IAM authorisation or independent source means deny.
 	FoundingGovernanceEnabled bool
-	FoundingGovernance foundingGovernanceWriter
+	FoundingGovernance        foundingGovernanceWriter
 	// PEO-03 v2 progressive drafts are deliberately independent of v1
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
@@ -634,8 +634,8 @@ func New(dependencies Dependencies) http.Handler {
 	}
 	if dependencies.FoundingGovernanceEnabled && dependencies.FoundingGovernance != nil &&
 		(dependencies.Environment == "development" || dependencies.Environment == "test" ||
-		 dependencies.Environment == "integration" || dependencies.Environment == "sandbox" ||
-		 dependencies.Environment == "staging") {
+			dependencies.Environment == "integration" || dependencies.Environment == "sandbox" ||
+			dependencies.Environment == "staging") {
 		founding := foundingGovernanceHandler{repo: dependencies.FoundingGovernance, api: a}
 		r.With(a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)).
 			Post("/v2/founding-governance/sponsorship-proposals", founding.propose("SPONSORSHIP"))
