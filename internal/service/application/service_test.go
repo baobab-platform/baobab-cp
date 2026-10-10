@@ -400,11 +400,11 @@ func TestInternalClassificationIsServerAuthoritative(t *testing.T) {
 		t.Fatalf("a refused decision changes nothing: %s", app.Status)
 	}
 
-	e.elig.eligible["ce_zuribeans"] = []domain.PlatformRelationship{{ID: "prel_01k8zuriaffil"}, {ID: "prel_01k8zuriaffil"}}
-	decision := okDecision(t)(e.svc.Decide(e.ctx, decider, id, internal("ce_zuribeans")))
+	e.elig.eligible["ce_synthetic_affiliate"] = []domain.PlatformRelationship{{ID: "prel_01k8synthaffil"}, {ID: "prel_01k8synthaffil"}}
+	decision := okDecision(t)(e.svc.Decide(e.ctx, decider, id, internal("ce_synthetic_affiliate")))
 	ev := decision.InternalEligibility
-	if decision.ApprovedSubscriptionType != domain.SubscriptionInternal || ev == nil || ev.OrganisationID != "ce_zuribeans" ||
-		ev.EligibilityStatus != "ELIGIBLE" || !slices.Equal(ev.BasisRelationshipIDs, []string{"prel_01k8zuriaffil"}) || !ev.EvaluatedAt.Equal(decision.DecidedAt) {
+	if decision.ApprovedSubscriptionType != domain.SubscriptionInternal || ev == nil || ev.OrganisationID != "ce_synthetic_affiliate" ||
+		ev.EligibilityStatus != "ELIGIBLE" || !slices.Equal(ev.BasisRelationshipIDs, []string{"prel_01k8synthaffil"}) || !ev.EvaluatedAt.Equal(decision.DecidedAt) {
 		t.Fatalf("INTERNAL decision: %+v %+v", decision, ev)
 	}
 	stored := okDecision(t)(e.svc.GetDecision(e.ctx, id))
@@ -434,7 +434,7 @@ func TestClientApplicationsConformToSharedContract(t *testing.T) {
 	dir := contracttest.SharedDir(t)
 	e := newEnv(t)
 	applicant, reviewer, decider := e.principal(t), e.principal(t), e.principal(t)
-	e.elig.eligible["ce_zuribeans"] = []domain.PlatformRelationship{{ID: "prel_01k8zuriaffil"}}
+	e.elig.eligible["ce_synthetic_affiliate"] = []domain.PlatformRelationship{{ID: "prel_01k8synthaffil"}}
 
 	app := e.create(t, applicant, []byte(completeDraft))
 	app = okApp(t)(e.svc.Submit(e.ctx, applicant, app.ID))
@@ -443,7 +443,7 @@ func TestClientApplicationsConformToSharedContract(t *testing.T) {
 	app = okApp(t)(e.svc.Respond(e.ctx, applicant, app.ID, []byte(`{"version":`+jsonInt(app.Version)+`,"response":"Done."}`)))
 	app = okApp(t)(e.svc.BeginReview(e.ctx, reviewer, app.ID))
 	decision := okDecision(t)(e.svc.Decide(e.ctx, decider, app.ID, []byte(`{"decision":"APPROVED","reason":"Affiliate.","approved_subscription_type":"INTERNAL",
-		"internal_eligibility_organisation_id":"ce_zuribeans","approved_market_scope":["KE","UG"],"approved_isolation_requirements":"schema_per_tenant",
+		"internal_eligibility_organisation_id":"ce_synthetic_affiliate","approved_market_scope":["KE","UG"],"approved_isolation_requirements":"schema_per_tenant",
 		"conditions":["Annual review."],"evidence_references":["evd_share_register"]}`)))
 	platformView := okApp(t)(e.svc.Get(e.ctx, app.ID))
 	applicantView := okApp(t)(e.svc.GetForApplicant(e.ctx, applicant, app.ID))
