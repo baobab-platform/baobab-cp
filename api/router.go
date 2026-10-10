@@ -676,6 +676,17 @@ func New(dependencies Dependencies) http.Handler {
 			Patch("/v2/client-applications/{applicationID}", ph.update)
 		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
 			Post("/v2/client-applications/{applicationID}/submit", ph.submit)
+		// PEO-03 review read visibility is opt-in with the existing v2
+		// applicant routes. Staff requires a registered principal and
+		// explicit platform-wide review authority, not applicant scopes.
+		if _, ok := dependencies.ProgressiveApplications.(progressiveReviewReader); ok {
+			reviewers := []func(http.Handler) http.Handler{
+				a.authorize(a.adminVerifier, "human", "admission:review"),
+				a.requireAdminRole(nil, true),
+			}
+			r.With(reviewers...).Get("/v2/admin/client-applications", ph.reviewList)
+			r.With(reviewers...).Get("/v2/admin/client-applications/{applicationID}", ph.reviewGet)
+		}
 	}
 	if dependencies.Applications != nil {
 		// ADR-BCP-017: applicants reach only their own applications; review
