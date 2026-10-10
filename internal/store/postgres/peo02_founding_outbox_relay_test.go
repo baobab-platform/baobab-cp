@@ -48,7 +48,9 @@ func TestPEO02EDurableRelayWithholdsPublicationUntilMatchingReceipt(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	var event struct { ID string `json:"id"` }
+	var event struct {
+		ID string `json:"id"`
+	}
 	if err = json.Unmarshal(envelope, &event); err != nil {
 		t.Fatal(err)
 	}
