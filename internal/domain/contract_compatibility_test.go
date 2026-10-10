@@ -76,7 +76,7 @@ func TestMappingMatchesSharedSchema(t *testing.T) {
 		ID:                  "map_zuribeansproduct001",
 		MappingType:         "IDENTITY",
 		TenantID:            "tn_zuribeans",
-		LegalEntityID:       "ZURIBEANS-ZA",
+		LegalEntityID:       "LE-SYNTHZA01",
 		CanonicalEntityID:   "product:zuribeans:arabica-60kg",
 		ExternalReferenceID: "ref_medusa00123",
 		ScopeID:             "scope_zuribeansprod",
@@ -104,7 +104,7 @@ func TestMappingScopeMatchesSharedSchema(t *testing.T) {
 	scope := domain.MappingScope{
 		ScopeID:           "scope_zuribeansprod",
 		TenantID:          "tn_zuribeans",
-		LegalEntityID:     "ZURIBEANS-ZA",
+		LegalEntityID:     "LE-SYNTHZA01",
 		MarketID:          "kenya_b2b",
 		Country:           "KE",
 		EstateID:          "zuribeans_estate",

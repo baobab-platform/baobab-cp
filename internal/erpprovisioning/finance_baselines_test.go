@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	entityA = "ZURIBEANS-ZA"
-	entityB = "ZURIBEANS-UG"
+	entityA = "LE-SYNTHZA01"
+	entityB = "LE-SYNTHUG01"
 )
 
 // twoEntities is an approved plan covering two legal entities. Neither the plan nor the Control Plane says anything about
@@ -28,7 +28,7 @@ func twoEntities(t *testing.T) *rig {
 		entityA: baselineFor(entityA, "ZAR"),
 		entityB: baselineFor(entityB, "UGX"),
 	}
-	r.erp.baselines[entityB]["reference"].(map[string]any)["baseline_id"] = "fb_01k4zuribeansug"
+	r.erp.baselines[entityB]["reference"].(map[string]any)["baseline_id"] = "fb_01k4syntheticug"
 	return r
 }
 
@@ -58,7 +58,7 @@ func TestSubmitSendsERPsOwnEffectiveBaselineReferencesAndCurrenciesVerbatim(t *t
 	if len(refs) != 2 {
 		t.Fatalf("one reference per legal entity: %v", refs)
 	}
-	for i, want := range []struct{ entity, id string }{{entityB, "fb_01k4zuribeansug"}, {entityA, "fb_01k4zuribeansza"}} {
+	for i, want := range []struct{ entity, id string }{{entityB, "fb_01k4syntheticug"}, {entityA, "fb_01k4syntheticza"}} {
 		ref := refs[i].(map[string]any)
 		if ref["legal_entity_id"] != want.entity || ref["baseline_id"] != want.id || ref["version"] != float64(3) ||
 			ref["digest"] != "sha256:"+strings.Repeat("9f", 32) {
@@ -225,9 +225,9 @@ func TestARetryAfterTheBaselineMovedOnContinuesTheRecordedOperation(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	moved := baselineFor("ZURIBEANS-ZA", "ZAR")
+	moved := baselineFor("LE-SYNTHZA01", "ZAR")
 	moved["reference"].(map[string]any)["version"] = 4
-	r.erp.baselines = map[string]map[string]any{"ZURIBEANS-ZA": moved}
+	r.erp.baselines = map[string]map[string]any{"LE-SYNTHZA01": moved}
 	calls := len(r.erp.baselineCalls)
 	again, err := r.w.Submit(context.Background(), provisionID)
 	if err != nil {
@@ -250,9 +250,9 @@ func TestARetryAfterACrashBeforeTheOperationWasRecordedSendsTheSameRequest(t *te
 	if len(r.erp.posts) != 1 || len(r.led.intents) != 1 {
 		t.Fatalf("the request was sent once and its intent recorded first (posts=%d intents=%d)", len(r.erp.posts), len(r.led.intents))
 	}
-	moved := baselineFor("ZURIBEANS-ZA", "ZAR")
+	moved := baselineFor("LE-SYNTHZA01", "ZAR")
 	moved["reference"].(map[string]any)["version"] = 4
-	r.erp.baselines = map[string]map[string]any{"ZURIBEANS-ZA": moved}
+	r.erp.baselines = map[string]map[string]any{"LE-SYNTHZA01": moved}
 	calls := len(r.erp.baselineCalls)
 	if _, err := r.w.Submit(context.Background(), provisionID); err != nil {
 		t.Fatal(err)
