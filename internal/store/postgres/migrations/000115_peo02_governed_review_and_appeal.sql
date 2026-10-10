@@ -7,6 +7,10 @@ CREATE TABLE admission.documentary_review_intent (
   review_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   deferral_id uuid NOT NULL,
   milestone_month integer NOT NULL,
+  revision integer NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 16),
+  reopened_from_appeal_id uuid,
+  CHECK ((revision=1 AND reopened_from_appeal_id IS NULL)
+      OR (revision>1 AND reopened_from_appeal_id IS NOT NULL)),
   organisation_id uuid NOT NULL REFERENCES registry.organisation_profile(canonical_entity_id),
   proposed_by uuid NOT NULL REFERENCES identity.principal(principal_id),
   idempotency_key text NOT NULL CHECK(length(idempotency_key) BETWEEN 16 AND 128),
@@ -17,7 +21,7 @@ CREATE TABLE admission.documentary_review_intent (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   FOREIGN KEY (deferral_id,milestone_month) REFERENCES
     admission.founding_documentary_review_checkpoint(deferral_id,milestone_month),
-  UNIQUE (deferral_id,milestone_month),
+  UNIQUE (deferral_id,milestone_month,revision),
   UNIQUE (proposed_by,idempotency_key)
 );
 CREATE TABLE admission.documentary_review_decision (
@@ -71,6 +75,10 @@ CREATE TABLE admission.documentary_appeal_decision (
   UNIQUE(decided_by,idempotency_key)
 );
 
+ALTER TABLE admission.documentary_review_intent
+ ADD CONSTRAINT documentary_review_reopen_appeal_fk
+ FOREIGN KEY (reopened_from_appeal_id) REFERENCES admission.documentary_review_appeal(appeal_id);
+
 -- No DELETE, reactivation, retroactive revision or write-through from review
 -- history. A future independent policy-bound release mechanism must be
 -- separately authorised and will not rewrite this historical evidence.
@@ -79,11 +87,13 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP='DELETE' OR (TG_OP='UPDATE' AND (
        (TG_TABLE_NAME='documentary_review_intent' AND
-        (ROW(NEW.review_id,NEW.deferral_id,NEW.milestone_month,NEW.organisation_id,
+        (ROW(NEW.review_id,NEW.deferral_id,NEW.milestone_month,NEW.revision,
+            NEW.reopened_from_appeal_id,NEW.organisation_id,
             NEW.proposed_by,NEW.idempotency_key,NEW.request_digest,NEW.assessment,
             NEW.policy_reference,NEW.created_at)
          IS DISTINCT FROM
-         ROW(OLD.review_id,OLD.deferral_id,OLD.milestone_month,OLD.organisation_id,
+         ROW(OLD.review_id,OLD.deferral_id,OLD.milestone_month,OLD.revision,
+             OLD.reopened_from_appeal_id,OLD.organisation_id,
              OLD.proposed_by,OLD.idempotency_key,OLD.request_digest,OLD.assessment,
              OLD.policy_reference,OLD.created_at)
          OR OLD.state<>'PENDING' OR NEW.state<>'DECIDED'))
