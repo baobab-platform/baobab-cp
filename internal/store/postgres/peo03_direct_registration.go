@@ -77,7 +77,7 @@ func (s *Store) verifyProgressiveRegistrationTx(ctx context.Context, tx pgx.Tx,
 	var desiredJSON []byte
 	err = tx.QueryRow(ctx, `SELECT o.organisation_id::text,o.status,
 		a.applicant_principal_id::text,rv.reviewed_by::text,d.decided_by::text,
-		o.requested_by::text,o.authorised_by::text,rv.approved_subscription_type,
+		o.requested_by::text,COALESCE(o.authorised_by::text,''),rv.approved_subscription_type,
 		o.desired_state
 		FROM admission.progressive_onboarding_request o
 		JOIN admission.progressive_admission_decision d ON d.decision_id=o.decision_id
