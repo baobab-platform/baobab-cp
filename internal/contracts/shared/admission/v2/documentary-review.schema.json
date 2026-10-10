@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/admission/v2/documentary-review.schema.json",
+  "title": "PEO-01/02 governed requirement applicability and documentary review checkpoints",
+  "description": "CP-owned, purpose-scoped applicability and due-work vocabulary. Does not override Regulations legal applicability, provider policy, official evidence verification, IAM authority or downstream enforcement. A due-review notification is not an entitlement, approved evidence or legal waiver.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "RequirementApplicabilityAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assessment_reference",
+        "organisation_id",
+        "requirement_id",
+        "authority",
+        "applies",
+        "policy_reference",
+        "policy_version",
+        "context_reference",
+        "evaluated_at",
+        "valid_until"
+      ],
+      "properties": {
+        "assessment_reference": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_id": {
+          "type": "string",
+          "pattern": "^tn_[a-z0-9]+$"
+        },
+        "requirement_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "authority": {
+          "type": "string",
+          "enum": [
+            "PLATFORM_DOCUMENTARY",
+            "STATUTORY",
+            "PROVIDER"
+          ]
+        },
+        "applies": {
+          "type": "string",
+          "enum": [
+            "REQUIRED",
+            "NOT_APPLICABLE",
+            "NEEDS_ASSESSMENT"
+          ]
+        },
+        "policy_reference": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "policy_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "context_reference": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "market": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "capability": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "evidence_reference": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "evidence_state": {
+          "type": "string",
+          "enum": [
+            "APPROVED_EVIDENCE",
+            "PENDING",
+            "ABSENT"
+          ]
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "evidence_state": {
+                "const": "APPROVED_EVIDENCE"
+              }
+            },
+            "required": [
+              "evidence_state"
+            ]
+          },
+          "then": {
+            "required": [
+              "evidence_reference"
+            ]
+          }
+        }
+      ]
+    },
+    "DocumentaryReviewCheckpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deferral_id",
+        "organisation_id",
+        "milestone_month",
+        "scheduled_at",
+        "policy_reference",
+        "requirement_ids",
+        "status",
+        "recorded_at"
+      ],
+      "properties": {
+        "deferral_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "milestone_month": {
+          "type": "integer",
+          "enum": [
+            6,
+            12,
+            18,
+            24
+          ]
+        },
+        "scheduled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "policy_reference": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "requirement_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          }
+        },
+        "status": {
+          "const": "REASSESSMENT_REQUIRED"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "DocumentaryReviewAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deferral_id",
+        "organisation_id",
+        "milestone_month",
+        "review_reference",
+        "reviewed_at",
+        "reviewed_by",
+        "applicability_assessments"
+      ],
+      "properties": {
+        "deferral_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "organisation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "milestone_month": {
+          "type": "integer",
+          "enum": [
+            6,
+            12,
+            18,
+            24
+          ]
+        },
+        "review_reference": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500
+        },
+        "reviewed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reviewed_by": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "applicability_assessments": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/RequirementApplicabilityAssessment"
+          }
+        }
+      },
+      "description": "Evidence/policy assessment input for independently governed review processing. Does not itself mark a review resolved, satisfy evidence or impose a restriction. Consumer verifies that every original deferral requirement is covered, trusted issuer and policy provenance, and the reviewer authority."
+    }
+  }
+}
