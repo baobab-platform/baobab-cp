@@ -103,14 +103,3 @@ CREATE TRIGGER progressive_bridge_command_immutable BEFORE UPDATE OR DELETE
  ON admission.progressive_bridge_command FOR EACH ROW
  EXECUTE FUNCTION admission.progressive_bridge_immutable();
 REVOKE ALL ON admission.progressive_bridge_command FROM PUBLIC;
-
-),
- receipt jsonb NOT NULL CHECK(jsonb_typeof(receipt)='object'),
- recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
- PRIMARY KEY(actor_id,idempotency_key)
-);
-CREATE TRIGGER progressive_bridge_command_immutable BEFORE UPDATE OR DELETE
- ON admission.progressive_bridge_command FOR EACH ROW
- EXECUTE FUNCTION admission.progressive_bridge_immutable();
-REVOKE ALL ON admission.progressive_bridge_command FROM PUBLIC;
-
