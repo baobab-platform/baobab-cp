@@ -18,10 +18,10 @@ import (
 )
 
 const (
-	tenant      = "tn_01k4zuribeans"
-	provisionID = "tp_01k4zuribeans"
+	tenant      = "tn_01k4synthetic"
+	provisionID = "tp_01k4synthetic"
 	planDigest  = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-	entity      = "ZURIBEANS-ZA"
+	entity      = "LE-SYNTHZA01"
 	operationID = "0199a1b2-c3d4-7e8f-9a0b-1c2d3e4f5a6b"
 	issuer      = "https://iam.example.invalid/realms/baobab"
 	subject     = "baobab-cp-provisioning-workload"
@@ -35,7 +35,7 @@ func (t token) Token(context.Context) (string, error) { return string(t), nil }
 func baselineFor(entityID, currency string) map[string]any {
 	return map[string]any{
 		"reference": map[string]any{
-			"baseline_id": "fb_01k4zuribeansza", "legal_entity_id": entityID, "version": 3,
+			"baseline_id": "fb_01k4syntheticza", "legal_entity_id": entityID, "version": 3,
 			"digest": "sha256:" + strings.Repeat("9f", 32), "effective_from": "2026-04-01",
 			"authority": map[string]any{"engine_id": "baobab-erp", "system_of_record": "FINANCE_BASELINE"}},
 		"status": "EFFECTIVE", "functional_currency": currency, "resolved_at": "2026-10-07T07:00:00Z"}
@@ -116,7 +116,7 @@ func (s source) Authorised(context.Context, string) (Authorised, error) { return
 
 func approved() Authorised {
 	return Authorised{TenantID: tenant, LegalEntityIDs: []string{entity}, Countries: []string{"ZA"},
-		Authority: Authority{TenantProvisioningID: provisionID, PlanID: "plan_01k4zuribeans", PlanVersion: 2, PlanDigest: planDigest}}
+		Authority: Authority{TenantProvisioningID: provisionID, PlanID: "plan_01k4synthetic", PlanVersion: 2, PlanDigest: planDigest}}
 }
 
 type identities struct {
@@ -253,7 +253,7 @@ func TestSubmitSendsTheApprovedTupleUnderTheProvisionersOwnContext(t *testing.T)
 	}
 	// It is pre-activation authority, bound to exactly the approved plan, and never ordinary runtime authority.
 	if cx.Purpose() != domain.ContextPurposeTenantProvisioning || cx.IsRuntime() || cx.ProvisioningAuthority == nil ||
-		*cx.ProvisioningAuthority != (domain.ProvisioningAuthority{TenantProvisioningID: provisionID, PlanID: "plan_01k4zuribeans", PlanVersion: 2, PlanDigest: planDigest}) {
+		*cx.ProvisioningAuthority != (domain.ProvisioningAuthority{TenantProvisioningID: provisionID, PlanID: "plan_01k4synthetic", PlanVersion: 2, PlanDigest: planDigest}) {
 		t.Fatalf("context must be a TENANT_PROVISIONING context bound to the approved plan: %+v", cx)
 	}
 	if cx.ExpiresAt.Sub(cx.ResolvedAt) > domain.MaxProvisioningContextLifetime {
@@ -271,7 +271,7 @@ func TestSubmitSendsTheApprovedTupleUnderTheProvisionersOwnContext(t *testing.T)
 	}
 	auth := body["control_plane_authority"].(map[string]any)
 	if body["context_id"] != cx.ID || body["tenant_id"] != tenant || auth["plan_digest"] != planDigest ||
-		auth["plan_id"] != "plan_01k4zuribeans" || auth["plan_version"] != float64(2) || auth["tenant_provisioning_id"] != provisionID {
+		auth["plan_id"] != "plan_01k4synthetic" || auth["plan_version"] != float64(2) || auth["tenant_provisioning_id"] != provisionID {
 		t.Fatalf("body=%v", body)
 	}
 	if sub := r.led.subs[operationID]; sub.TenantProvisioningID != provisionID || sub.Authority.PlanDigest != planDigest {
