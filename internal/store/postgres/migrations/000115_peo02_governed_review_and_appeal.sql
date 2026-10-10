@@ -105,7 +105,7 @@ BEGIN
              OLD.reason,OLD.evidence_reference,OLD.raised_at)
          OR OLD.state<>'FILED' OR NEW.state<>'DECIDED'))
        OR TG_TABLE_NAME NOT IN ('documentary_review_intent','documentary_review_appeal')
-      ))) THEN
+      )) THEN
       RAISE EXCEPTION 'PEO-02 review history is append-only and state transitions are forward only'
         USING ERRCODE='check_violation';
   END IF;
