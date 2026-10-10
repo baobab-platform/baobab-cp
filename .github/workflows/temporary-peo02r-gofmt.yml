@@ -1,0 +1,23 @@
+name: Temporary PEO-02R canonical formatting
+on:
+  push:
+    branches:
+      - feat/peo04-documentary-grace-review-checkpoints
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Apply gofmt to PEO review checkpoint sources
+        run: |
+          set -euo pipefail
+          gofmt -w cmd/controlplane/main.go internal/store/postgres/peo02_documentary_review.go internal/store/postgres/peo02_documentary_review_test.go internal/store/postgres/migrate.go internal/store/postgres/migrate_test.go
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add cmd/controlplane/main.go internal/store/postgres/peo02_documentary_review.go internal/store/postgres/peo02_documentary_review_test.go internal/store/postgres/migrate.go internal/store/postgres/migrate_test.go
+            git commit -m "style(peo-02r): canonical Go formatting"
+            git push origin HEAD:refs/heads/feat/peo04-documentary-grace-review-checkpoints
+          fi
