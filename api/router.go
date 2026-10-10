@@ -100,6 +100,14 @@ type Dependencies struct {
 	// including unset, as production: providers must then be permitted in
 	// production (ADR-SHARED-011).
 	Environment string
+	// PEO-02 separate privileged and human-reviewed founding governance.
+	// Default off. Unavailable IAM authorisation or independent source means deny.
+	FoundingGovernanceEnabled bool
+	FoundingGovernance        foundingGovernanceWriter
+	// PEO-03 v2 progressive drafts are deliberately independent of v1
+	// decisions and are disabled by default pending applicant journey proof.
+	ProgressiveApplicationsEnabled bool
+	ProgressiveApplications        progressiveApplicationWriter
 	// Applications backs the ADR-BCP-017 client application routes. Nil
 	// skips them. Callers are resolved to Control Plane principals through
 	// Identities.
@@ -254,6 +262,16 @@ type API struct {
 	// Roles are authoritative unless the owner's enforcement policy says
 	// otherwise.
 	enforcement *administration.Enforcement
+}
+
+// peoRoutesPermittedIn is the explicit allow-list of environments in which the opt-in PEO-02/03
+// v2 route families may be mounted. An unset or unknown environment is production-like and denied.
+func peoRoutesPermittedIn(environment string) bool {
+	switch environment {
+	case "development", "test", "integration", "sandbox", "staging":
+		return true
+	}
+	return false
 }
 
 func New(dependencies Dependencies) http.Handler {
@@ -623,6 +641,28 @@ func New(dependencies Dependencies) http.Handler {
 		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-drift", obs.drift)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/audit", obs.audit)
+	}
+	if dependencies.FoundingGovernanceEnabled && dependencies.FoundingGovernance != nil &&
+		peoRoutesPermittedIn(dependencies.Environment) {
+		founding := foundingGovernanceHandler{repo: dependencies.FoundingGovernance, api: a}
+		r.With(a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)).
+			Post("/v2/founding-governance/sponsorship-proposals", founding.propose("SPONSORSHIP"))
+		r.With(a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)).
+			Post("/v2/founding-governance/documentary-deferral-proposals", founding.propose("DOCUMENTARY_DEFERRAL"))
+		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
+			Post("/v2/founding-governance/intents/{intentID}/decision", founding.decide)
+	}
+	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&
+		peoRoutesPermittedIn(dependencies.Environment) {
+		ph := progressiveApplicantHandler{repo: dependencies.ProgressiveApplications, api: a}
+		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
+			Post("/v2/client-applications", ph.create)
+		r.With(a.authorize(a.adminVerifier, "human", "application:read")).
+			Get("/v2/client-applications/{applicationID}", ph.get)
+		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
+			Patch("/v2/client-applications/{applicationID}", ph.update)
+		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
+			Post("/v2/client-applications/{applicationID}/submit", ph.submit)
 	}
 	if dependencies.Applications != nil {
 		// ADR-BCP-017: applicants reach only their own applications; review

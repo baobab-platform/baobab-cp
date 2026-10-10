@@ -10,8 +10,8 @@ func TestLoadMigrationsReturnsCanonicalOrderedForwardMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load migrations failed: %v", err)
 	}
-	if len(migrations) != 106 {
-		t.Fatalf("expected 106 canonical migrations, got %d", len(migrations))
+	if len(migrations) != 110 {
+		t.Fatalf("expected 110 canonical migrations, got %d", len(migrations))
 	}
 	for index, migration := range migrations {
 		expectedVersion := index + 1
@@ -27,6 +27,28 @@ func TestLoadMigrationsReturnsCanonicalOrderedForwardMigrations(t *testing.T) {
 		if strings.TrimSpace(migration.SQL) == "" {
 			t.Fatalf("migration %s is empty", migration.Name)
 		}
+	}
+}
+
+// A migration file that is embedded but not registered in canonicalMigrationNames is
+// silently never applied (PEO-02/03 migrations 000107-000110 were added this way and
+// every dependent integration test failed with "relation does not exist").
+func TestEveryEmbeddedMigrationIsRegistered(t *testing.T) {
+	entries, err := migrationFiles.ReadDir("migrations")
+	if err != nil {
+		t.Fatalf("read embedded migrations: %v", err)
+	}
+	registered := make(map[string]bool, len(canonicalMigrationNames))
+	for _, name := range canonicalMigrationNames {
+		registered[name] = true
+	}
+	for _, entry := range entries {
+		if !registered[entry.Name()] {
+			t.Errorf("embedded migration %s is not in canonicalMigrationNames and would never be applied", entry.Name())
+		}
+	}
+	if len(entries) != len(canonicalMigrationNames) {
+		t.Errorf("embedded migration files (%d) and canonicalMigrationNames (%d) differ", len(entries), len(canonicalMigrationNames))
 	}
 }
 
