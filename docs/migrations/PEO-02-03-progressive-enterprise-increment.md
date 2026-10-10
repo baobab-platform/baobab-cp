@@ -27,3 +27,32 @@ This is **not complete PEO-02 or PEO-03**. The new Go policy is a reusable enfor
 6. Deferral status is not equivalent to evidence VERIFIED, and expired grace never silently creates a fresh window.
 
 The permanent `UNIQUE(organisation_id)` history forbids policy reissuance in this initial model. If authorised corrections to a flawed record are needed, implement a separately audited forward-only adjustment with the **original** deadline, not a delete/reinsert exception.
+
+
+## Second implementation increment — authenticated API and durable commands
+
+The draft branch now additionally contains migrations `000108`–`000110` and production-shaped Go commands, but **routes remain strictly opt-in for nonproduction environments**.
+
+| Authority | HTTP command | Authentication | Persistence / non-authority |
+| --- | --- | --- | --- |
+| Applicant | `POST /v2/client-applications` | Human `application:write`, canonical CP principal | Server-generated applicant identity, `DRAFT` and 16–128 char Idempotency-Key; no legal person |
+| Applicant | `GET /v2/client-applications/{applicationID}` | Human `application:read`; same applicant principal only | Foreign principal receives NOT_FOUND |
+| Applicant | `PATCH /v2/client-applications/{applicationID}` | Human `application:write`, ownership, exact optimistic version | Revalidates Shared `ClientApplicationDraftUpdateV2`; only DRAFT editable |
+| Applicant | `POST /v2/client-applications/{applicationID}/submit` | Human `application:write`, ownership | Shared `ClientApplicationV2` validation, market and real representative required; state SUBMITTED **without approval or tenant** |
+| Governance maker | `POST /v2/founding-governance/sponsorship-proposals` | Platform admin human `admission:review` | Durable PENDING intent, canonical JSON request digest, idempotency, audit |
+| Governance maker | `POST /v2/founding-governance/documentary-deferral-proposals` | Platform admin human `admission:review` | Durable PENDING intent, no deferral active |
+| Independent checker | `POST /v2/founding-governance/intents/{intentID}/decision` | Platform admin human `admission:decide`, distinct from maker | Either REJECT or attempt independently verified sponsorship / 24-month documentary grant; audited and digest-bound; failure rolls back the transaction |
+
+Both route families default **off** and require the explicit environment inputs `PEO_PROGRESSIVE_ADMISSION_ENABLED=true` and/or `PEO_FOUNDING_GOVERNANCE_ENABLED=true` in a nonproduction deployment. The entire route family remains unavailable in `production`, regardless of flags. There is no applicant decision/activation route and no automatic upgrade of v2 submissions into v1 AdmissionDecision or tenant registration.
+
+A first-party sponsorship checker needs a real, CURRENT independently verified legal sponsor (not an unverified Shared registry entry or a legal-person claim), an independent human reviewer and a durable reviewed authority reference. A deferral checker additionally needs an approved INTERNAL_GROUP admission decision and current, independently approved `PLATFORM_DOCUMENTARY` requirement classifications in `admission.founding_documentary_policy_requirement`. **That policy table is intentionally empty in this increment**: statutory/provider requirements and unapproved policy names cannot create a grace right. No Nabhold, ZuriBeans, Thamani or Equator actual sponsor, corporate control, legal person or service permission was granted.
+
+The new writes and audit records commit in a single PostgreSQL transaction. A canonical versioned Shared sponsorship/deferral event schema and transactional messaging outbox publication remain pending cross-repository approval; do **not** claim PEO-02 event integration is complete. Existing v1 admission review, authorisation, provisioning and IAM readiness are not bypassed by new v2 applications.
+
+### Operator acceptance remaining
+
+- Green Go race, PostgreSQL 17 migrations, Foundation and Security checks on the **final** head.
+- Real approved policy classifications, signer credentials, IAM scope issuance and permanent reviewer/revocation/appeal lifecycle.
+- Separate v2 review/decision path and governed translation to authorised TenantOnboardingRequest, rather than misusing old v1 incorporation prerequisites.
+- Transactional canonical outbox event conformance and replay/revocation integration across IAM/Subscriptions.
+- CP Console accessible applicant wizard, draft resumability, document applicability explanation and actual market/capability PEP tests; no frontend implementation is claimed here.
