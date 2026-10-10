@@ -14,11 +14,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gofmt -w api/progressive_bridge_handler.go internal/store/postgres/progressive_admission_bridge.go
-          if ! git diff --quiet -- api/progressive_bridge_handler.go internal/store/postgres/progressive_admission_bridge.go; then
+          gofmt -w api/progressive_bridge_handler.go internal/store/postgres/progressive_admission_bridge.go internal/store/postgres/progressive_admission_bridge_test.go
+          if ! git diff --quiet -- api/progressive_bridge_handler.go internal/store/postgres/progressive_admission_bridge.go internal/store/postgres/progressive_admission_bridge_test.go; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add api/progressive_bridge_handler.go internal/store/postgres/progressive_admission_bridge.go
+            git add api/progressive_bridge_handler.go internal/store/postgres/progressive_admission_bridge.go internal/store/postgres/progressive_admission_bridge_test.go
             git commit -m "style(peo-03b): apply gofmt to reviewed admission bridge"
             git push origin HEAD:refs/heads/feat/peo03-v2-admission-decision-bridge
           fi
