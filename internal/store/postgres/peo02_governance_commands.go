@@ -315,7 +315,7 @@ func (s *Store) DecideFoundingGovernance(ctx context.Context, key string, meta b
     requirement_ids,policy_reference,approval_reference,proposed_by,
     approved_by,approved_at,effective_from,expires_at,maximum_duration_months,status)
    SELECT $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7,$8::uuid,$9::uuid,$10,
-    d.decided_at,d.decided_at+interval '24 months',24,'ACTIVE'
+    d.decided_at,admission.founding_grace_expiry(d.decided_at),24,'ACTIVE'
    FROM admission.admission_decision d WHERE d.admission_decision_id=$4::uuid`,
 				grant, p.OrganisationID, p.SponsorshipID, p.AdmissionDecisionID, p.RequirementIDs,
 				p.PolicyReference, decision.ReviewReference, maker, checkerID, now)

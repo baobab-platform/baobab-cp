@@ -20,6 +20,11 @@ import (
 var ErrProgressiveApplicationConflict = errors.New("PEO-03: applicant draft conflict")
 var ErrProgressiveApplicationNotFound = errors.New("PEO-03: applicant draft not found")
 
+// ErrProgressiveApplicationInvalid marks applicant-correctable contract failures (schema,
+// business identity, attestation). Everything else is a persistence/infrastructure failure
+// and must not be presented to the applicant as invalid input.
+var ErrProgressiveApplicationInvalid = errors.New("PEO-03: application violates the v2 contract")
+
 type ProgressiveApplicantDraft struct {
 	ID                   string          `json:"client_application_id"`
 	Reference            string          `json:"reference"`
@@ -50,14 +55,14 @@ var progressiveApplicationSchema = contracts.MustSchema("admission/v2/applicatio
 func validateProgressiveDraft(raw []byte) (ProgressiveDraftUpdate, error) {
 	var v ProgressiveDraftUpdate
 	if err := contracts.Validate(progressiveUpdateSchema, raw); err != nil {
-		return v, err
+		return v, fmt.Errorf("%w: %v", ErrProgressiveApplicationInvalid, err)
 	}
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return v, err
+		return v, fmt.Errorf("%w: %v", ErrProgressiveApplicationInvalid, err)
 	}
 	if len(v.BusinessIdentity) > 0 {
 		if _, err := progressive.ValidateProgressiveBusinessIdentity(v.BusinessIdentity); err != nil {
-			return v, err
+			return v, fmt.Errorf("%w: %v", ErrProgressiveApplicationInvalid, err)
 		}
 	}
 	return v, nil
@@ -74,7 +79,10 @@ func (a *ProgressiveApplicantDraft) applyProgressiveDraft(v ProgressiveDraftUpda
 	}
 }
 func progressiveAttest(a ProgressiveApplicantDraft) error {
-	return contracts.ValidateValue(progressiveApplicationSchema, a)
+	if err := contracts.ValidateValue(progressiveApplicationSchema, a); err != nil {
+		return fmt.Errorf("%w: %v", ErrProgressiveApplicationInvalid, err)
+	}
+	return nil
 }
 
 const progressiveSelect = `client_application_id::text,reference,status,application_channel,version,

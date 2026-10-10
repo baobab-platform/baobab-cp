@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
+	"github.com/baobab-platform/baobab-cp/internal/service/progressive"
 	basestore "github.com/baobab-platform/baobab-cp/internal/store"
 )
 
@@ -191,5 +192,52 @@ func TestPEO02MakerCheckerNeverCertifiesSyntheticSponsor(t *testing.T) {
 	}
 	if decisionEvents != 2 {
 		t.Fatalf("expected one proposal and one checker decision audit, got %d", decisionEvents)
+	}
+}
+
+// ADR-BCP-026/A1 fixes the grace window as 24 calendar months from an explicit UTC instant.
+// PostgreSQL does month arithmetic in the session time zone, so an unqualified
+// `timestamptz + interval '24 months'` moves the expiry by the DST offset difference
+// (e.g. 2026-11-03T12:00Z in America/New_York becomes 2028-11-03T11:00Z). The expression
+// the migration and command use must agree with progressive.CalendarAnniversaryUTC in
+// every session time zone.
+func TestFoundingGraceExpiryIsUTCCalendarMonthsInAnySessionTimeZone(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("PostgreSQL acceptance DB not configured")
+	}
+	ctx := context.Background()
+	db, err := Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	starts := []time.Time{
+		time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC),
+		time.Date(2026, 3, 8, 6, 30, 0, 0, time.UTC),
+		time.Date(2028, 2, 29, 23, 59, 59, 0, time.UTC),
+		time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC),
+	}
+	for _, zone := range []string{"UTC", "America/New_York", "Africa/Johannesburg", "Pacific/Auckland"} {
+		conn, acquireErr := db.pool.Acquire(ctx)
+		if acquireErr != nil {
+			t.Fatal(acquireErr)
+		}
+		if _, err = conn.Exec(ctx, `SELECT set_config('TimeZone',$1,false)`, zone); err != nil {
+			conn.Release()
+			t.Fatal(err)
+		}
+		for _, start := range starts {
+			var got time.Time
+			if err = conn.QueryRow(ctx, `SELECT admission.founding_grace_expiry($1::timestamptz)`, start).Scan(&got); err != nil {
+				conn.Release()
+				t.Fatal(err)
+			}
+			want := progressive.CalendarAnniversaryUTC(start, progressive.FoundingDocumentaryGraceMonths)
+			if !got.UTC().Equal(want) {
+				t.Errorf("zone %s start %s: database expiry %s, policy expiry %s", zone, start, got.UTC(), want)
+			}
+		}
+		conn.Release()
 	}
 }

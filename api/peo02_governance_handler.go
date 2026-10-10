@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
@@ -68,7 +69,7 @@ func (h foundingGovernanceHandler) propose(kind string) http.HandlerFunc {
 		}
 		receipt, err := h.repo.ProposeFoundingGovernance(r.Context(), key, meta, actor, kind, raw)
 		if err != nil {
-			h.fail(w, r)
+			h.fail(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusAccepted, receipt)
@@ -96,12 +97,17 @@ func (h foundingGovernanceHandler) decide(w http.ResponseWriter, r *http.Request
 	}
 	receipt, err := h.repo.DecideFoundingGovernance(r.Context(), key, meta, actor, chi.URLParam(r, "intentID"), input)
 	if err != nil {
-		h.fail(w, r)
+		h.fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusAccepted, receipt)
 }
-func (h foundingGovernanceHandler) fail(w http.ResponseWriter, r *http.Request) {
+func (h foundingGovernanceHandler) fail(w http.ResponseWriter, r *http.Request, err error) {
+	if !errors.Is(err, postgres.ErrFoundingAuthority) {
+		// A storage or infrastructure fault is not a missing authority: do not report it as one.
+		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "the governance command could not be processed", true)
+		return
+	}
 	problem(w, r, http.StatusConflict, "FOUNDING_AUTHORITY_NOT_ESTABLISHED",
 		"independent platform reviewer, current verified sponsorship, admission decision or named platform documentary policy is missing", false)
 }

@@ -40,11 +40,14 @@ func (h progressiveApplicantHandler) failed(w http.ResponseWriter, r *http.Reque
 		problem(w, r, http.StatusNotFound, "APPLICATION_NOT_FOUND", "no such applicant-owned application", false)
 	case errors.Is(err, postgres.ErrProgressiveApplicationConflict):
 		problem(w, r, http.StatusConflict, "APPLICATION_VERSION_CONFLICT", "this draft or idempotency key cannot be reused", false)
-	default:
-		// Contract errors are applicant mistakes; internal persistence failures
-		// MUST NOT disclose another principal's application or database details.
+	case errors.Is(err, postgres.ErrProgressiveApplicationInvalid):
 		problem(w, r, http.StatusUnprocessableEntity, "PROGRESSIVE_APPLICATION_REJECTED",
 			"application requires an eligible business identity and valid v2 fields", false)
+	default:
+		// Persistence and infrastructure failures are not applicant mistakes: report a
+		// retryable server fault and never echo database detail or another principal's data.
+		problem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR",
+			"the application could not be processed", true)
 	}
 }
 func (h progressiveApplicantHandler) create(w http.ResponseWriter, r *http.Request) {

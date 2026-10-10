@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -74,5 +73,50 @@ func TestPEO02AndPEO03FeatureGatesAndAuthentication(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A storage fault must not be presented as an applicant mistake or as a missing authority.
+func TestPEOHandlersDoNotMisreportInfrastructureFaults(t *testing.T) {
+	dbDown := errors.New("connection refused")
+	req := httptest.NewRequest("POST", "/v2/client-applications", strings.NewReader("{}"))
+	for _, tc := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"contract violation", postgres.ErrProgressiveApplicationInvalid, 422},
+		{"conflict", postgres.ErrProgressiveApplicationConflict, 409},
+		{"not found", postgres.ErrProgressiveApplicationNotFound, 404},
+		{"database outage", dbDown, 500},
+	} {
+		w := httptest.NewRecorder()
+		progressiveApplicantHandler{}.failed(w, req, tc.err)
+		if w.Code != tc.want {
+			t.Errorf("applicant %s: got %d want %d", tc.name, w.Code, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"authority not established", postgres.ErrFoundingAuthority, 409},
+		{"database outage", dbDown, 500},
+	} {
+		w := httptest.NewRecorder()
+		foundingGovernanceHandler{}.fail(w, req, tc.err)
+		if w.Code != tc.want {
+			t.Errorf("founding %s: got %d want %d", tc.name, w.Code, tc.want)
+		}
+	}
+}
+
+func TestPEORoutesPermittedOnlyInNonProductionEnvironments(t *testing.T) {
+	for env, want := range map[string]bool{"development": true, "test": true, "integration": true,
+		"sandbox": true, "staging": true, "production": false, "": false, "Staging": false, "prod-like": false} {
+		if got := peoRoutesPermittedIn(env); got != want {
+			t.Errorf("environment %q: got %v want %v", env, got, want)
+		}
 	}
 }

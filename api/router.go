@@ -264,6 +264,16 @@ type API struct {
 	enforcement *administration.Enforcement
 }
 
+// peoRoutesPermittedIn is the explicit allow-list of environments in which the opt-in PEO-02/03
+// v2 route families may be mounted. An unset or unknown environment is production-like and denied.
+func peoRoutesPermittedIn(environment string) bool {
+	switch environment {
+	case "development", "test", "integration", "sandbox", "staging":
+		return true
+	}
+	return false
+}
+
 func New(dependencies Dependencies) http.Handler {
 	a := &API{store: dependencies.Store, adminVerifier: dependencies.AdminVerifier, workloadVerifier: dependencies.WorkloadVerifier, workloadRegistry: dependencies.WorkloadRegistry, resolution: dependencies.Resolution, identities: dependencies.Identities, memberships: dependencies.Memberships,
 		onboarding: dependencies.Onboarding, tenantBootstrap: dependencies.TenantBootstrapRegistration,
@@ -633,9 +643,7 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/audit", obs.audit)
 	}
 	if dependencies.FoundingGovernanceEnabled && dependencies.FoundingGovernance != nil &&
-		(dependencies.Environment == "development" || dependencies.Environment == "test" ||
-			dependencies.Environment == "integration" || dependencies.Environment == "sandbox" ||
-			dependencies.Environment == "staging") {
+		peoRoutesPermittedIn(dependencies.Environment) {
 		founding := foundingGovernanceHandler{repo: dependencies.FoundingGovernance, api: a}
 		r.With(a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)).
 			Post("/v2/founding-governance/sponsorship-proposals", founding.propose("SPONSORSHIP"))
@@ -645,9 +653,7 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/founding-governance/intents/{intentID}/decision", founding.decide)
 	}
 	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&
-		(dependencies.Environment == "development" || dependencies.Environment == "test" ||
-			dependencies.Environment == "integration" || dependencies.Environment == "sandbox" ||
-			dependencies.Environment == "staging") {
+		peoRoutesPermittedIn(dependencies.Environment) {
 		ph := progressiveApplicantHandler{repo: dependencies.ProgressiveApplications, api: a}
 		r.With(a.authorize(a.adminVerifier, "human", "application:write")).
 			Post("/v2/client-applications", ph.create)

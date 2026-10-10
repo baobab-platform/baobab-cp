@@ -1,6 +1,16 @@
 -- PEO-02 foundation: first-party sponsorship and immutable one-time grace.
 -- No automatic INSERT of real organisations, rights, subscriptions or legal
 -- persons. Platform documentary grace is NOT statutory/provider evidence.
+-- Grace expiry: exactly 24 calendar months from an explicit UTC instant (ADR-BCP-026/A1).
+-- PostgreSQL performs month arithmetic in the SESSION time zone, so an unqualified
+-- `timestamptz + interval '24 months'` shifts the instant by any DST offset difference.
+-- This is the single database definition of the window; month-end days clamp
+-- (Jan 31 -> Feb 28/29), matching progressive.CalendarAnniversaryUTC.
+CREATE FUNCTION admission.founding_grace_expiry(provisional_approval_at timestamptz)
+RETURNS timestamptz LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
+  SELECT ((provisional_approval_at AT TIME ZONE 'UTC') + interval '24 months') AT TIME ZONE 'UTC'
+$$;
+
 CREATE TABLE admission.founding_group_sponsorship (
   sponsorship_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   sponsor_organisation_id uuid NOT NULL REFERENCES registry.organisation_profile(canonical_entity_id),
@@ -23,7 +33,9 @@ CREATE TABLE admission.founding_group_sponsorship (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CHECK (proposed_by<>approved_by AND effective_to>effective_from
       AND approved_at<=effective_to AND (revoked_at IS NULL OR revoked_at>=approved_at)),
-  CHECK (status<>'REVOKED' OR revoked_at IS NOT NULL)
+  CHECK (status<>'REVOKED' OR revoked_at IS NOT NULL),
+  -- A sponsor vouches for a different operating Organisation, never for itself.
+  CHECK (sponsor_organisation_id<>operating_organisation_id)
 );
 CREATE INDEX founding_sponsorship_target_idx
   ON admission.founding_group_sponsorship(operating_organisation_id,status,effective_to);
@@ -129,7 +141,7 @@ BEGIN
      OR src.status<>'ACTIVE' OR src.scope<>'INTERNAL_GROUP_ADMISSION'
      OR src.decision<>'APPROVED' OR src.application_channel<>'INTERNAL_GROUP'
      OR NEW.effective_from IS DISTINCT FROM src.decided_at
-     OR NEW.expires_at IS DISTINCT FROM (src.decided_at + interval '24 months')
+     OR NEW.expires_at IS DISTINCT FROM admission.founding_grace_expiry(src.decided_at)
      OR NEW.approved_at<NEW.effective_from OR NEW.approved_at>clock_timestamp()
      OR NEW.effective_from>clock_timestamp() OR NEW.expires_at<=clock_timestamp()
      OR src.sponsor_from>NEW.effective_from OR src.sponsor_to<=NEW.approved_at
