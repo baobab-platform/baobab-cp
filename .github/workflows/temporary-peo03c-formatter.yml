@@ -1,0 +1,23 @@
+name: Temporary peo03c gofmt
+on:
+  push:
+    branches:
+      - feat/peo03c-direct-v2-tenant-registration
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Canonical Go formatting
+        run: |
+          set -euo pipefail
+          gofmt -w api/peo03_direct_registration_handler.go api/router.go internal/store/postgres/peo03_direct_registration.go internal/store/postgres/peo03_direct_registration_test.go internal/store/postgres/store.go internal/store/postgres/migrate.go internal/store/postgres/migrate_test.go
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add api/peo03_direct_registration_handler.go api/router.go internal/store/postgres/peo03_direct_registration.go internal/store/postgres/peo03_direct_registration_test.go internal/store/postgres/store.go internal/store/postgres/migrate.go internal/store/postgres/migrate_test.go
+            git commit -m "style(peo03c): canonical gofmt of implementation"
+            git push origin HEAD:refs/heads/feat/peo03c-direct-v2-tenant-registration
+          fi
