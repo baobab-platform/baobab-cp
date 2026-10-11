@@ -49,13 +49,17 @@ func documentaryReleaseVerified(ctx context.Context, tx pgx.Tx, restrictionID, r
    ON sp.policy_reference=ri.policy_reference
   AND sp.requirement_id=restriction.requirement_id
   AND sp.market_code=restriction.market_code
+ JOIN identity.principal source_approver ON source_approver.principal_id=sp.approved_by
+   AND source_approver.actor_type='human'
+ JOIN identity.principal policy_approver ON policy_approver.principal_id=p.approved_by
+   AND policy_approver.actor_type='human'
  JOIN evidence.result res ON res.result_id=$2
  JOIN evidence.claim c ON c.claim_id=res.claim_id AND c.case_id=res.case_id
  JOIN evidence.verification_case vc ON vc.case_id=res.case_id
  WHERE restriction.restriction_id=$1::uuid
   AND p.requirement_authority='PLATFORM_DOCUMENTARY'
-  AND p.effective_from<=$3 AND p.effective_to>$3
-  AND sp.effective_from<=$3 AND sp.effective_to>$3
+  AND p.approved_at<=$3 AND p.effective_from<=$3 AND p.effective_to>$3
+  AND sp.approved_at<=$3 AND sp.effective_from<=$3 AND sp.effective_to>$3
   AND sp.claim_type=c.document->>'claim_type'
   AND c.document->>'jurisdiction'=sp.market_code
   AND c.document->>'purpose'='COMPLIANCE_REMEDIATION'
