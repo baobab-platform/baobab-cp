@@ -88,7 +88,7 @@ export async function exchangeAuthorizationCode(
     code_verifier: verifier,
     redirect_uri: config.redirectUri,
   });
-  const basic = Buffer.from(`${config.clientId}:${clientSecret}`, "utf8").toString("base64");
+  const basic = Buffer.from(`${encodeURIComponent(config.clientId)}:${encodeURIComponent(clientSecret)}`, "utf8").toString("base64");
   let response: Response;
   try {
     response = await fetcher(url, {
@@ -108,7 +108,7 @@ export async function exchangeAuthorizationCode(
     throw new OidcBoundaryError();
   }
   const data = await boundedJSON(response);
-  if (!isObject(data) || data.token_type !== "Bearer" ||
+  if (!isObject(data) || typeof data.token_type !== "string" || data.token_type.toLowerCase() !== "bearer" ||
       typeof data.access_token !== "string" || data.access_token.length < 16 || data.access_token.length > 16384 ||
       typeof data.id_token !== "string" || data.id_token.length < 32 || data.id_token.length > 16384 ||
       typeof data.expires_in !== "number" || !Number.isSafeInteger(data.expires_in) ||
