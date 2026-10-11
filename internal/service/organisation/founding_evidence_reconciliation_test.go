@@ -70,7 +70,7 @@ func setupPEO04AFixture(t *testing.T)(FoundingEvidenceReconciler,FoundingIdentit
 		Corporate:foundingCorporateFixture{edges:[]domain.CorporateRelationship{control}},
 		Proofs:foundingProofFixture{proof:proof},
 		Trust:map[string]IndependentControlTrust{
-			proof.SignerID:{SignerID:proof.SignerID,PublicKey:pub,ApprovedBy:"independent-platform-checker",
+			proof.SignerID:{IssuerID:proof.IssuerID,SignerID:proof.SignerID,PublicKey:pub,\n\t\t\t\tProposedBy:"independent-platform-maker",ApprovedBy:"independent-platform-checker",ApprovalRecord:"synthetic-independent-trust-approval",
 				ApprovedAt:now.Add(-time.Hour),ExpiresAt:now.Add(2*time.Hour)}},
 		Now:func()time.Time{return now},
 	},parent,child,priv
