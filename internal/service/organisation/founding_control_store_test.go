@@ -6,7 +6,9 @@ import (
 	"errors"
 	"os"
 	"testing"
-	"time"
+	"strings"
+
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,6 +29,9 @@ func TestPEO04APostgresIndependentControlEvidenceIsImmutable(t *testing.T) {
 	defer pool.Close()
 	reconciler,_,_,private:=setupPEO04AFixture(t)
 	proof:=reconciler.Proofs.(foundingProofFixture).proof
+	// Every test run owns an isolated synthetic proof chain.
+	proof.RelationshipID="crel_"+strings.ReplaceAll(domain.NewUUIDv7(),"-","")
+	proof.Signature=ed25519.Sign(private,proof.signingPayload())
 	trust:=reconciler.Trust
 	store:=PostgresControlProofStore{Pool:pool,Trust:trust,Now:reconciler.Now}
 	approval:=IndependentProofApproval{MakerID:"prn_synthetic_independent_maker",
@@ -75,5 +80,4 @@ func TestPEO04APostgresIndependentControlEvidenceIsImmutable(t *testing.T) {
 	if _,err=store.ReadIndependentControlProof(ctx,proof.RelationshipID);!errors.Is(err,ErrUntrustedCorporateProof){
 		t.Fatalf("conflicting active attestation silently selected: %v",err)
 	}
-	_ = time.Second // keep the test's independent temporal semantics explicit
 }
