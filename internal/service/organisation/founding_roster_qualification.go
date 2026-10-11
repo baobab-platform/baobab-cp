@@ -78,8 +78,10 @@ func (p PostgresFoundingSnapshot) SnapshotFoundingEntity(ctx context.Context, fi
 	err = p.Pool.QueryRow(ctx, `SELECT count(*),
  COALESCE(bool_or(verification_state='VERIFIED' AND legal_status='ACTIVE'
  AND source_authority NOT IN('shared-governance','control-plane-registration')
+ AND verified_at IS NOT NULL AND verified_at<=$2
+ AND effective_from<=$2 AND (effective_to IS NULL OR effective_to>$2)
  AND jsonb_array_length(evidence_references)>0),false)
- FROM registry.legal_entity_profile WHERE organisation_id=$1::uuid`, row.OrganisationID).
+ FROM registry.legal_entity_profile WHERE organisation_id=$1::uuid`, row.OrganisationID,at).
 		Scan(&row.LegalProfileCount, &row.LegalProfileVerified)
 	if err != nil {
 		return row, err
@@ -95,8 +97,10 @@ func (p PostgresFoundingSnapshot) SnapshotFoundingEntity(ctx context.Context, fi
  AND s.scope='INTERNAL_GROUP_ADMISSION' AND s.status='ACTIVE'
  AND s.effective_from<=$2 AND s.effective_to>$2
  AND fp.identity_class='LEGAL_PERSON'
+ AND fp.incorporation_claim='REGISTERED_EVIDENCED'
  AND lp.verification_state='VERIFIED' AND lp.legal_status='ACTIVE'
  AND lp.source_authority NOT IN ('shared-governance','control-plane-registration')
+ AND lp.verified_at IS NOT NULL AND lp.verified_at<=$2
  AND lp.effective_from<=$2 AND (lp.effective_to IS NULL OR lp.effective_to>$2)
  AND jsonb_array_length(lp.evidence_references)>0
  )`, row.OrganisationID, at).Scan(&row.SponsorshipEligible)
@@ -112,7 +116,12 @@ func (p PostgresFoundingSnapshot) SnapshotFoundingEntity(ctx context.Context, fi
  AND m.legal_actor_verification_reference IS NOT NULL
  AND lp.verification_state='VERIFIED' AND lp.legal_status='ACTIVE'
  AND lp.source_authority NOT IN ('shared-governance','control-plane-registration')
+ AND lp.verified_at IS NOT NULL AND lp.verified_at<=$3
  AND lp.effective_from<=$3 AND (lp.effective_to IS NULL OR lp.effective_to>$3)
+ AND EXISTS (
+   SELECT 1 FROM jsonb_array_elements_text(lp.evidence_references) exact_ref
+   WHERE exact_ref.value=m.legal_actor_verification_reference
+ )
  `, row.TenantIDs[0], row.OrganisationID, at).Scan(&row.ActiveMandateCount)
 	return row, err
 }
