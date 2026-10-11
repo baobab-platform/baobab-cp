@@ -18,14 +18,14 @@ var ErrDocumentExtractionDenied = errors.New("document extraction requires gover
 // custody adapter. Its evidence and artifact IDs, clean scan proof and digest
 // MUST be derived from custody metadata, never from a caller's HTTP request.
 type ScannedDocument struct {
-	EvidenceID     string
-	ArtifactID     string
-	MediaType      string
-	Bytes          []byte
-	SHA256         string
-	ScanOutcome    string
+	EvidenceID      string
+	ArtifactID      string
+	MediaType       string
+	Bytes           []byte
+	SHA256          string
+	ScanOutcome     string
 	ScanAttestation string
-	ScannedAt      time.Time
+	ScannedAt       time.Time
 }
 
 type ScannedDocumentReader interface {
@@ -39,12 +39,12 @@ type DocumentCandidateProcessor interface {
 // DocumentCandidateAttempt represents a private, encrypted-at-rest candidate
 // ledger entry; it is NOT an OEV-03 check/result or verified legal fact.
 type DocumentCandidateAttempt struct {
-	CaseID    string
-	ClaimID   string
+	CaseID     string
+	ClaimID    string
 	EvidenceID string
 	ArtifactID string
-	ActorID   string
-	Receipt   authority.DocumentExtractionReceipt
+	ActorID    string
+	Receipt    authority.DocumentExtractionReceipt
 }
 
 type DocumentCandidateRepository interface {
@@ -63,11 +63,11 @@ type DocumentCandidateRepository interface {
 // an authorised malware-scanned custody reader and a durable sealed ledger.
 // Without every dependency it fails closed.
 type DocumentExtractionWorker struct {
-	Repo DocumentCandidateRepository
-	Custody ScannedDocumentReader
-	Processor DocumentCandidateProcessor
+	Repo            DocumentCandidateRepository
+	Custody         ScannedDocumentReader
+	Processor       DocumentCandidateProcessor
 	AllowedClientID string
-	Now func() time.Time
+	Now             func() time.Time
 }
 
 func (w DocumentExtractionWorker) Extract(ctx context.Context, caseID, claimID, evidenceID, idempotencyKey string, actor repository.AuditActor) (DocumentCandidateAttempt, error) {
