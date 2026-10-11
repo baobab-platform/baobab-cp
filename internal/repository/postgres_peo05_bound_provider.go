@@ -42,7 +42,7 @@ func (r *PostgresRepository) ReadPEO05BoundProvider(ctx context.Context, tenantI
 		JOIN capability.capability_provider p ON p.provider_id = b.provider_id
 		JOIN topology.engine_instance ei ON ei.engine_instance_id = b.engine_instance_id
 		JOIN topology.engine e ON e.engine_id = ei.engine_id AND e.engine_id = p.engine_id
-		JOIN mapping.mapping_scope scope ON scope.mapping_scope_id = b.scope_id
+		JOIN capability.capability_scope scope ON scope.scope_id = b.scope_id
 		JOIN capability.provider_capability_support pcs ON pcs.provider_id = p.provider_id AND pcs.capability_id = c.capability_id
 		WHERE scope.tenant_id = $1 AND c.code = $2 AND p.provider_key = $3 AND ei.engine_instance_key = $4
 			AND b.status = 'ACTIVE' AND b.binding_mode = 'PRIMARY'
