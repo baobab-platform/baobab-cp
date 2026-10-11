@@ -57,7 +57,7 @@ func TestPEO03KReaderRequiresIndependentScannerSignatureAndWorkload(t *testing.T
 		EvidenceType: "DOCUMENT", Status: verification.EvidenceAvail}
 	actor := repository.AuditActor{ActorID: "prn_worker", ActorType: "workload",
 		ClientID: "baobab-document-extractor-staging"}
-	if _, err := readWithSyntheticLease(reader, e, actor); err == nil {
+	if _, err := reader.OpenScanned(context.Background(), e, actor); err == nil {
 		t.Fatal("direct read outside canonical lease disclosed scanned document")
 	}
 	d, err := readWithSyntheticLease(reader, e, actor)
