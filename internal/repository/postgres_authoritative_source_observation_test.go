@@ -70,7 +70,7 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 	claim := verification.Claim{ClaimID: claimID, Subject: subject,
 		ClaimType: "LEGAL_NAME", Jurisdiction: "ZA",
 		ClaimedValue: verification.ClaimedValue{Value: company},
-		AssertedBy: "synthetic-applicant", AssertedVia: "APPLICANT",
+		AssertedBy:   "synthetic-applicant", AssertedVia: "APPLICANT",
 		AssertedAt: now, Purpose: vercase.Purpose, Status: verification.ClaimUnderCheck,
 		EvidenceIDs: []string{evidenceID}, Version: 1}
 	evidence := verification.Evidence{EvidenceID: evidenceID, SourceID: "esrc_cipc",
@@ -110,7 +110,7 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 		SourceID: "esrc_cipc", Method: "SOURCE_API_LOOKUP", Outcome: "MATCHED",
 		SourceReference: obsRef, ProvenanceRef: "synthetic/immutable-proof/" + suffix,
 		ResponseDigest: "sha256:" + strings.Repeat("c", 64),
-		ObservedAt: now.Add(-time.Second), FreshnessUntil: now.Add(time.Hour),
+		ObservedAt:     now.Add(-time.Second), FreshnessUntil: now.Add(time.Hour),
 		AdapterID: "baobab.cipc.synthetic", Synthetic: true,
 	}
 	actor := AuditActor{ActorID: "prn_test" + suffix[:12], ActorType: "human",
@@ -178,7 +178,7 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 		SourceID: "esrc_cipc", Method: "SOURCE_API_LOOKUP",
 		Outcome: "VERIFIED", RequestedAt: now, PerformedAt: &now,
 		PerformedBy: "synthetic-reviewer", SourceRecordReference: obsRef,
-		Dimensions: []verification.Dimension{{Dimension: "CLAIM_MATCH", Outcome: "PASSED"}},
+		Dimensions:  []verification.Dimension{{Dimension: "CLAIM_MATCH", Outcome: "PASSED"}},
 		ReasonCodes: []string{}, EvidenceIDs: []string{},
 	}
 	if _, err := seed.Exec(ctx, `INSERT INTO evidence.check
