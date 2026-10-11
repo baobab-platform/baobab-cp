@@ -27,7 +27,7 @@ func syntheticCIPCClaim() Claim {
 		ClaimID: "ecl_syntheticcipc01", Subject: Subject{SubjectType: "ORGANISATION", SubjectID: "org_synthetic"},
 		ClaimType: "LEGAL_NAME", Jurisdiction: "ZA",
 		ClaimedValue: ClaimedValue{Value: "Synthetic Sample Ltd"},
-		Purpose: "ORGANISATION_ADMISSION", AssertedBy: "applicant-1",
+		Purpose:      "ORGANISATION_ADMISSION", AssertedBy: "applicant-1",
 	}
 }
 
@@ -35,9 +35,9 @@ func syntheticCIPCRecord(now time.Time) CompanyRecord {
 	return CompanyRecord{
 		RegistrationNumber: "2020/123456/07", LegalName: "Synthetic Sample Ltd",
 		EntityStatus: "IN_BUSINESS", SourceReference: "synthetic/cipc/company-01",
-		ProvenanceRef: "synthetic-immutable-object/cipc-response-01",
+		ProvenanceRef:  "synthetic-immutable-object/cipc-response-01",
 		ResponseDigest: "sha256:" + strings.Repeat("a", 64),
-		ObservedAt: now.Add(-time.Second), FreshnessUntil: now.Add(time.Hour),
+		ObservedAt:     now.Add(-time.Second), FreshnessUntil: now.Add(time.Hour),
 		Synthetic: true,
 	}
 }
@@ -166,8 +166,11 @@ func TestPEO03BCannotBorrowSomeoneElsesClaimOrReview(t *testing.T) {
 		Outcome: "MATCHED", SourceReference: "official/record-01",
 		ProvenanceRef: "immutable/evidence-01", AdapterID: "baobab.cipc",
 		ResponseDigest: "sha256:" + strings.Repeat("a", 64),
-		ObservedAt: now.Add(-time.Second), FreshnessUntil: now.Add(time.Hour)}
-	for _, tc := range []struct{ name string; tweak func(*SourceObservation) }{
+		ObservedAt:     now.Add(-time.Second), FreshnessUntil: now.Add(time.Hour)}
+	for _, tc := range []struct {
+		name  string
+		tweak func(*SourceObservation)
+	}{
 		{"case mismatch", func(o *SourceObservation) { o.CaseID = "vcase_other" }},
 		{"claim mismatch", func(o *SourceObservation) { o.ClaimID = "ecl_other" }},
 		{"subject mismatch", func(o *SourceObservation) { o.Subject.SubjectID = "other" }},
