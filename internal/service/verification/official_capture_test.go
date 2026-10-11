@@ -89,8 +89,8 @@ func TestPEO03GLocalTLSSourceToEncryptedCustodyAndNonPositiveReceipt(t *testing.
 	if err!=nil||!strings.Contains(string(raw),"Synthetic Company Ltd"){
 		t.Fatalf("official proof not encrypted and recoverable: %v",err)
 	}
-	if _,err:=service.Capture(context.Background(),caseID,claimID,evidenceID,
-		"another-synthetic-source-capture",actor);err==nil{
-		t.Fatal("duplicate encrypted evidence was overwritten")
+	if replay,err:=service.Capture(context.Background(),caseID,claimID,evidenceID,
+		"another-synthetic-source-capture",actor);err!=nil||replay.AuthorityGranted{
+		t.Fatalf("identical issuer response could not be replayed safely: %+v %v",replay,err)
 	}
 }
