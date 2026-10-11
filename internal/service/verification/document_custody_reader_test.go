@@ -27,7 +27,7 @@ func TestPEO03KReaderRequiresIndependentScannerSignatureAndWorkload(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	data := []byte("%PDF-1.7\nsynthetic readable document")
 	hash := sha256.Sum256(data)
 	proof := authority.ScanProof{EvidenceID: "evr_123456789", ArtifactID: "eart_123456789",
