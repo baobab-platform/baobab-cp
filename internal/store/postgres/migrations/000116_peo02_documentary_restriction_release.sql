@@ -78,6 +78,35 @@ CREATE OR REPLACE VIEW admission.active_documentary_remediation_restriction AS
       JOIN evidence.result result ON result.result_id=d.verification_result_id
       JOIN evidence.claim claim ON claim.claim_id=result.claim_id
       JOIN evidence.verification_case verification_case ON verification_case.case_id=result.case_id
+      JOIN admission.documentary_review_decision originating_decision
+        ON originating_decision.decision_id=r.decision_id
+      JOIN admission.documentary_review_intent original_review
+        ON original_review.review_id=originating_decision.review_id
+      JOIN admission.founding_documentary_policy_requirement policy
+        ON policy.policy_reference=original_review.policy_reference
+       AND policy.requirement_id=r.requirement_id
+       AND policy.requirement_authority='PLATFORM_DOCUMENTARY'
+       AND policy.effective_from<=clock_timestamp()
+       AND policy.effective_to>clock_timestamp()
+      JOIN admission.documentary_release_source_policy source_policy
+        ON source_policy.policy_reference=original_review.policy_reference
+       AND source_policy.requirement_id=r.requirement_id
+       AND source_policy.market_code=r.market_code
+       AND source_policy.claim_type=claim.document->>'claim_type'
+       AND source_policy.market_code=claim.document->>'jurisdiction'
+       AND source_policy.effective_from<=clock_timestamp()
+       AND source_policy.effective_to>clock_timestamp()
+       AND EXISTS (
+          SELECT 1 FROM evidence.check source_check
+          WHERE source_check.claim_id=result.claim_id
+            AND source_check.case_id=result.case_id
+            AND source_check.source_id=source_policy.source_id
+            AND source_check.outcome IN ('VERIFIED','MATCHED')
+            AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(result.document->'check_ids') AS cited(check_id)
+              WHERE cited.check_id=source_check.check_id
+            )
+       )
       WHERE d.restriction_id=r.restriction_id AND d.outcome='APPROVE'
         AND result.outcome='VERIFIED' AND claim.status='VERIFIED'
         AND claim.current_result_id=result.result_id
