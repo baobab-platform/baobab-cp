@@ -62,10 +62,32 @@ type CompanyRegistry interface {
 	LookupCompany(context.Context, string) (CompanyRecord, error)
 }
 
+// VerifiedRegistrationBinding is an independently VERIFIED, current OEV-03
+// registration-identifier fact scoped to the *same* case and Organisation.
+// It MUST be resolved from CP's own ledger, never populated from an applicant
+// request or a lookalike corporate number.
+type VerifiedRegistrationBinding struct {
+	CaseID             string
+	Subject            Subject
+	RegistrationNumber string
+	ClaimID            string
+	ResultID           string
+	SourceID           string
+	FreshnessUntil     time.Time
+}
+
+// VerifiedRegistrationResolver must read CP's authoritative OEV-03 results,
+// joining result -> claim -> case -> exact subject, with current_result_id,
+// VERIFIED outcome and unexpired evidence. It must not accept browser claims.
+type VerifiedRegistrationResolver interface {
+	ResolveVerifiedRegistration(context.Context, string, Subject) (VerifiedRegistrationBinding, error)
+}
+
 // CIPCCompaniesAdapter contains no bearer tokens or URLs. The transport is
 // injected by the approved source adapter at composition root.
 type CIPCCompaniesAdapter struct {
 	Registry       CompanyRegistry
+	Registrations  VerifiedRegistrationResolver
 	Certified      bool
 	AllowSynthetic bool
 	AdapterID      string
@@ -73,12 +95,34 @@ type CIPCCompaniesAdapter struct {
 
 // LookupCIPC creates a non-authorising observation for a pre-existing claim.
 // A caller cannot supply the source, company reference, or observation outcome.
-func (a CIPCCompaniesAdapter) LookupCIPC(ctx context.Context, caseID string, claim Claim, companyNumber string, now time.Time) (SourceObservation, error) {
+func (a CIPCCompaniesAdapter) LookupCIPC(ctx context.Context, caseID string, claim Claim, now time.Time) (SourceObservation, error) {
 	if ctx == nil || a.Registry == nil || !a.Certified || !strings.HasPrefix(caseID, "vcase_") ||
-		claim.ClaimID == "" || strings.TrimSpace(companyNumber) == "" ||
+		claim.ClaimID == "" ||
 		claim.Jurisdiction != "ZA" || !cipcClaimSupported(claim.ClaimType) ||
 		claim.Subject.SubjectType == "" || claim.Subject.SubjectID == "" ||
 		claim.Purpose == "" || a.AdapterID == "" {
+		return SourceObservation{}, ErrUntrustedObservation
+	}
+	// Registry number is never supplied as an independent per-operation
+	// browser argument for a legal-name or status claim. Those checks MUST
+	// use a current, independently verified identifier for this exact
+	// case/subject, resolved from CP's evidence ledger.
+	companyNumber := ""
+	if claim.ClaimType == "REGISTRATION_IDENTIFIER" {
+		companyNumber = strings.TrimSpace(claim.ClaimedValue.Value)
+	} else {
+		if a.Registrations == nil {
+			return SourceObservation{}, ErrUntrustedObservation
+		}
+		binding, lookupErr := a.Registrations.ResolveVerifiedRegistration(ctx, caseID, claim.Subject)
+		if lookupErr != nil || binding.CaseID != caseID || binding.Subject != claim.Subject ||
+			binding.SourceID != "esrc_cipc" || !strings.HasPrefix(binding.ClaimID, "ecl_") ||
+			!strings.HasPrefix(binding.ResultID, "vres_") || !binding.FreshnessUntil.After(now) {
+			return SourceObservation{}, ErrUntrustedObservation
+		}
+		companyNumber = strings.TrimSpace(binding.RegistrationNumber)
+	}
+	if companyNumber == "" {
 		return SourceObservation{}, ErrUntrustedObservation
 	}
 	source, err := SourceByID("esrc_cipc")
