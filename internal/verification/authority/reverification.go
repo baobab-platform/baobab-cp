@@ -11,6 +11,7 @@ var ErrReverification = errors.New("source re-verification is not currently auth
 // DueObservation is only a re-verification target. It carries no positive
 // permission, cached credentials or source response body.
 type DueObservation struct {
+	ObservationID string
 	CaseID        string
 	ClaimID       string
 	EvidenceID    string
@@ -25,6 +26,8 @@ type DueObservation struct {
 // positive standing until a NEW authenticated source check and independent
 // result have been committed. This selector never copies positive status.
 type ReverificationPlan struct {
+	ObservationID string
+	EvidenceID string
 	CaseID     string
 	ClaimID    string
 	SourceID   string
@@ -33,8 +36,8 @@ type ReverificationPlan struct {
 }
 
 func PlanReverification(row DueObservation, now time.Time, certified bool) (ReverificationPlan,error) {
-	plan:=ReverificationPlan{CaseID:row.CaseID,ClaimID:row.ClaimID,SourceID:row.SourceID}
-	if row.CaseID=="" || row.ClaimID=="" || row.EvidenceID=="" ||
+	plan:=ReverificationPlan{ObservationID:row.ObservationID,EvidenceID:row.EvidenceID,CaseID:row.CaseID,ClaimID:row.ClaimID,SourceID:row.SourceID}
+	if row.ObservationID=="" || row.CaseID=="" || row.ClaimID=="" || row.EvidenceID=="" ||
 		row.SourceID=="" || now.IsZero() {
 		return plan,ErrReverification
 	}
