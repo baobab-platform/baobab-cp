@@ -61,24 +61,27 @@ func (p IndependentControlProof) signingPayload() []byte {
 // separately configured from first-party Shared registry evidence and the
 // issuer's submitted certificate. No browser controls trusted public keys.
 type IndependentControlTrust struct {
+	IssuerID string
 	SignerID string
 	PublicKey ed25519.PublicKey
+	ProposedBy string
 	ApprovedBy string
+	ApprovalRecord string
 	ApprovedAt time.Time
 	ExpiresAt time.Time
 }
 
 func (t IndependentControlTrust) verify(proof IndependentControlProof, now time.Time) bool {
-	if t.SignerID == "" || t.SignerID != proof.SignerID ||
+	if t.IssuerID == "" || t.IssuerID != proof.IssuerID ||\n\t\tt.IssuerID == "shared-governance" || t.IssuerID == "esrc_applicant" ||\n\t\tt.SignerID == "" || t.SignerID != proof.SignerID ||
 		len(t.PublicKey) != ed25519.PublicKeySize ||
 		len(proof.Signature) != ed25519.SignatureSize ||
-		t.ApprovedBy == "" || t.ApprovedAt.IsZero() ||
+		t.ApprovedBy == "" || t.ProposedBy == "" || t.ApprovedBy == t.ProposedBy ||\n\t\tt.ApprovalRecord == "" || t.ApprovedAt.IsZero() ||
 		t.ApprovedAt.After(now) || !t.ExpiresAt.After(now) ||
 		proof.IssuerID == "" || proof.SourceRecordReference == "" ||
 		proof.EvidenceReference == "" || proof.RelationshipID == "" ||
 		proof.ParentOrganisationID == "" || proof.ChildOrganisationID == "" ||
 		proof.ParentOrganisationID == proof.ChildOrganisationID ||
-		proof.ObservedAt.IsZero() || proof.ObservedAt.After(now) ||
+		proof.ObservedAt.IsZero() || proof.ObservedAt.After(now) ||\n\t\tnow.Sub(proof.ObservedAt) > 90*24*time.Hour ||\n\t\t!proof.ExpiresAt.After(proof.ObservedAt) ||
 		!proof.ExpiresAt.After(now) || proof.ExpiresAt.After(t.ExpiresAt) ||
 		len(proof.EvidenceDigest) != 71 ||
 		!strings.HasPrefix(proof.EvidenceDigest, "sha256:") {
@@ -189,7 +192,7 @@ func (r FoundingEvidenceReconciler) Reconcile(ctx context.Context, parent, child
 	}
 	trust,ok:=r.Trust[proof.SignerID]
 	if !ok || !trust.verify(proof,now) ||
-		proof.RelationshipID!=edge.ID ||
+		proof.RelationshipID!=edge.ID ||\n\t\tproof.IssuerID!=edge.SourceAuthority ||
 		proof.ParentOrganisationID!=parent.OrganisationID ||
 		proof.ChildOrganisationID!=child.OrganisationID ||
 		proof.ParentRegistration!=parentBinding.RegistrationNumber ||
