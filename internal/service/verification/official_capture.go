@@ -2,6 +2,8 @@ package verificationservice
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -36,8 +38,9 @@ type CIPCIntake struct {
 type custodiedRegistry struct {
 	transport  authority.CIPCTransport
 	vault      authority.SealedVault
-	evidenceID string
-	ttl        time.Duration
+	evidenceID   string
+	attemptDigest string
+	ttl          time.Duration
 }
 
 func (c custodiedRegistry) LookupCompany(ctx context.Context, number string) (verification.CompanyRecord, error) {
@@ -45,7 +48,7 @@ func (c custodiedRegistry) LookupCompany(ctx context.Context, number string) (ve
 	if err != nil {
 		return verification.CompanyRecord{}, ErrCaptureDenied
 	}
-	uri, err := c.vault.Seal(ctx, c.evidenceID, record.RawResponse)
+	uri, err := c.vault.SealVersioned(ctx, c.evidenceID, c.attemptDigest, record.RawResponse)
 	if err != nil {
 		return verification.CompanyRecord{}, ErrCaptureDenied
 	}
@@ -61,7 +64,7 @@ func (c custodiedRegistry) LookupCompany(ctx context.Context, number string) (ve
 func (s CIPCIntake) Capture(ctx context.Context, caseID, claimID, evidenceID, key string, actor repository.AuditActor) (authority.CaptureReceipt, error) {
 	empty := authority.CaptureReceipt{}
 	if s.Repo == nil || ctx == nil || s.Now == nil || caseID == "" || claimID == "" ||
-		evidenceID == "" || actor.ActorType != "workload" || actor.ClientID == "" || actor.ActorID == "" {
+		evidenceID == "" || len(key) < 16 || len(key) > 128 || actor.ActorType != "workload" || actor.ClientID == "" || actor.ActorID == "" {
 		return empty, ErrCaptureDenied
 	}
 	// A replay that has already committed may not query the provider again
@@ -107,7 +110,15 @@ func (s CIPCIntake) Capture(ctx context.Context, caseID, claimID, evidenceID, ke
 	if evidence.ExpiresAt != nil && !evidence.ExpiresAt.After(now) {
 		return empty, ErrCaptureDenied
 	}
-	registry := custodiedRegistry{transport: s.Transport, vault: s.Vault, evidenceID: evidenceID, ttl: 24 * time.Hour}
+	// Every authenticated source lookup gets one immutable custody object.
+	// Re-verification with a new request key may reveal a changed official fact
+	// and must never overwrite the historical issuer response.
+	sum := sha256.Sum256([]byte("peo03g-cipc/v2\x00" + actor.ActorID + "\x00" +
+		actor.ClientID + "\x00" + caseID + "\x00" + claimID + "\x00" +
+		evidenceID + "\x00" + key))
+	attemptDigest := "sha256:" + hex.EncodeToString(sum[:])
+	registry := custodiedRegistry{transport: s.Transport, vault: s.Vault,
+		evidenceID: evidenceID, attemptDigest: attemptDigest, ttl: 24 * time.Hour}
 	adapter := verification.CIPCCompaniesAdapter{Registry: registry,
 		Registrations: s.Registrations, Certified: true,
 		AllowSynthetic: s.AllowSynthetic, AdapterID: "baobab.cipc.certified"}
