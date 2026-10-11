@@ -271,6 +271,26 @@ func (s *Store) DecideDocumentaryReview(ctx context.Context, key string, meta ba
 	if err = reviewActorExists(ctx, tx, actor); err != nil {
 		return empty, err
 	}
+	// Serialize the actor/key pair BEFORE locking an individual review. The
+	// unique index spans reviews, so per-review locking alone is insufficient.
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
+		"peo02s:review-decision-key:"+actor+":"+key); err != nil {
+		return empty, err
+	}
+	var reusedDecisionID, reusedReviewID, reusedDigest string
+	err = tx.QueryRow(ctx, `SELECT decision_id::text,review_id::text,request_digest
+   FROM admission.documentary_review_decision
+   WHERE decided_by=$1::uuid AND idempotency_key=$2`, actor, key).
+		Scan(&reusedDecisionID, &reusedReviewID, &reusedDigest)
+	if err == nil {
+		if reusedReviewID == reviewID && reusedDigest == digest {
+			return ReviewReceipt{reusedDecisionID, "DECIDED"}, nil
+		}
+		return empty, ErrDocumentaryReviewDenied
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return empty, err
+	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
 		"peo02s:review:"+reviewID); err != nil {
 		return empty, err
@@ -386,6 +406,27 @@ func (s *Store) FileDocumentaryReviewAppeal(ctx context.Context, key string, met
 	if actor == checker {
 		return empty, ErrDocumentaryReviewDenied
 	}
+	// Appeal idempotency is actor-scoped across all decisions. A reused key
+	// cannot be inserted for a different decision and surface as HTTP 500.
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
+		"peo02s:appeal-key:"+actor+":"+key); err != nil {
+		return empty, err
+	}
+	var reusedAppealID, reusedDecisionID, reusedReason, reusedEvidence string
+	err = tx.QueryRow(ctx, `SELECT appeal_id::text,decision_id::text,reason,evidence_reference
+   FROM admission.documentary_review_appeal
+   WHERE raised_by=$1::uuid AND idempotency_key=$2`, actor, key).
+		Scan(&reusedAppealID, &reusedDecisionID, &reusedReason, &reusedEvidence)
+	if err == nil {
+		if reusedDecisionID == decisionID && reusedReason == in.Reason &&
+			reusedEvidence == in.EvidenceReference {
+			return ReviewReceipt{reusedAppealID, "FILED"}, nil
+		}
+		return empty, ErrDocumentaryReviewDenied
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return empty, err
+	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
 		"peo02s:appeal:"+decisionID); err != nil {
 		return empty, err
@@ -439,6 +480,26 @@ func (s *Store) DecideDocumentaryReviewAppeal(ctx context.Context, key string, m
 	}
 	defer tx.Rollback(ctx)
 	if err = reviewActorExists(ctx, tx, actor); err != nil {
+		return empty, err
+	}
+	// Separate actor/key locking precedes the individual appeal row lock:
+	// otherwise the global unique index can reject a different appeal as 500.
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
+		"peo02s:appeal-decision-key:"+actor+":"+key); err != nil {
+		return empty, err
+	}
+	var reusedDecisionID, reusedAppealID, reusedDigest string
+	err = tx.QueryRow(ctx, `SELECT decision_id::text,appeal_id::text,request_digest
+   FROM admission.documentary_appeal_decision
+   WHERE decided_by=$1::uuid AND idempotency_key=$2`, actor, key).
+		Scan(&reusedDecisionID, &reusedAppealID, &reusedDigest)
+	if err == nil {
+		if reusedAppealID == appealID && reusedDigest == digest {
+			return ReviewReceipt{reusedDecisionID, "DECIDED"}, nil
+		}
+		return empty, ErrDocumentaryReviewDenied
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
 		return empty, err
 	}
 	var appellant, previousChecker, reviewMaker, state string

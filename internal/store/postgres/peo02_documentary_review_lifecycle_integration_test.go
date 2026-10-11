@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -134,10 +135,31 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 		t.Fatal("review maker approved own negative restriction")
 	}
 	decisionKey := key("decision")
-	decision, err := db.DecideDocumentaryReview(ctx, decisionKey, meta(7), actors[7], proposal.ID, decisionInput)
-	if err != nil || decision.Status != "DECIDED" {
-		t.Fatalf("independent decision denied: %+v %v", decision, err)
+	// Concurrent same-key retries must converge on one decision and one
+	// audit fact. They must not contend on the unique index or return 500.
+	type concurrentDecision struct {
+		receipt ReviewReceipt
+		err     error
 	}
+	startDecisions := make(chan struct{})
+	decisionResults := make(chan concurrentDecision, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			<-startDecisions
+			receipt, callErr := db.DecideDocumentaryReview(ctx, decisionKey, meta(7),
+				actors[7], proposal.ID, decisionInput)
+			decisionResults <- concurrentDecision{receipt: receipt, err: callErr}
+		}()
+	}
+	close(startDecisions)
+	firstDecision, secondDecision := <-decisionResults, <-decisionResults
+	if firstDecision.err != nil || secondDecision.err != nil ||
+		firstDecision.receipt.Status != "DECIDED" ||
+		firstDecision.receipt.ID != secondDecision.receipt.ID {
+		t.Fatalf("same-key concurrent review decisions did not converge: first=%+v second=%+v",
+			firstDecision, secondDecision)
+	}
+	decision := firstDecision.receipt
 	same, err := db.DecideDocumentaryReview(ctx, decisionKey, meta(7), actors[7], proposal.ID, decisionInput)
 	if err != nil || same.ID != decision.ID {
 		t.Fatalf("decision replay changed authority: %+v %v", same, err)
@@ -198,12 +220,32 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 		newProposal.ID).Scan(&rev, &linked); err != nil || rev != 2 || linked != appeal.ID {
 		t.Fatalf("reassessment lost appeal lineage: revision=%d appeal=%s err=%v", rev, linked, err)
 	}
+	// This review is still PENDING but the same checker/key already belongs
+	// to revision 1. The conflict must be deterministic and fail closed.
+	if _, err = db.DecideDocumentaryReview(ctx, decisionKey, meta(7), actors[7],
+		newProposal.ID, decisionInput); !errors.Is(err, ErrDocumentaryReviewDenied) {
+		t.Fatalf("cross-review idempotency key did not return a stable conflict: %v", err)
+	}
+	var crossReviewDecisions int
+	if err = db.pool.QueryRow(ctx, `SELECT count(*) FROM admission.documentary_review_decision
+        WHERE review_id=$1::uuid`, newProposal.ID).Scan(&crossReviewDecisions); err != nil || crossReviewDecisions != 0 {
+		t.Fatalf("reused key persisted a second review decision: %d %v", crossReviewDecisions, err)
+	}
 	revisedDecision, err := db.DecideDocumentaryReview(ctx, key("reassess-decide"), meta(11), actors[11],
 		newProposal.ID, ReviewDecisionInput{Outcome: "ASSESSMENT_INCOMPLETE",
 			DecisionReference: "synthetic/peo02s/reassessment",
 			Reason:            "Further independent verification required; do not clear any previous hold"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err = db.FileDocumentaryReviewAppeal(ctx, appealKey, meta(8), actors[8],
+		revisedDecision.ID, appealInput); !errors.Is(err, ErrDocumentaryReviewDenied) {
+		t.Fatalf("cross-decision appeal idempotency key did not return a stable conflict: %v", err)
+	}
+	var crossDecisionAppeals int
+	if err = db.pool.QueryRow(ctx, `SELECT count(*) FROM admission.documentary_review_appeal
+        WHERE decision_id=$1::uuid`, revisedDecision.ID).Scan(&crossDecisionAppeals); err != nil || crossDecisionAppeals != 0 {
+		t.Fatalf("reused key persisted an unrelated appeal: %d %v", crossDecisionAppeals, err)
 	}
 	blocked, err := db.DocumentaryScopeBlocked(ctx, operating, "trade.checkout", "ZA")
 	if err != nil || !blocked {
@@ -237,6 +279,31 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 	}
 	if audit != 6 {
 		t.Fatalf("expected exactly six committed, nonreplayed review/appeal audit facts, got %d", audit)
+	}
+	// Exercise the third independent actor/key uniqueness constraint on a
+	// different, newly filed appeal. Only a fresh key may adjudicate it.
+	secondAppeal, err := db.FileDocumentaryReviewAppeal(ctx, key("second-appeal"),
+		meta(8), actors[8], revisedDecision.ID, appealInput)
+	if err != nil || secondAppeal.Status != "FILED" {
+		t.Fatalf("new appeal with fresh key rejected: %+v %v", secondAppeal, err)
+	}
+	if _, err = db.DecideDocumentaryReviewAppeal(ctx, appealDecKey, meta(9),
+		actors[9], secondAppeal.ID, appealDecision); !errors.Is(err, ErrDocumentaryReviewDenied) {
+		t.Fatalf("cross-appeal adjudication idempotency key did not return a stable conflict: %v", err)
+	}
+	var crossAppealDecisions int
+	if err = db.pool.QueryRow(ctx, `SELECT count(*) FROM admission.documentary_appeal_decision
+        WHERE appeal_id=$1::uuid`, secondAppeal.ID).Scan(&crossAppealDecisions); err != nil || crossAppealDecisions != 0 {
+		t.Fatalf("reused adjudication key persisted an unrelated decision: %d %v",
+			crossAppealDecisions, err)
+	}
+	// The same adjudicator may handle the separate appeal with a fresh key.
+	secondAdjudication, err := db.DecideDocumentaryReviewAppeal(ctx, key("second-adjudication"),
+		meta(9), actors[9], secondAppeal.ID, ReviewAppealDecisionInput{
+			Outcome: "UPHOLD", Reason: "Synthetic prior remediation restriction must remain",
+			EvidenceReference: "synthetic/peo02s/second-adjudication"})
+	if err != nil || secondAdjudication.Status != "DECIDED" {
+		t.Fatalf("fresh-key independent appeal adjudication failed: %+v %v", secondAdjudication, err)
 	}
 	// Source event/evidence claims are synthetic-only. These tests DO NOT
 	// establish external statutory applicability or live PEP acceptance.
