@@ -36,16 +36,9 @@ type DocumentCandidateProcessor interface {
 	Extract(context.Context, string, string, string, []byte) (authority.DocumentExtractionReceipt, error)
 }
 
-// DocumentCandidateAttempt represents a private, encrypted-at-rest candidate
-// ledger entry; it is NOT an OEV-03 check/result or verified legal fact.
-type DocumentCandidateAttempt struct {
-	CaseID     string
-	ClaimID    string
-	EvidenceID string
-	ArtifactID string
-	ActorID    string
-	Receipt    authority.DocumentExtractionReceipt
-}
+// Keep the provider-neutral candidate ledger DTO in the authority package
+// so both service and repository can implement the port without an import cycle.
+type DocumentCandidateAttempt = authority.DocumentCandidateAttempt
 
 type DocumentCandidateRepository interface {
 	GetVerificationCase(context.Context, string) (verification.Case, error)
