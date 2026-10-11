@@ -119,6 +119,10 @@ type Dependencies struct {
 	DocumentaryRestrictionEnabled   bool
 	DocumentaryRestriction          documentaryRestrictionReader
 	DocumentaryRestrictionClientIDs []string
+	// PEO-03G: certified official-source intake; separate nonproduction toggle.
+	SourceCaptureEnabled bool
+	SourceCapture SourceCaptureService
+	SourceCaptureClientIDs []string
 	// PEO-03 v2 progressive drafts are deliberately independent of v1
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
@@ -713,6 +717,19 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/documentary-restrictions/{restrictionID}/release-proposals", release.propose)
 		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
 			Post("/v2/documentary-restrictions/release-proposals/{intentID}/decision", release.decide)
+	}
+	if dependencies.SourceCaptureEnabled && dependencies.SourceCapture != nil &&
+		dependencies.WorkloadRegistry != nil && peoRoutesPermittedIn(dependencies.Environment) {
+		allow := make(map[string]bool)
+		for _, id := range dependencies.SourceCaptureClientIDs {
+			id = strings.TrimSpace(id)
+			if id != "" { allow[id] = true }
+		}
+		if len(allow) > 0 {
+			h := sourceCaptureHandler{api: a, service: dependencies.SourceCapture, allow: allow}
+			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", officialSourceScope)).
+				Post("/internal/evidence/v1/source-observations/cipc", h.capture)
+		}
 	}
 	if dependencies.DocumentaryRestrictionEnabled &&
 		dependencies.DocumentaryRestriction != nil &&
