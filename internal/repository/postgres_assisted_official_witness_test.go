@@ -41,9 +41,9 @@ func TestPEO03GPG17IndependentSARSWitnessDoesNotVerifyTaxCompliance(t *testing.T
 		AssertedBy:"prn_applicant", AssertedVia:"APPLICANT", AssertedAt:now,
 		ClaimedValue:verification.ClaimedValue{Value:"COMPLIANT"},
 		EvidenceIDs:[]string{evidenceID},Version:1}
-	proof := verification.Evidence{EvidenceID:evidenceID, Subject:subject, SourceID:"esrc_applicant",
-		SourceRecordReference:"synthetic/sars-witness-not-authoritative",
-		ObtainedBy:"prn_applicant", Status:verification.EvidenceAvail, Purpose:vcase.Purpose,
+	proof := verification.Evidence{EvidenceID:evidenceID, Subject:subject, SourceID:"esrc_sarstcs",
+		SourceRecordReference:"ref-sha256:"+strings.Repeat("b",64),
+		ObtainedBy:"prn_independent_portal_operator", Status:verification.EvidenceAvail, Purpose:vcase.Purpose,
 		EvidenceType:"DOCUMENT", Classification:"CONFIDENTIAL",RetentionPolicy:"synthetic-only",
 		CreatedAt:now,Version:1}
 	encode:=func(v any) []byte {
@@ -59,7 +59,7 @@ func TestPEO03GPG17IndependentSARSWitnessDoesNotVerifyTaxCompliance(t *testing.T
 	 claimID,caseID,claim.AssertedBy,encode(claim),now);err!=nil{t.Fatal(err)}
 	if _,err=db.Exec(ctx,`INSERT INTO evidence.record
 	 (evidence_id,source_id,status,obtained_by,document,created_at)
-	 VALUES($1,'esrc_applicant','AVAILABLE','prn_applicant',$2::jsonb,$3)`,
+	 VALUES($1,'esrc_sarstcs','AVAILABLE','prn_independent_portal_operator',$2::jsonb,$3)`,
 	 evidenceID,encode(proof),now);err!=nil{t.Fatal(err)}
 	witness:=AuditActor{ActorID:"prn_witness",ActorType:"human",CorrelationID:domain.NewUUIDv7()}
 	checker:=AuditActor{ActorID:"prn_otherchecker",ActorType:"human",CorrelationID:domain.NewUUIDv7()}
