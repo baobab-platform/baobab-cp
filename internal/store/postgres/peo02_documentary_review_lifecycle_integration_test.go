@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -354,8 +354,8 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 	}
 	release := DocumentaryReleaseProposal{
 		VerificationResultID: "vres_" + strings.ReplaceAll(domain.NewUUIDv7(), "-", ""),
-		EvidenceReference: "synthetic/cipc-lookup-provenance",
-		Reason: "Synthetic test release requires an independently verified source",
+		EvidenceReference:    "synthetic/cipc-lookup-provenance",
+		Reason:               "Synthetic test release requires an independently verified source",
 	}
 	if _, err = db.ProposeDocumentaryRelease(ctx, key("no-evidence"), meta(4),
 		actors[4], restrictionID, release); !errors.Is(err, ErrDocumentaryReviewDenied) {
