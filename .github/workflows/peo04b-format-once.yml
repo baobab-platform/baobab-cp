@@ -21,14 +21,14 @@ jobs:
       - name: Format code with repository Go version
         run: |
           set -euo pipefail
-          gofmt -w internal/service/organisation/founding_roster_qualification*.go
+          gofmt -w internal/service/organisation/founding_roster*.go
           gofmt -w cmd/qualify-founding-onboarding/*.go
           gofmt -w internal/store/postgres/peo04b_four_business_registration_test.go
           git diff --check
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add internal/service/organisation/founding_roster_qualification*.go
+            git add internal/service/organisation/founding_roster*.go
             git add cmd/qualify-founding-onboarding/*.go
             git add internal/store/postgres/peo04b_four_business_registration_test.go
             git commit -m "style(peo04b): gofmt founding-onboarding runtime and PostgreSQL acceptance"
