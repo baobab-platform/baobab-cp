@@ -83,7 +83,7 @@ func ValidateCertification(spec Specification, cert Certification, now time.Time
 		spec.HTTPMethod != http.MethodGet || spec.Version == "" ||
 		spec.IDField == "" || spec.NameField == "" || spec.StatusField == "" ||
 		spec.ReferenceField == "" || !strings.HasPrefix(spec.SubscriptionField, "X-") ||
-		strings.ContainsAny(spec.SubscriptionField, " \\r\\n:") {
+		strings.IndexFunc(spec.SubscriptionField, func(r rune) bool { return r < '!' || r > '~' || r == ':' }) >= 0 {
 		return fmt.Errorf("%w: incomplete issuer specification", ErrUncertified)
 	}
 	if strings.TrimSpace(cert.ProposedBy) == "" || strings.TrimSpace(cert.ApprovedBy) == "" ||
