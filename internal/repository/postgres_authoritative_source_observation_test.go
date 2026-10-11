@@ -143,4 +143,73 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 	if resultCount != 0 {
 		t.Fatal("observation must not auto-create an OEV-03 VERIFIED decision")
 	}
+	// Prove that a subsequent legal-name lookup can only use a separate,
+	// source-backed VERIFIED registration identifier for this exact case and
+	// Organisation. An applicant claim or arbitrary registry number is not
+	// a substitute for the CP ledger's current result.
+	regClaimID, checkID, resultID := "ecl_reg"+suffix, "vchk_reg"+suffix, "vres_reg"+suffix
+	reg := claim
+	reg.ClaimID = regClaimID
+	reg.ClaimType = "REGISTRATION_IDENTIFIER"
+	reg.ClaimedValue.Value = "2020/123456/07"
+	reg.EvidenceIDs = []string{}
+	if _, err := seed.Exec(ctx, `INSERT INTO evidence.claim
+	  (claim_id,case_id,asserted_by,status,document,created_at)
+	  VALUES($1,$2,$3,'UNDER_VERIFICATION',$4::jsonb,$5)`,
+		regClaimID,caseID,reg.AssertedBy,encode(reg),now); err != nil {
+		t.Fatal(err)
+	}
+	check := verification.Check{
+		CheckID: checkID, CaseID: caseID, ClaimID: regClaimID,
+		SourceID: "esrc_cipc", Method: "SOURCE_API_LOOKUP",
+		Outcome: "VERIFIED", RequestedAt: now, PerformedAt: &now,
+		PerformedBy: "synthetic-reviewer", SourceRecordReference: obsRef,
+		Dimensions: []verification.Dimension{{Dimension: "CLAIM_MATCH", Outcome: "PASSED"}},
+		ReasonCodes: []string{}, EvidenceIDs: []string{},
+	}
+	if _, err := seed.Exec(ctx, `INSERT INTO evidence.check
+	  (check_id,case_id,claim_id,source_id,outcome,performed_by,performed_at,document)
+	  VALUES($1,$2,$3,'esrc_cipc','VERIFIED',$4,$5,$6::jsonb)`,
+		checkID,caseID,regClaimID,check.PerformedBy,now,encode(check)); err != nil {
+		t.Fatal(err)
+	}
+	until := now.Add(time.Hour)
+	res := verification.Result{
+		ResultID: resultID, CaseID: caseID, ClaimID: regClaimID,
+		Outcome: "VERIFIED", CheckIDs: []string{checkID},
+		Dimensions: []verification.Dimension{{Dimension: "CLAIM_MATCH", Outcome: "PASSED"},
+			{Dimension: "ISSUER_AUTHORITY", Outcome: "PASSED"}},
+		Freshness: "CURRENT", FreshnessUntil: &until,
+		DecidedBy: "synthetic-independent-decider", DecidedAt: now,
+		ReasonCodes: []string{},
+	}
+	if _, err := seed.Exec(ctx, `INSERT INTO evidence.result
+	  (result_id,case_id,claim_id,outcome,decided_by,decided_at,document)
+	  VALUES($1,$2,$3,'VERIFIED',$4,$5,$6::jsonb)`,
+		resultID,caseID,regClaimID,res.DecidedBy,now,encode(res)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seed.Exec(ctx, `UPDATE evidence.claim
+	  SET status='VERIFIED', current_result_id=$2 WHERE claim_id=$1`,
+		regClaimID,resultID); err != nil {
+		t.Fatal(err)
+	}
+	binding, err := repo.ResolveVerifiedRegistration(ctx, caseID, subject)
+	if err != nil || binding.RegistrationNumber != "2020/123456/07" ||
+		binding.ResultID != resultID || binding.Subject != subject {
+		t.Fatalf("trusted CIPC identifier did not resolve exactly: %+v %v", binding, err)
+	}
+	if _, err := repo.ResolveVerifiedRegistration(ctx, caseID,
+		verification.Subject{SubjectType: "ORGANISATION", SubjectID: domain.NewUUIDv7()});
+		!errors.Is(err, ErrVerifiedRegistrationUnavailable) {
+		t.Fatalf("foreign organisation borrowed registry identifier: %v", err)
+	}
+	if _, err := seed.Exec(ctx, `UPDATE evidence.claim SET status='REVOKED'
+	  WHERE claim_id=$1`, regClaimID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ResolveVerifiedRegistration(ctx, caseID, subject);
+		!errors.Is(err, ErrVerifiedRegistrationUnavailable) {
+		t.Fatalf("revoked registry claim remained authoritative: %v", err)
+	}
 }
