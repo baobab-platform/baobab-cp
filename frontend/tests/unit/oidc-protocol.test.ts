@@ -49,7 +49,7 @@ describe("FE-03 provider-neutral OIDC protocol gate", () => {
 
   it.each([
     "mismatched state", "expired", "duplicated state", "duplicate code",
-    "issuer substitution", "remote error", "missing code", "changed client",
+    "issuer substitution", "remote error", "missing code", "changed client", "unicode state",
   ])("fails closed on %s", (scenario) => {
     const now = 1_800_000_000_000;
     const { pending } = beginAuthorization(config, metadata, now);
@@ -58,6 +58,7 @@ describe("FE-03 provider-neutral OIDC protocol gate", () => {
     let at = now + 1;
     switch (scenario) {
       case "mismatched state": query.set("state", "x".repeat(43)); break;
+      case "unicode state": query.set("state", "é".repeat(43)); break;
       case "expired": at = now + 300_000; break;
       case "duplicated state": query.append("state", pending.state); break;
       case "duplicate code": query.append("code", "second"); break;
@@ -94,6 +95,45 @@ describe("FE-03 provider-neutral OIDC protocol gate", () => {
         status: 200, headers: { "Content-Type": "application/json" },
       });
     await expect(discoverOidc(config, { fetcher: rejectFetcher })).rejects.toThrow(OidcBoundaryError);
+  });
+
+  it("accepts a root issuer only when the document preserves the exact configured string", () => {
+    const root = { ...config, issuer: "https://identity.example.test" };
+    const rootMetadata = { ...metadata, issuer: root.issuer };
+    expect(() => validateOidcMetadata(root, rootMetadata)).not.toThrow();
+    expect(() => validateOidcMetadata(root, { ...rootMetadata, issuer: root.issuer + "/" })).toThrow(OidcBoundaryError);
+  });
+
+  it("refuses an oversize discovery stream without downloading its entire body", async () => {
+    let didCancel = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(65_537));
+      },
+      cancel() { didCancel = true; },
+    });
+    const fetcher = async (): Promise<Response> =>
+      new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
+    await expect(discoverOidc(config, { fetcher })).rejects.toThrow(OidcBoundaryError);
+    expect(didCancel).toBe(true);
+  });
+
+  it("allows explicitly configured localhost only when both gates opt in", () => {
+    const local: OidcConfiguration = {
+      issuer: "http://localhost:8081/realms/baobab",
+      clientId: config.clientId,
+      redirectUri: "http://localhost:3000/api/auth/callback",
+    };
+    const localMetadata: OidcMetadata = {
+      ...metadata,
+      issuer: local.issuer,
+      authorization_endpoint: "http://localhost:8081/realms/baobab/auth",
+      token_endpoint: "http://localhost:8081/realms/baobab/token",
+      jwks_uri: "http://localhost:8081/realms/baobab/jwks",
+    };
+    expect(() => beginAuthorization(local, localMetadata)).toThrow(OidcBoundaryError);
+    const auth = beginAuthorization(local, localMetadata, 1_800_000_000_000, true);
+    expect(new URL(auth.authorizationUrl).protocol).toBe("http:");
   });
 
   it("provides no in-memory or implicit production session fallback", () => {
