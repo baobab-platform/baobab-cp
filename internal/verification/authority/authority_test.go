@@ -106,8 +106,11 @@ func TestPEO03FSealedCustodyTamperAndIdentityBinding(t *testing.T){
 	if err!=nil || !strings.HasPrefix(ref,"sealed-sha256:"){t.Fatalf("seal: %s %v",ref,err)}
 	got,err:=vault.Open(context.Background(),"evr_fixture00000001")
 	if err!=nil || string(got)!=string(data){t.Fatalf("open: %v",err)}
-	if _,err=vault.Seal(context.Background(),"evr_fixture00000001",data);!errors.Is(err,ErrCustody){
-		t.Fatalf("immutable file was overwritten: %v",err)
+	if replay,sealErr:=vault.Seal(context.Background(),"evr_fixture00000001",data);sealErr!=nil||replay!=ref{
+		t.Fatalf("identical encrypted evidence replay could not recover: %s %v",replay,sealErr)
+	}
+	if _,err=vault.Seal(context.Background(),"evr_fixture00000001",[]byte("different record"));!errors.Is(err,ErrCustody){
+		t.Fatalf("different response overwrote immutable ciphertext: %v",err)
 	}
 	if _,err=vault.Open(context.Background(),"evr_some_other_id");!errors.Is(err,ErrCustody){
 		t.Fatalf("foreign evidence ID read source contents: %v",err)
