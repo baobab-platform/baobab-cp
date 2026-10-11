@@ -137,7 +137,9 @@ func TestPEO02TDocumentaryRestrictionContextOwnershipAndNegativeOnly(t *testing.
 			if w.Code != tc.want {
 				t.Fatalf("status=%d wanted %d, body=%s", w.Code, tc.want, w.Body.String())
 			}
-			if w.Header().Get("Cache-Control") != "no-store, max-age=0" {
+			// A missing scope is denied by router middleware before the
+			// handler runs; only handled responses carry its no-store header.
+			if tc.scope && w.Header().Get("Cache-Control") != "no-store, max-age=0" {
 				t.Fatal("current restriction outcome must never be cached")
 			}
 			if tc.want != 200 {
