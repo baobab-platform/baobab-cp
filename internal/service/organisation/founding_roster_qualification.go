@@ -81,7 +81,7 @@ func (p PostgresFoundingSnapshot) SnapshotFoundingEntity(ctx context.Context, fi
  AND verified_at IS NOT NULL AND verified_at<=$2
  AND effective_from<=$2 AND (effective_to IS NULL OR effective_to>$2)
  AND jsonb_array_length(evidence_references)>0),false)
- FROM registry.legal_entity_profile WHERE organisation_id=$1::uuid`, row.OrganisationID,at).
+ FROM registry.legal_entity_profile WHERE organisation_id=$1::uuid`, row.OrganisationID, at).
 		Scan(&row.LegalProfileCount, &row.LegalProfileVerified)
 	if err != nil {
 		return row, err
