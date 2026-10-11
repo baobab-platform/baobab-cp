@@ -45,7 +45,8 @@ func ValidateAssistedProposal(f AssistedFinding, now time.Time) error {
 			f.SourceID!="esrc_sarspaye" && f.SourceID!="esrc_sarsuif" &&
 			f.SourceID!="esrc_sarssdl" && f.SourceID!="esrc_sarscustoms" &&
 			f.SourceID!="esrc_uifdept" ||
-		!strings.HasPrefix(f.OfficialReference,"ref-sha256:") ||\n\t\t!isLowerHexDigest("sha256:"+strings.TrimPrefix(f.OfficialReference,"ref-sha256:")) ||
+		!strings.HasPrefix(f.OfficialReference,"ref-sha256:") ||
+		!isLowerHexDigest("sha256:"+strings.TrimPrefix(f.OfficialReference,"ref-sha256:")) ||
 		len(f.ProvenanceRef)<8 || len(f.ProvenanceRef)>512 ||
 		len(f.ResponseDigest)!=71 || !strings.HasPrefix(f.ResponseDigest,"sha256:") ||
 		!isLowerHexDigest(f.ResponseDigest) ||
