@@ -30,8 +30,8 @@ import (
 	svcorg "github.com/baobab-platform/baobab-cp/internal/service/organisation"
 	"github.com/baobab-platform/baobab-cp/internal/service/subscription"
 	verificationservice "github.com/baobab-platform/baobab-cp/internal/service/verification"
-	"github.com/baobab-platform/baobab-cp/internal/verification/authority"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
+	"github.com/baobab-platform/baobab-cp/internal/verification/authority"
 	"github.com/baobab-platform/baobab-cp/internal/workloadtoken"
 )
 

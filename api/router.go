@@ -120,12 +120,12 @@ type Dependencies struct {
 	DocumentaryRestriction          documentaryRestrictionReader
 	DocumentaryRestrictionClientIDs []string
 	// PEO-03G: certified official-source intake; separate nonproduction toggle.
-	SourceCaptureEnabled bool
-	SourceCapture SourceCaptureService
+	SourceCaptureEnabled   bool
+	SourceCapture          SourceCaptureService
 	SourceCaptureClientIDs []string
 	// PEO-03G: separately governed human SARS assisted witness, default off.
 	AssistedWitnessEnabled bool
-	AssistedWitness assistedWitnessWriter
+	AssistedWitness        assistedWitnessWriter
 	// PEO-03 v2 progressive drafts are deliberately independent of v1
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
@@ -726,7 +726,9 @@ func New(dependencies Dependencies) http.Handler {
 		allow := make(map[string]bool)
 		for _, id := range dependencies.SourceCaptureClientIDs {
 			id = strings.TrimSpace(id)
-			if id != "" { allow[id] = true }
+			if id != "" {
+				allow[id] = true
+			}
 		}
 		if len(allow) > 0 {
 			h := sourceCaptureHandler{api: a, service: dependencies.SourceCapture, allow: allow}
@@ -762,7 +764,7 @@ func New(dependencies Dependencies) http.Handler {
 			h := documentaryRestrictionHandler{
 				api: a, contexts: runtimeOnly(dependencies.Contexts),
 				identities: dependencies.Identities,
-				reader: dependencies.DocumentaryRestriction, clientIDs: allow,
+				reader:     dependencies.DocumentaryRestriction, clientIDs: allow,
 			}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", "documentary:restriction-assess")).
 				Post("/internal/documentary/v1/restrictions/assess", h.assess)

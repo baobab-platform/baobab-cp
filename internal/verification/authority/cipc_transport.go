@@ -25,17 +25,17 @@ var ErrUnavailable = errors.New("official source unavailable or invalid")
 // contract and kept out of an applicant request. Neither endpoints nor
 // response field names are inferred from an unofficial example.
 type Specification struct {
-	SourceID          string    `json:"source_id"`
-	OfficialOrigin    string    `json:"official_origin"`
-	OAuthTokenURL     string    `json:"oauth_token_url"`
-	CompanyLookupURL  string    `json:"company_lookup_url"`
-	HTTPMethod        string    `json:"http_method"`
-	SubscriptionField string    `json:"subscription_header"`
-	IDField           string    `json:"registration_number_field"`
-	NameField         string    `json:"legal_name_field"`
-	StatusField       string    `json:"status_field"`
-	ReferenceField    string    `json:"record_reference_field"`
-	Version           string    `json:"version"`
+	SourceID          string `json:"source_id"`
+	OfficialOrigin    string `json:"official_origin"`
+	OAuthTokenURL     string `json:"oauth_token_url"`
+	CompanyLookupURL  string `json:"company_lookup_url"`
+	HTTPMethod        string `json:"http_method"`
+	SubscriptionField string `json:"subscription_header"`
+	IDField           string `json:"registration_number_field"`
+	NameField         string `json:"legal_name_field"`
+	StatusField       string `json:"status_field"`
+	ReferenceField    string `json:"record_reference_field"`
+	Version           string `json:"version"`
 }
 
 // Certification is an independent, time-bounded approval of one frozen

@@ -12,7 +12,8 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 )
 
-type inertLifecycleFoundingWriter struct { inertFoundingWriter }
+type inertLifecycleFoundingWriter struct{ inertFoundingWriter }
+
 func (inertLifecycleFoundingWriter) TransitionFoundingGovernance(
 	context.Context, string, basestore.RequestMetadata, string, string, string,
 	string, postgres.FoundingLifecycleInput,
@@ -46,7 +47,7 @@ func TestPEO02LifecycleRoutesAreNonproductionAndAuthenticated(t *testing.T) {
 		}, http.StatusNotFound},
 		{"staging rejects invalid bearer", Dependencies{
 			Store: &fakeStore{}, Environment: "staging",
-			AdminVerifier: fakeVerifier{err: errors.New("invalid issuer")},
+			AdminVerifier:             fakeVerifier{err: errors.New("invalid issuer")},
 			FoundingGovernanceEnabled: true, FoundingGovernance: inertLifecycleFoundingWriter{},
 		}, http.StatusUnauthorized},
 	}
@@ -59,7 +60,7 @@ func TestPEO02LifecycleRoutesAreNonproductionAndAuthenticated(t *testing.T) {
 				w := httptest.NewRecorder()
 				h.ServeHTTP(w, req)
 				if w.Code != tc.want {
-					t.Errorf("%s returned %d (want %d): %s",path,w.Code,tc.want,w.Body.String())
+					t.Errorf("%s returned %d (want %d): %s", path, w.Code, tc.want, w.Body.String())
 				}
 			}
 		})

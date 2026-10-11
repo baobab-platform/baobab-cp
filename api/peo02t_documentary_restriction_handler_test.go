@@ -29,6 +29,7 @@ type documentaryRestrictionFixture struct {
 	blocked bool
 	err     error
 }
+
 func (f *documentaryRestrictionFixture) DocumentaryScopeBlocked(_ context.Context, _, _, _ string) (bool, error) {
 	f.calls++
 	return f.blocked, f.err
@@ -38,12 +39,12 @@ func TestPEO02TDocumentaryRestrictionDefaultOffAndProductionDenied(t *testing.T)
 	repo := repository.NewInMemoryRepository()
 	for _, deps := range []Dependencies{
 		{Store: &fakeStore{}, Environment: "integration", Contexts: repo, Identities: repo,
-			DocumentaryRestriction: &documentaryRestrictionFixture{},
-			WorkloadRegistry: documentaryRestrictionRegistry{active: true},
+			DocumentaryRestriction:          &documentaryRestrictionFixture{},
+			WorkloadRegistry:                documentaryRestrictionRegistry{active: true},
 			DocumentaryRestrictionClientIDs: []string{"baobab-trade"}},
 		{Store: &fakeStore{}, Environment: "production", Contexts: repo, Identities: repo,
 			DocumentaryRestrictionEnabled: true, DocumentaryRestriction: &documentaryRestrictionFixture{},
-			WorkloadRegistry: documentaryRestrictionRegistry{active: true},
+			WorkloadRegistry:                documentaryRestrictionRegistry{active: true},
 			DocumentaryRestrictionClientIDs: []string{"baobab-trade"}},
 		{Store: &fakeStore{}, Environment: "integration", Contexts: repo, Identities: repo,
 			DocumentaryRestrictionEnabled: true, DocumentaryRestriction: &documentaryRestrictionFixture{},
@@ -116,7 +117,7 @@ func TestPEO02TDocumentaryRestrictionContextOwnershipAndNegativeOnly(t *testing.
 				Store: &fakeStore{tenant: domain.Tenant{
 					TenantID: ctx.TenantID, ObservedState: string(domain.LifecycleActive),
 					PrimaryOrganisationID: org}},
-				Environment: "integration",
+				Environment:                   "integration",
 				DocumentaryRestrictionEnabled: true, DocumentaryRestriction: reader,
 				DocumentaryRestrictionClientIDs: []string{"baobab-trade"},
 				WorkloadVerifier: fakeVerifier{principal: auth.Principal{
@@ -124,7 +125,7 @@ func TestPEO02TDocumentaryRestrictionContextOwnershipAndNegativeOnly(t *testing.
 					ClientID: "baobab-trade", TenantID: ctx.TenantID,
 					TokenID: "token-documentary", Scopes: scopes}},
 				WorkloadRegistry: documentaryRestrictionRegistry{active: true},
-				Contexts: repo, Identities: repo,
+				Contexts:         repo, Identities: repo,
 			})
 			body, _ := json.Marshal(documentaryRestrictionRequest{
 				ContextID: ctx.ID, Capability: "trade.checkout",
