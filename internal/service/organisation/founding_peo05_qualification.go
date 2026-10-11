@@ -147,6 +147,14 @@ func (g PEO05Gate) Assess(ctx context.Context, reg FirstPartyRegistry,
 		row := PEO05Entry{FirstPartyID: entry.FirstPartyID,
 			OrganisationID: entry.OrganisationID, TenantID: entry.TenantID,
 			Status: PEO05Blocked, Missing: append([]string{}, entry.Missing...)}
+		// Group-level acceptance is distinct from the valid independent
+		// Tenant identities. A source-verified incorporation is not proof of
+		// corporate control, so an unverified Nabhold->Thamani relationship
+		// blocks a green *founding-group* Package 5 report.
+		if !founding.IndependentControlVerified &&
+			(entry.FirstPartyID == "NABHOLD" || entry.FirstPartyID == "THAMANI-GLOBAL") {
+			row.Missing = addPEO05Missing(row.Missing, "INDEPENDENT_CORPORATE_CONTROL_PROOF")
+		}
 		if entry.Readiness != "IDENTITY_TENANT_ACCEPTED_NOT_PRODUCTION" {
 			row.Missing = addPEO05Missing(row.Missing, "PEO04_CURRENT_IDENTITY_TENANT_EVIDENCE")
 		} else if entry.OrganisationID == "" || entry.TenantID == "" || seenTenants[entry.TenantID] {
