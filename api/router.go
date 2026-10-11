@@ -108,6 +108,9 @@ type Dependencies struct {
 	// Default off. Unavailable IAM authorisation or independent source means deny.
 	FoundingGovernanceEnabled bool
 	FoundingGovernance        foundingGovernanceWriter
+	// PEO-02S: authenticated review decision and appeal boundary, default off.
+	DocumentaryReviewEnabled bool
+	DocumentaryReview        documentaryReviewWriter
 	// PEO-03 v2 progressive drafts are deliberately independent of v1
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
@@ -125,7 +128,7 @@ type Dependencies struct {
 	// registered Control Plane principals through Identities.
 	Classifications *subscription.Classifier
 	// PEO-02D: workload-only and nonproduction-only live INTERNAL PDP.
-	CurrentInternalAuthorityEnabled bool
+	CurrentInternalAuthorityEnabled  bool
 	CurrentInternalAuthorityClientID string
 	// Metrics is served on GET /metrics to workloads holding metrics:read.
 	// Nil serves nothing.
@@ -683,6 +686,18 @@ func New(dependencies Dependencies) http.Handler {
 			r.With(decider...).Post("/v2/founding-governance/documentary-deferrals/{grantID}/revoke", founding.transition("DOCUMENTARY_DEFERRAL", "REVOKE"))
 		}
 	}
+	if dependencies.DocumentaryReviewEnabled && dependencies.DocumentaryReview != nil &&
+		peoRoutesPermittedIn(dependencies.Environment) {
+		dr := documentaryReviewHandler{api: a, repo: dependencies.DocumentaryReview}
+		r.With(a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)).
+			Post("/v2/documentary-reviews/deferrals/{deferralID}/milestones/{month}/propose", dr.propose)
+		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
+			Post("/v2/documentary-reviews/intents/{reviewID}/decision", dr.decide)
+		r.With(a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)).
+			Post("/v2/documentary-reviews/decisions/{decisionID}/appeals", dr.appeal)
+		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
+			Post("/v2/documentary-reviews/appeals/{appealID}/decision", dr.appealDecision)
+	}
 	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&
 		peoRoutesPermittedIn(dependencies.Environment) {
 		ph := progressiveApplicantHandler{repo: dependencies.ProgressiveApplications, api: a}
@@ -790,7 +805,7 @@ func New(dependencies Dependencies) http.Handler {
 		peoRoutesPermittedIn(dependencies.Environment) {
 		authority := internalAuthorityHandler{
 			classifications: dependencies.Classifications,
-			clientID: dependencies.CurrentInternalAuthorityClientID,
+			clientID:        dependencies.CurrentInternalAuthorityClientID,
 		}
 		r.With(a.authorize(a.workloadVerifier, "workload", "subscription:internal-authority")).
 			Get("/internal/subscriptions/v1/tenants/{tenantID}/product-subscriptions/{subscriptionID}/internal-authority",
