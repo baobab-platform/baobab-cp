@@ -38,7 +38,9 @@ func (r *syntheticCaptureRepo) RecordAuthoritativeSourceObservation(_ context.Co
 	return "aobs_synthetictest1", nil
 }
 func (r *syntheticCaptureRepo) GetAuthoritativeObservationByKey(context.Context, string, string) (authority.CaptureReceipt, error) {
-	if r.prior != nil { return *r.prior,nil }
+	if r.prior != nil {
+		return *r.prior, nil
+	}
 	return authority.CaptureReceipt{}, repository.ErrVerificationNotFound
 }
 
@@ -124,7 +126,7 @@ func TestPEO03GLocalTLSSourceToEncryptedCustodyAndNonPositiveReceipt(t *testing.
 	repo.prior = &prior
 	if r, err := service.Capture(context.Background(), caseID, claimID, evidenceID,
 		"synthetic-committed-replay", actor); err != nil || r.AuthorityGranted {
-		t.Fatalf("valid nonauthorising replay denied: %+v %v",r,err)
+		t.Fatalf("valid nonauthorising replay denied: %+v %v", r, err)
 	}
 	repo.evidence.Status = "RESTRICTED"
 	if _, err := service.Capture(context.Background(), caseID, claimID, evidenceID,

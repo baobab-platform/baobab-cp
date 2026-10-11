@@ -20,10 +20,10 @@ var ErrFoundingReconciliation = errors.New("independent founding-company evidenc
 // Organisation. It MUST come from Shared/CP governance, never a browser
 // request. Corporate-group labels are not proof of incorporation or control.
 type FoundingIdentityInput struct {
-	RegistryID                  string
-	OrganisationID              string
-	VerificationCaseID          string
-	DeclaredRegistrationNumber  string
+	RegistryID                 string
+	OrganisationID             string
+	VerificationCaseID         string
+	DeclaredRegistrationNumber string
 }
 
 // IndependentControlProof is a narrowly scoped, externally attested snapshot
@@ -31,21 +31,21 @@ type FoundingIdentityInput struct {
 // does not supply ownership evidence. The producer's private key is never
 // held by Baobab CP or an affiliated business.
 type IndependentControlProof struct {
-	IssuerID             string    `json:"issuer_id"`
-	SourceRecordReference string   `json:"source_record_reference"`
-	EvidenceReference    string    `json:"evidence_reference"`
-	EvidenceDigest       string    `json:"evidence_digest"`
-	RelationshipID       string    `json:"relationship_id"`
-	ParentOrganisationID string    `json:"parent_organisation_id"`
-	ChildOrganisationID  string    `json:"child_organisation_id"`
-	ParentRegistration   string    `json:"parent_registration"`
-	ChildRegistration    string    `json:"child_registration"`
-	RelationshipType     string    `json:"relationship_type"`
-	OwnershipPercentage  *float64  `json:"ownership_percentage,omitempty"`
-	ObservedAt           time.Time `json:"observed_at"`
-	ExpiresAt            time.Time `json:"expires_at"`
-	SignerID             string    `json:"signer_id"`
-	Signature            []byte    `json:"signature"`
+	IssuerID              string    `json:"issuer_id"`
+	SourceRecordReference string    `json:"source_record_reference"`
+	EvidenceReference     string    `json:"evidence_reference"`
+	EvidenceDigest        string    `json:"evidence_digest"`
+	RelationshipID        string    `json:"relationship_id"`
+	ParentOrganisationID  string    `json:"parent_organisation_id"`
+	ChildOrganisationID   string    `json:"child_organisation_id"`
+	ParentRegistration    string    `json:"parent_registration"`
+	ChildRegistration     string    `json:"child_registration"`
+	RelationshipType      string    `json:"relationship_type"`
+	OwnershipPercentage   *float64  `json:"ownership_percentage,omitempty"`
+	ObservedAt            time.Time `json:"observed_at"`
+	ExpiresAt             time.Time `json:"expires_at"`
+	SignerID              string    `json:"signer_id"`
+	Signature             []byte    `json:"signature"`
 }
 
 func (p IndependentControlProof) signingPayload() []byte {
@@ -61,14 +61,14 @@ func (p IndependentControlProof) signingPayload() []byte {
 // separately configured from first-party Shared registry evidence and the
 // issuer's submitted certificate. No browser controls trusted public keys.
 type IndependentControlTrust struct {
-	IssuerID string
-	SignerID string
-	PublicKey ed25519.PublicKey
-	ProposedBy string
-	ApprovedBy string
+	IssuerID       string
+	SignerID       string
+	PublicKey      ed25519.PublicKey
+	ProposedBy     string
+	ApprovedBy     string
 	ApprovalRecord string
-	ApprovedAt time.Time
-	ExpiresAt time.Time
+	ApprovedAt     time.Time
+	ExpiresAt      time.Time
 }
 
 func (t IndependentControlTrust) verify(proof IndependentControlProof, now time.Time) bool {
@@ -114,14 +114,14 @@ type IndependentCorporateControlSource interface {
 type FoundingCompanyReconciliation struct {
 	NabholdRegistrationVerified bool
 	ThamaniRegistrationVerified bool
-	ControlVerified bool
+	ControlVerified             bool
 	NabholdRegistrationEvidence string
 	ThamaniRegistrationEvidence string
-	ControlEvidenceReference string
-	ControlRelationshipID string
-	AssessedAt time.Time
-	Standing string // PENDING_INDEPENDENT_EVIDENCE or BOTH_TRACKS_VERIFIED
-	Reasons []string
+	ControlEvidenceReference    string
+	ControlRelationshipID       string
+	AssessedAt                  time.Time
+	Standing                    string // PENDING_INDEPENDENT_EVIDENCE or BOTH_TRACKS_VERIFIED
+	Reasons                     []string
 }
 
 // FoundingEvidenceReconciler requires OEV-03 verified CIPC registrations for
@@ -129,14 +129,14 @@ type FoundingCompanyReconciliation struct {
 // It cannot infer ownership from corporate-group membership or Shared roles.
 type FoundingEvidenceReconciler struct {
 	Registrations FoundingRegistrationSource
-	Corporate FoundingCorporateSource
-	Proofs IndependentCorporateControlSource
-	Trust map[string]IndependentControlTrust // exact external signer ID
-	Now func() time.Time
+	Corporate     FoundingCorporateSource
+	Proofs        IndependentCorporateControlSource
+	Trust         map[string]IndependentControlTrust // exact external signer ID
+	Now           func() time.Time
 }
 
 func (r FoundingEvidenceReconciler) Reconcile(ctx context.Context, parent, child FoundingIdentityInput) (FoundingCompanyReconciliation, error) {
-	out := FoundingCompanyReconciliation{Standing:"PENDING_INDEPENDENT_EVIDENCE"}
+	out := FoundingCompanyReconciliation{Standing: "PENDING_INDEPENDENT_EVIDENCE"}
 	if ctx == nil || ctx.Err() != nil || r.Registrations == nil || r.Corporate == nil ||
 		r.Proofs == nil || r.Now == nil || parent.RegistryID != "NABHOLD" ||
 		child.RegistryID != "THAMANI-GLOBAL" ||
@@ -148,94 +148,104 @@ func (r FoundingEvidenceReconciler) Reconcile(ctx context.Context, parent, child
 	}
 	now := r.Now().UTC()
 	out.AssessedAt = now
-	parentBinding, err1 := r.Registrations.ResolveVerifiedRegistration(ctx,parent.VerificationCaseID,
-		verification.Subject{SubjectType:"ORGANISATION",SubjectID:parent.OrganisationID})
-	childBinding, err2 := r.Registrations.ResolveVerifiedRegistration(ctx,child.VerificationCaseID,
-		verification.Subject{SubjectType:"ORGANISATION",SubjectID:child.OrganisationID})
-	pGood := err1 == nil && foundingRegistrationMatches(parent,parentBinding,now)
-	cGood := err2 == nil && foundingRegistrationMatches(child,childBinding,now)
-	out.NabholdRegistrationVerified, out.ThamaniRegistrationVerified = pGood,cGood
+	parentBinding, err1 := r.Registrations.ResolveVerifiedRegistration(ctx, parent.VerificationCaseID,
+		verification.Subject{SubjectType: "ORGANISATION", SubjectID: parent.OrganisationID})
+	childBinding, err2 := r.Registrations.ResolveVerifiedRegistration(ctx, child.VerificationCaseID,
+		verification.Subject{SubjectType: "ORGANISATION", SubjectID: child.OrganisationID})
+	pGood := err1 == nil && foundingRegistrationMatches(parent, parentBinding, now)
+	cGood := err2 == nil && foundingRegistrationMatches(child, childBinding, now)
+	out.NabholdRegistrationVerified, out.ThamaniRegistrationVerified = pGood, cGood
 	if pGood {
 		out.NabholdRegistrationEvidence = parentBinding.ResultID
 	} else {
-		out.Reasons=append(out.Reasons,"NABHOLD_CIPC_OEV03_PENDING")
+		out.Reasons = append(out.Reasons, "NABHOLD_CIPC_OEV03_PENDING")
 	}
 	if cGood {
 		out.ThamaniRegistrationEvidence = childBinding.ResultID
 	} else {
-		out.Reasons=append(out.Reasons,"THAMANI_CIPC_OEV03_PENDING")
+		out.Reasons = append(out.Reasons, "THAMANI_CIPC_OEV03_PENDING")
 	}
 	// Do not even consult corporate ownership evidence until both legal
 	// identities are source-verified independently. Applicant certificates
 	// and Shared registration entries cannot open this gate.
 	if !pGood || !cGood {
-		out.Reasons=append(out.Reasons,"CONTROL_PROOF_NOT_APPLICABLE_YET")
-		return out,nil
+		out.Reasons = append(out.Reasons, "CONTROL_PROOF_NOT_APPLICABLE_YET")
+		return out, nil
 	}
-	edges, err := r.Corporate.ListCorporateRelationshipsByOrganisation(ctx,parent.OrganisationID,now)
-	if err != nil {return out,ErrFoundingReconciliation}
-	matches := make([]domain.CorporateRelationship,0,1)
-	for _,edge:=range edges {
-		if edge.SourceOrganisationID==parent.OrganisationID &&
-			edge.TargetOrganisationID==child.OrganisationID &&
-			edge.DirectOrDerived==domain.CorporateFactDirect &&
-			edge.VerificationState==domain.VerificationVerified &&
-			edge.IsConsequential(now) && domain.QualifiesForGroup(edge,now)=="" &&
-			edge.SourceAuthority!="" && edge.SourceAuthority!="shared-governance" {
-			matches=append(matches,edge)
+	edges, err := r.Corporate.ListCorporateRelationshipsByOrganisation(ctx, parent.OrganisationID, now)
+	if err != nil {
+		return out, ErrFoundingReconciliation
+	}
+	matches := make([]domain.CorporateRelationship, 0, 1)
+	for _, edge := range edges {
+		if edge.SourceOrganisationID == parent.OrganisationID &&
+			edge.TargetOrganisationID == child.OrganisationID &&
+			edge.DirectOrDerived == domain.CorporateFactDirect &&
+			edge.VerificationState == domain.VerificationVerified &&
+			edge.IsConsequential(now) && domain.QualifiesForGroup(edge, now) == "" &&
+			edge.SourceAuthority != "" && edge.SourceAuthority != "shared-governance" {
+			matches = append(matches, edge)
 		}
 	}
-	if len(matches)!=1 {
-		out.Reasons=append(out.Reasons,"UNIQUE_DIRECT_VERIFIED_CONTROL_EDGE_REQUIRED")
-		return out,nil
+	if len(matches) != 1 {
+		out.Reasons = append(out.Reasons, "UNIQUE_DIRECT_VERIFIED_CONTROL_EDGE_REQUIRED")
+		return out, nil
 	}
-	edge:=matches[0]
-	proof,err:=r.Proofs.ReadIndependentControlProof(ctx,edge.ID)
-	if err!=nil {
-		out.Reasons=append(out.Reasons,"INDEPENDENT_CONTROL_PROOF_MISSING")
-		return out,nil
+	edge := matches[0]
+	proof, err := r.Proofs.ReadIndependentControlProof(ctx, edge.ID)
+	if err != nil {
+		out.Reasons = append(out.Reasons, "INDEPENDENT_CONTROL_PROOF_MISSING")
+		return out, nil
 	}
-	trust,ok:=r.Trust[proof.SignerID]
-	if !ok || !trust.verify(proof,now) ||
-		proof.RelationshipID!=edge.ID ||
-		proof.IssuerID!=edge.SourceAuthority ||
-		proof.ParentOrganisationID!=parent.OrganisationID ||
-		proof.ChildOrganisationID!=child.OrganisationID ||
-		proof.ParentRegistration!=parentBinding.RegistrationNumber ||
-		proof.ChildRegistration!=childBinding.RegistrationNumber ||
-		proof.RelationshipType!=string(edge.RelationshipType) ||
-		!sameControlPercentage(proof.OwnershipPercentage,edge.OwnershipPercentage,edge.RelationshipType) ||
-		!evidenceRefPresent(edge.EvidenceReferences,proof.EvidenceReference) {
-		out.Reasons=append(out.Reasons,"INDEPENDENT_CONTROL_PROOF_UNTRUSTED_OR_MISMATCHED")
-		return out,nil
+	trust, ok := r.Trust[proof.SignerID]
+	if !ok || !trust.verify(proof, now) ||
+		proof.RelationshipID != edge.ID ||
+		proof.IssuerID != edge.SourceAuthority ||
+		proof.ParentOrganisationID != parent.OrganisationID ||
+		proof.ChildOrganisationID != child.OrganisationID ||
+		proof.ParentRegistration != parentBinding.RegistrationNumber ||
+		proof.ChildRegistration != childBinding.RegistrationNumber ||
+		proof.RelationshipType != string(edge.RelationshipType) ||
+		!sameControlPercentage(proof.OwnershipPercentage, edge.OwnershipPercentage, edge.RelationshipType) ||
+		!evidenceRefPresent(edge.EvidenceReferences, proof.EvidenceReference) {
+		out.Reasons = append(out.Reasons, "INDEPENDENT_CONTROL_PROOF_UNTRUSTED_OR_MISMATCHED")
+		return out, nil
 	}
-	out.ControlVerified=true
-	out.ControlEvidenceReference=proof.EvidenceReference
-	out.ControlRelationshipID=edge.ID
-	out.Standing="BOTH_TRACKS_VERIFIED"
-	return out,nil
+	out.ControlVerified = true
+	out.ControlEvidenceReference = proof.EvidenceReference
+	out.ControlRelationshipID = edge.ID
+	out.Standing = "BOTH_TRACKS_VERIFIED"
+	return out, nil
 }
 
 func foundingRegistrationMatches(input FoundingIdentityInput, b verification.VerifiedRegistrationBinding, now time.Time) bool {
-	return b.CaseID == input.VerificationCaseID && b.Subject == (verification.Subject{SubjectType:"ORGANISATION",SubjectID:input.OrganisationID}) &&
+	return b.CaseID == input.VerificationCaseID && b.Subject == (verification.Subject{SubjectType: "ORGANISATION", SubjectID: input.OrganisationID}) &&
 		b.SourceID == "esrc_cipc" && b.RegistrationNumber == input.DeclaredRegistrationNumber &&
-		b.ClaimID!="" && b.ResultID!="" && b.FreshnessUntil.After(now)
+		b.ClaimID != "" && b.ResultID != "" && b.FreshnessUntil.After(now)
 }
 
-func sameControlPercentage(a,b *float64,t domain.CorporateRelationshipType)bool {
-	if t==domain.CorpRelOwns {return a!=nil&&b!=nil&&*a==*b&&*a>50&&*a<=100}
-	if t==domain.CorpRelControls {return a==nil&&b==nil}
+func sameControlPercentage(a, b *float64, t domain.CorporateRelationshipType) bool {
+	if t == domain.CorpRelOwns {
+		return a != nil && b != nil && *a == *b && *a > 50 && *a <= 100
+	}
+	if t == domain.CorpRelControls {
+		return a == nil && b == nil
+	}
 	return false
 }
-func evidenceRefPresent(refs []string,want string)bool {
-	for _,v:=range refs{if v==want{return true}}
+func evidenceRefPresent(refs []string, want string) bool {
+	for _, v := range refs {
+		if v == want {
+			return true
+		}
+	}
 	return false
 }
 
 // A compiled fingerprint is available for audit output without publishing
 // a raw control document, secret, company director or beneficiary identity.
 func ControlProofFingerprint(proof IndependentControlProof) string {
-	payload:=append(proof.signingPayload(),proof.Signature...)
-	sum:=sha256.Sum256(payload)
-	return "sha256:"+hex.EncodeToString(sum[:])
+	payload := append(proof.signingPayload(), proof.Signature...)
+	sum := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }

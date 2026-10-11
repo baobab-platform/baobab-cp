@@ -27,13 +27,13 @@ type CaptureRepository interface {
 // specification/secret/custody configuration. An applicant cannot supply the
 // source, response, outcome, lookup host, or certification.
 type CIPCIntake struct {
-	Repo           CaptureRepository
+	Repo            CaptureRepository
 	AllowedClientID string // exact IAM-registered source verifier, never applicant-selected
-	Transport      authority.CIPCTransport
-	Vault          authority.SealedVault
-	Registrations  verification.VerifiedRegistrationResolver
-	Now            func() time.Time
-	AllowSynthetic bool
+	Transport       authority.CIPCTransport
+	Vault           authority.SealedVault
+	Registrations   verification.VerifiedRegistrationResolver
+	Now             func() time.Time
+	AllowSynthetic  bool
 }
 
 type custodiedRegistry struct {

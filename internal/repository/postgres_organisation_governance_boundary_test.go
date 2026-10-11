@@ -14,7 +14,7 @@ func TestPEO04ALegacySharedRegistryCannotGrantVerifiedLegalPersonInStagingOrProd
 			_, err := repo.ApplyFirstPartyGovernance(context.Background(), FirstPartyGovernance{
 				LegalEntityID: "NABHOLD", LegalName: "Declared Holdings",
 				EvidenceReference: "shared:registry:declaration",
-				At: time.Date(2026, 10, 11, 1, 0, 0, 0, time.UTC),
+				At:                time.Date(2026, 10, 11, 1, 0, 0, 0, time.UTC),
 			}, AuditActor{ActorType: "workload", ActorID: "synthetic-workload"})
 			if err == nil || !strings.Contains(err.Error(), "cannot verify legal incorporation") {
 				t.Fatalf("Shared membership unexpectedly granted incorporation in %q: %v", env, err)
