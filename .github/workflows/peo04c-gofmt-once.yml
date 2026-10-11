@@ -1,0 +1,29 @@
+name: PEO-04C format
+on:
+  push:
+    branches: [feat/peo04c-founding-acceptance-correlation]
+    paths: [.github/workflows/peo04c-gofmt-once.yml]
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+          ref: feat/peo04c-founding-acceptance-correlation
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - run: |
+          set -euo pipefail
+          gofmt -w internal/service/organisation/founding_acceptance_gate*.go
+          git diff --check
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add internal/service/organisation/founding_acceptance_gate*.go
+            git commit -m "style(peo04c): format four-founder acceptance tests"
+            git push origin HEAD:feat/peo04c-founding-acceptance-correlation
+          fi
