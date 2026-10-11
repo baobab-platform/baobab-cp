@@ -42,6 +42,9 @@ func (v SealedVault) Seal(ctx context.Context, evidenceID string, plaintext []by
 	if _, err := rand.Read(nonce); err != nil { return "", ErrCustody }
 	ciphertext := aead.Seal(nonce, nonce, plaintext, []byte(evidenceID))
 	if err := os.MkdirAll(v.Directory, 0700); err != nil { return "", fmt.Errorf("%w: directory creation failed", ErrCustody) }
+	st, err := os.Lstat(v.Directory)
+	if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 { return "", fmt.Errorf("%w: untrusted custody directory", ErrCustody) }
+	if err := os.Chmod(v.Directory, 0700); err != nil { return "", fmt.Errorf("%w: custody permissions unavailable", ErrCustody) }
 	dir, err := os.Open(v.Directory)
 	if err != nil { return "", ErrCustody }
 	defer dir.Close()
