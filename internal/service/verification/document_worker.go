@@ -72,17 +72,18 @@ func (w DocumentExtractionWorker) Extract(ctx context.Context, caseID, claimID, 
 		caseID == "" || claimID == "" || evidenceID == "" {
 		return deny, ErrDocumentExtractionDenied
 	}
-	// Read a committed attempt first; replays must not reach custody or OCR.
+	// Look up committed idempotency metadata, but do not return a replay
+	// before rechecking the CURRENT case/claim/evidence lifecycle. A later
+	// RESTRICTED, DESTROYED, superseded or expired record must revoke reads.
 	prior, err := w.Repo.GetDocumentCandidateByKey(ctx, actor.ActorID, idempotencyKey)
-	if err == nil {
+	replay := err == nil
+	if replay {
 		if prior.CaseID != caseID || prior.ClaimID != claimID ||
 			prior.EvidenceID != evidenceID || prior.ActorID != actor.ActorID ||
 			prior.Receipt.Standing != "DOCUMENT_CANDIDATE_ONLY" {
 			return deny, ErrDocumentExtractionDenied
 		}
-		return prior, nil
-	}
-	if !errors.Is(err, repository.ErrVerificationNotFound) {
+	} else if !errors.Is(err, repository.ErrVerificationNotFound) {
 		return deny, ErrDocumentExtractionDenied
 	}
 	c, err := w.Repo.GetVerificationCase(ctx, caseID)
@@ -124,6 +125,15 @@ func (w DocumentExtractionWorker) Extract(ctx context.Context, caseID, claimID, 
 		e.Subject != c.Subject || e.Purpose != c.Purpose ||
 		e.ExpiresAt != nil && !e.ExpiresAt.After(now) {
 		return deny, ErrDocumentExtractionDenied
+	}
+	// A valid replay may avoid custody and OCR, but only while the exact
+	// artifact is still AVAILABLE and bound to the current claim/case.
+	if replay {
+		if prior.ArtifactID != e.ArtifactID || prior.Receipt.EvidenceID != evidenceID ||
+			prior.Receipt.DocumentDigest == "" {
+			return deny, ErrDocumentExtractionDenied
+		}
+		return prior, nil
 	}
 	doc, err := w.Custody.OpenScanned(ctx, e, actor)
 	if err != nil || doc.ScanOutcome != "CLEAN" || doc.ScanAttestation == "" ||
