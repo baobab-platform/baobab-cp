@@ -6,7 +6,6 @@ package main
 import (
  "context"
  "encoding/json"
- "errors"
  "flag"
  "log/slog"
  "os"
@@ -44,5 +43,4 @@ func main(){
  if !complete{os.Exit(2)}
  // Passing checks permit continued controlled integration. They NEVER
  // grant real CIPC/ownership, permits, IAM access, provider or go-live.
- _=errors.Is // keep ordinary runtime errors redacted by caller
 }
