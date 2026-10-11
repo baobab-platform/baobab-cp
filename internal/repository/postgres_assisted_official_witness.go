@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
@@ -97,17 +98,21 @@ func (r *PostgresRepository) DecideAssistedWitness(ctx context.Context,intentID,
 	if err!=nil{return empty,err}
 	defer tx.Rollback(ctx)
 	var f authority.AssistedFinding
-	var prevKey *string
+	var prevKey sql.NullString
+	var prevChecker sql.NullString
+	var prevChecked sql.NullTime
 	err=tx.QueryRow(ctx,`SELECT intent_id,case_id,claim_id,source_id,evidence_id,
 		official_reference,provenance_digest,observed_at,freshness_until,
 		witness_actor,checker_actor,checked_at,outcome,decision_key
 		FROM evidence.assisted_official_witness WHERE intent_id=$1 FOR UPDATE`,intentID).
 		Scan(&f.IntentID,&f.CaseID,&f.ClaimID,&f.SourceID,&f.EvidenceID,
 			&f.OfficialReference,&f.ResponseDigest,&f.ObservedAt,&f.FreshnessUntil,
-			&f.Witness,&f.Checker,&f.CheckedAt,&f.Status,&prevKey)
+			&f.Witness,&prevChecker,&prevChecked,&f.Status,&prevKey)
 	if err!=nil{return empty,err}
+	if prevChecker.Valid { f.Checker=prevChecker.String }
+	if prevChecked.Valid { f.CheckedAt=prevChecked.Time }
 	if f.Status!="PENDING"{
-		if prevKey!=nil&&*prevKey==key&&f.Checker==actor.ActorID&&f.Status==outcome{return f,nil}
+		if prevKey.Valid&&prevKey.String==key&&f.Checker==actor.ActorID&&f.Status==outcome{return f,nil}
 		return empty,ErrAssistedWitnessDenied
 	}
 	if authority.ValidateAssistedApproval(f,actor.ActorID,now)!=nil{return empty,ErrAssistedWitnessDenied}
