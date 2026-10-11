@@ -60,7 +60,7 @@ func peo05Fixture(t *testing.T) (PEO05Gate, FirstPartyRegistry, FoundingIdentity
 			}},
 			IAM: PEO05IAMProof{
 				TenantID: tenant, OrganisationID: ids[reg.ID],
-				PrincipalID: "prn_synthetic_staff", IssuerID: "iss_test",
+				PrincipalID: "prn_synthetic_" + tenant, IssuerID: "iss_test",
 				Audience: "baobab-control-plane", MembershipStatus: "ACTIVE",
 				EvidenceReference:   "iam_live_revision",
 				RevocationCheckedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute),
@@ -175,5 +175,19 @@ func TestPEO05ANeverReclassifiesReportAsProductionAuthority(t *testing.T) {
 	got.ProductionEligible = true
 	if !errors.Is(got.VerifyNonAuthorising(), ErrPEO05Integrity) {
 		t.Fatal("production endorsement not rejected")
+	}
+}
+
+func TestPEO05DRejectsSharedHumanPrincipalAcrossFourTenantTokens(t *testing.T) {
+	gate, reg, parent, child, reader := peo05Fixture(t)
+	first := reader.tenants["tn_NABHOLD"]
+	second := reader.tenants["tn_THAMANI-GLOBAL"]
+	// The tokens and tenant memberships can differ while the canonical
+	// underlying person remains identical. This MUST NOT satisfy the
+	// four-independent-human acceptance condition.
+	second.IAM.PrincipalID = first.IAM.PrincipalID
+	reader.tenants["tn_THAMANI-GLOBAL"] = second
+	if _, err := gate.Assess(context.Background(), reg, parent, child); !errors.Is(err, ErrPEO05Integrity) {
+		t.Fatalf("shared human principal falsely qualified all founding tenants: %v", err)
 	}
 }
