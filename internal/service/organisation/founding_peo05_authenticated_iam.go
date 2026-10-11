@@ -26,13 +26,13 @@ type PEO05IdentityAuthority interface {
 var _ PEO05IdentityAuthority = (*repository.PostgresRepository)(nil)
 
 type PEO05RevocationStatus struct {
-	Issuer     string
-	Subject    string
-	TokenID    string
-	Audience   string
-	CheckedAt  time.Time
-	ExpiresAt  time.Time
-	Active     bool
+	Issuer    string
+	Subject   string
+	TokenID   string
+	Audience  string
+	CheckedAt time.Time
+	ExpiresAt time.Time
+	Active    bool
 }
 
 type PEO05RevocationAuthority interface {
@@ -93,7 +93,7 @@ func (a PEO05AuthenticatedIAM) CurrentTenantIAM(ctx context.Context, tenantID, o
 		TenantID: tenantID, OrganisationID: orgID,
 		PrincipalID: principal.ID, IssuerID: verified.Issuer,
 		Audience: "baobab-control-plane", MembershipStatus: "ACTIVE",
-		EvidenceReference: "oauth2:introspection:sha256:" + hex.EncodeToString(sum[:]),
+		EvidenceReference:   "oauth2:introspection:sha256:" + hex.EncodeToString(sum[:]),
 		RevocationCheckedAt: revoked.CheckedAt, ExpiresAt: expiry,
 	}, nil
 }
@@ -138,12 +138,12 @@ func (c PEO05OAuthIntrospection) CurrentToken(ctx context.Context, raw string, p
 		return empty, ErrPEO05Integrity
 	}
 	var proof struct {
-		Active bool            `json:"active"`
-		Subject string         `json:"sub"`
-		Issuer string          `json:"iss"`
-		TokenID string         `json:"jti"`
+		Active   bool            `json:"active"`
+		Subject  string          `json:"sub"`
+		Issuer   string          `json:"iss"`
+		TokenID  string          `json:"jti"`
 		Audience json.RawMessage `json:"aud"`
-		Expires int64          `json:"exp"`
+		Expires  int64           `json:"exp"`
 	}
 	if json.Unmarshal(data, &proof) != nil || !proof.Active || proof.Issuer != principal.Issuer ||
 		proof.Subject != principal.Subject || proof.TokenID != principal.TokenID ||
