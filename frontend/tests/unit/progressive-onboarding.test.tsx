@@ -11,7 +11,7 @@ import { expectAccessible } from "./axe";
 describe("PEO-06 progressive journey showcase", () => {
   it("exposes all seven independent transitions without inventing authority", async () => {
     const { container } = render(<ProgressiveShowcase />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("clearer path");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("clearer path");
     expect(screen.getByText(/not a live application/i)).toBeTruthy();
     expect(screen.getByText(/APPROVED does not mean READY/)).toBeTruthy();
     const items = container.querySelectorAll("ol li");
@@ -25,7 +25,7 @@ describe("PEO-06 progressive journey showcase", () => {
     render(<ProgressiveShowcase />);
     const settlement = screen.getByRole("button", { name: "Payment settlement" });
     await user.click(settlement);
-    expect(settlement).toHaveAttribute("aria-pressed", "true");
+    expect(settlement.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText(/Statutory and payment-provider restrictions cannot be waived/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /approve|activate|submit application/i })).toBeNull();
     expect(serviceIllustrations).toHaveLength(5);
