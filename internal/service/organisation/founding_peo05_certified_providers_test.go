@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/capability/certification"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/health"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
@@ -15,14 +15,14 @@ import (
 )
 
 type peo05ProviderSource struct {
-	grants []capabilitydomain.CapabilityGrant
-	scope capabilitydomain.CapabilityScope
-	binding repository.PEO05BoundProvider
-	observed release.ObservedRelease
+	grants        []capabilitydomain.CapabilityGrant
+	scope         capabilitydomain.CapabilityScope
+	binding       repository.PEO05BoundProvider
+	observed      release.ObservedRelease
 	engineRelease release.Release
-	certs []certification.Certification
-	health health.Levels
-	err error
+	certs         []certification.Certification
+	health        health.Levels
+	err           error
 }
 
 func (s *peo05ProviderSource) ListGrants(context.Context, string, string) ([]capabilitydomain.CapabilityGrant, error) {
@@ -60,7 +60,7 @@ func peo05ProviderCase() (*peo05ProviderSource, convergence.Plan, time.Time) {
 		scope: capabilitydomain.CapabilityScope{TenantID: tenant},
 		binding: repository.PEO05BoundProvider{
 			ProviderKey: "trade.medusa", CanonicalProviderID: "cp_trade_medusa",
-			ProviderUUID: "10000000-0000-7000-8000-000000000001",
+			ProviderUUID:      "10000000-0000-7000-8000-000000000001",
 			EngineInstanceKey: "ei_trade", EngineInstanceUUID: "20000000-0000-7000-8000-000000000002",
 			EngineID: "baobab-trade", ContractMajor: 1, Region: "af-south-1", Environment: "staging",
 		},
@@ -79,8 +79,8 @@ func peo05ProviderCase() (*peo05ProviderSource, convergence.Plan, time.Time) {
 			ContractVersion: 1, ReleaseID: "erl_trade", Status: certification.StatusCertified,
 		}},
 		health: health.Levels{
-			EngineInstance: obs(health.Subject{EngineInstanceID: "20000000-0000-7000-8000-000000000002"}),
-			Provider: obs(health.Subject{ProviderID: "10000000-0000-7000-8000-000000000001"}),
+			EngineInstance:     obs(health.Subject{EngineInstanceID: "20000000-0000-7000-8000-000000000002"}),
+			Provider:           obs(health.Subject{ProviderID: "10000000-0000-7000-8000-000000000001"}),
 			ProviderCapability: obs(health.Subject{ProviderID: "10000000-0000-7000-8000-000000000001", CapabilityKey: key}),
 		},
 	}
@@ -109,20 +109,26 @@ func TestPEO05CProviderNeedsActiveTenantGrantCertifiedObservedReleaseAndHealth(t
 
 func TestPEO05CProviderFailsClosedWhenAuthorityChanges(t *testing.T) {
 	cases := map[string]func(*peo05ProviderSource, *convergence.Plan){
-		"revoked grant": func(s *peo05ProviderSource, _ *convergence.Plan) { s.grants[0].Status = capabilitydomain.GrantStatusRevoked },
-		"foreign grant": func(s *peo05ProviderSource, _ *convergence.Plan) { s.grants[0].TenantID = "tn_sibling" },
-		"foreign scope": func(s *peo05ProviderSource, _ *convergence.Plan) { s.scope.TenantID = "tn_sibling" },
-		"provider unknown": func(s *peo05ProviderSource, _ *convergence.Plan) { s.binding.CanonicalProviderID = "" },
+		"revoked grant": func(s *peo05ProviderSource, _ *convergence.Plan) {
+			s.grants[0].Status = capabilitydomain.GrantStatusRevoked
+		},
+		"foreign grant":     func(s *peo05ProviderSource, _ *convergence.Plan) { s.grants[0].TenantID = "tn_sibling" },
+		"foreign scope":     func(s *peo05ProviderSource, _ *convergence.Plan) { s.scope.TenantID = "tn_sibling" },
+		"provider unknown":  func(s *peo05ProviderSource, _ *convergence.Plan) { s.binding.CanonicalProviderID = "" },
 		"instance mismatch": func(s *peo05ProviderSource, _ *convergence.Plan) { s.binding.EngineInstanceKey = "ei_other" },
-		"drifted release": func(s *peo05ProviderSource, _ *convergence.Plan) { s.observed.State = release.StateMixed },
-		"release revoked": func(s *peo05ProviderSource, _ *convergence.Plan) { s.engineRelease.Status = release.StatusRevoked },
-		"release contract unsupported": func(s *peo05ProviderSource, _ *convergence.Plan) { s.engineRelease.ProviderSupport[0].ContractVersions = []int{2} },
-		"certification revoked": func(s *peo05ProviderSource, _ *convergence.Plan) { s.certs[0].Status = certification.StatusRevoked },
+		"drifted release":   func(s *peo05ProviderSource, _ *convergence.Plan) { s.observed.State = release.StateMixed },
+		"release revoked":   func(s *peo05ProviderSource, _ *convergence.Plan) { s.engineRelease.Status = release.StatusRevoked },
+		"release contract unsupported": func(s *peo05ProviderSource, _ *convergence.Plan) {
+			s.engineRelease.ProviderSupport[0].ContractVersions = []int{2}
+		},
+		"certification revoked":     func(s *peo05ProviderSource, _ *convergence.Plan) { s.certs[0].Status = certification.StatusRevoked },
 		"certification wrong major": func(s *peo05ProviderSource, _ *convergence.Plan) { s.certs[0].ContractVersion = 2 },
-		"health expired": func(s *peo05ProviderSource, _ *convergence.Plan) { s.health.ProviderCapability.ExpiresAt = time.Time{} },
-		"provider health absent": func(s *peo05ProviderSource, _ *convergence.Plan) { s.health.Provider = nil },
+		"health expired":            func(s *peo05ProviderSource, _ *convergence.Plan) { s.health.ProviderCapability.ExpiresAt = time.Time{} },
+		"provider health absent":    func(s *peo05ProviderSource, _ *convergence.Plan) { s.health.Provider = nil },
 		"provider registry offline": func(s *peo05ProviderSource, _ *convergence.Plan) { s.err = errors.New("offline") },
-		"plan provider substituted": func(_ *peo05ProviderSource, p *convergence.Plan) { p.Steps[1].Resources.ProviderKey = "sibling.provider" },
+		"plan provider substituted": func(_ *peo05ProviderSource, p *convergence.Plan) {
+			p.Steps[1].Resources.ProviderKey = "sibling.provider"
+		},
 		"missing plan grant": func(_ *peo05ProviderSource, p *convergence.Plan) { p.Steps = p.Steps[1:] },
 	}
 	for name, mutate := range cases {
@@ -130,8 +136,7 @@ func TestPEO05CProviderFailsClosedWhenAuthorityChanges(t *testing.T) {
 			store, plan, now := peo05ProviderCase()
 			mutate(store, &plan)
 			if _, err := (PEO05CertifiedProviders{Store: store}).CurrentMandatoryProviders(
-				context.Background(), "tn_testa", "org_test", plan, []string{"commerce.order.manage"}, now);
-				!errors.Is(err, ErrPEO05Integrity) {
+				context.Background(), "tn_testa", "org_test", plan, []string{"commerce.order.manage"}, now); !errors.Is(err, ErrPEO05Integrity) {
 				t.Fatalf("stale or foreign provider evidence accepted: %v", err)
 			}
 		})
