@@ -378,25 +378,35 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 	 VALUES($1,'ORGANISATION',$2,'VERIFIED',$3,clock_timestamp(),
 	     clock_timestamp(),$4::jsonb)`,
 		caseID, operating, actors[0], caseDoc)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = db.pool.Exec(ctx, `INSERT INTO evidence.claim
 	 (claim_id,case_id,asserted_by,status,document,created_at)
 	 VALUES($1,$2,$3,'UNDER_VERIFICATION',$4::jsonb,clock_timestamp())`,
 		claimID, caseID, actors[9], claimDoc)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = db.pool.Exec(ctx, `INSERT INTO evidence.check
 	 (check_id,case_id,claim_id,source_id,outcome,performed_by,performed_at,document)
 	 VALUES($1,$2,$3,'esrc_cipc','VERIFIED',$4,clock_timestamp(),'{}'::jsonb)`,
 		checkID, caseID, claimID, actors[10])
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = db.pool.Exec(ctx, `INSERT INTO evidence.result
 	 (result_id,case_id,claim_id,outcome,decided_by,decided_at,document)
 	 VALUES($1,$2,$3,'VERIFIED',$4,clock_timestamp(),$5::jsonb)`,
 		resultID, caseID, claimID, actors[1], resultDoc)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = db.pool.Exec(ctx, `UPDATE evidence.claim
 	 SET status='VERIFIED',current_result_id=$2 WHERE claim_id=$1`, claimID, resultID)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Even a synthetically VERIFIED ledger result is not enough without
 	// a separately governed, requirement-specific trusted source binding.
 	if _, err = db.ProposeDocumentaryRelease(ctx, key("no-binding"), meta(4),
@@ -410,10 +420,14 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 	   'LEGAL_NAME','esrc_cipc','ZA','synthetic/reviewed-source-policy',
 	   $1::uuid,$2,$3,$4)`,
 		actors[3], now.Add(-time.Hour), now.Add(-time.Hour), now.Add(time.Hour))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	made, err := db.ProposeDocumentaryRelease(ctx, key("release"), meta(4),
 		actors[4], restrictionID, release)
-	if err != nil || made.Status != "PENDING" { t.Fatalf("release maker denied: %+v %v", made, err) }
+	if err != nil || made.Status != "PENDING" {
+		t.Fatalf("release maker denied: %+v %v", made, err)
+	}
 	if _, err = db.DecideDocumentaryRelease(ctx, key("self-release"), meta(4),
 		actors[4], made.ID, DocumentaryReleaseDecision{Outcome: "APPROVE",
 			Reason: "Synthetic self-approval must not release any restriction"}); !errors.Is(err, ErrDocumentaryReviewDenied) {
@@ -422,16 +436,24 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 	checked, err := db.DecideDocumentaryRelease(ctx, key("checker"), meta(5),
 		actors[5], made.ID, DocumentaryReleaseDecision{Outcome: "APPROVE",
 			Reason: "Synthetic source-verified remediation now independently approved"})
-	if err != nil || checked.Status != "APPROVE" { t.Fatalf("independent release rejected: %+v %v", checked, err) }
+	if err != nil || checked.Status != "APPROVE" {
+		t.Fatalf("independent release rejected: %+v %v", checked, err)
+	}
 	cleared, err := db.DocumentaryScopeBlocked(ctx, operating, "trade.checkout", "ZA")
-	if err != nil || cleared { t.Fatalf("verified synthetic release did not clear exact scope: blocked=%v err=%v", cleared, err) }
+	if err != nil || cleared {
+		t.Fatalf("verified synthetic release did not clear exact scope: blocked=%v err=%v", cleared, err)
+	}
 	// A result that becomes REVOKED must immediately re-impose the old
 	// negative restriction. Historical review/release rows remain untouched.
 	_, err = db.pool.Exec(ctx, `UPDATE evidence.claim SET status='REVOKED'
 	 WHERE claim_id=$1`, claimID)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	reblocked, err := db.DocumentaryScopeBlocked(ctx, operating, "trade.checkout", "ZA")
-	if err != nil || !reblocked { t.Fatalf("revoked evidence did not restore hold: blocked=%v err=%v", reblocked, err) }
+	if err != nil || !reblocked {
+		t.Fatalf("revoked evidence did not restore hold: blocked=%v err=%v", reblocked, err)
+	}
 	// Source event/evidence claims are synthetic-only. These tests DO NOT
 	// establish external statutory applicability or live PEP acceptance.
 }
