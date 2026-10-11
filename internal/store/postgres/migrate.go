@@ -152,6 +152,7 @@ var canonicalMigrationNames = []string{
 	"000115_peo02_governed_review_and_appeal.sql",
 	"000116_peo02_documentary_restriction_release.sql",
 	"000117_peo03_authoritative_source_observations.sql",
+	"000118_peo03_assisted_official_witness.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
