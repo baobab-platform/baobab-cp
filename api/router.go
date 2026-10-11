@@ -123,6 +123,9 @@ type Dependencies struct {
 	SourceCaptureEnabled bool
 	SourceCapture SourceCaptureService
 	SourceCaptureClientIDs []string
+	// PEO-03G: separately governed human SARS assisted witness, default off.
+	AssistedWitnessEnabled bool
+	AssistedWitness assistedWitnessWriter
 	// PEO-03 v2 progressive drafts are deliberately independent of v1
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
@@ -730,6 +733,18 @@ func New(dependencies Dependencies) http.Handler {
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", officialSourceScope)).
 				Post("/internal/evidence/v1/source-observations/cipc", h.capture)
 		}
+	}
+	if dependencies.AssistedWitnessEnabled && dependencies.AssistedWitness != nil &&
+		peoRoutesPermittedIn(dependencies.Environment) && dependencies.Identities != nil {
+		h := assistedWitnessHandler{api: a, repo: dependencies.AssistedWitness}
+		r.With(documentaryRestrictionNoStore,
+			a.authorize(a.adminVerifier, "human", "verification:write"),
+			a.requireAdminRole(nil, true)).
+			Post("/v2/admin/assisted-official-witness", h.propose)
+		r.With(documentaryRestrictionNoStore,
+			a.authorize(a.adminVerifier, "human", "verification:decide"),
+			a.requireAdminRole(nil, true)).
+			Post("/v2/admin/assisted-official-witness/{intentID}/decision", h.decide)
 	}
 	if dependencies.DocumentaryRestrictionEnabled &&
 		dependencies.DocumentaryRestriction != nil &&
