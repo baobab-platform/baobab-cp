@@ -52,6 +52,8 @@ func (p ScanProof) SigningPayload() []byte {
 	return raw
 }
 
+// Scanners MUST truncate timestamps to PostgreSQL microsecond precision BEFORE signing.
+// This preserves the exact signature payload after timestamptz persistence.
 // VerifyScanProof only trusts an out-of-band configured scanner public key
 // paired with the exact scanner_id/version. No caller can self-assert CLEAN.
 func VerifyScanProof(p ScanProof, publicKey ed25519.PublicKey, now time.Time) error {
@@ -59,7 +61,7 @@ func VerifyScanProof(p ScanProof, publicKey ed25519.PublicKey, now time.Time) er
 		!strings.HasPrefix(p.EvidenceID, "evr_") || len(p.EvidenceID) < 8 ||
 		!strings.HasPrefix(p.ArtifactID, "eart_") || len(p.ArtifactID) < 8 ||
 		p.ScannerID == "" || p.ScannerVersion == "" ||
-		p.Outcome != "CLEAN" || p.ScannedAt.IsZero() ||
+		p.Outcome != "CLEAN" || p.ScannedAt.IsZero() || p.ScannedAt.UnixNano()%1000 != 0 ||
 		p.ScannedAt.After(now.UTC()) || now.Sub(p.ScannedAt) > 365*24*time.Hour ||
 		len(p.Digest) != 71 || !strings.HasPrefix(p.Digest, "sha256:") {
 		return ErrDocumentCustody
