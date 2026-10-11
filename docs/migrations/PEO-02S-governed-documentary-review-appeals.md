@@ -58,6 +58,15 @@ Proposal body follows the exact Shared
 `DocumentaryReviewAssessment` schema and must cover every original
 deferral requirement with the original policy reference, exact Organisation,
 single trusted context, unexpired assessments and actual caller identity.
+At proposal time CP also checks each named requirement against its own
+immutable, independently approved `founding_documentary_policy_requirement`
+record. The classification must still be effective, have a nonblank authority
+basis, precede the review, and be approved by someone other than the maker.
+Only `PLATFORM_DOCUMENTARY` matches an approved founding deferral; a supplied
+`STATUTORY`/`PROVIDER` label is denied. This is an **internal authoritative
+classification check**, not proof of a live Regulations decision or provider
+verification. External positive evidence claims remain untrusted.
+
 A second proposal at the same milestone requires a previously approved
 `RETURN_FOR_REASSESSMENT` appeal, and creates a bounded new revision.
 A reviewer cannot decide their own proposal; the appeal reviewer must be
