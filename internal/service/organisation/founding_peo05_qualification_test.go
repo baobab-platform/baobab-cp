@@ -47,7 +47,8 @@ func peo05Fixture(t *testing.T) (PEO05Gate, FirstPartyRegistry, FoundingIdentity
 			PlanDigest: digest, ApprovedPlanDigest: digest,
 			PlanApprovalID: "apd_proof", PlanApproverID: "prn_plan_approver",
 			PlanExpiresAt: now.Add(time.Hour), ResidencyRequirement: "af-south-1",
-			SubscriptionID: "sub_test", SubscriptionTenantID: tenant, SubscriptionStatus: "ACTIVE",
+			RequiredProducts:     []string{"baobab-xbt"},
+			Subscriptions:        []PEO05SubscriptionProof{{ProductID: "baobab-xbt", SubscriptionID: "sub_test", TenantID: tenant, Status: "ACTIVE"}},
 			RequiredCapabilities: []string{"commerce.order.manage"},
 			Providers: []PEO05ProviderProof{{
 				CapabilityKey: "commerce.order.manage", TenantID: tenant,
@@ -124,7 +125,7 @@ func TestPEO05ARejectsOperationalBypasses(t *testing.T) {
 		"modified desired intent":    func(e *PEO05TenantEvidence) { e.PlanDesiredStateDigest = "sha256:" + strings.Repeat("b", 64) },
 		"plan digest mismatch":       func(e *PEO05TenantEvidence) { e.ApprovedPlanDigest = "" },
 		"provisioning blocked":       func(e *PEO05TenantEvidence) { e.ProvisioningState = "BLOCKED" },
-		"subscription revoked":       func(e *PEO05TenantEvidence) { e.SubscriptionStatus = "REVOKED" },
+		"subscription revoked":       func(e *PEO05TenantEvidence) { e.Subscriptions[0].Status = "REVOKED" },
 		"IAM revoked":                func(e *PEO05TenantEvidence) { e.IAM.MembershipStatus = "REVOKED" },
 		"IAM unknown issuer":         func(e *PEO05TenantEvidence) { e.IAM.IssuerID = "" },
 		"IAM wrong audience":         func(e *PEO05TenantEvidence) { e.IAM.Audience = "baobab-payments" },

@@ -56,6 +56,15 @@ type PEO05ProviderProof struct {
 // A CP-owned snapshot is independently joined with IAM/provider evidence.
 // The reader must derive RequiredCapabilities from the *current* canonical
 // product composition and must verify the latest approved plan is still current.
+type PEO05SubscriptionProof struct {
+	ProductID      string
+	SubscriptionID string
+	TenantID       string
+	Status         string
+}
+
+// Product subscriptions are individually required; one active product never
+// authorises another product of the same founding tenant.
 type PEO05TenantEvidence struct {
 	TenantID               string
 	OrganisationID         string
@@ -72,9 +81,8 @@ type PEO05TenantEvidence struct {
 	PlanApproverID         string
 	PlanExpiresAt          time.Time
 	ResidencyRequirement   string
-	SubscriptionID         string
-	SubscriptionTenantID   string
-	SubscriptionStatus     string
+	RequiredProducts       []string
+	Subscriptions          []PEO05SubscriptionProof
 	RequiredCapabilities   []string
 	Providers              []PEO05ProviderProof
 	IAM                    PEO05IAMProof
@@ -184,8 +192,33 @@ func assessPEO05Tenant(p PEO05TenantEvidence, entry FoundingAcceptanceEntry, at 
 		p.PlanApproverID != p.RequesterID && p.PlanApproverID != p.AuthoriserID &&
 		p.PlanExpiresAt.After(at), "CURRENT_INDEPENDENT_PLAN_APPROVAL")
 	add(p.ResidencyRequirement != "", "RESIDENCY_NOT_DECLARED")
-	add(p.SubscriptionID != "" && p.SubscriptionTenantID == entry.TenantID &&
-		p.SubscriptionStatus == "ACTIVE", "CURRENT_TENANT_SUBSCRIPTION")
+	add(len(p.RequiredProducts) > 0, "CANONICAL_REQUIRED_PRODUCTS_NOT_RESOLVED")
+	expectedProducts := map[string]bool{}
+	for _, product := range p.RequiredProducts {
+		if strings.TrimSpace(product) == "" || expectedProducts[product] {
+			missing = append(missing, "INVALID_REQUIRED_PRODUCT_SET")
+			continue
+		}
+		expectedProducts[product] = true
+	}
+	subscriptions := map[string]PEO05SubscriptionProof{}
+	for _, sub := range p.Subscriptions {
+		if !expectedProducts[sub.ProductID] || sub.ProductID == "" {
+			missing = append(missing, "UNREQUESTED_PRODUCT_SUBSCRIPTION")
+			continue
+		}
+		if _, exists := subscriptions[sub.ProductID]; exists {
+			missing = append(missing, "AMBIGUOUS_PRODUCT_SUBSCRIPTION")
+			continue
+		}
+		subscriptions[sub.ProductID] = sub
+	}
+	for product := range expectedProducts {
+		sub, ok := subscriptions[product]
+		if !ok || sub.SubscriptionID == "" || sub.TenantID != entry.TenantID || sub.Status != "ACTIVE" {
+			missing = append(missing, "CURRENT_TENANT_SUBSCRIPTION_REQUIRED_FOR_"+product)
+		}
+	}
 
 	iam := p.IAM
 	add(iam.TenantID == entry.TenantID && iam.OrganisationID == entry.OrganisationID &&
