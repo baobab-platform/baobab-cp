@@ -62,3 +62,20 @@ func TestPEO05DRejectsUnsignedControlAuthority(t *testing.T) {
 		t.Fatal("unapproved or absent independent signer key was accepted")
 	}
 }
+
+func TestPEO05DOperatorConfigRejectsTrailingOrUnknownJSON(t *testing.T) {
+	good := []byte(`{"environment":"staging"}`)
+	cfg, err := decodeOperatorConfig(good)
+	if err != nil || cfg.Environment != "staging" {
+		t.Fatalf("single operator document rejected: %+v %v", cfg, err)
+	}
+	for _, bad := range []string{
+		`{"environment":"staging"} {"environment":"production"}`,
+		`{"environment":"staging"} garbage`,
+		`{"environment":"staging","unknown_excess":"value"}`,
+	} {
+		if _, err := decodeOperatorConfig([]byte(bad)); err == nil {
+			t.Fatalf("operator configuration with trailing or unknown content accepted")
+		}
+	}
+}
