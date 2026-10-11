@@ -52,7 +52,7 @@ func (s ClamdUnixScanner) ScanDocument(ctx context.Context, document []byte) err
 	if err = conn.SetDeadline(deadline); err != nil {
 		return ErrIndependentScanUnavailable
 	}
-	if _, err = conn.Write([]byte("zINSTREAM\x00")); err != nil {
+	if err = writeScanChunk(conn, []byte("zINSTREAM\x00")); err != nil {
 		return ErrIndependentScanUnavailable
 	}
 	// Stream fixed 32 KiB frames and an explicit final zero-length frame,
@@ -64,7 +64,7 @@ func (s ClamdUnixScanner) ScanDocument(ctx context.Context, document []byte) err
 		}
 		var frame [4]byte
 		binary.BigEndian.PutUint32(frame[:], uint32(end-position))
-		if _, err = conn.Write(frame[:]); err != nil {
+		if err = writeScanChunk(conn, frame[:]); err != nil {
 			return ErrIndependentScanUnavailable
 		}
 		if err = writeScanChunk(conn, document[position:end]); err != nil {
@@ -72,7 +72,7 @@ func (s ClamdUnixScanner) ScanDocument(ctx context.Context, document []byte) err
 		}
 		position = end
 	}
-	if _, err = conn.Write([]byte{0, 0, 0, 0}); err != nil {
+	if err = writeScanChunk(conn, []byte{0, 0, 0, 0}); err != nil {
 		return ErrIndependentScanUnavailable
 	}
 	reply, err := io.ReadAll(io.LimitReader(conn, 257))
