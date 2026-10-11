@@ -67,7 +67,11 @@ func (r *PostgresRepository) ProposeAssistedWitness(ctx context.Context,f author
 	if err!=nil{return empty,err}
 	proof,ok:=records[f.EvidenceID]
 	if !ok||proof.Status!=verification.EvidenceAvail||proof.Subject!=claim.Subject||
-		proof.Purpose!=claim.Purpose{return empty,ErrAssistedWitnessDenied}
+		proof.Purpose!=claim.Purpose||proof.SourceID!=f.SourceID||
+		proof.SourceRecordReference!=f.OfficialReference ||
+		proof.ObtainedBy==claim.AssertedBy {
+		return empty,ErrAssistedWitnessDenied
+	}
 	_,err=tx.Exec(ctx,`INSERT INTO evidence.assisted_official_witness
 		(intent_id,case_id,claim_id,source_id,evidence_id,official_reference,
 		 provenance_digest,observed_at,freshness_until,witness_actor,outcome,idempotency_key)
