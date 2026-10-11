@@ -63,3 +63,23 @@ func (r VerifiedScannedArtifactReader) OpenScanned(ctx context.Context, e verifi
 		ScannedAt: p.ScannedAt.UTC(),
 	}, nil
 }
+
+type canonicalDocumentLocker interface {
+	WithLockedDocument(context.Context, string, string, string, string, func(context.Context) error) error
+}
+
+// WithDocumentLease requires the actual PostgreSQL ledger to hold canonical
+// case/claim/evidence row locks while the worker opens the artifact and calls
+// OCR. A proof-only reader cannot silently skip this revocation barrier.
+func (r VerifiedScannedArtifactReader) WithDocumentLease(ctx context.Context, caseID, claimID, evidenceID string, actor repository.AuditActor, run func(context.Context) error) error {
+	locker, ok := r.Proofs.(canonicalDocumentLocker)
+	if !ok || ctx == nil || ctx.Err() != nil || r.AllowedClientID == "" ||
+		actor.ActorType != "workload" || actor.ActorID == "" ||
+		actor.ClientID != r.AllowedClientID || run == nil {
+		return ErrScannedArtifactUnavailable
+	}
+	if err := locker.WithLockedDocument(ctx, caseID, claimID, evidenceID, actor.ActorID, run); err != nil {
+		return ErrScannedArtifactUnavailable
+	}
+	return nil
+}
