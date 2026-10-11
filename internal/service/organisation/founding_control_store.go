@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -54,20 +53,21 @@ func (s PostgresControlProofStore) Record(ctx context.Context,proof IndependentC
 	defer tx.Rollback(ctx)
 	tag,err:=tx.Exec(ctx,`INSERT INTO evidence.founding_control_attestation
 	(relationship_id,issuer_id,signer_id,evidence_ref,document_digest,
-	proof_digest,proof_document,maker_principal,checker_principal,checker_approval_ref)
-	VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10)
+	proof_digest,proof_document,maker_principal,checker_principal,checker_approval_ref,checker_approved_at)
+	VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11)
 	ON CONFLICT(relationship_id,proof_digest) DO NOTHING`,
 	proof.RelationshipID,proof.IssuerID,proof.SignerID,proof.EvidenceReference,
-	proof.EvidenceDigest,digest,raw,approval.MakerID,approval.CheckerID,approval.ApprovalReference)
+	proof.EvidenceDigest,digest,raw,approval.MakerID,approval.CheckerID,approval.ApprovalReference,approval.ApprovedAt
 	if err!=nil{return err}
 	if tag.RowsAffected()==0 {
 		// An idempotent retry must not silently change maker/checker evidence.
 		var maker,checker,reference string
-		err=tx.QueryRow(ctx,`SELECT maker_principal,checker_principal,checker_approval_ref
+		var approvedAt time.Time
+		err=tx.QueryRow(ctx,`SELECT maker_principal,checker_principal,checker_approval_ref,checker_approved_at
 			FROM evidence.founding_control_attestation WHERE relationship_id=$1
-			AND proof_digest=$2`,proof.RelationshipID,digest).Scan(&maker,&checker,&reference)
+			AND proof_digest=$2`,proof.RelationshipID,digest).Scan(&maker,&checker,&reference,&approvedAt)
 		if err!=nil || maker!=approval.MakerID || checker!=approval.CheckerID ||
-			reference!=approval.ApprovalReference{return ErrUntrustedCorporateProof}
+			reference!=approval.ApprovalReference || !approvedAt.Equal(approval.ApprovedAt){return ErrUntrustedCorporateProof}
 	}
 	return tx.Commit(ctx)
 }
@@ -95,6 +95,3 @@ func (s PostgresControlProofStore) ReadIndependentControlProof(ctx context.Conte
 	return proof,nil
 }
 
-// Keep the single source-of-truth binding to pgx's transactional idempotence
-// semantics; no automatic records may be created from corporate group roles.
-var _ = pgx.ErrNoRows
