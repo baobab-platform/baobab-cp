@@ -57,17 +57,25 @@ func (v SealedVault) Seal(ctx context.Context, evidenceID string, plaintext []by
 		return "", ErrCustody
 	}
 	ciphertext := aead.Seal(nonce, nonce, plaintext, []byte(evidenceID))
+	// Never chmod the configured parent: it may be a mounted volume.
+	// Instead use a private leaf that this adapter exclusively owns.
 	if err := os.MkdirAll(v.Directory, 0700); err != nil {
 		return "", fmt.Errorf("%w: directory creation failed", ErrCustody)
 	}
-	st, err := os.Lstat(v.Directory)
-	if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("%w: untrusted custody directory", ErrCustody)
+	parent, err := os.Lstat(v.Directory)
+	if err != nil || !parent.IsDir() || parent.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("%w: untrusted custody parent", ErrCustody)
 	}
-	// Never chmod a caller-configured pre-existing directory: it could be
-	// a shared mount or contain unrelated application data. Operators must
-	// provision a dedicated private 0700 leaf before source capture.
-	dir, err := os.Open(v.Directory)
+	private := filepath.Join(v.Directory, ".baobab-source-custody")
+	if err := os.Mkdir(private, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+		return "", ErrCustody
+	}
+	st, err := os.Lstat(private)
+	if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 ||
+		st.Mode().Perm()&0077 != 0 {
+		return "", fmt.Errorf("%w: unsafe private custody directory", ErrCustody)
+	}
+	dir, err := os.Open(private)
 	if err != nil {
 		return "", ErrCustody
 	}
@@ -77,7 +85,7 @@ func (v SealedVault) Seal(ctx context.Context, evidenceID string, plaintext []by
 		return "", fmt.Errorf("%w: directory permissions rejected", ErrCustody)
 	}
 	name := sha256.Sum256([]byte(evidenceID))
-	path := filepath.Join(v.Directory, hex.EncodeToString(name[:])+".sealed")
+	path := filepath.Join(private, hex.EncodeToString(name[:])+".sealed")
 	// O_EXCL avoids replacing an existing immutable source response; a retry
 	// must reconcile its existing evidence binding rather than overwrite it.
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -115,8 +123,14 @@ func (v SealedVault) Open(ctx context.Context, evidenceID string) ([]byte, error
 	if ctx == nil || ctx.Err() != nil || !safeCustodyDirectory(v.Directory) || len(v.Key) != 32 || evidenceID == "" {
 		return nil, ErrCustody
 	}
+	private := filepath.Join(v.Directory, ".baobab-source-custody")
+	dirInfo, statErr := os.Lstat(private)
+	if statErr != nil || !dirInfo.IsDir() || dirInfo.Mode()&os.ModeSymlink != 0 ||
+		dirInfo.Mode().Perm()&0077 != 0 {
+		return nil, ErrCustody
+	}
 	name := sha256.Sum256([]byte(evidenceID))
-	path := filepath.Join(v.Directory, hex.EncodeToString(name[:])+".sealed")
+	path := filepath.Join(private, hex.EncodeToString(name[:])+".sealed")
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, ErrCustody
