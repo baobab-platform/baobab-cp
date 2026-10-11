@@ -5,8 +5,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -91,17 +89,7 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 		t.Fatal(err)
 	}
 	content := []byte("%PDF-1.7\nindependently scanned synthetic company certificate")
-	sum := sha256.Sum256(content)
-	signed := authority.ScanProof{
-		EvidenceID: evidenceID, ArtifactID: artifactID, MediaType: "application/pdf",
-		Digest: "sha256:" + hex.EncodeToString(sum[:]), ScannerID: "synthetic-independent-scanner",
-		ScannerVersion: "v1", Outcome: "CLEAN", ScannedAt: now.Add(-time.Minute),
-	}
-	signed.Signature = ed25519.Sign(scannerPriv, signed.SigningPayload())
 	vault := authority.ScannedDocumentVault{Directory: t.TempDir(), Key: bytes.Repeat([]byte{0x55}, 32)}
-	if err = vault.Seal(ctx, signed, content); err != nil {
-		t.Fatal(err)
-	}
 	ledger := repository.DocumentLedger{PostgresRepository: base,
 		CandidateKey: bytes.Repeat([]byte{0x32}, 32), ExtractorClientID: "baobab-document-extractor-staging",
 		ScannerClientID: "baobab-independent-scanner-staging",
@@ -109,7 +97,17 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 		Now:             func() time.Time { return now }}
 	scannerActor := repository.AuditActor{ActorID: "prn_scanner", ActorType: "workload",
 		ClientID: "baobab-independent-scanner-staging", CorrelationID: domain.NewUUIDv7()}
-	if err = ledger.RegisterScannedArtifact(ctx, signed, scannerActor); err != nil {
+	pipeline := ScannedArtifactIngestor{
+		Attester: authority.IndependentDocumentAttester{
+			Scanner: syntheticAlwaysCleanScanner{},
+			Signer: syntheticEd25519Signer{key: scannerPriv},
+			ScannerID: "synthetic-independent-scanner", ScannerVersion: "v1",
+			Now: func() time.Time { return now },
+		},
+		Vault: vault, Ledger: ledger, AllowedClientID: scannerActor.ClientID,
+	}
+	signed, err := pipeline.Ingest(ctx, evidenceID, artifactID, "application/pdf", content, scannerActor)
+	if err != nil {
 		t.Fatal(err)
 	}
 	wrongScanner := scannerActor
@@ -159,4 +157,12 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 	if _, err = ledger.GetDocumentCandidateByKey(ctx, extractor.ActorID, key); !errors.Is(err, repository.ErrDocumentLedgerDenied) {
 		t.Fatalf("direct ledger bypassed revoked evidence: %v", err)
 	}
+}
+
+type syntheticAlwaysCleanScanner struct{}
+func (syntheticAlwaysCleanScanner) ScanDocument(context.Context, []byte) error { return nil }
+
+type syntheticEd25519Signer struct { key ed25519.PrivateKey }
+func (s syntheticEd25519Signer) Sign(payload []byte) ([]byte,error) {
+	return ed25519.Sign(s.key,payload),nil
 }
