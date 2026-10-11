@@ -111,6 +111,9 @@ type Dependencies struct {
 	// PEO-02S: authenticated review decision and appeal boundary, default off.
 	DocumentaryReviewEnabled bool
 	DocumentaryReview        documentaryReviewWriter
+	// PEO-02U: independently sourced, two-human restriction release, default off.
+	DocumentaryReleaseEnabled bool
+	DocumentaryRelease        documentaryReleaseWriter
 	// PEO-02T current negative-only remediation PDP: separate workload scope,
 	// explicit registered client allowlist and nonproduction opt-in.
 	DocumentaryRestrictionEnabled   bool
@@ -702,6 +705,14 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/documentary-reviews/decisions/{decisionID}/appeals", dr.appeal)
 		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
 			Post("/v2/documentary-reviews/appeals/{appealID}/decision", dr.appealDecision)
+	}
+	if dependencies.DocumentaryReleaseEnabled && dependencies.DocumentaryRelease != nil &&
+		peoRoutesPermittedIn(dependencies.Environment) {
+		release := documentaryReleaseHandler{api: a, repo: dependencies.DocumentaryRelease}
+		r.With(a.authorize(a.adminVerifier, "human", "admission:review"), a.requireAdminRole(nil, true)).
+			Post("/v2/documentary-restrictions/{restrictionID}/release-proposals", release.propose)
+		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
+			Post("/v2/documentary-restrictions/release-proposals/{intentID}/decision", release.decide)
 	}
 	if dependencies.DocumentaryRestrictionEnabled &&
 		dependencies.DocumentaryRestriction != nil &&
