@@ -1,0 +1,35 @@
+name: PEO-03L temporary gofmt
+on:
+  push:
+    branches: [feat/peo03l-independent-malware-scan-attestation]
+    paths: [.github/workflows/peo03l-format-once.yml]
+permissions:
+  contents: write
+jobs:
+  format:
+    if: github.repository == 'baobab-platform/baobab-cp'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          ref: feat/peo03l-independent-malware-scan-attestation
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: |
+          set -euo pipefail
+          gofmt -w internal/verification/authority/independent_scanner*.go
+          gofmt -w internal/service/verification/document_scan_ingestor*.go
+          gofmt -w internal/service/verification/document_custody_postgres_integration_test.go
+          git diff --check
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add internal/verification/authority/independent_scanner*.go
+            git add internal/service/verification/document_scan_ingestor*.go
+            git add internal/service/verification/document_custody_postgres_integration_test.go
+            git commit -m "style(peo03l): gofmt independently scanned evidence pipeline"
+            git pull --rebase origin feat/peo03l-independent-malware-scan-attestation
+            git push origin HEAD:feat/peo03l-independent-malware-scan-attestation
+          fi
