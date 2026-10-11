@@ -38,7 +38,7 @@ func documentaryReleaseVerified(ctx context.Context, tx pgx.Tx, restrictionID, r
        c.document->>'jurisdiction', res.document,
        ri.proposed_by::text, rd.decided_by::text,
        sp.approved_by::text, p.approved_by::text, res.decided_by
- FROM admission.documentary_remediation_restriction restriction
+ FROM admission.active_documentary_remediation_restriction restriction
  JOIN admission.documentary_review_decision rd
    ON rd.decision_id=restriction.decision_id
  JOIN admission.documentary_review_intent ri ON ri.review_id=rd.review_id
@@ -66,8 +66,8 @@ func documentaryReleaseVerified(ctx context.Context, tx pgx.Tx, restrictionID, r
     WHERE ch.case_id=res.case_id AND ch.claim_id=res.claim_id
       AND ch.source_id=sp.source_id AND ch.outcome IN ('VERIFIED','MATCHED')
       AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements_text(res.document->'check_ids') ref
-        WHERE ref=ch.check_id
+        SELECT 1 FROM jsonb_array_elements_text(res.document->'check_ids') AS item(check_id)
+        WHERE item.check_id=ch.check_id
       )
   )
  ORDER BY sp.effective_from DESC LIMIT 1`, restrictionID, resultID, now).
@@ -144,16 +144,7 @@ func (s *Store) ProposeDocumentaryRelease(ctx context.Context, key string, meta 
 	if err = documentaryReleaseVerified(ctx, tx, restrictionID, in.VerificationResultID, actor, time.Now().UTC()); err != nil {
 		return empty, err
 	}
-	// An already approved release cannot receive a second proposal.
-	var released bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1
-		FROM admission.documentary_restriction_release_decision
-		WHERE restriction_id=$1::uuid AND outcome='APPROVE')`, restrictionID).Scan(&released); err != nil {
-		return empty, err
-	}
-	if released {
-		return empty, ErrDocumentaryReviewDenied
-	}
+
 	var id string
 	err = tx.QueryRow(ctx, `INSERT INTO admission.documentary_restriction_release_intent
 	  (restriction_id,verification_result_id,proposed_by,idempotency_key,
@@ -252,13 +243,13 @@ func (s *Store) DecideDocumentaryRelease(ctx context.Context, key string, meta b
 		return empty, err
 	}
 	if in.Outcome == "APPROVE" {
-		var released bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM
-		 admission.documentary_restriction_release_decision
-		 WHERE restriction_id=$1::uuid AND outcome='APPROVE')`, restrictionID).Scan(&released); err != nil {
+		var held bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(
+		 SELECT 1 FROM admission.active_documentary_remediation_restriction
+		 WHERE restriction_id=$1::uuid)`, restrictionID).Scan(&held); err != nil {
 			return empty, err
 		}
-		if released {
+		if !held {
 			return empty, ErrDocumentaryReviewDenied
 		}
 	}
