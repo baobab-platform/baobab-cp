@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/verification/authority"
 	"github.com/go-chi/chi/v5"
@@ -49,7 +50,7 @@ func (h assistedWitnessHandler) propose(w http.ResponseWriter,r *http.Request){
 			"sanitized source witness only; credentials and PINs forbidden",false)
 		return
 	}
-	f:=authority.AssistedFinding{IntentID: "asrs_"+newRequestID(),
+	f:=authority.AssistedFinding{IntentID: domain.NewResourceID("asrs"),
 		CaseID:req.CaseID,ClaimID:req.ClaimID,SourceID:req.SourceID,
 		EvidenceID:req.EvidenceID,OfficialReference:req.OfficialReference,
 		ObservedAt:req.ObservedAt,FreshnessUntil:req.FreshnessUntil,
