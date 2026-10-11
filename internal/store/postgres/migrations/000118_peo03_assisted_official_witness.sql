@@ -20,6 +20,7 @@ CREATE TABLE evidence.assisted_official_witness (
     outcome text NOT NULL DEFAULT 'PENDING'
         CHECK(outcome IN ('PENDING','ATTESTED','REJECTED')),
     decision_reason text,
+    decision_key text,
     idempotency_key text NOT NULL CHECK(length(idempotency_key) BETWEEN 16 AND 128),
     CHECK((outcome='PENDING' AND checker_actor IS NULL AND checked_at IS NULL)
        OR (outcome<>'PENDING' AND checker_actor IS NOT NULL AND checked_at IS NOT NULL
