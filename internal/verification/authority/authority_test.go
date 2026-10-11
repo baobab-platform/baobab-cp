@@ -117,3 +117,39 @@ func TestPEO03FSealedCustodyTamperAndIdentityBinding(t *testing.T){
 		t.Fatalf("wrong key opened source response: %v",err)
 	}
 }
+
+func TestPEO03FAssistedSARSIndependentHumanWitness(t *testing.T) {
+	now:=time.Date(2026,10,11,10,0,0,0,time.UTC)
+	f:=AssistedFinding{IntentID:"sars_synthetic_0001",CaseID:"vcase_1",ClaimID:"ecl_1",
+		SourceID:"esrc_sarstcs",EvidenceID:"evr_synthetic1",OfficialReference:"synthetic-official-review",
+		ObservedAt:now.Add(-time.Minute),FreshnessUntil:now.Add(time.Hour),
+		ResponseDigest:"sha256:"+strings.Repeat("a",64),ProvenanceRef:"sealed://synthetic-evidence",
+		Witness:"prn_witness",Status:"PENDING"}
+	if err:=ValidateAssistedProposal(f,now);err!=nil {t.Fatalf("witnessed portal finding refused: %v",err)}
+	for _,checker:=range []string{"","prn_witness"} {
+		if err:=ValidateAssistedApproval(f,checker,now);!errors.Is(err,ErrAssistedReview){
+			t.Fatalf("self-approval passed: %q %v",checker,err)
+		}
+	}
+	if err:=ValidateAssistedApproval(f,"prn_independent",now);err!=nil {t.Fatal(err)}
+	f.SourceID="esrc_cipc"
+	if err:=ValidateAssistedProposal(f,now);!errors.Is(err,ErrAssistedReview){
+		t.Fatalf("assisted SARS review claimed CIPC authority: %v",err)
+	}
+}
+
+func TestPEO03FReverificationRequiresFreshIndependentEvidence(t *testing.T) {
+	now:=time.Date(2026,10,11,10,0,0,0,time.UTC)
+	row:=DueObservation{CaseID:"vcase_1",ClaimID:"ecl_1",EvidenceID:"evr_1",
+		SourceID:"esrc_cipc",LastObserved:now.Add(-48*time.Hour),FreshnessUntil:now.Add(-time.Minute)}
+	p,err:=PlanReverification(row,now,true)
+	if err!=nil||!p.Execute||p.Reason!="EVIDENCE_EXPIRED"{t.Fatalf("expiry not queued: %+v %v",p,err)}
+	row.Suspended=true
+	if p,err:=PlanReverification(row,now,true);!errors.Is(err,ErrReverification)||p.Execute{
+		t.Fatal("suspended provider was executed")
+	}
+	row.Suspended=false
+	if p,err:=PlanReverification(row,now,false);!errors.Is(err,ErrReverification)||p.Execute{
+		t.Fatal("uncertified provider was executed")
+	}
+}
