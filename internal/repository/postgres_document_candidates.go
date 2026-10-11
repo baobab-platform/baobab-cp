@@ -140,6 +140,23 @@ func validateDocumentLink(ctx context.Context, tx pgx.Tx, a authority.DocumentCa
 	return nil
 }
 
+// verifySignedArtifact rejects replay when the independently trusted scanner
+// key is missing/revoked. A DB row marked CLEAN alone is NOT scan authority.
+func (d DocumentLedger) verifySignedArtifact(ctx context.Context,tx pgx.Tx,a authority.DocumentCandidateAttempt) error {
+	var p authority.ScanProof
+	err:=tx.QueryRow(ctx,`SELECT evidence_id,artifact_id,media_type,document_digest,
+		scanner_id,scanner_version,scan_outcome,scanned_at,signature
+		FROM evidence.scanned_artifact WHERE evidence_id=$1 AND artifact_id=$2`,
+		a.EvidenceID,a.ArtifactID).
+		Scan(&p.EvidenceID,&p.ArtifactID,&p.MediaType,&p.Digest,&p.ScannerID,
+			&p.ScannerVersion,&p.Outcome,&p.ScannedAt,&p.Signature)
+	if err!=nil||d.Now==nil||p.Digest!=a.Receipt.DocumentDigest ||
+		authority.VerifyScanProof(p,d.ScannerKeys[p.ScannerID+"/"+p.ScannerVersion],d.Now())!=nil{
+		return ErrDocumentLedgerDenied
+	}
+	return nil
+}
+
 func (d DocumentLedger) ready(actor AuditActor) bool {
 	return d.PostgresRepository != nil && d.Now != nil && len(d.CandidateKey) == 32 &&
 		d.ExtractorClientID != "" && actor.ActorID != "" && actor.ActorType == "workload" &&
@@ -177,7 +194,8 @@ func (d DocumentLedger) GetDocumentCandidateByKey(ctx context.Context, actorID, 
 		return empty, err
 	}
 	defer tx.Rollback(ctx)
-	if validateDocumentLink(ctx, tx, a, d.Now().UTC()) != nil {
+	if validateDocumentLink(ctx, tx, a, d.Now().UTC()) != nil ||
+		d.verifySignedArtifact(ctx,tx,a)!=nil {
 		return empty, ErrDocumentLedgerDenied
 	}
 	// The same transaction holds the case lock until after authenticated
@@ -210,7 +228,8 @@ func (d DocumentLedger) RecordDocumentCandidates(ctx context.Context, a authorit
 		return empty, err
 	}
 	defer tx.Rollback(ctx)
-	if validateDocumentLink(ctx, tx, a, d.Now().UTC()) != nil {
+	if validateDocumentLink(ctx, tx, a, d.Now().UTC()) != nil ||
+		d.verifySignedArtifact(ctx,tx,a)!=nil {
 		return empty, ErrDocumentLedgerDenied
 	}
 	var prior authority.DocumentCandidateAttempt
@@ -305,7 +324,8 @@ func (d DocumentLedger) WithLockedDocument(ctx context.Context, caseID, claimID,
 		ArtifactID: current.ArtifactID, ActorID: actorID,
 		Receipt: authority.DocumentExtractionReceipt{DocumentDigest: digest},
 	}
-	if validateDocumentLink(limited, tx, attempt, d.Now().UTC()) != nil {
+	if validateDocumentLink(limited, tx, attempt, d.Now().UTC()) != nil ||
+		d.verifySignedArtifact(limited,tx,attempt)!=nil {
 		return ErrDocumentLedgerDenied
 	}
 	if err = readAndExtract(limited); err != nil || limited.Err() != nil {
