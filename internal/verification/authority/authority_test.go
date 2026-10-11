@@ -132,6 +132,11 @@ func TestPEO03FAssistedSARSIndependentHumanWitness(t *testing.T) {
 		}
 	}
 	if err:=ValidateAssistedApproval(f,"prn_independent",now);err!=nil {t.Fatal(err)}
+	f.ResponseDigest="sha256:"+strings.Repeat("z",64)
+	if err:=ValidateAssistedProposal(f,now);!errors.Is(err,ErrAssistedReview){
+		t.Fatalf("nonhex digest accepted: %v",err)
+	}
+	f.ResponseDigest="sha256:"+strings.Repeat("a",64)
 	f.SourceID="esrc_cipc"
 	if err:=ValidateAssistedProposal(f,now);!errors.Is(err,ErrAssistedReview){
 		t.Fatalf("assisted SARS review claimed CIPC authority: %v",err)
@@ -140,7 +145,7 @@ func TestPEO03FAssistedSARSIndependentHumanWitness(t *testing.T) {
 
 func TestPEO03FReverificationRequiresFreshIndependentEvidence(t *testing.T) {
 	now:=time.Date(2026,10,11,10,0,0,0,time.UTC)
-	row:=DueObservation{CaseID:"vcase_1",ClaimID:"ecl_1",EvidenceID:"evr_1",
+	row:=DueObservation{ObservationID:"aobs_1",CaseID:"vcase_1",ClaimID:"ecl_1",EvidenceID:"evr_1",
 		SourceID:"esrc_cipc",LastObserved:now.Add(-48*time.Hour),FreshnessUntil:now.Add(-time.Minute)}
 	p,err:=PlanReverification(row,now,true)
 	if err!=nil||!p.Execute||p.Reason!="EVIDENCE_EXPIRED"{t.Fatalf("expiry not queued: %+v %v",p,err)}
