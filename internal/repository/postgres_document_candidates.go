@@ -275,30 +275,44 @@ func (d DocumentLedger) WithLockedDocument(ctx context.Context, caseID, claimID,
 	limited, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	tx, err := d.pool.Begin(limited)
-	if err != nil { return ErrDocumentLedgerDenied }
+	if err != nil {
+		return ErrDocumentLedgerDenied
+	}
 	defer tx.Rollback(context.Background())
 	// Preserve the OEV-03 lock order, so a concurrent restriction cannot
 	// transition the evidence while its private bytes are being processed.
-	if _, err = lockCase(limited,tx,caseID,-1); err != nil { return ErrDocumentLedgerDenied }
-	if _, err = lockClaim(limited,tx,caseID,claimID); err != nil { return ErrDocumentLedgerDenied }
+	if _, err = lockCase(limited, tx, caseID, -1); err != nil {
+		return ErrDocumentLedgerDenied
+	}
+	if _, err = lockClaim(limited, tx, caseID, claimID); err != nil {
+		return ErrDocumentLedgerDenied
+	}
 	var raw []byte
-	if err = tx.QueryRow(limited,`SELECT document FROM evidence.record WHERE evidence_id=$1 FOR SHARE`,evidenceID).Scan(&raw);err!=nil {
+	if err = tx.QueryRow(limited, `SELECT document FROM evidence.record WHERE evidence_id=$1 FOR SHARE`, evidenceID).Scan(&raw); err != nil {
 		return ErrDocumentLedgerDenied
 	}
 	current, err := decodeDocument[verification.Evidence](raw)
-	if err != nil || current.ArtifactID == "" { return ErrDocumentLedgerDenied }
+	if err != nil || current.ArtifactID == "" {
+		return ErrDocumentLedgerDenied
+	}
 	var digest string
-	if err = tx.QueryRow(limited,`SELECT document_digest FROM evidence.scanned_artifact
-		WHERE evidence_id=$1 AND artifact_id=$2 AND scan_outcome='CLEAN'`,evidenceID,current.ArtifactID).Scan(&digest);err!=nil{
+	if err = tx.QueryRow(limited, `SELECT document_digest FROM evidence.scanned_artifact
+		WHERE evidence_id=$1 AND artifact_id=$2 AND scan_outcome='CLEAN'`, evidenceID, current.ArtifactID).Scan(&digest); err != nil {
 		return ErrDocumentLedgerDenied
 	}
 	attempt := authority.DocumentCandidateAttempt{
-		CaseID:caseID,ClaimID:claimID,EvidenceID:evidenceID,
-		ArtifactID:current.ArtifactID,ActorID:actorID,
-		Receipt:authority.DocumentExtractionReceipt{DocumentDigest:digest},
+		CaseID: caseID, ClaimID: claimID, EvidenceID: evidenceID,
+		ArtifactID: current.ArtifactID, ActorID: actorID,
+		Receipt: authority.DocumentExtractionReceipt{DocumentDigest: digest},
 	}
-	if validateDocumentLink(limited,tx,attempt,d.Now().UTC())!=nil { return ErrDocumentLedgerDenied }
-	if err = readAndExtract(limited); err != nil || limited.Err() != nil { return ErrDocumentLedgerDenied }
-	if err = tx.Commit(limited);err!=nil{return ErrDocumentLedgerDenied}
+	if validateDocumentLink(limited, tx, attempt, d.Now().UTC()) != nil {
+		return ErrDocumentLedgerDenied
+	}
+	if err = readAndExtract(limited); err != nil || limited.Err() != nil {
+		return ErrDocumentLedgerDenied
+	}
+	if err = tx.Commit(limited); err != nil {
+		return ErrDocumentLedgerDenied
+	}
 	return nil
 }
