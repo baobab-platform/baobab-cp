@@ -28,16 +28,16 @@ type documentaryRestrictionRequest struct {
 }
 
 type documentaryRestrictionResponse struct {
-	ContextID             string    `json:"context_id"`
-	OperationReference    string    `json:"operation_reference"`
-	OrganisationID        string    `json:"organisation_id"`
-	Capability            string    `json:"capability"`
-	Market                string    `json:"market"`
-	Blocked               bool      `json:"blocked"`
-	AuthorityGranted      bool      `json:"authority_granted"`
-	PolicyReference       string    `json:"policy_reference"`
-	EvaluatedAt           time.Time `json:"evaluated_at"`
-	ExpiresAt             time.Time `json:"expires_at"`
+	ContextID          string    `json:"context_id"`
+	OperationReference string    `json:"operation_reference"`
+	OrganisationID     string    `json:"organisation_id"`
+	Capability         string    `json:"capability"`
+	Market             string    `json:"market"`
+	Blocked            bool      `json:"blocked"`
+	AuthorityGranted   bool      `json:"authority_granted"`
+	PolicyReference    string    `json:"policy_reference"`
+	EvaluatedAt        time.Time `json:"evaluated_at"`
+	ExpiresAt          time.Time `json:"expires_at"`
 }
 
 var documentaryCapabilityKey = regexp.MustCompile(`^[a-z][a-z0-9._-]{2,199}$`)
@@ -137,9 +137,9 @@ func (h documentaryRestrictionHandler) assess(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, documentaryRestrictionResponse{
 		ContextID: trusted.ID, OperationReference: req.OperationReference,
 		OrganisationID: trusted.OrganisationID,
-		Capability: req.Capability, Market: req.Market,
+		Capability:     req.Capability, Market: req.Market,
 		Blocked: blocked, AuthorityGranted: false,
 		PolicyReference: "ADR-BCP-026/PEO-02T:negative-only",
-		EvaluatedAt: now, ExpiresAt: expiry,
+		EvaluatedAt:     now, ExpiresAt: expiry,
 	})
 }
