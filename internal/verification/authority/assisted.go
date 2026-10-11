@@ -13,20 +13,20 @@ var ErrAssistedReview = errors.New("independently witnessed official review not 
 // AssistedFinding contains only a witnessed metadata receipt, never the
 // taxpayer's TCS PIN, tax reference, CAPTCHA response or portal credentials.
 type AssistedFinding struct {
-	IntentID          string
-	CaseID            string
-	ClaimID           string
-	SourceID          string
-	EvidenceID        string
-	OfficialReference string
-	ObservedAt        time.Time
-	FreshnessUntil    time.Time
-	ResponseDigest    string
-	ProvenanceRef     string
-	Witness           string
-	Checker           string
-	CheckedAt         time.Time
-	Status            string
+	IntentID          string    `json:"intent_id"`
+	CaseID            string    `json:"verification_case_id"`
+	ClaimID           string    `json:"claim_id"`
+	SourceID          string    `json:"source_id"`
+	EvidenceID        string    `json:"evidence_id"`
+	OfficialReference string    `json:"official_reference"`
+	ObservedAt        time.Time `json:"observed_at"`
+	FreshnessUntil    time.Time `json:"freshness_until"`
+	ResponseDigest    string    `json:"response_digest"`
+	ProvenanceRef     string    `json:"provenance_reference"`
+	Witness           string    `json:"witness_principal_id"`
+	Checker           string    `json:"checker_principal_id,omitempty"`
+	CheckedAt         time.Time `json:"checked_at,omitempty"`
+	Status            string    `json:"status"`
 }
 
 // AssistedLedger persists proposals and decisions atomically. A production
