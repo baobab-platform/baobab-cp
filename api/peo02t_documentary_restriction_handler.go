@@ -43,6 +43,16 @@ type documentaryRestrictionResponse struct {
 var documentaryCapabilityKey = regexp.MustCompile(`^[a-z][a-z0-9._-]{2,199}$`)
 var documentaryMarketCode = regexp.MustCompile(`^[A-Z]{2}$`)
 
+// The cache policy must wrap IAM middleware, since invalid credentials and
+// missing scopes are rejected before the business handler is invoked.
+func documentaryRestrictionNoStore(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, max-age=0")
+		w.Header().Set("Pragma", "no-cache")
+		next.ServeHTTP(w, r)
+	})
+}
+
 type documentaryRestrictionHandler struct {
 	api        *API
 	contexts   repository.ContextRepository
