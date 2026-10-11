@@ -22,6 +22,27 @@ func (f *fakeCIPC) LookupCompany(ctx context.Context, ref string) (CompanyRecord
 	return f.record, f.err
 }
 
+type fakeVerifiedRegistration struct {
+	binding VerifiedRegistrationBinding
+	err     error
+}
+
+func (f fakeVerifiedRegistration) ResolveVerifiedRegistration(_ context.Context, _ string, _ Subject) (VerifiedRegistrationBinding, error) {
+	return f.binding, f.err
+}
+
+func syntheticRegistration(now time.Time) VerifiedRegistrationResolver {
+	return fakeVerifiedRegistration{binding: VerifiedRegistrationBinding{
+		CaseID: "vcase_synthetic01",
+		Subject: syntheticCIPCClaim().Subject,
+		RegistrationNumber: "2020/123456/07",
+		ClaimID: "ecl_verifiedreg01",
+		ResultID: "vres_verifiedreg01",
+		SourceID: "esrc_cipc",
+		FreshnessUntil: now.Add(time.Hour),
+	}}
+}
+
 func syntheticCIPCClaim() Claim {
 	return Claim{
 		ClaimID: "ecl_syntheticcipc01", Subject: Subject{SubjectType: "ORGANISATION", SubjectID: "org_synthetic"},
@@ -47,10 +68,10 @@ func TestPEO03BCIPCSyntheticRegistrationAndIndependentCheck(t *testing.T) {
 	company := &fakeCIPC{record: syntheticCIPCRecord(now)}
 	claim := syntheticCIPCClaim()
 	adapter := CIPCCompaniesAdapter{
-		Registry: company, Certified: true, AllowSynthetic: true,
+		Registry: company, Registrations: syntheticRegistration(now), Certified: true, AllowSynthetic: true,
 		AdapterID: "baobab.cipc.synthetic",
 	}
-	obs, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim, "2020/123456/07", now)
+	obs, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,35 +113,32 @@ func TestPEO03BCIPCFailsClosed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			record := syntheticCIPCRecord(now)
 			tc.edit(&record)
-			adapter := CIPCCompaniesAdapter{Registry: &fakeCIPC{record: record},
+			adapter := CIPCCompaniesAdapter{Registry: &fakeCIPC{record: record}, Registrations: syntheticRegistration(now),
 				Certified: true, AllowSynthetic: true, AdapterID: "baobab.cipc.synthetic"}
 			if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01",
-				claim, "2020/123456/07", now); !errors.Is(err, ErrUntrustedObservation) {
+				claim, now); !errors.Is(err, ErrUntrustedObservation) {
 				t.Fatalf("accepted invalid source: %v", err)
 			}
 		})
 	}
 	t.Run("synthetic credential refused in real runtime", func(t *testing.T) {
-		adapter := CIPCCompaniesAdapter{Registry: &fakeCIPC{record: syntheticCIPCRecord(now)},
+		adapter := CIPCCompaniesAdapter{Registry: &fakeCIPC{record: syntheticCIPCRecord(now)}, Registrations: syntheticRegistration(now),
 			Certified: true, AdapterID: "baobab.cipc"}
-		if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim,
-			"2020/123456/07", now); !errors.Is(err, ErrUntrustedObservation) {
+		if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now); !errors.Is(err, ErrUntrustedObservation) {
 			t.Fatalf("synthetic response was promoted: %v", err)
 		}
 	})
 	t.Run("uncertified client never queried", func(t *testing.T) {
 		r := &fakeCIPC{record: syntheticCIPCRecord(now)}
-		adapter := CIPCCompaniesAdapter{Registry: r, AllowSynthetic: true, AdapterID: "candidate"}
-		if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim,
-			"2020/123456/07", now); !errors.Is(err, ErrUntrustedObservation) || r.calls != 0 {
+		adapter := CIPCCompaniesAdapter{Registry: r, Registrations: syntheticRegistration(now), AllowSynthetic: true, AdapterID: "candidate"}
+		if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now); !errors.Is(err, ErrUntrustedObservation) || r.calls != 0 {
 			t.Fatalf("uncertified provider invoked or allowed: %v", err)
 		}
 	})
 	t.Run("API outage cannot grant authority", func(t *testing.T) {
-		adapter := CIPCCompaniesAdapter{Registry: &fakeCIPC{err: errors.New("synthetic outage")},
+		adapter := CIPCCompaniesAdapter{Registry: &fakeCIPC{err: errors.New("synthetic outage")}, Registrations: syntheticRegistration(now),
 			Certified: true, AllowSynthetic: true, AdapterID: "candidate"}
-		if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim,
-			"2020/123456/07", now); !errors.Is(err, ErrUntrustedObservation) {
+		if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now); !errors.Is(err, ErrUntrustedObservation) {
 			t.Fatalf("outage allowed: %v", err)
 		}
 	})
@@ -128,8 +146,7 @@ func TestPEO03BCIPCFailsClosed(t *testing.T) {
 		claim.ClaimType = "VAT_REGISTRATION"
 		adapter := CIPCCompaniesAdapter{Registry: &fakeCIPC{record: syntheticCIPCRecord(now)},
 			Certified: true, AllowSynthetic: true, AdapterID: "baobab.cipc.synthetic"}
-		if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim,
-			"2020/123456/07", now); !errors.Is(err, ErrUntrustedObservation) {
+		if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now); !errors.Is(err, ErrUntrustedObservation) {
 			t.Fatalf("CIPC illegally verified VAT: %v", err)
 		}
 	})
@@ -154,6 +171,42 @@ func TestPEO03BSARSAssistedEvidenceIsNotTrustedUntilAuthorityEnabled(t *testing.
 	// accepted/stored by the observation type or this assisted constructor.
 	if obs.SourceID == "esrc_cipc" || obs.AdapterID != "" {
 		t.Fatal("assisted SARS review masqueraded as automated CIPC lookup")
+	}
+}
+
+func TestPEO03BCompanyNameCannotBorrowUnrelatedRegistryIdentifier(t *testing.T) {
+	now := time.Now().UTC()
+	claim := syntheticCIPCClaim()
+	registry := &fakeCIPC{record: syntheticCIPCRecord(now)}
+	missing := CIPCCompaniesAdapter{
+		Registry: registry, Certified: true, AdapterID: "baobab.cipc",
+		AllowSynthetic: true,
+	}
+	if _, err := missing.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now);
+		!errors.Is(err, ErrUntrustedObservation) || registry.calls != 0 {
+		t.Fatalf("unbound company name was accepted: %v", err)
+	}
+	for _, change := range []func(*VerifiedRegistrationBinding){
+		func(b *VerifiedRegistrationBinding) { b.CaseID = "vcase_another" },
+		func(b *VerifiedRegistrationBinding) { b.Subject.SubjectID = "org_another" },
+		func(b *VerifiedRegistrationBinding) { b.SourceID = "esrc_applicant" },
+		func(b *VerifiedRegistrationBinding) { b.FreshnessUntil = now.Add(-time.Minute) },
+		func(b *VerifiedRegistrationBinding) { b.ResultID = "" },
+	} {
+		binding := syntheticRegistration(now).(fakeVerifiedRegistration)
+		change(&binding.binding)
+		missing.Registrations = binding
+		before := registry.calls
+		if _, err := missing.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now);
+			!errors.Is(err, ErrUntrustedObservation) || registry.calls != before {
+			t.Fatalf("foreign or expired registration was accepted: %v", err)
+		}
+	}
+	claim.ClaimType = "REGISTRATION_IDENTIFIER"
+	claim.ClaimedValue.Value = "2020/123456/07"
+	missing.Registrations = nil
+	if _, err := missing.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now); err != nil {
+		t.Fatalf("initial claimed registration identifier may be checked, not auto-approved: %v", err)
 	}
 }
 
