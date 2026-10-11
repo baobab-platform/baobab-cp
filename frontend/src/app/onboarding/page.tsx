@@ -1,3 +1,6 @@
+// Environment-gated presentation must be decided at runtime, not during Next build.
+export const dynamic = "force-dynamic";
+
 import { notFound } from "next/navigation";
 
 import { ProgressiveShowcase } from "@/features/onboarding/ProgressiveShowcase";
