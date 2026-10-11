@@ -721,7 +721,7 @@ func New(dependencies Dependencies) http.Handler {
 				identities: dependencies.Identities,
 				reader: dependencies.DocumentaryRestriction, clientIDs: allow,
 			}
-			r.With(a.authorize(a.workloadVerifier, "workload", "documentary:restriction-assess")).
+			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", "documentary:restriction-assess")).
 				Post("/internal/documentary/v1/restrictions/assess", h.assess)
 		}
 	}
