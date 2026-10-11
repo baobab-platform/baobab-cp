@@ -28,6 +28,7 @@ type CaptureRepository interface {
 // source, response, outcome, lookup host, or certification.
 type CIPCIntake struct {
 	Repo           CaptureRepository
+	AllowedClientID string // exact IAM-registered source verifier, never applicant-selected
 	Transport      authority.CIPCTransport
 	Vault          authority.SealedVault
 	Registrations  verification.VerifiedRegistrationResolver
@@ -64,19 +65,19 @@ func (c custodiedRegistry) LookupCompany(ctx context.Context, number string) (ve
 func (s CIPCIntake) Capture(ctx context.Context, caseID, claimID, evidenceID, key string, actor repository.AuditActor) (authority.CaptureReceipt, error) {
 	empty := authority.CaptureReceipt{}
 	if s.Repo == nil || ctx == nil || s.Now == nil || caseID == "" || claimID == "" ||
-		evidenceID == "" || len(key) < 16 || len(key) > 128 || actor.ActorType != "workload" || actor.ClientID == "" || actor.ActorID == "" {
+		evidenceID == "" || len(key) < 16 || len(key) > 128 || actor.ActorType != "workload" ||
+		s.AllowedClientID == "" || actor.ClientID != s.AllowedClientID || actor.ActorID == "" {
 		return empty, ErrCaptureDenied
 	}
-	// A replay that has already committed may not query the provider again
-	// or overwrite immutable encrypted evidence.
+	// Replays are looked up before calling CIPC, but may NOT return old
+	// provenance while the source evidence, case or claim has been revoked.
 	prior, err := s.Repo.GetAuthoritativeObservationByKey(ctx, actor.ActorID, key)
-	if err == nil {
+	replay := err == nil
+	if replay {
 		if prior.CaseID != caseID || prior.ClaimID != claimID || prior.EvidenceID != evidenceID {
 			return empty, ErrCaptureDenied
 		}
-		return prior, nil
-	}
-	if !errors.Is(err, repository.ErrVerificationNotFound) {
+	} else if !errors.Is(err, repository.ErrVerificationNotFound) {
 		return empty, ErrCaptureDenied
 	}
 	c, err := s.Repo.GetVerificationCase(ctx, caseID)
@@ -109,6 +110,15 @@ func (s CIPCIntake) Capture(ctx context.Context, caseID, claimID, evidenceID, ke
 	now := s.Now().UTC()
 	if evidence.ExpiresAt != nil && !evidence.ExpiresAt.After(now) {
 		return empty, ErrCaptureDenied
+	}
+	if replay {
+		// The exact still-AVAILABLE issuer evidence and open review case are
+		// required on every replay. No network request or custody rewrite.
+		if prior.SourceID != "esrc_cipc" || prior.AuthorityGranted ||
+			!prior.FreshnessUntil.After(now) {
+			return empty, ErrCaptureDenied
+		}
+		return prior, nil
 	}
 	// Every authenticated source lookup gets one immutable custody object.
 	// Re-verification with a new request key may reveal a changed official fact
