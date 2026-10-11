@@ -36,7 +36,7 @@ function protectedURL(value: string, origin?: string): URL {
 }
 
 /** Explicit runtime approval; no public or production enablement by default. */
-export function readAuthSettings(source: NodeJS.ProcessEnv = process.env): AuthSettings {
+export function readAuthSettings(source: Record<string, string | undefined> = process.env): AuthSettings {
   if (source.CP_CONSOLE_AUTH_ENABLED !== "true" ||
       !["integration", "staging", "development"].includes(source.CONSOLE_ENVIRONMENT ?? "")) {
     throw new OidcBoundaryError();
