@@ -158,6 +158,8 @@ func (c CIPCTransport) Lookup(ctx context.Context, registrationNumber string) (R
 	now := c.now()
 	if c.Secrets == nil || ctx == nil || registrationNumber == "" ||
 		strings.ContainsAny(registrationNumber, "\\?#&%\r\n") ||
+		strings.Contains(registrationNumber, "..") || strings.Contains(registrationNumber, "//") ||
+		strings.HasPrefix(registrationNumber, "/") || strings.HasSuffix(registrationNumber, "/") ||
 		len(registrationNumber) > 80 ||
 		ValidateCertification(c.Spec, c.Certification, now, c.AllowLoopback) != nil {
 		return empty, ErrUncertified
