@@ -16,7 +16,7 @@ import (
 
 type peo05VerifiedToken struct {
 	value auth.Principal
-	err error
+	err   error
 }
 
 func (v peo05VerifiedToken) Verify(context.Context, string) (auth.Principal, error) {
@@ -24,9 +24,9 @@ func (v peo05VerifiedToken) Verify(context.Context, string) (auth.Principal, err
 }
 
 type peo05Identities struct {
-	principal domain.Principal
+	principal  domain.Principal
 	membership domain.WorkforceMembership
-	err error
+	err        error
 }
 
 func (v peo05Identities) ResolveIdentity(context.Context, string, string) (domain.Principal, error) {
@@ -38,7 +38,7 @@ func (v peo05Identities) GetWorkforceMembership(context.Context, string, string)
 
 type peo05Revocation struct {
 	proof PEO05RevocationStatus
-	err error
+	err   error
 }
 
 func (v peo05Revocation) CurrentToken(context.Context, string, auth.Principal, time.Time) (PEO05RevocationStatus, error) {
@@ -55,7 +55,7 @@ func peo05IAMCase() (PEO05AuthenticatedIAM, time.Time) {
 	return PEO05AuthenticatedIAM{
 		Verifier: peo05VerifiedToken{value: token}, Token: "test-not-a-real-secret",
 		Identities: peo05Identities{
-			principal: domain.Principal{ID: "principal-one", Status: "ACTIVE", ActorType: "human"},
+			principal:  domain.Principal{ID: "principal-one", Status: "ACTIVE", ActorType: "human"},
 			membership: domain.WorkforceMembership{PrincipalID: "principal-one", TenantID: "tn_testa", Status: "ACTIVE", Roles: []string{"cp:tenant-admin"}},
 		},
 		Revocation: peo05Revocation{proof: PEO05RevocationStatus{
@@ -77,15 +77,47 @@ func TestPEO05CIAMActiveMembershipAndCurrentIntrospection(t *testing.T) {
 func TestPEO05CIAMDoesNotTrustRealmRoleOrCrossTenant(t *testing.T) {
 	for name, change := range map[string]func(*PEO05AuthenticatedIAM){
 		"missing membership": func(a *PEO05AuthenticatedIAM) { a.Identities = peo05Identities{err: errors.New("no membership")} },
-		"revoked membership": func(a *PEO05AuthenticatedIAM) { v := a.Identities.(peo05Identities); v.membership.Status = "DISABLED"; a.Identities = v },
-		"sibling tenant": func(a *PEO05AuthenticatedIAM) { v := a.Identities.(peo05Identities); v.membership.TenantID = "tn_sibling"; a.Identities = v },
-		"missing realm role": func(a *PEO05AuthenticatedIAM) { v := a.Verifier.(peo05VerifiedToken); v.value.Roles = nil; a.Verifier = v },
-		"missing membership role": func(a *PEO05AuthenticatedIAM) { v := a.Identities.(peo05Identities); v.membership.Roles = []string{"reader"}; a.Identities = v },
-		"disabled principal": func(a *PEO05AuthenticatedIAM) { v := a.Identities.(peo05Identities); v.principal.Status = "DISABLED"; a.Identities = v },
-		"revoked token": func(a *PEO05AuthenticatedIAM) { v := a.Revocation.(peo05Revocation); v.proof.Active = false; a.Revocation = v },
+		"revoked membership": func(a *PEO05AuthenticatedIAM) {
+			v := a.Identities.(peo05Identities)
+			v.membership.Status = "DISABLED"
+			a.Identities = v
+		},
+		"sibling tenant": func(a *PEO05AuthenticatedIAM) {
+			v := a.Identities.(peo05Identities)
+			v.membership.TenantID = "tn_sibling"
+			a.Identities = v
+		},
+		"missing realm role": func(a *PEO05AuthenticatedIAM) {
+			v := a.Verifier.(peo05VerifiedToken)
+			v.value.Roles = nil
+			a.Verifier = v
+		},
+		"missing membership role": func(a *PEO05AuthenticatedIAM) {
+			v := a.Identities.(peo05Identities)
+			v.membership.Roles = []string{"reader"}
+			a.Identities = v
+		},
+		"disabled principal": func(a *PEO05AuthenticatedIAM) {
+			v := a.Identities.(peo05Identities)
+			v.principal.Status = "DISABLED"
+			a.Identities = v
+		},
+		"revoked token": func(a *PEO05AuthenticatedIAM) {
+			v := a.Revocation.(peo05Revocation)
+			v.proof.Active = false
+			a.Revocation = v
+		},
 		"revocation unavailable": func(a *PEO05AuthenticatedIAM) { a.Revocation = peo05Revocation{err: errors.New("offline")} },
-		"wrong audience": func(a *PEO05AuthenticatedIAM) { v := a.Revocation.(peo05Revocation); v.proof.Audience = "another-api"; a.Revocation = v },
-		"stale introspection": func(a *PEO05AuthenticatedIAM) { v := a.Revocation.(peo05Revocation); v.proof.CheckedAt = time.Time{}; a.Revocation = v },
+		"wrong audience": func(a *PEO05AuthenticatedIAM) {
+			v := a.Revocation.(peo05Revocation)
+			v.proof.Audience = "another-api"
+			a.Revocation = v
+		},
+		"stale introspection": func(a *PEO05AuthenticatedIAM) {
+			v := a.Revocation.(peo05Revocation)
+			v.proof.CheckedAt = time.Time{}
+			a.Revocation = v
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			reader, now := peo05IAMCase()
@@ -109,7 +141,7 @@ func TestPEO05COAuthIntrospectionHTTPSAndRevocation(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"active": active, "iss": "https://issuer.test", "sub": "subject",
-			"jti": "jti", "aud": []string{"baobab-control-plane"}, "exp": now.Add(2*time.Minute).Unix(),
+			"jti": "jti", "aud": []string{"baobab-control-plane"}, "exp": now.Add(2 * time.Minute).Unix(),
 		})
 	}))
 	defer server.Close()
