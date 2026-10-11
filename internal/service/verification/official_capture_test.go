@@ -19,6 +19,7 @@ type syntheticCaptureRepo struct {
 	claim    verification.Claim
 	evidence verification.Evidence
 	stored   verification.SourceObservation
+	prior    *authority.CaptureReceipt
 	recorded int
 }
 
@@ -37,6 +38,7 @@ func (r *syntheticCaptureRepo) RecordAuthoritativeSourceObservation(_ context.Co
 	return "aobs_synthetictest1", nil
 }
 func (r *syntheticCaptureRepo) GetAuthoritativeObservationByKey(context.Context, string, string) (authority.CaptureReceipt, error) {
+	if r.prior != nil { return *r.prior,nil }
 	return authority.CaptureReceipt{}, repository.ErrVerificationNotFound
 }
 
@@ -92,7 +94,7 @@ func TestPEO03GLocalTLSSourceToEncryptedCustodyAndNonPositiveReceipt(t *testing.
 	vault := authority.SealedVault{Directory: t.TempDir(), Key: key}
 	service := CIPCIntake{Repo: repo, Transport: authority.CIPCTransport{Spec: spec, Certification: cert,
 		Secrets: staticCaptureCredentials{}, Client: server.Client(), AllowLoopback: true, Now: func() time.Time { return now }},
-		Vault: vault, Now: func() time.Time { return now }, AllowSynthetic: true}
+		Vault: vault, AllowedClientID: "test-verifier", Now: func() time.Time { return now }, AllowSynthetic: true}
 	actor := repository.AuditActor{ActorID: "prn_workload", ActorType: "workload", ClientID: "test-verifier",
 		CorrelationID: "019a0707-0202-7777-8000-111111111111"}
 	res, err := service.Capture(context.Background(), caseID, claimID, evidenceID, "synthetic-source-capture-test", actor)
@@ -110,5 +112,29 @@ func TestPEO03GLocalTLSSourceToEncryptedCustodyAndNonPositiveReceipt(t *testing.
 	if replay, err := service.Capture(context.Background(), caseID, claimID, evidenceID,
 		"another-synthetic-source-capture", actor); err != nil || replay.AuthorityGranted {
 		t.Fatalf("identical issuer response could not be replayed safely: %+v %v", replay, err)
+	}
+	actor.ClientID = "unrelated-generic-workload"
+	if _, err := service.Capture(context.Background(), caseID, claimID, evidenceID,
+		"synthetic-unauthorised-replay", actor); err == nil {
+		t.Fatal("unrelated workload reused certified source transport")
+	}
+	actor.ClientID = service.AllowedClientID
+	prior := res
+	prior.FreshnessUntil = now.Add(time.Hour)
+	repo.prior = &prior
+	if r, err := service.Capture(context.Background(), caseID, claimID, evidenceID,
+		"synthetic-committed-replay", actor); err != nil || r.AuthorityGranted {
+		t.Fatalf("valid nonauthorising replay denied: %+v %v",r,err)
+	}
+	repo.evidence.Status = "RESTRICTED"
+	if _, err := service.Capture(context.Background(), caseID, claimID, evidenceID,
+		"synthetic-committed-replay", actor); err == nil {
+		t.Fatal("restricted source evidence remained available on replay")
+	}
+	repo.evidence.Status = verification.EvidenceAvail
+	repo.c.Status = verification.CaseVerified
+	if _, err := service.Capture(context.Background(), caseID, claimID, evidenceID,
+		"synthetic-committed-replay", actor); err == nil {
+		t.Fatal("completed case still exposed prior official-source receipt")
 	}
 }
