@@ -152,6 +152,15 @@ func (r *PostgresRepository) DecideAssistedWitness(ctx context.Context, intentID
 	if authority.ValidateAssistedApproval(f, actor.ActorID, now) != nil {
 		return empty, ErrAssistedWitnessDenied
 	}
+	// Observe OEV-03's canonical case-before-claim row-lock order to avoid
+	// deadlocks with concurrent verification lifecycle transitions.
+	var currentCase verification.Case
+	if outcome == "ATTESTED" {
+		currentCase, err = lockCase(ctx, tx, f.CaseID, -1)
+		if err != nil || currentCase.Status != verification.CaseVerifying {
+			return empty, ErrAssistedWitnessDenied
+		}
+	}
 	claim, err := lockClaim(ctx, tx, f.CaseID, f.ClaimID)
 	if err != nil {
 		return empty, err
@@ -164,9 +173,7 @@ func (r *PostgresRepository) DecideAssistedWitness(ctx context.Context, intentID
 	// against concurrent evidence updates before committing an attestation;
 	// REJECTED remains a separate, non-positive reviewer decision.
 	if outcome == "ATTESTED" {
-		c, caseErr := lockCase(ctx, tx, f.CaseID, -1)
-		if caseErr != nil || c.Status != verification.CaseVerifying ||
-			c.Subject != claim.Subject || c.Purpose != claim.Purpose ||
+		if currentCase.Subject != claim.Subject || currentCase.Purpose != claim.Purpose ||
 			claim.ClaimType == "" {
 			return empty, ErrAssistedWitnessDenied
 		}
