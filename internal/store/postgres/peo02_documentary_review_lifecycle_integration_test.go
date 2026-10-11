@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -110,6 +111,41 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 	}
 	key := func(tag string) string { return fmt.Sprintf("peo02s-%s-%s", tag, domain.NewUUIDv7()) }
 	body := syntheticAssessment(actors[6], deferral, operating, 6, time.Now().UTC())
+	// The original deferral/checkpoint cannot manufacture a current source
+	// policy classification. Until an independent approval exists the
+	// documentary review proposal must be refused.
+	if _, err = db.ProposeDocumentaryReview(ctx, key("no-source-policy"), meta(6),
+		actors[6], deferral, 6, body); !errors.Is(err, ErrDocumentaryReviewDenied) {
+		t.Fatalf("missing independently approved policy was accepted: %v", err)
+	}
+	_, err = db.pool.Exec(ctx, `INSERT INTO admission.founding_documentary_policy_requirement
+	    (policy_reference,requirement_id,requirement_authority,
+	     authority_basis_reference,approved_by,approved_at,effective_from,effective_to)
+	    VALUES('policy/peo02/approved-synthetic-only',
+	      'platform.founding.trading-name-proof','PLATFORM_DOCUMENTARY',
+	      'synthetic/governed-classification', $1::uuid, $2, $3, $4)`,
+		actors[2], now.Add(-48*time.Hour), now.Add(-24*time.Hour), now.Add(24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Applicant/maker assessment cannot relabel an independently published
+	// platform-document requirement as statutory or provider authority.
+	for _, wrongAuthority := range []string{"STATUTORY", "PROVIDER"} {
+		var changed map[string]any
+		if err = json.Unmarshal(body, &changed); err != nil {
+			t.Fatal(err)
+		}
+		items := changed["applicability_assessments"].([]any)
+		items[0].(map[string]any)["authority"] = wrongAuthority
+		mutated, marshalErr := json.Marshal(changed)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		if _, err = db.ProposeDocumentaryReview(ctx, key("relabel"), meta(6),
+			actors[6], deferral, 6, mutated); !errors.Is(err, ErrDocumentaryReviewDenied) {
+			t.Fatalf("%s relabelling was accepted: %v", wrongAuthority, err)
+		}
+	}
 	firstKey := key("propose")
 	proposal, err := db.ProposeDocumentaryReview(ctx, firstKey, meta(6), actors[6], deferral, 6, body)
 	if err != nil || proposal.Status != "PENDING" {

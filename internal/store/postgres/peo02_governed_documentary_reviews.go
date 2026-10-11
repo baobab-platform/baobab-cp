@@ -190,7 +190,29 @@ func (s *Store) ProposeDocumentaryReview(ctx context.Context, key string, meta b
 		originals[req] = true
 	}
 	for _, v := range input.Applicability {
-		if !originals[v.RequirementID] || v.PolicyReference != policy {
+		if !originals[v.RequirementID] || v.PolicyReference != policy ||
+			v.Authority != "PLATFORM_DOCUMENTARY" {
+			return empty, ErrDocumentaryReviewDenied
+		}
+		// The reviewed assessment is only a CLAIM. Independently approved
+		// classification must still be current in CP's immutable policy ledger,
+		// predate the review, and be approved by a different human. In
+		// particular, STATUTORY/PROVIDER requirements cannot be relabelled.
+		var governed bool
+		err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1
+		  FROM admission.founding_documentary_policy_requirement p
+		  JOIN identity.principal approver ON approver.principal_id=p.approved_by
+		  WHERE p.policy_reference=$1 AND p.requirement_id=$2
+		    AND p.requirement_authority='PLATFORM_DOCUMENTARY'
+		    AND approver.actor_type='human'
+		    AND length(btrim(p.authority_basis_reference))>0
+		    AND p.approved_by<>$3::uuid AND p.approved_at<=$4
+		    AND p.effective_from<=$5 AND p.effective_to>$5)`,
+			policy, v.RequirementID, actor, input.ReviewedAt, now).Scan(&governed)
+		if err != nil {
+			return empty, err
+		}
+		if !governed {
 			return empty, ErrDocumentaryReviewDenied
 		}
 	}
