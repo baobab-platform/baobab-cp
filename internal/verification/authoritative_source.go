@@ -12,7 +12,7 @@ import (
 
 // PEO-03B: source observations carry verified provenance but never constitute
 // a VerificationResult. RecordVerificationResult remains a distinct,
- // independent OEV-03 reviewer decision.
+// independent OEV-03 reviewer decision.
 var ErrUntrustedObservation = errors.New("authoritative source observation is not independently trustworthy")
 
 const MaxAuthoritativeObservationAge = 5 * time.Minute
