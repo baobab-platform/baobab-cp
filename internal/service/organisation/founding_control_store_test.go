@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 	"strings"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
@@ -79,5 +80,29 @@ func TestPEO04APostgresIndependentControlEvidenceIsImmutable(t *testing.T) {
 	if err=store.Record(ctx,other,approval);err!=nil{t.Fatal(err)}
 	if _,err=store.ReadIndependentControlProof(ctx,proof.RelationshipID);!errors.Is(err,ErrUntrustedCorporateProof){
 		t.Fatalf("conflicting active attestation silently selected: %v",err)
+	}
+	// The newest approved proof may be read after the earlier signed proof
+	// expires. The old immutable row remains for audit and recovery.
+	atExpiry := proof.ExpiresAt.Add(time.Minute)
+	latest := other
+	latest.ExpiresAt = atExpiry.Add(30 * time.Minute)
+	latest.ObservedAt = proof.ExpiresAt
+	latest.Signature = ed25519.Sign(private, latest.signingPayload())
+	// Use a freshly accepted trust interval for the synthetic renewal.
+	approvedTrust := trust[latest.SignerID]
+	approvedTrust.ExpiresAt = atExpiry.Add(2 * time.Hour)
+	approvedTrust.ApprovedAt = atExpiry.Add(-time.Minute)
+	renewer := PostgresControlProofStore{Pool: pool,
+		Trust: map[string]IndependentControlTrust{latest.SignerID: approvedTrust},
+		Now: func() time.Time { return atExpiry }}
+	// Previous overlapping proof is expired but 'other' remains active;
+	// this test also ensures the newest live proof does not silently win.
+	if err = renewer.Record(ctx, latest, IndependentProofApproval{
+		MakerID: approval.MakerID, CheckerID: approval.CheckerID,
+		ApprovalReference: "synthetic-control-renewal-approval",
+		ApprovedAt: atExpiry.Add(-time.Minute),
+	}); err != nil { t.Fatal(err) }
+	if _, err = renewer.ReadIndependentControlProof(ctx, proof.RelationshipID); !errors.Is(err, ErrUntrustedCorporateProof) {
+		t.Fatal("two live signed control versions must still be reconciled")
 	}
 }
