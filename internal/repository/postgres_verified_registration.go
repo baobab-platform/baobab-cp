@@ -78,7 +78,7 @@ func (r *PostgresRepository) ResolveVerifiedRegistration(
 		found = verification.VerifiedRegistrationBinding{
 			CaseID: caseID, Subject: subject,
 			RegistrationNumber: strings.TrimSpace(registrationNumber),
-			ClaimID: claimID, ResultID: resultID, SourceID: "esrc_cipc",
+			ClaimID:            claimID, ResultID: resultID, SourceID: "esrc_cipc",
 			FreshnessUntil: validUntil,
 		}
 		count++
