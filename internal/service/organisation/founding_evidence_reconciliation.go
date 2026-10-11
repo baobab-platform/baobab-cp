@@ -229,6 +229,7 @@ func evidenceRefPresent(refs []string,want string)bool {
 // A compiled fingerprint is available for audit output without publishing
 // a raw control document, secret, company director or beneficiary identity.
 func ControlProofFingerprint(proof IndependentControlProof) string {
-	sum:=sha256.Sum256(proof.signingPayload())
+	payload:=append(proof.signingPayload(),proof.Signature...)
+	sum:=sha256.Sum256(payload)
 	return "sha256:"+hex.EncodeToString(sum[:])
 }
