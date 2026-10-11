@@ -116,7 +116,7 @@ func TestPEO03BCIPCFailsClosed(t *testing.T) {
 			adapter := CIPCCompaniesAdapter{Registry: &fakeCIPC{record: record}, Registrations: syntheticRegistration(now),
 				Certified: true, AllowSynthetic: true, AdapterID: "baobab.cipc.synthetic"}
 			if _, err := adapter.LookupCIPC(context.Background(), "vcase_synthetic01",
-				claim, "2020/123456/07", now); !errors.Is(err, ErrUntrustedObservation) {
+				claim, now); !errors.Is(err, ErrUntrustedObservation) {
 				t.Fatalf("accepted invalid source: %v", err)
 			}
 		})
