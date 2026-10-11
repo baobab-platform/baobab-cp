@@ -6,8 +6,8 @@ import (
 	"slices"
 	"time"
 
-	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/capability/certification"
+	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/health"
 	"github.com/baobab-platform/baobab-cp/internal/provisioning/convergence"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
