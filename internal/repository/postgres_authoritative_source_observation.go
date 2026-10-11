@@ -21,6 +21,18 @@ import (
 // verification, retry with untrusted content, or activate onboarding.
 var ErrAuthoritativeSourceConflict = errors.New("authoritative source observation is not admissible")
 
+// sourceObservationTestEnvironment must never admit staging, unknown,
+// misspelled or unset environments. Mirror CP's production-by-default
+// classification; real authority can never originate from synthetic records.
+func sourceObservationTestEnvironment(environment string) bool {
+	switch strings.ToLower(strings.TrimSpace(environment)) {
+	case "development", "test", "integration", "sandbox":
+		return true
+	default:
+		return false
+	}
+}
+
 // RecordAuthoritativeSourceObservation stores only metadata; source response
 // bodies, secrets and applicant tax PINs must be kept out of this ledger.
 //
@@ -38,7 +50,7 @@ func (r *PostgresRepository) RecordAuthoritativeSourceObservation(
 	if !strings.HasPrefix(evidenceID, "evr_") || len(evidenceID) > 63 ||
 		len(key) < 16 || len(key) > 128 ||
 		obs.CaseID != caseID || obs.Outcome != "MATCHED" ||
-		obs.Synthetic && (!allowSynthetic || strings.EqualFold(r.Environment, "production")) {
+		obs.Synthetic && (!allowSynthetic || !sourceObservationTestEnvironment(r.Environment)) {
 		return "", ErrAuthoritativeSourceConflict
 	}
 	digestBody, err := json.Marshal(struct {
