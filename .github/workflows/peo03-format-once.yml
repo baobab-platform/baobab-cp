@@ -1,0 +1,30 @@
+name: PEO temporary Go formatting
+on:
+  push:
+    branches: [feat/peo03f-certified-provider-runtime-vault]
+    paths: [.github/workflows/peo03-format-once.yml]
+permissions:
+  contents: write
+jobs:
+  gofmt:
+    if: github.repository == 'baobab-platform/baobab-cp'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Format Go and push branch changes
+        run: |
+          set -euo pipefail
+          gofmt -w cmd internal
+          git diff --check
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add cmd internal
+            git commit -m "style(peo03f): gofmt certified-source runtime"
+            git push origin HEAD:feat/peo03f-certified-provider-runtime-vault
+          fi
