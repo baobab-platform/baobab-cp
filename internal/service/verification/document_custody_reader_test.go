@@ -21,6 +21,18 @@ type scanProofFixture struct{ proof authority.ScanProof }
 func (s scanProofFixture) FindScanProof(_ context.Context, _, _ string) (authority.ScanProof, error) {
 	return s.proof, nil
 }
+func (s scanProofFixture) WithLockedDocument(ctx context.Context, _, _, _, _ string, run func(context.Context) error) error {
+	return run(ctx) // synthetic fixture only, PostgreSQL integration verifies real row locks.
+}
+func readWithSyntheticLease(r VerifiedScannedArtifactReader,e verification.Evidence,actor repository.AuditActor)(ScannedDocument,error){
+	var doc ScannedDocument
+	err:=r.WithDocumentLease(context.Background(),"vcase_fixture","ecl_fixture",e.EvidenceID,actor,func(ctx context.Context)error{
+		var openErr error
+		doc,openErr=r.OpenScanned(ctx,e,actor)
+		return openErr
+	})
+	return doc,err
+}
 
 func TestPEO03KReaderRequiresIndependentScannerSignatureAndWorkload(t *testing.T) {
 	public, private, err := ed25519.GenerateKey(rand.Reader)
@@ -45,29 +57,32 @@ func TestPEO03KReaderRequiresIndependentScannerSignatureAndWorkload(t *testing.T
 		EvidenceType: "DOCUMENT", Status: verification.EvidenceAvail}
 	actor := repository.AuditActor{ActorID: "prn_worker", ActorType: "workload",
 		ClientID: "baobab-document-extractor-staging"}
-	d, err := reader.OpenScanned(context.Background(), e, actor)
+	if _, err := readWithSyntheticLease(reader, e, actor); err == nil {
+		t.Fatal("direct read outside canonical lease disclosed scanned document")
+	}
+	d, err := readWithSyntheticLease(reader, e, actor)
 	if err != nil || !bytes.Equal(d.Bytes, data) || d.ScanOutcome != "CLEAN" || d.ScanAttestation == "" {
 		t.Fatalf("signed proof rejected: %v", err)
 	}
 	actor.ClientID = "baobab-cipc-verifier-staging"
-	if _, err := reader.OpenScanned(context.Background(), e, actor); !errors.Is(err, ErrScannedArtifactUnavailable) {
+	if _, err := readWithSyntheticLease(reader, e, actor); !errors.Is(err, ErrScannedArtifactUnavailable) {
 		t.Fatalf("wrong workload read: %v", err)
 	}
 	actor.ClientID = "baobab-document-extractor-staging"
 	rogue := reader
 	rogue.ScannerKeys = map[string]ed25519.PublicKey{}
-	if _, err := rogue.OpenScanned(context.Background(), e, actor); err == nil {
+	if _, err := readWithSyntheticLease(rogue, e, actor); err == nil {
 		t.Fatal("scanner without trusted public key accepted")
 	}
 	rogue = reader
 	tampered := proof
 	tampered.Digest = "sha256:" + hex.EncodeToString(bytes.Repeat([]byte{0x00}, 32))
 	rogue.Proofs = scanProofFixture{tampered}
-	if _, err := rogue.OpenScanned(context.Background(), e, actor); err == nil {
+	if _, err := readWithSyntheticLease(rogue, e, actor); err == nil {
 		t.Fatal("unsigned digest modification accepted")
 	}
 	e.Status = "RESTRICTED"
-	if _, err := reader.OpenScanned(context.Background(), e, actor); err == nil {
+	if _, err := readWithSyntheticLease(reader, e, actor); err == nil {
 		t.Fatal("restricted evidence readable")
 	}
 }
