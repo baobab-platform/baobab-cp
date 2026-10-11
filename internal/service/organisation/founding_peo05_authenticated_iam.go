@@ -124,7 +124,13 @@ func (c PEO05OAuthIntrospection) CurrentToken(ctx context.Context, raw string, p
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	req.SetBasicAuth(c.ClientID, c.ClientSecret)
-	response, err := c.HTTPClient.Do(req)
+	// Do not follow any redirect: Go can forward a Basic credential and POST
+	// token body across 307/308 redirects, including an HTTPS->HTTP downgrade.
+	client := *c.HTTPClient
+	client.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	response, err := client.Do(req)
 	if err != nil {
 		return empty, ErrPEO05Integrity
 	}
