@@ -14,6 +14,10 @@ import (
 // test is repeatable and never touches real first-party records.
 func TestFirstPartyReconciliation(t *testing.T) {
 	e := newEnv(t)
+	// Deliberate compatibility fixture: the legacy unannotated registry
+	// auto-verified legal entities under ADR-BCP-018. ADR-BCP-026/027
+	// prohibit this path in staging/production; run only in integration.
+	e.repo.Environment = "integration"
 	run := strings.ToUpper(token())[:10]
 	id := func(c string) string { return "FP-" + c + "-" + run }
 	seeded, claimed, tenantOnly, rejected, conflicted := id("SEED"), id("CLAIM"), id("TENANT"), id("REJECT"), id("CONFLICT")
