@@ -5,11 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -176,5 +174,3 @@ func (c PEO05OAuthIntrospection) CurrentToken(ctx context.Context, raw string, p
 
 // Keep the exact parse error decision opaque at the tenant boundary; do not
 // disclose raw token values or private OAuth client details in errors/logs.
-var _ = errors.Is
-var _ = strconv.Itoa
