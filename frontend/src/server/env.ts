@@ -50,3 +50,8 @@ export function serverEnv(): ServerEnv {
   cached ??= parseServerEnv(process.env);
   return cached;
 }
+
+/** Strictly server-side auth input; never imported into a client component. */
+export function authConfigSource(): Record<string, string | undefined> {
+  return process.env;
+}
