@@ -2,7 +2,8 @@ name: PEO-04A temporary gofmt
 on:
   push:
     branches: [feat/peo04a-independent-founding-corporate-proof]
-    paths: [.github/workflows/peo04a-format-once.yml]
+  pull_request:
+    branches: [main]
 permissions:
   contents: write
 jobs:
@@ -19,17 +20,18 @@ jobs:
           go-version-file: go.mod
       - run: |
           set -euo pipefail
+          gofmt -w cmd/reconcile-founding-evidence/*.go
           gofmt -w internal/service/organisation/founding_evidence_reconciliation*.go
           gofmt -w internal/service/organisation/founding_control_store*.go
           gofmt -w internal/service/verification/official_capture*.go
-          gofmt -w internal/repository/postgres_organisation_governance.go
+          gofmt -w internal/repository/postgres_organisation_governance*.go
           gofmt -w internal/service/organisation/firstparty_reconciler_test.go
           gofmt -w cmd/controlplane/main.go
           git diff --check
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add internal/service/organisation internal/service/verification/official_capture*.go
+            git add cmd/reconcile-founding-evidence/*.go internal/service/organisation internal/service/verification/official_capture*.go
             git add internal/repository/postgres_organisation_governance.go cmd/controlplane/main.go
             git commit -m "style(peo04a): gofmt independent founding corporate verification"
             git pull --rebase origin feat/peo04a-independent-founding-corporate-proof
