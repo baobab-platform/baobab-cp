@@ -128,10 +128,10 @@ func (r *PostgresRepository) RecordAuthoritativeSourceObservation(
 		 source_observed_at,freshness_until,recorded_at,recorded_by,adapter_id,
 		 witness_principal,checker_principal,is_synthetic,idempotency_key,request_digest)
 		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
-		id,caseID,obs.ClaimID,evidenceID,obs.SourceID,obs.Method,obs.Outcome,
-		obs.SourceReference,obs.ProvenanceRef,obs.ResponseDigest,
-		obs.ObservedAt,obs.FreshnessUntil,now,actor.ActorID,adapterID,
-		witness,checker,obs.Synthetic,key,digest)
+		id, caseID, obs.ClaimID, evidenceID, obs.SourceID, obs.Method, obs.Outcome,
+		obs.SourceReference, obs.ProvenanceRef, obs.ResponseDigest,
+		obs.ObservedAt, obs.FreshnessUntil, now, actor.ActorID, adapterID,
+		witness, checker, obs.Synthetic, key, digest)
 	if err != nil {
 		return "", fmt.Errorf("persist authoritative observation: %w", err)
 	}
