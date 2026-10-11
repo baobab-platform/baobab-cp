@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -278,8 +277,6 @@ func (d DocumentLedger) RecordDocumentCandidates(ctx context.Context, a authorit
 	return a, nil
 }
 
-// compile-time assert equivalent signatures without linking the service.
-var _ = json.Valid
 
 // WithLockedDocument serialises document plaintext delivery with a concurrent
 // case/claim/evidence restriction. The callback performs vault read and OCR,
