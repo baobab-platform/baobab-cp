@@ -64,9 +64,9 @@ func (v SealedVault) Seal(ctx context.Context, evidenceID string, plaintext []by
 	if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
 		return "", fmt.Errorf("%w: untrusted custody directory", ErrCustody)
 	}
-	if err := os.Chmod(v.Directory, 0700); err != nil {
-		return "", fmt.Errorf("%w: custody permissions unavailable", ErrCustody)
-	}
+	// Never chmod a caller-configured pre-existing directory: it could be
+	// a shared mount or contain unrelated application data. Operators must
+	// provision a dedicated private 0700 leaf before source capture.
 	dir, err := os.Open(v.Directory)
 	if err != nil {
 		return "", ErrCustody
