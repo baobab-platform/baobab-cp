@@ -1,0 +1,68 @@
+name: PEO-05 Protected Staging Acceptance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: peo05-protected-staging
+  cancel-in-progress: false
+jobs:
+  protected-qualification:
+    runs-on: ubuntu-24.04
+    environment: staging
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: ${{ secrets.PEO05_DATABASE_URL }}
+      PEO05_OPERATOR_B64: ${{ secrets.PEO05_OPERATOR_JSON_B64 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Resolve immutable Shared contract pin
+        id: pin
+        shell: bash
+        run: echo "commit=$(grep -m1 'commit:' contracts.lock.yaml | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: baobab-platform/shared
+          token: ${{ secrets.SHARED_READ_TOKEN || github.token }}
+          persist-credentials: false
+          ref: ${{ steps.pin.outputs.commit }}
+          path: .shared-contracts
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Enforce non-synthetic protected source configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo "::error::No protected staging PostgreSQL source configured"; exit 1; }
+          test -n "$PEO05_OPERATOR_B64" || { echo "::error::No protected four-tenant operator credentials configured"; exit 1; }
+          test -f .shared-contracts/contracts/legal-entity/registry.yaml ||
+            { echo "::error::Pinned Shared first-party registry unavailable"; exit 1; }
+      - name: Execute live evidence checks without tenant mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$PEO05_OPERATOR_B64" | base64 --decode > "$RUNNER_TEMP/peo05-operator.json"
+          chmod 600 "$RUNNER_TEMP/peo05-operator.json"
+          trap 'rm -f "$RUNNER_TEMP/peo05-operator.json"' EXIT
+          set +e
+          go run ./cmd/qualify-founding-package5 \
+            --registry "$GITHUB_WORKSPACE/.shared-contracts/contracts/legal-entity/registry.yaml" \
+            --operator-config "$RUNNER_TEMP/peo05-operator.json" > peo05-report.json
+          status=$?
+          set -e
+          if test -s peo05-report.json; then
+            sha256sum peo05-report.json > peo05-report.sha256
+          fi
+          exit "$status"
+      - name: Upload non-authorising evidence for independent sign-off
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: peo05-protected-staging-evidence
+          path: |
+            peo05-report.json
+            peo05-report.sha256
+          retention-days: 30
+          if-no-files-found: warn

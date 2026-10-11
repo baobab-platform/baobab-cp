@@ -138,6 +138,7 @@ func (g PEO05Gate) Assess(ctx context.Context, reg FirstPartyRegistry,
 		ProductionEligible: false, Entries: make([]PEO05Entry, 0, len(founding.Entries))}
 	seen := map[string]bool{}
 	seenTenants := map[string]bool{}
+	seenPrincipals := map[string]bool{}
 	for _, entry := range founding.Entries {
 		if seen[entry.FirstPartyID] || entry.FirstPartyID == "" {
 			return empty, ErrPEO05Integrity
@@ -146,6 +147,14 @@ func (g PEO05Gate) Assess(ctx context.Context, reg FirstPartyRegistry,
 		row := PEO05Entry{FirstPartyID: entry.FirstPartyID,
 			OrganisationID: entry.OrganisationID, TenantID: entry.TenantID,
 			Status: PEO05Blocked, Missing: append([]string{}, entry.Missing...)}
+		// Group-level acceptance is distinct from the valid independent
+		// Tenant identities. A source-verified incorporation is not proof of
+		// corporate control, so an unverified Nabhold->Thamani relationship
+		// blocks a green *founding-group* Package 5 report.
+		if !founding.IndependentControlVerified &&
+			(entry.FirstPartyID == "NABHOLD" || entry.FirstPartyID == "THAMANI-GLOBAL") {
+			row.Missing = addPEO05Missing(row.Missing, "INDEPENDENT_CORPORATE_CONTROL_PROOF")
+		}
 		if entry.Readiness != "IDENTITY_TENANT_ACCEPTED_NOT_PRODUCTION" {
 			row.Missing = addPEO05Missing(row.Missing, "PEO04_CURRENT_IDENTITY_TENANT_EVIDENCE")
 		} else if entry.OrganisationID == "" || entry.TenantID == "" || seenTenants[entry.TenantID] {
@@ -157,6 +166,16 @@ func (g PEO05Gate) Assess(ctx context.Context, reg FirstPartyRegistry,
 				row.Missing = addPEO05Missing(row.Missing, "UPSTREAM_AUTHORITY_UNAVAILABLE")
 			} else {
 				row.Missing = append(row.Missing, assessPEO05Tenant(snapshot, entry, at)...)
+				// PEO-05D requires distinct *canonical people*, not merely
+				// four JWTs that the same group administrator can rotate.
+				// A shared principal across any founding tenant denies the
+				// entire acceptance report, independent of token issuer.
+				if len(row.Missing) == 0 && snapshot.IAM.PrincipalID != "" {
+					if seenPrincipals[snapshot.IAM.PrincipalID] {
+						return empty, ErrPEO05Integrity
+					}
+					seenPrincipals[snapshot.IAM.PrincipalID] = true
+				}
 			}
 		}
 		if len(row.Missing) == 0 {
