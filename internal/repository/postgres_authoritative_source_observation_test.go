@@ -157,6 +157,40 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 	if resultCount != 0 {
 		t.Fatal("observation must not auto-create an OEV-03 VERIFIED decision")
 	}
+	// PEO-03D: no reviewer can forge a positive official CIPC lookup.
+	// Check creation must consume an immutable source observation and bind
+	// precisely its case, claim, official reference, expiry and EvidenceRecord.
+	sourceCandidate := verification.CheckRecord{
+		ClaimID: claimID, SourceID: "esrc_cipc",
+		Method: "SOURCE_API_LOOKUP", Outcome: "MATCHED",
+		SourceRecordReference: "unobserved/foreign-company",
+		Dimensions: []verification.Dimension{
+			{Dimension: "CLAIM_MATCH", Outcome: "PASSED"},
+			{Dimension: "ISSUER_AUTHORITY", Outcome: "PASSED"},
+		},
+		ReasonCodes: []string{}, EvidenceIDs: []string{},
+	}
+	if _, err := repo.RecordVerificationCheck(ctx, caseID, sourceCandidate,
+		domain.NewResourceID("vchk"), actor.ActorID, now, actor);
+		!errors.Is(err, ErrAuthoritativeSourceConflict) {
+		t.Fatalf("unobserved CIPC record created an authoritative check: %v", err)
+	}
+	sourceCandidate.SourceRecordReference = obsRef
+	sourceCheck, err := repo.RecordVerificationCheck(ctx, caseID, sourceCandidate,
+		domain.NewResourceID("vchk"), actor.ActorID, now, actor)
+	if err != nil {
+		t.Fatalf("verified source check not linked to immutable evidence: %v", err)
+	}
+	if len(sourceCheck.EvidenceIDs) != 1 || sourceCheck.EvidenceIDs[0] != evidenceID ||
+		sourceCheck.SourceObservedAt == nil ||
+		!sourceCheck.SourceObservedAt.Equal(obs.ObservedAt) ||
+		sourceCheck.FreshnessUntil == nil ||
+		!sourceCheck.FreshnessUntil.Equal(obs.FreshnessUntil) {
+		t.Fatalf("CIPC check did not inherit exact source evidence: %+v", sourceCheck)
+	}
+	if resultCount != 0 {
+		t.Fatal("source-backed check must not create an OEV-03 decision")
+	}
 	// Prove that a subsequent legal-name lookup can only use a separate,
 	// source-backed VERIFIED registration identifier for this exact case and
 	// Organisation. An applicant claim or arbitrary registry number is not

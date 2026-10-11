@@ -542,6 +542,15 @@ func (r *PostgresRepository) RecordVerificationCheck(ctx context.Context, caseID
 	if verification.Terminal(verification.MachineClaim, claim.Status) {
 		return verification.Check{}, fmt.Errorf("%w: claim %s is %s", ErrVerificationState, claim.ClaimID, claim.Status)
 	}
+	// PEO-03D: a positive CIPC claim is never established solely by a
+	// reviewer naming an official source; bind it to immutable observed proof.
+	// This also supplies the canonical proof evidence and its expiry before
+	// the existing OEV-03 ValidateCheck decision rules are invoked.
+	var sourceObservationID string
+	rec, sourceObservationID, err = r.boundCIPCCheck(ctx, tx, caseID, rec, now)
+	if err != nil {
+		return verification.Check{}, err
+	}
 	evidence, err := evidenceByID(ctx, tx, rec.EvidenceIDs)
 	if err != nil {
 		return verification.Check{}, err
@@ -566,7 +575,7 @@ func (r *PostgresRepository) RecordVerificationCheck(ctx context.Context, caseID
 		return chk, selfVerificationOr(err, "record check")
 	}
 	if err := insertProvisioningAudit(ctx, tx, actor, "", "verification_check.recorded", "verification-case/"+caseID, map[string]any{
-		"case_id": caseID, "check_id": chk.CheckID, "claim_id": chk.ClaimID, "source_id": chk.SourceID, "outcome": chk.Outcome}); err != nil {
+		"case_id": caseID, "check_id": chk.CheckID, "claim_id": chk.ClaimID, "source_id": chk.SourceID, "outcome": chk.Outcome, "source_observation_id": sourceObservationID}); err != nil {
 		return chk, err
 	}
 	return chk, tx.Commit(ctx)
