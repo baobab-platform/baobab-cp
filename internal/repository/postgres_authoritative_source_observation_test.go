@@ -16,6 +16,19 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/verification"
 )
 
+func TestPEO03CSyntheticSourceOnlyInExplicitNonproduction(t *testing.T) {
+	for _, env := range []string{"", "staging", "production", "unknown", "prod", "local"} {
+		if sourceObservationTestEnvironment(env) {
+			t.Fatalf("synthetic evidence admitted in production-class environment %q", env)
+		}
+	}
+	for _, env := range []string{"development", "test", "integration", "sandbox"} {
+		if !sourceObservationTestEnvironment(env) {
+			t.Fatalf("synthetic test fixture denied in explicit test environment %q", env)
+		}
+	}
+}
+
 // PEO-03C intentionally operates on synthetic cases in an ephemeral PG17
 // integration environment. Append-only provenance is NOT deleted afterwards.
 // Set TEST_DATABASE_URL only for a disposable, isolated test database.
@@ -37,6 +50,7 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	repo.Environment = "integration"
 	defer repo.Close()
 	seed, err := pgxpool.New(ctx, url)
 	if err != nil {
