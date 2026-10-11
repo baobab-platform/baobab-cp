@@ -200,12 +200,14 @@ func (s *Store) ProposeDocumentaryReview(ctx context.Context, key string, meta b
 		// particular, STATUTORY/PROVIDER requirements cannot be relabelled.
 		var governed bool
 		err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1
-		  FROM admission.founding_documentary_policy_requirement
-		  WHERE policy_reference=$1 AND requirement_id=$2
-		    AND requirement_authority='PLATFORM_DOCUMENTARY'
-		    AND length(btrim(authority_basis_reference))>0
-		    AND approved_by<>$3::uuid AND approved_at<=$4
-		    AND effective_from<=$5 AND effective_to>$5)`,
+		  FROM admission.founding_documentary_policy_requirement p
+		  JOIN identity.principal approver ON approver.principal_id=p.approved_by
+		  WHERE p.policy_reference=$1 AND p.requirement_id=$2
+		    AND p.requirement_authority='PLATFORM_DOCUMENTARY'
+		    AND approver.actor_type='human'
+		    AND length(btrim(p.authority_basis_reference))>0
+		    AND p.approved_by<>$3::uuid AND p.approved_at<=$4
+		    AND p.effective_from<=$5 AND p.effective_to>$5)`,
 			policy, v.RequirementID, actor, input.ReviewedAt, now).Scan(&governed)
 		if err != nil {
 			return empty, err
