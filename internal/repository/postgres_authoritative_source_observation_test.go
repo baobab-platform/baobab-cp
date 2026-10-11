@@ -171,8 +171,7 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 		ReasonCodes: []string{}, EvidenceIDs: []string{},
 	}
 	if _, err := repo.RecordVerificationCheck(ctx, caseID, sourceCandidate,
-		domain.NewResourceID("vchk"), actor.ActorID, now, actor);
-		!errors.Is(err, ErrAuthoritativeSourceConflict) {
+		domain.NewResourceID("vchk"), actor.ActorID, now, actor); !errors.Is(err, ErrAuthoritativeSourceConflict) {
 		t.Fatalf("unobserved CIPC record created an authoritative check: %v", err)
 	}
 	sourceCandidate.SourceRecordReference = obsRef
