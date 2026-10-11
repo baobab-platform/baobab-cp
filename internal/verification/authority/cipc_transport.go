@@ -83,19 +83,23 @@ func ValidateCertification(spec Specification, cert Certification, now time.Time
 		spec.HTTPMethod != http.MethodGet || spec.Version == "" ||
 		spec.IDField == "" || spec.NameField == "" || spec.StatusField == "" ||
 		spec.ReferenceField == "" || !strings.HasPrefix(spec.SubscriptionField, "X-") ||
-		strings.ContainsAny(spec.SubscriptionField, " \\r\\n:") ||
-		strings.TrimSpace(cert.ProposedBy) == "" || strings.TrimSpace(cert.ApprovedBy) == "" ||
+		strings.ContainsAny(spec.SubscriptionField, " \\r\\n:") {
+		return fmt.Errorf("%w: incomplete issuer specification", ErrUncertified)
+	}
+	if strings.TrimSpace(cert.ProposedBy) == "" || strings.TrimSpace(cert.ApprovedBy) == "" ||
 		cert.ProposedBy == cert.ApprovedBy || cert.ApprovalRecord == "" ||
-		cert.ApprovedAt.After(now) || !cert.ExpiresAt.After(now) ||
-		!validURL(spec.OAuthTokenURL, spec.OfficialOrigin, allowLoopback) ||
+		cert.ApprovedAt.After(now) || !cert.ExpiresAt.After(now) {
+		return fmt.Errorf("%w: independent approval unavailable or expired", ErrUncertified)
+	}
+	if !validURL(spec.OAuthTokenURL, spec.OfficialOrigin, allowLoopback) ||
 		!validURL(spec.CompanyLookupURL, spec.OfficialOrigin, allowLoopback) {
-		return ErrUncertified
+		return fmt.Errorf("%w: URL outside approved TLS issuer", ErrUncertified)
 	}
 	if subtle.ConstantTimeCompare([]byte(cert.SpecDigest), []byte(Digest(spec))) != 1 {
-		return ErrUncertified
+		return fmt.Errorf("%w: specification signature digest mismatch", ErrUncertified)
 	}
 	if !strings.Contains(spec.CompanyLookupURL, "{registration_number}") {
-		return ErrUncertified
+		return fmt.Errorf("%w: company record selector missing", ErrUncertified)
 	}
 	return nil
 }
