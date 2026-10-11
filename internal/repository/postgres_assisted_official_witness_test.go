@@ -97,6 +97,23 @@ func TestPEO03GPG17IndependentSARSWitnessDoesNotVerifyTaxCompliance(t *testing.T
 		"OFFICIAL_PORTAL_REVIEWED", now, witness); !errors.Is(err, ErrAssistedWitnessDenied) {
 		t.Fatalf("original reviewer approved own SARS witness: %v", err)
 	}
+	// A human witness does not remain attestable after its source artifact
+	// has become inaccessible. A distinct checker must re-read the current
+	// OEV-03 evidence state rather than trusting the original proposal.
+	if _, err = db.Exec(ctx, `UPDATE evidence.record SET status='RESTRICTED',
+		document=jsonb_set(document, '{status}', '"RESTRICTED"'::jsonb)
+		WHERE evidence_id=$1`, evidenceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = repo.DecideAssistedWitness(ctx, f.IntentID, "synthetic-stale-proof-check", "ATTESTED",
+		"OFFICIAL_PORTAL_REVIEWED", now, checker); !errors.Is(err, ErrAssistedWitnessDenied) {
+		t.Fatalf("stale/restricted SARS proof attested: %v", err)
+	}
+	if _, err = db.Exec(ctx, `UPDATE evidence.record SET status='AVAILABLE',
+		document=jsonb_set(document, '{status}', '"AVAILABLE"'::jsonb)
+		WHERE evidence_id=$1`, evidenceID); err != nil {
+		t.Fatal(err)
+	}
 	decision, err := repo.DecideAssistedWitness(ctx, f.IntentID, "synthetic-independent-approve", "ATTESTED",
 		"OFFICIAL_PORTAL_REVIEWED", now, checker)
 	if err != nil || decision.Status != "ATTESTED" {
