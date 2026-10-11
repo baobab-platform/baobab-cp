@@ -122,6 +122,22 @@ func TestPEO03JOnlyScannedGovernedDocumentReachesOCR(t *testing.T) {
 		"synthetic-idempotency-key-0001", actor); !errors.Is(err, ErrDocumentExtractionDenied) {
 		t.Fatalf("idempotency binding stolen: %v", err)
 	}
+	// Previously retrieved candidates must become inaccessible when the
+	// evidence is later restricted or the case is no longer under review.
+	repo.e.Status = "RESTRICTED"
+	if _, err := w.Extract(context.Background(), repo.c.CaseID, repo.claim.ClaimID, repo.e.EvidenceID,
+		"synthetic-idempotency-key-0001", actor); !errors.Is(err, ErrDocumentExtractionDenied) {
+		t.Fatalf("restricted evidence replay disclosed candidate values: %v", err)
+	}
+	repo.e.Status = verification.EvidenceAvail
+	repo.c.Status = "VERIFIED"
+	if _, err := w.Extract(context.Background(), repo.c.CaseID, repo.claim.ClaimID, repo.e.EvidenceID,
+		"synthetic-idempotency-key-0001", actor); !errors.Is(err, ErrDocumentExtractionDenied) {
+		t.Fatalf("completed case replay disclosed candidate values: %v", err)
+	}
+	if repo.writes != 1 || custody.reads != 1 || processor.count != 1 {
+		t.Fatal("replay denial performed external OCR or rewrote immutable ledger")
+	}
 }
 
 func TestPEO03JDenyUnboundEvidenceAndUnscannedDocuments(t *testing.T) {
