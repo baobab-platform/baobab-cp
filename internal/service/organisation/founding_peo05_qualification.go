@@ -126,7 +126,7 @@ func (g PEO05Gate) Assess(ctx context.Context, reg FirstPartyRegistry,
 		return empty, ErrPEO05Integrity
 	}
 	report := PEO05Report{RegistryDigest: reg.Digest, AssessedAt: at,
-		EvidenceClass:      "READ_ONLY_NON_AUTHORISING", AllStagingCandidates: true,
+		EvidenceClass: "READ_ONLY_NON_AUTHORISING", AllStagingCandidates: true,
 		ProductionEligible: false, Entries: make([]PEO05Entry, 0, len(founding.Entries))}
 	seen := map[string]bool{}
 	seenTenants := map[string]bool{}
@@ -137,7 +137,7 @@ func (g PEO05Gate) Assess(ctx context.Context, reg FirstPartyRegistry,
 		seen[entry.FirstPartyID] = true
 		row := PEO05Entry{FirstPartyID: entry.FirstPartyID,
 			OrganisationID: entry.OrganisationID, TenantID: entry.TenantID,
-			Status:         PEO05Blocked, Missing: append([]string{}, entry.Missing...)}
+			Status: PEO05Blocked, Missing: append([]string{}, entry.Missing...)}
 		if entry.Readiness != "IDENTITY_TENANT_ACCEPTED_NOT_PRODUCTION" {
 			row.Missing = addPEO05Missing(row.Missing, "PEO04_CURRENT_IDENTITY_TENANT_EVIDENCE")
 		} else if entry.OrganisationID == "" || entry.TenantID == "" || seenTenants[entry.TenantID] {
