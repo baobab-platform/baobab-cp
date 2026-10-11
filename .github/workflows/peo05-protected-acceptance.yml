@@ -46,12 +46,18 @@ jobs:
           printf '%s' "$PEO05_OPERATOR_B64" | base64 --decode > "$RUNNER_TEMP/peo05-operator.json"
           chmod 600 "$RUNNER_TEMP/peo05-operator.json"
           trap 'rm -f "$RUNNER_TEMP/peo05-operator.json"' EXIT
+          set +e
           go run ./cmd/qualify-founding-package5 \
             --registry "$GITHUB_WORKSPACE/.shared-contracts/contracts/legal-entity/registry.yaml" \
             --operator-config "$RUNNER_TEMP/peo05-operator.json" > peo05-report.json
-          sha256sum peo05-report.json > peo05-report.sha256
+          status=$?
+          set -e
+          if test -s peo05-report.json; then
+            sha256sum peo05-report.json > peo05-report.sha256
+          fi
+          exit "$status"
       - name: Upload non-authorising evidence for independent sign-off
-        if: success()
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: peo05-protected-staging-evidence
@@ -59,4 +65,4 @@ jobs:
             peo05-report.json
             peo05-report.sha256
           retention-days: 30
-          if-no-files-found: error
+          if-no-files-found: warn
