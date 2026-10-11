@@ -19,7 +19,7 @@ func TestPEO03KSignedScanProofAndSealedArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	data := []byte("%PDF-1.7\nsynthetic scan fixture; not a real incorporation certificate")
 	sum := sha256.Sum256(data)
 	p := ScanProof{EvidenceID: "evr_123456789", ArtifactID: "eart_123456789", MediaType: "application/pdf",
