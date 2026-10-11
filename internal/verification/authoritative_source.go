@@ -65,10 +65,10 @@ type CompanyRegistry interface {
 // CIPCCompaniesAdapter contains no bearer tokens or URLs. The transport is
 // injected by the approved source adapter at composition root.
 type CIPCCompaniesAdapter struct {
-	Registry        CompanyRegistry
-	Certified       bool
-	AllowSynthetic  bool
-	AdapterID       string
+	Registry       CompanyRegistry
+	Certified      bool
+	AllowSynthetic bool
+	AdapterID      string
 }
 
 // LookupCIPC creates a non-authorising observation for a pre-existing claim.
