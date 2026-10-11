@@ -82,7 +82,8 @@ func ValidateCertification(spec Specification, cert Certification, now time.Time
 	if spec.SourceID != "esrc_cipc" || cert.SourceID != spec.SourceID ||
 		spec.HTTPMethod != http.MethodGet || spec.Version == "" ||
 		spec.IDField == "" || spec.NameField == "" || spec.StatusField == "" ||
-		spec.ReferenceField == "" || !strings.HasPrefix(spec.SubscriptionField, "X-") ||\n\t\tstrings.ContainsAny(spec.SubscriptionField, " \\r\\n:") ||
+		spec.ReferenceField == "" || !strings.HasPrefix(spec.SubscriptionField, "X-") ||
+		strings.ContainsAny(spec.SubscriptionField, " \\r\\n:") ||
 		strings.TrimSpace(cert.ProposedBy) == "" || strings.TrimSpace(cert.ApprovedBy) == "" ||
 		cert.ProposedBy == cert.ApprovedBy || cert.ApprovalRecord == "" ||
 		cert.ApprovedAt.After(now) || !cert.ExpiresAt.After(now) ||
