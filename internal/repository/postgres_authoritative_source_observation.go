@@ -38,7 +38,7 @@ func (r *PostgresRepository) RecordAuthoritativeSourceObservation(
 	if !strings.HasPrefix(evidenceID, "evr_") || len(evidenceID) > 63 ||
 		len(key) < 16 || len(key) > 128 ||
 		obs.CaseID != caseID || obs.Outcome != "MATCHED" ||
-		obs.Synthetic && (!allowSynthetic || r.Environment == "production") {
+		obs.Synthetic && (!allowSynthetic || strings.EqualFold(r.Environment, "production")) {
 		return "", ErrAuthoritativeSourceConflict
 	}
 	digestBody, err := json.Marshal(struct {
@@ -84,6 +84,9 @@ func (r *PostgresRepository) RecordAuthoritativeSourceObservation(
 	if err != nil {
 		return "", err
 	}
+	if claim.Status != verification.ClaimUnderCheck {
+		return "", ErrAuthoritativeSourceConflict
+	}
 	if err = verification.ValidateAuthoritativeObservation(claim, caseID, obs, now, allowSynthetic); err != nil {
 		return "", ErrAuthoritativeSourceConflict
 	}
@@ -93,6 +96,7 @@ func (r *PostgresRepository) RecordAuthoritativeSourceObservation(
 	}
 	ev, exists := proofs[evidenceID]
 	if !exists || ev.Status != verification.EvidenceAvail ||
+		ev.ExpiresAt != nil && !ev.ExpiresAt.After(now) ||
 		ev.SourceID != obs.SourceID || ev.Subject != claim.Subject ||
 		ev.Purpose != claim.Purpose || ev.SourceRecordReference != obs.SourceReference {
 		return "", ErrAuthoritativeSourceConflict
