@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -340,6 +341,118 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 			EvidenceReference: "synthetic/peo02s/second-adjudication"})
 	if err != nil || secondAdjudication.Status != "DECIDED" {
 		t.Fatalf("fresh-key independent appeal adjudication failed: %+v %v", secondAdjudication, err)
+	}
+	// PEO-02U: the existing negative hold cannot be released by appeal,
+	// a self-declared document reference or an absent verification result.
+	// Synthetically seed a normal OEV-03 verified source chain to exercise
+	// the full maker/checker release, expiry and re-blocking projection.
+	var restrictionID string
+	if err = db.pool.QueryRow(ctx, `SELECT restriction_id::text FROM
+	 admission.documentary_remediation_restriction
+	 WHERE organisation_id=$1::uuid AND capability_key='trade.checkout'`, operating).Scan(&restrictionID); err != nil {
+		t.Fatal(err)
+	}
+	release := DocumentaryReleaseProposal{
+		VerificationResultID: "vres_" + strings.ReplaceAll(domain.NewUUIDv7(), "-", ""),
+		EvidenceReference:    "synthetic/cipc-lookup-provenance",
+		Reason:               "Synthetic test release requires an independently verified source",
+	}
+	if _, err = db.ProposeDocumentaryRelease(ctx, key("no-evidence"), meta(4),
+		actors[4], restrictionID, release); !errors.Is(err, ErrDocumentaryReviewDenied) {
+		t.Fatalf("invented evidence result released a hold: %v", err)
+	}
+	caseID := "vcase_" + strings.ReplaceAll(domain.NewUUIDv7(), "-", "")
+	claimID := "ecl_" + strings.ReplaceAll(domain.NewUUIDv7(), "-", "")
+	checkID := "vchk_" + strings.ReplaceAll(domain.NewUUIDv7(), "-", "")
+	resultID := release.VerificationResultID
+	verifiedUntil := time.Now().UTC().Add(time.Hour)
+	claimDoc := fmt.Sprintf(`{"claim_type":"LEGAL_NAME","jurisdiction":"ZA",
+	  "purpose":"COMPLIANCE_REMEDIATION"}`)
+	caseDoc := `{"purpose":"COMPLIANCE_REMEDIATION"}`
+	resultDoc, _ := json.Marshal(map[string]any{
+		"outcome": "VERIFIED", "check_ids": []string{checkID},
+		"freshness_until": verifiedUntil,
+	})
+	_, err = db.pool.Exec(ctx, `INSERT INTO evidence.verification_case
+	 (case_id,subject_type,subject_id,status,opened_by,opened_at,completed_at,document)
+	 VALUES($1,'ORGANISATION',$2,'VERIFIED',$3,clock_timestamp(),
+	     clock_timestamp(),$4::jsonb)`,
+		caseID, operating, actors[0], caseDoc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.pool.Exec(ctx, `INSERT INTO evidence.claim
+	 (claim_id,case_id,asserted_by,status,document,created_at)
+	 VALUES($1,$2,$3,'UNDER_VERIFICATION',$4::jsonb,clock_timestamp())`,
+		claimID, caseID, actors[9], claimDoc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.pool.Exec(ctx, `INSERT INTO evidence.check
+	 (check_id,case_id,claim_id,source_id,outcome,performed_by,performed_at,document)
+	 VALUES($1,$2,$3,'esrc_cipc','VERIFIED',$4,clock_timestamp(),'{}'::jsonb)`,
+		checkID, caseID, claimID, actors[10])
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.pool.Exec(ctx, `INSERT INTO evidence.result
+	 (result_id,case_id,claim_id,outcome,decided_by,decided_at,document)
+	 VALUES($1,$2,$3,'VERIFIED',$4,clock_timestamp(),$5::jsonb)`,
+		resultID, caseID, claimID, actors[1], resultDoc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.pool.Exec(ctx, `UPDATE evidence.claim
+	 SET status='VERIFIED',current_result_id=$2 WHERE claim_id=$1`, claimID, resultID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Even a synthetically VERIFIED ledger result is not enough without
+	// a separately governed, requirement-specific trusted source binding.
+	if _, err = db.ProposeDocumentaryRelease(ctx, key("no-binding"), meta(4),
+		actors[4], restrictionID, release); !errors.Is(err, ErrDocumentaryReviewDenied) {
+		t.Fatalf("verification without source/requirement policy released a hold: %v", err)
+	}
+	_, err = db.pool.Exec(ctx, `INSERT INTO admission.documentary_release_source_policy
+	 (policy_reference,requirement_id,claim_type,source_id,market_code,
+	  authority_basis_reference,approved_by,approved_at,effective_from,effective_to)
+	 VALUES('policy/peo02/approved-synthetic-only','platform.founding.trading-name-proof',
+	   'LEGAL_NAME','esrc_cipc','ZA','synthetic/reviewed-source-policy',
+	   $1::uuid,$2,$3,$4)`,
+		actors[3], now.Add(-time.Hour), now.Add(-time.Hour), now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	made, err := db.ProposeDocumentaryRelease(ctx, key("release"), meta(4),
+		actors[4], restrictionID, release)
+	if err != nil || made.Status != "PENDING" {
+		t.Fatalf("release maker denied: %+v %v", made, err)
+	}
+	if _, err = db.DecideDocumentaryRelease(ctx, key("self-release"), meta(4),
+		actors[4], made.ID, DocumentaryReleaseDecision{Outcome: "APPROVE",
+			Reason: "Synthetic self-approval must not release any restriction"}); !errors.Is(err, ErrDocumentaryReviewDenied) {
+		t.Fatalf("same actor approved release: %v", err)
+	}
+	checked, err := db.DecideDocumentaryRelease(ctx, key("checker"), meta(5),
+		actors[5], made.ID, DocumentaryReleaseDecision{Outcome: "APPROVE",
+			Reason: "Synthetic source-verified remediation now independently approved"})
+	if err != nil || checked.Status != "APPROVE" {
+		t.Fatalf("independent release rejected: %+v %v", checked, err)
+	}
+	cleared, err := db.DocumentaryScopeBlocked(ctx, operating, "trade.checkout", "ZA")
+	if err != nil || cleared {
+		t.Fatalf("verified synthetic release did not clear exact scope: blocked=%v err=%v", cleared, err)
+	}
+	// A result that becomes REVOKED must immediately re-impose the old
+	// negative restriction. Historical review/release rows remain untouched.
+	_, err = db.pool.Exec(ctx, `UPDATE evidence.claim SET status='REVOKED'
+	 WHERE claim_id=$1`, claimID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reblocked, err := db.DocumentaryScopeBlocked(ctx, operating, "trade.checkout", "ZA")
+	if err != nil || !reblocked {
+		t.Fatalf("revoked evidence did not restore hold: blocked=%v err=%v", reblocked, err)
 	}
 	// Source event/evidence claims are synthetic-only. These tests DO NOT
 	// establish external statutory applicability or live PEP acceptance.
