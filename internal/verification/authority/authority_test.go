@@ -121,7 +121,7 @@ func TestPEO03FSealedCustodyTamperAndIdentityBinding(t *testing.T){
 func TestPEO03FAssistedSARSIndependentHumanWitness(t *testing.T) {
 	now:=time.Date(2026,10,11,10,0,0,0,time.UTC)
 	f:=AssistedFinding{IntentID:"sars_synthetic_0001",CaseID:"vcase_1",ClaimID:"ecl_1",
-		SourceID:"esrc_sarstcs",EvidenceID:"evr_synthetic1",OfficialReference:"synthetic-official-review",
+		SourceID:"esrc_sarstcs",EvidenceID:"evr_synthetic1",OfficialReference:"ref-sha256:"+strings.Repeat("b",64),
 		ObservedAt:now.Add(-time.Minute),FreshnessUntil:now.Add(time.Hour),
 		ResponseDigest:"sha256:"+strings.Repeat("a",64),ProvenanceRef:"sealed://synthetic-evidence",
 		Witness:"prn_witness",Status:"PENDING"}
