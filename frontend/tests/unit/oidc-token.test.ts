@@ -94,7 +94,7 @@ describe("FE-03B confidential OIDC exchange and verification", () => {
       expect(init?.redirect).toBe("error");
       expect(init?.cache).toBe("no-store");
       expect(init?.method).toBe("POST");
-      expect((init?.headers as Record<string, string>).Authorization.startsWith("Basic ")).toBe(true);
+      expect((init?.headers as Record<string, string>).Authorization?.startsWith("Basic ")).toBe(true);
       expect(String(init?.body)).toContain("code_verifier=");
       return new Response(JSON.stringify({
         access_token: accessToken,
