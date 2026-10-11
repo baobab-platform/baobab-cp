@@ -57,7 +57,7 @@ func (s PostgresControlProofStore) Record(ctx context.Context,proof IndependentC
 	VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11)
 	ON CONFLICT(relationship_id,proof_digest) DO NOTHING`,
 	proof.RelationshipID,proof.IssuerID,proof.SignerID,proof.EvidenceReference,
-	proof.EvidenceDigest,digest,raw,approval.MakerID,approval.CheckerID,approval.ApprovalReference,approval.ApprovedAt
+	proof.EvidenceDigest,digest,raw,approval.MakerID,approval.CheckerID,approval.ApprovalReference,approval.ApprovedAt)
 	if err!=nil{return err}
 	if tag.RowsAffected()==0 {
 		// An idempotent retry must not silently change maker/checker evidence.
@@ -74,11 +74,14 @@ func (s PostgresControlProofStore) Record(ctx context.Context,proof IndependentC
 
 func (s PostgresControlProofStore) ReadIndependentControlProof(ctx context.Context,relationshipID string)(IndependentControlProof,error) {
 	var empty IndependentControlProof
-	if ctx==nil || ctx.Err()!=nil || s.Pool==nil || relationshipID==""{
+	if ctx==nil || ctx.Err()!=nil || s.Pool==nil || s.Now==nil || relationshipID==""{
 		return empty,ErrUntrustedCorporateProof
 	}
 	rows,err:=s.Pool.Query(ctx,`SELECT proof_document FROM evidence.founding_control_attestation
-		WHERE relationship_id=$1 ORDER BY recorded_at DESC,attestation_id DESC LIMIT 2`,relationshipID)
+		WHERE relationship_id=$1
+          AND (proof_document->>'expires_at')::timestamptz > $2
+          AND (proof_document->>'observed_at')::timestamptz <= $2
+          ORDER BY recorded_at DESC,attestation_id DESC LIMIT 2`,relationshipID,s.Now().UTC())
 	if err!=nil{return empty,err}
 	defer rows.Close()
 	count:=0
