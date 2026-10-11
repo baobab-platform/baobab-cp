@@ -11,6 +11,7 @@ import (
 	"errors"
 	"flag"
 	"log/slog"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -85,17 +86,31 @@ func parseTrust(entries []signerDeclaration, now time.Time) (map[string]organisa
 	return trust, nil
 }
 
+// decodeOperatorConfig refuses concatenated or stale trailing JSON and unknown
+// fields; protected credentials must form exactly one reviewed document.
+func decodeOperatorConfig(raw []byte) (operatorConfig, error) {
+	var cfg operatorConfig
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&cfg); err != nil {
+		return operatorConfig{}, errors.New("invalid operator configuration")
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return operatorConfig{}, errors.New("operator configuration must contain one JSON document")
+	}
+	return cfg, nil
+}
+
 func run(ctx context.Context, registryPath, configPath string) (organisation.PEO05Report, error) {
 	var empty organisation.PEO05Report
 	raw, err := readProtected(configPath)
 	if err != nil {
 		return empty, err
 	}
-	var cfg operatorConfig
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&cfg); err != nil {
-		return empty, errors.New("invalid operator configuration")
+	cfg, err := decodeOperatorConfig(raw)
+	if err != nil {
+		return empty, err
 	}
 	if cfg.Environment != "staging" && cfg.Environment != "integration" && cfg.Environment != "sandbox" {
 		return empty, errors.New("Package 5 qualification must run outside production")
