@@ -166,3 +166,27 @@ func TestPEO05COAuthIntrospectionHTTPSAndRevocation(t *testing.T) {
 		t.Fatalf("unauthenticated introspection accepted: %v", err)
 	}
 }
+
+func TestPEO05COAuthIntrospectionRefusesCredentialForwardingRedirect(t *testing.T) {
+	leaked := false
+	plaintext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked = r.Header.Get("Authorization") != "" || r.FormValue("token") != ""
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer plaintext.Close()
+	redirector := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, plaintext.URL, http.StatusTemporaryRedirect)
+	}))
+	defer redirector.Close()
+	reader := PEO05OAuthIntrospection{
+		Endpoint: redirector.URL, ClientID: "client", ClientSecret: "secret",
+		HTTPClient: redirector.Client(),
+	}
+	principal := auth.Principal{Issuer: "https://issuer.test", Subject: "subject", TokenID: "jti"}
+	if _, err := reader.CurrentToken(context.Background(), "sensitive-bearer", principal, time.Now()); !errors.Is(err, ErrPEO05Integrity) {
+		t.Fatalf("introspection redirect allowed: %v", err)
+	}
+	if leaked {
+		t.Fatal("introspection bearer or OAuth client secret was leaked over redirect")
+	}
+}
