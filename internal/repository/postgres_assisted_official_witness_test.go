@@ -65,7 +65,7 @@ func TestPEO03GPG17IndependentSARSWitnessDoesNotVerifyTaxCompliance(t *testing.T
 	checker:=AuditActor{ActorID:"prn_otherchecker",ActorType:"human",CorrelationID:domain.NewUUIDv7()}
 	f:=authority.AssistedFinding{IntentID:domain.NewResourceID("asrs"),
 		CaseID:caseID,ClaimID:claimID,SourceID:"esrc_sarstcs",EvidenceID:evidenceID,
-		OfficialReference:"synthetic-official-query-reference",ResponseDigest:"sha256:"+strings.Repeat("a",64),
+		OfficialReference:"ref-sha256:"+strings.Repeat("b",64),ResponseDigest:"sha256:"+strings.Repeat("a",64),
 		ProvenanceRef:"evidence:"+evidenceID,ObservedAt:now.Add(-time.Minute),
 		FreshnessUntil:now.Add(time.Hour),Witness:witness.ActorID,Status:"PENDING"}
 	key:="synthetic-sars-human-witness-001"
