@@ -187,7 +187,12 @@ export async function verifyOidcIdToken(
   }
   let valid = false;
   try {
-    const publicKey = createPublicKey({ key, format: "jwk" });
+    // Node's JsonWebKey requires an index signature; project only the
+    // already-validated public key fields rather than casting untrusted JSON.
+    const nodeJwk: Record<string, string> = header.alg === "RS256"
+      ? { kty: "RSA", n: key.n ?? "", e: key.e ?? "" }
+      : { kty: "EC", crv: "P-256", x: key.x ?? "", y: key.y ?? "" };
+    const publicKey = createPublicKey({ key: nodeJwk, format: "jwk" });
     valid = verifySignature("sha256", Buffer.from(`${encodedHeader}.${encodedClaims}`, "ascii"),
       header.alg === "ES256" ? { key: publicKey, dsaEncoding: "ieee-p1363" } : publicKey,
       Buffer.from(encodedSignature, "base64url"));
