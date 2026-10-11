@@ -25,7 +25,7 @@ export class ProgressiveBffError extends Error {
 }
 
 function validIdentifier(value: string | undefined): value is string {
-  return typeof value === "string" && /^[A-Za-z][A-Za-z0-9_-]{5,127}$/.test(value);
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{5,127}$/.test(value);
 }
 
 const bodyFields: Partial<Record<ProgressiveWriteAction, readonly string[]>> = {
