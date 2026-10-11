@@ -1,3 +1,6 @@
+// Environment-gated presentation must be decided at runtime, not during Next build.
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { serverEnv } from "@/server/env";
 
