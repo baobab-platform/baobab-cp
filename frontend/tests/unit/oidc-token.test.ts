@@ -86,6 +86,22 @@ describe("FE-03B confidential OIDC exchange and verification", () => {
       .rejects.toThrow(OidcBoundaryError);
   });
 
+  it("form-encodes unusual confidential-client credentials in OAuth Basic authentication", async () => {
+    const special = { ...cfg, clientId: "cli:ent+Ü" };
+    const fetcher = async (_url: URL | RequestInfo, init?: RequestInit) => {
+      const encoded = (init?.headers as Record<string, string>).Authorization ?? "";
+      expect(Buffer.from(encoded.slice("Basic ".length), "base64").toString("utf8"))
+        .toBe(`${encodeURIComponent(special.clientId)}:${encodeURIComponent("sec:+% Ü")}`);
+      return new Response(JSON.stringify({
+        access_token: accessToken, id_token: "long-signed-id-token-placeholder-for-verification",
+        token_type: "bearer", expires_in: 120,
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    };
+    const result = await exchangeAuthorizationCode(metadata, special, "code",
+      randomBytes(32).toString("base64url"), "sec:+% Ü", fetcher);
+    expect(result.token_type).toBe("Bearer");
+  });
+
   it("uses HTTPS authenticated code exchange without redirect or cache and bounds returned credentials", async () => {
     let called = false;
     const fetcher = async (url: URL | RequestInfo, init?: RequestInit) => {
@@ -106,7 +122,7 @@ describe("FE-03B confidential OIDC exchange and verification", () => {
     const tokens = await exchangeAuthorizationCode(metadata, cfg, "one-time-code", randomBytes(32).toString("base64url"),
       "protected-confidential-client-secret", fetcher);
     expect(called).toBe(true);
-    expect(tokens.access_token).toBe(accessToken);
+    expect(tokens.access_token).toBe(accessToken);\n    expect(tokens.token_type).toBe("Bearer");
     await expect(exchangeAuthorizationCode({ ...metadata, token_endpoint: "https://evil.example.test/token" },
       cfg, "code", randomBytes(32).toString("base64url"), "secret", fetcher)).rejects.toThrow(OidcBoundaryError);
     await expect(exchangeAuthorizationCode(metadata, cfg, "code", "not-a-pkce-verifier", "secret", fetcher))
