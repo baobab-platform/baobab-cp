@@ -26,11 +26,20 @@ type SealedVault struct {
 	Key       []byte
 }
 
+// A custody directory MUST be a dedicated absolute child, not a filesystem
+// mount root or shared system directory: Seal chmods the leaf to 0700.
+// Configuring "/" or "/tmp" would otherwise mutate unrelated permissions.
+func safeCustodyDirectory(path string) bool {
+	clean := filepath.Clean(path)
+	return filepath.IsAbs(clean) && filepath.Dir(clean) != string(filepath.Separator) &&
+		clean != "." && clean != string(filepath.Separator)
+}
+
 // Seal commits encrypted ciphertext before a source observation is linked to
 // it. No plaintext, taxpayer PIN or bearer token is written to the evidence
 // metadata database, logfile or source ID.
 func (v SealedVault) Seal(ctx context.Context, evidenceID string, plaintext []byte) (string, error) {
-	if ctx == nil || ctx.Err() != nil || v.Directory == "" || len(v.Key) != 32 ||
+	if ctx == nil || ctx.Err() != nil || !safeCustodyDirectory(v.Directory) || len(v.Key) != 32 ||
 		len(plaintext) == 0 || len(plaintext) > 128*1024 ||
 		len(evidenceID) < 8 || len(evidenceID) > 96 {
 		return "", ErrCustody
@@ -55,9 +64,9 @@ func (v SealedVault) Seal(ctx context.Context, evidenceID string, plaintext []by
 	if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
 		return "", fmt.Errorf("%w: untrusted custody directory", ErrCustody)
 	}
-	if err := os.Chmod(v.Directory, 0700); err != nil {
-		return "", fmt.Errorf("%w: custody permissions unavailable", ErrCustody)
-	}
+	// Never chmod a caller-configured pre-existing directory: it could be
+	// a shared mount or contain unrelated application data. Operators must
+	// provision a dedicated private 0700 leaf before source capture.
 	dir, err := os.Open(v.Directory)
 	if err != nil {
 		return "", ErrCustody
@@ -103,7 +112,7 @@ func (v SealedVault) Seal(ctx context.Context, evidenceID string, plaintext []by
 // Open requires the original internal evidence ID; the returned bytes must
 // never be served to an unauthorised user or logged as HTTP response material.
 func (v SealedVault) Open(ctx context.Context, evidenceID string) ([]byte, error) {
-	if ctx == nil || ctx.Err() != nil || len(v.Key) != 32 || evidenceID == "" {
+	if ctx == nil || ctx.Err() != nil || !safeCustodyDirectory(v.Directory) || len(v.Key) != 32 || evidenceID == "" {
 		return nil, ErrCustody
 	}
 	name := sha256.Sum256([]byte(evidenceID))
