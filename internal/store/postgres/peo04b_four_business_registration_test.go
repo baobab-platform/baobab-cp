@@ -3,7 +3,6 @@ package postgres
 import (
  "context"
  "encoding/json"
- "fmt"
  "os"
  "strings"
  "testing"
@@ -68,7 +67,7 @@ func TestPEO04BFourFoundingBusinessShapesRequireIndependentGovernedTenantAdmissi
     businessIdentity["legal_name"]=c.name
     businessIdentity["jurisdiction_of_incorporation"]="ZA"
     businessIdentity["registration_identifiers"]=[]map[string]any{{
-      "identifier_type":"COMPANY_REGISTRATION","jurisdiction":"ZA",
+      "type":"COMPANY_REGISTRATION","issuing_jurisdiction":"ZA",
       "value":"synthetic-not-an-official-registration",
     }}
    }
@@ -143,7 +142,6 @@ func TestPEO04BFourFoundingBusinessShapesRequireIndependentGovernedTenantAdmissi
     WHERE tenant_id=$1 AND mapping_role='PRIMARY_ORGANISATION'`,result.TenantID).Scan(&prior);err!=nil||prior!=1{
     t.Fatalf("duplicate founding primary mapping: %d %v",prior,err)
    }
-   _=fmt.Sprintf // keep synthetic fixture independent of provider packages
   })
  }
  if len(seenTenant)!=4||len(seenOrg)!=4{t.Fatalf("expected four isolated tenants and organisations")}
