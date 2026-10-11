@@ -35,7 +35,7 @@ type ScanProof struct {
  Signature []byte
 }
 
-func (p ScanProof) signingBytes() []byte {
+// SigningPayload provides the canonical bytes for the independent scanner.\nfunc (p ScanProof) SigningPayload() []byte {
  v := struct{
   EvidenceID string `json:"evidence_id"`
   ArtifactID string `json:"artifact_id"`
@@ -67,7 +67,7 @@ func VerifyScanProof(p ScanProof, publicKey ed25519.PublicKey, now time.Time) er
  case "application/pdf","image/jpeg","image/png":
  default:return ErrDocumentCustody
  }
- if !ed25519.Verify(publicKey,p.signingBytes(),p.Signature) {return ErrDocumentCustody}
+ if !ed25519.Verify(publicKey,p.SigningPayload(),p.Signature) {return ErrDocumentCustody}
  return nil
 }
 
