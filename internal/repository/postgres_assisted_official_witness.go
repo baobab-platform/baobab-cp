@@ -159,6 +159,32 @@ func (r *PostgresRepository) DecideAssistedWitness(ctx context.Context, intentID
 	if claim.AssertedBy == actor.ActorID || claim.Status != verification.ClaimUnderCheck {
 		return empty, ErrAssistedWitnessDenied
 	}
+	// A second human may not attest a witness after its original case or
+	// evidence was withdrawn, restricted, expired or rebound. Serialize
+	// against concurrent evidence updates before committing an attestation;
+	// REJECTED remains a separate, non-positive reviewer decision.
+	if outcome == "ATTESTED" {
+		c, caseErr := lockCase(ctx, tx, f.CaseID, -1)
+		if caseErr != nil || c.Status != verification.CaseVerifying ||
+			c.Subject != claim.Subject || c.Purpose != claim.Purpose ||
+			claim.ClaimType == "" {
+			return empty, ErrAssistedWitnessDenied
+		}
+		var raw []byte
+		if err := tx.QueryRow(ctx,
+			`SELECT document FROM evidence.record WHERE evidence_id=$1 FOR SHARE`,
+			f.EvidenceID).Scan(&raw); err != nil {
+			return empty, ErrAssistedWitnessDenied
+		}
+		proof, parseErr := decodeDocument[verification.Evidence](raw)
+		if parseErr != nil || proof.Status != verification.EvidenceAvail ||
+			proof.Subject != claim.Subject || proof.Purpose != claim.Purpose ||
+			proof.SourceID != f.SourceID || proof.SourceRecordReference != f.OfficialReference ||
+			proof.ObtainedBy == actor.ActorID ||
+			proof.ExpiresAt != nil && !proof.ExpiresAt.After(now) {
+			return empty, ErrAssistedWitnessDenied
+		}
+	}
 	_, err = tx.Exec(ctx, `UPDATE evidence.assisted_official_witness
 		SET checker_actor=$2,checked_at=$3,outcome=$4,decision_reason=$5,decision_key=$6
 		WHERE intent_id=$1 AND outcome='PENDING'`, intentID, actor.ActorID, now, outcome, reason, key)
