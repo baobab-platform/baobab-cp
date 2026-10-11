@@ -61,8 +61,28 @@ func (r *PostgresRepository) ResolveVerifiedRegistration(
 	        SELECT 1 FROM jsonb_array_elements_text(res.document->'check_ids') AS cited(check_id)
 	        WHERE cited.check_id=chk.check_id
 	      )
+	      -- PEO-03E: a pre-existing, self-asserted or legacy check citing
+	      -- the CIPC name alone cannot bootstrap legal-name/status identity.
+	      -- Require the current independently recorded observation that
+	      -- actually supported the check when it was made.
+	      AND EXISTS (
+	        SELECT 1 FROM evidence.authoritative_source_observation ao
+	        JOIN evidence.record source_evidence ON source_evidence.evidence_id=ao.evidence_id
+	        WHERE ao.case_id=vc.case_id AND ao.claim_id=cl.claim_id
+	          AND ao.source_id='esrc_cipc'
+	          AND ao.outcome='MATCHED'
+	          AND ao.source_record_reference=chk.document->>'source_record_reference'
+	          AND ao.method=chk.document->>'method'
+	          AND ao.recorded_at <= chk.performed_at
+	          AND ao.source_observed_at <= chk.performed_at
+	          AND ao.freshness_until>clock_timestamp()
+	          AND source_evidence.status='AVAILABLE'
+	          AND source_evidence.source_id=ao.source_id
+	          AND ($4::boolean OR NOT ao.is_synthetic)
+	      )
 	  )
-	LIMIT 2`, caseID, subject.SubjectType, subject.SubjectID)
+	LIMIT 2`, caseID, subject.SubjectType, subject.SubjectID,
+		sourceObservationTestEnvironment(r.Environment))
 	if err != nil {
 		return empty, err
 	}

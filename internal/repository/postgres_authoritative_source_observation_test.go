@@ -206,11 +206,32 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 		regClaimID, caseID, reg.AssertedBy, encode(reg), now); err != nil {
 		t.Fatal(err)
 	}
+	// Register an independent, matching source observation for this
+	// registration claim BEFORE the check is recorded. A historical check
+	// without such provenance must never bind another company identity.
+	regEvidenceID := "evr_reg" + suffix
+	regProof := evidence
+	regProof.EvidenceID = regEvidenceID
+	regProof.SourceRecordReference = obsRef + "/registration"
+	if _, err := seed.Exec(ctx, `INSERT INTO evidence.record
+	  (evidence_id,source_id,status,obtained_by,document,created_at)
+	  VALUES($1,'esrc_cipc','AVAILABLE',$2,$3::jsonb,$4)`,
+		regEvidenceID, regProof.ObtainedBy, encode(regProof), now); err != nil {
+		t.Fatal(err)
+	}
+	regObservation := obs
+	regObservation.ClaimID = regClaimID
+	regObservation.ClaimType = "REGISTRATION_IDENTIFIER"
+	regObservation.SourceReference = regProof.SourceRecordReference
+	if _, err := repo.RecordAuthoritativeSourceObservation(ctx, caseID,
+		regObservation, regEvidenceID, key+"-registration", now, actor, true); err != nil {
+		t.Fatalf("could not persist independently witnessed CIPC registration: %v", err)
+	}
 	check := verification.Check{
 		CheckID: checkID, CaseID: caseID, ClaimID: regClaimID,
 		SourceID: "esrc_cipc", Method: "SOURCE_API_LOOKUP",
 		Outcome: "VERIFIED", RequestedAt: now, PerformedAt: &now,
-		PerformedBy: "synthetic-reviewer", SourceRecordReference: obsRef,
+		PerformedBy: "synthetic-reviewer", SourceRecordReference: regObservation.SourceReference,
 		Dimensions:  []verification.Dimension{{Dimension: "CLAIM_MATCH", Outcome: "PASSED"}},
 		ReasonCodes: []string{}, EvidenceIDs: []string{},
 	}
@@ -245,6 +266,19 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 	if err != nil || binding.RegistrationNumber != "2020/123456/07" ||
 		binding.ResultID != resultID || binding.Subject != subject {
 		t.Fatalf("trusted CIPC identifier did not resolve exactly: %+v %v", binding, err)
+	}
+	// A former positive result cannot remain usable if its official-source
+	// EvidenceRecord has since become restricted or withdrawn.
+	if _, err := seed.Exec(ctx, `UPDATE evidence.record SET status='RESTRICTED'
+	  WHERE evidence_id=$1`, regEvidenceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ResolveVerifiedRegistration(ctx, caseID, subject); !errors.Is(err, ErrVerifiedRegistrationUnavailable) {
+		t.Fatalf("restricted registry evidence remained trusted: %v", err)
+	}
+	if _, err := seed.Exec(ctx, `UPDATE evidence.record SET status='AVAILABLE'
+	  WHERE evidence_id=$1`, regEvidenceID); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := repo.ResolveVerifiedRegistration(ctx, caseID,
 		verification.Subject{SubjectType: "ORGANISATION", SubjectID: domain.NewUUIDv7()}); !errors.Is(err, ErrVerifiedRegistrationUnavailable) {
