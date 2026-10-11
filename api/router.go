@@ -111,6 +111,11 @@ type Dependencies struct {
 	// PEO-02S: authenticated review decision and appeal boundary, default off.
 	DocumentaryReviewEnabled bool
 	DocumentaryReview        documentaryReviewWriter
+	// PEO-02T current negative-only remediation PDP: separate workload scope,
+	// explicit registered client allowlist and nonproduction opt-in.
+	DocumentaryRestrictionEnabled   bool
+	DocumentaryRestriction          documentaryRestrictionReader
+	DocumentaryRestrictionClientIDs []string
 	// PEO-03 v2 progressive drafts are deliberately independent of v1
 	// decisions and are disabled by default pending applicant journey proof.
 	ProgressiveApplicationsEnabled bool
@@ -697,6 +702,28 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/documentary-reviews/decisions/{decisionID}/appeals", dr.appeal)
 		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
 			Post("/v2/documentary-reviews/appeals/{appealID}/decision", dr.appealDecision)
+	}
+	if dependencies.DocumentaryRestrictionEnabled &&
+		dependencies.DocumentaryRestriction != nil &&
+		dependencies.Contexts != nil && dependencies.Identities != nil &&
+		dependencies.WorkloadRegistry != nil &&
+		peoRoutesPermittedIn(dependencies.Environment) {
+		allow := make(map[string]bool)
+		for _, id := range dependencies.DocumentaryRestrictionClientIDs {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				allow[id] = true
+			}
+		}
+		if len(allow) > 0 {
+			h := documentaryRestrictionHandler{
+				api: a, contexts: runtimeOnly(dependencies.Contexts),
+				identities: dependencies.Identities,
+				reader: dependencies.DocumentaryRestriction, clientIDs: allow,
+			}
+			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", "documentary:restriction-assess")).
+				Post("/internal/documentary/v1/restrictions/assess", h.assess)
+		}
 	}
 	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&
 		peoRoutesPermittedIn(dependencies.Environment) {
