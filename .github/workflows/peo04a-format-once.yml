@@ -32,7 +32,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add cmd/reconcile-founding-evidence/*.go internal/service/organisation internal/service/verification/official_capture*.go
-            git add internal/repository/postgres_organisation_governance.go cmd/controlplane/main.go
+            git add -u
             git commit -m "style(peo04a): gofmt independent founding corporate verification"
             git pull --rebase origin feat/peo04a-independent-founding-corporate-proof
             git push origin HEAD:feat/peo04a-independent-founding-corporate-proof
