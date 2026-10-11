@@ -141,6 +141,14 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 	if err != nil || replay.Receipt.DocumentDigest != result.Receipt.DocumentDigest || processor.count != 1 {
 		t.Fatalf("durable idempotent replay reprocessed private content: %v", err)
 	}
+	// Revoking the independent scanner key must immediately block cached
+	// candidate plaintext, even while the metadata row still says CLEAN.
+	trusted := ledger.ScannerKeys
+	ledger.ScannerKeys = nil
+	if _, err = ledger.GetDocumentCandidateByKey(ctx, extractor.ActorID, key); !errors.Is(err, repository.ErrDocumentLedgerDenied) {
+		t.Fatalf("revoked scanner key was ignored on candidate replay: %v", err)
+	}
+	ledger.ScannerKeys = trusted
 	if _, err = db.Exec(ctx, `UPDATE evidence.record SET status='RESTRICTED',
   document=jsonb_set(document,'{status}','"RESTRICTED"') WHERE evidence_id=$1`, evidenceID); err != nil {
 		t.Fatal(err)
