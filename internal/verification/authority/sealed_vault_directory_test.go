@@ -25,8 +25,12 @@ func TestSealedVaultRefusesSharedFilesystemDirectories(t *testing.T) {
 		t.Fatal(err)
 	}
 	looseVault := SealedVault{Directory: loose, Key: bytes.Repeat([]byte{0x33}, 32)}
-	if _, err := looseVault.Seal(context.Background(), "evr_synthetic0001", []byte("synthetic record")); !errors.Is(err, ErrCustody) {
-		t.Fatalf("permissive directory was accepted: %v", err)
+	if _, err := looseVault.Seal(context.Background(), "evr_synthetic0001", []byte("synthetic record")); err != nil {
+		t.Fatalf("private custody child inside permissive mount rejected: %v", err)
+	}
+	child, childErr := os.Stat(filepath.Join(loose, ".baobab-source-custody"))
+	if childErr != nil || child.Mode().Perm()&0077 != 0 {
+		t.Fatalf("private custody leaf must be 0700: %v", childErr)
 	}
 	info, err := os.Stat(loose)
 	if err != nil || info.Mode().Perm() != 0755 {
