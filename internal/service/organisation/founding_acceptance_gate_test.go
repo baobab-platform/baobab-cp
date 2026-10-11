@@ -126,14 +126,14 @@ func TestPEO04CRejectsRegistryMutationAndCaseRebinding(t *testing.T) {
 }
 
 func TestPEO04CRejectsExpiredOrStaleIndependentSourceAssessment(t *testing.T) {
- gate,reg,parent,child:=acceptanceFixture(t)
- proof:=gate.Evidence.(*acceptanceEvidenceFixture)
- proof.result.AssessedAt=gate.Now().Add(-2*time.Minute)
- if _,err:=gate.Assess(context.Background(),reg,parent,child);!errors.Is(err,ErrFoundingAcceptance) {
-  t.Fatalf("stale OEV-03 result could admit founded tenant: %v",err)
- }
- proof.result.AssessedAt=gate.Now().Add(2*time.Second)
- if _,err:=gate.Assess(context.Background(),reg,parent,child);!errors.Is(err,ErrFoundingAcceptance) {
-  t.Fatalf("future official source result accepted: %v",err)
- }
+	gate, reg, parent, child := acceptanceFixture(t)
+	proof := gate.Evidence.(*acceptanceEvidenceFixture)
+	proof.result.AssessedAt = gate.Now().Add(-2 * time.Minute)
+	if _, err := gate.Assess(context.Background(), reg, parent, child); !errors.Is(err, ErrFoundingAcceptance) {
+		t.Fatalf("stale OEV-03 result could admit founded tenant: %v", err)
+	}
+	proof.result.AssessedAt = gate.Now().Add(2 * time.Second)
+	if _, err := gate.Assess(context.Background(), reg, parent, child); !errors.Is(err, ErrFoundingAcceptance) {
+		t.Fatalf("future official source result accepted: %v", err)
+	}
 }
