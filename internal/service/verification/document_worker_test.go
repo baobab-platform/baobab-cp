@@ -52,6 +52,10 @@ func (c *extractionCustodyFixture) OpenScanned(_ context.Context, _ verification
 	return c.doc, nil
 }
 
+func (c *extractionCustodyFixture) WithDocumentLease(ctx context.Context, _, _, _ string, _ repository.AuditActor, execute func(context.Context) error) error {
+	return execute(ctx) // synthetic only: PostgreSQL test uses canonical row locks.
+}
+
 type extractionProcessorFixture struct {
 	count    int
 	now      time.Time
