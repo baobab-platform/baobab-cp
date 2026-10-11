@@ -72,16 +72,21 @@ type IndependentControlTrust struct {
 }
 
 func (t IndependentControlTrust) verify(proof IndependentControlProof, now time.Time) bool {
-	if t.IssuerID == "" || t.IssuerID != proof.IssuerID ||\n\t\tt.IssuerID == "shared-governance" || t.IssuerID == "esrc_applicant" ||\n\t\tt.SignerID == "" || t.SignerID != proof.SignerID ||
+	if t.IssuerID == "" || t.IssuerID != proof.IssuerID ||
+		t.IssuerID == "shared-governance" || t.IssuerID == "esrc_applicant" ||
+		t.SignerID == "" || t.SignerID != proof.SignerID ||
 		len(t.PublicKey) != ed25519.PublicKeySize ||
 		len(proof.Signature) != ed25519.SignatureSize ||
-		t.ApprovedBy == "" || t.ProposedBy == "" || t.ApprovedBy == t.ProposedBy ||\n\t\tt.ApprovalRecord == "" || t.ApprovedAt.IsZero() ||
+		t.ApprovedBy == "" || t.ProposedBy == "" || t.ApprovedBy == t.ProposedBy ||
+		t.ApprovalRecord == "" || t.ApprovedAt.IsZero() ||
 		t.ApprovedAt.After(now) || !t.ExpiresAt.After(now) ||
 		proof.IssuerID == "" || proof.SourceRecordReference == "" ||
 		proof.EvidenceReference == "" || proof.RelationshipID == "" ||
 		proof.ParentOrganisationID == "" || proof.ChildOrganisationID == "" ||
 		proof.ParentOrganisationID == proof.ChildOrganisationID ||
-		proof.ObservedAt.IsZero() || proof.ObservedAt.After(now) ||\n\t\tnow.Sub(proof.ObservedAt) > 90*24*time.Hour ||\n\t\t!proof.ExpiresAt.After(proof.ObservedAt) ||
+		proof.ObservedAt.IsZero() || proof.ObservedAt.After(now) ||
+		now.Sub(proof.ObservedAt) > 90*24*time.Hour ||
+		!proof.ExpiresAt.After(proof.ObservedAt) ||
 		!proof.ExpiresAt.After(now) || proof.ExpiresAt.After(t.ExpiresAt) ||
 		len(proof.EvidenceDigest) != 71 ||
 		!strings.HasPrefix(proof.EvidenceDigest, "sha256:") {
@@ -192,7 +197,8 @@ func (r FoundingEvidenceReconciler) Reconcile(ctx context.Context, parent, child
 	}
 	trust,ok:=r.Trust[proof.SignerID]
 	if !ok || !trust.verify(proof,now) ||
-		proof.RelationshipID!=edge.ID ||\n\t\tproof.IssuerID!=edge.SourceAuthority ||
+		proof.RelationshipID!=edge.ID ||
+		proof.IssuerID!=edge.SourceAuthority ||
 		proof.ParentOrganisationID!=parent.OrganisationID ||
 		proof.ChildOrganisationID!=child.OrganisationID ||
 		proof.ParentRegistration!=parentBinding.RegistrationNumber ||
