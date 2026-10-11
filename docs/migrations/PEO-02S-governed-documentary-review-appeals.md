@@ -74,7 +74,14 @@ Migration 000115 appends `documentary_review_intent`,
 `documentary_review_decision`, `documentary_remediation_restriction`,
 `documentary_review_appeal` and `documentary_appeal_decision`.
 Rows are immutable, except one-way `PENDING -> DECIDED` / `FILED -> DECIDED`
-state transitions. Digests bind the exact request to its idempotency key;
+state transitions. Idempotency keys are unique per operation and human actor,
+not merely per review or appeal. Transaction-scoped actor/key advisory locks
+precede record-specific locks; exact same-target and same-payload replays return
+the original receipt, while cross-record key reuse or mutated payloads fail
+closed as a nonretryable HTTP 409 instead of leaking a PostgreSQL unique-index
+error as HTTP 500. PostgreSQL integration tests cover concurrent replay and
+cross-record collisions across review decisions, appeal filing and appeal
+adjudication. Digests bind the exact request to its idempotency key;
 independent reviewer IDs and the cited policy/evidence are historical
 audit fields. `active_documentary_remediation_restriction` projects
 **only negative** Organisation + Capability + Market scope holds;
