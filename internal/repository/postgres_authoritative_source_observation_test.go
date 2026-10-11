@@ -95,20 +95,20 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 	if _, err := seed.Exec(ctx, `INSERT INTO evidence.claim
 	  (claim_id,case_id,asserted_by,status,document,created_at)
 	  VALUES($1,$2,$3,'UNDER_VERIFICATION',$4::jsonb,$5)`,
-		claimID,caseID,claim.AssertedBy,encode(claim),now); err != nil {
+		claimID, caseID, claim.AssertedBy, encode(claim), now); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := seed.Exec(ctx, `INSERT INTO evidence.record
 	  (evidence_id,source_id,status,obtained_by,document,created_at)
 	  VALUES($1,'esrc_cipc','AVAILABLE',$2,$3::jsonb,$4)`,
-		evidenceID,evidence.ObtainedBy,encode(evidence),now); err != nil {
+		evidenceID, evidence.ObtainedBy, encode(evidence), now); err != nil {
 		t.Fatal(err)
 	}
 	obs := verification.SourceObservation{
 		CaseID: caseID, ClaimID: claimID, Subject: subject, ClaimType: "LEGAL_NAME",
 		Jurisdiction: "ZA", Purpose: vercase.Purpose,
 		SourceID: "esrc_cipc", Method: "SOURCE_API_LOOKUP", Outcome: "MATCHED",
-		SourceReference: obsRef, ProvenanceRef: "synthetic/immutable-proof/"+suffix,
+		SourceReference: obsRef, ProvenanceRef: "synthetic/immutable-proof/" + suffix,
 		ResponseDigest: "sha256:" + strings.Repeat("c", 64),
 		ObservedAt: now.Add(-time.Second), FreshnessUntil: now.Add(time.Hour),
 		AdapterID: "baobab.cipc.synthetic", Synthetic: true,
@@ -170,7 +170,7 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 	if _, err := seed.Exec(ctx, `INSERT INTO evidence.claim
 	  (claim_id,case_id,asserted_by,status,document,created_at)
 	  VALUES($1,$2,$3,'UNDER_VERIFICATION',$4::jsonb,$5)`,
-		regClaimID,caseID,reg.AssertedBy,encode(reg),now); err != nil {
+		regClaimID, caseID, reg.AssertedBy, encode(reg), now); err != nil {
 		t.Fatal(err)
 	}
 	check := verification.Check{
@@ -184,7 +184,7 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 	if _, err := seed.Exec(ctx, `INSERT INTO evidence.check
 	  (check_id,case_id,claim_id,source_id,outcome,performed_by,performed_at,document)
 	  VALUES($1,$2,$3,'esrc_cipc','VERIFIED',$4,$5,$6::jsonb)`,
-		checkID,caseID,regClaimID,check.PerformedBy,now,encode(check)); err != nil {
+		checkID, caseID, regClaimID, check.PerformedBy, now, encode(check)); err != nil {
 		t.Fatal(err)
 	}
 	until := now.Add(time.Hour)
@@ -200,12 +200,12 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 	if _, err := seed.Exec(ctx, `INSERT INTO evidence.result
 	  (result_id,case_id,claim_id,outcome,decided_by,decided_at,document)
 	  VALUES($1,$2,$3,'VERIFIED',$4,$5,$6::jsonb)`,
-		resultID,caseID,regClaimID,res.DecidedBy,now,encode(res)); err != nil {
+		resultID, caseID, regClaimID, res.DecidedBy, now, encode(res)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := seed.Exec(ctx, `UPDATE evidence.claim
 	  SET status='VERIFIED', current_result_id=$2 WHERE claim_id=$1`,
-		regClaimID,resultID); err != nil {
+		regClaimID, resultID); err != nil {
 		t.Fatal(err)
 	}
 	binding, err := repo.ResolveVerifiedRegistration(ctx, caseID, subject)
@@ -214,16 +214,14 @@ func TestPEO03CDurableAuthoritativeSourceObservation(t *testing.T) {
 		t.Fatalf("trusted CIPC identifier did not resolve exactly: %+v %v", binding, err)
 	}
 	if _, err := repo.ResolveVerifiedRegistration(ctx, caseID,
-		verification.Subject{SubjectType: "ORGANISATION", SubjectID: domain.NewUUIDv7()});
-		!errors.Is(err, ErrVerifiedRegistrationUnavailable) {
+		verification.Subject{SubjectType: "ORGANISATION", SubjectID: domain.NewUUIDv7()}); !errors.Is(err, ErrVerifiedRegistrationUnavailable) {
 		t.Fatalf("foreign organisation borrowed registry identifier: %v", err)
 	}
 	if _, err := seed.Exec(ctx, `UPDATE evidence.claim SET status='REVOKED'
 	  WHERE claim_id=$1`, regClaimID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.ResolveVerifiedRegistration(ctx, caseID, subject);
-		!errors.Is(err, ErrVerifiedRegistrationUnavailable) {
+	if _, err := repo.ResolveVerifiedRegistration(ctx, caseID, subject); !errors.Is(err, ErrVerifiedRegistrationUnavailable) {
 		t.Fatalf("revoked registry claim remained authoritative: %v", err)
 	}
 }
