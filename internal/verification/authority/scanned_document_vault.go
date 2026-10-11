@@ -35,7 +35,8 @@ type ScanProof struct {
  Signature []byte
 }
 
-// SigningPayload provides the canonical bytes for the independent scanner.\nfunc (p ScanProof) SigningPayload() []byte {
+// SigningPayload provides the canonical bytes for the independent scanner.
+func (p ScanProof) SigningPayload() []byte {
  v := struct{
   EvidenceID string `json:"evidence_id"`
   ArtifactID string `json:"artifact_id"`
