@@ -56,6 +56,10 @@ func documentaryReleaseVerified(ctx context.Context, tx pgx.Tx, restrictionID, r
   AND p.requirement_authority='PLATFORM_DOCUMENTARY'
   AND p.effective_from<=$3 AND p.effective_to>$3
   AND sp.effective_from<=$3 AND sp.effective_to>$3
+  AND sp.claim_type=c.document->>'claim_type'
+  AND c.document->>'jurisdiction'=sp.market_code
+  AND c.document->>'purpose'='COMPLIANCE_REMEDIATION'
+  AND vc.document->>'purpose'='COMPLIANCE_REMEDIATION'
   AND c.current_result_id=res.result_id AND c.status='VERIFIED'
   AND res.outcome='VERIFIED' AND vc.status='VERIFIED'
   AND vc.subject_type='ORGANISATION'
