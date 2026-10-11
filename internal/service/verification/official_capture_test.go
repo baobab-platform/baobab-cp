@@ -85,7 +85,7 @@ func TestPEO03GLocalTLSSourceToEncryptedCustodyAndNonPositiveReceipt(t *testing.
 	if err!=nil {t.Fatalf("locally captured source rejected: %v",err)}
 	if res.AuthorityGranted||res.SourceID!="esrc_cipc"||repo.recorded!=1 ||
 		repo.stored.Synthetic!=true {t.Fatalf("positive authority or missing synthetic ledger: %+v %+v",res,repo.stored)}
-	raw,err:=vault.Open(context.Background(),evidenceID)
+	raw,err:=vault.OpenVersioned(context.Background(),repo.stored.ProvenanceRef)
 	if err!=nil||!strings.Contains(string(raw),"Synthetic Company Ltd"){
 		t.Fatalf("official proof not encrypted and recoverable: %v",err)
 	}
