@@ -308,7 +308,13 @@ func (s *Store) DecideDocumentaryReview(ctx context.Context, key string, meta ba
 	}
 	expected := map[string]ReviewRestriction{}
 	for _, a := range reviewed.Applicability {
-		if a.Capability != "" && a.Market != "" {
+		// A restricted scope must correspond to an unresolved named
+		// requirement. Explicit NOT_APPLICABLE or claimant-asserted
+		// APPROVED_EVIDENCE inputs cannot become an arbitrary negative
+		// capability hold without fresh source-backed assessment.
+		if (a.Applies == "REQUIRED" || a.Applies == "NEEDS_ASSESSMENT") &&
+			a.EvidenceState != "APPROVED_EVIDENCE" &&
+			a.Capability != "" && a.Market != "" {
 			expected[a.RequirementID] = ReviewRestriction{
 				RequirementID: a.RequirementID, CapabilityKey: a.Capability, MarketCode: a.Market}
 		}
