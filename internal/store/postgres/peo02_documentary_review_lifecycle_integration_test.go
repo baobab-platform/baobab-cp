@@ -198,7 +198,7 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 		newProposal.ID).Scan(&rev, &linked); err != nil || rev != 2 || linked != appeal.ID {
 		t.Fatalf("reassessment lost appeal lineage: revision=%d appeal=%s err=%v", rev, linked, err)
 	}
-	if _, err = db.DecideDocumentaryReview(ctx, key("reassess-decide"), meta(11), actors[11],
+	revisedDecision, err := db.DecideDocumentaryReview(ctx, key("reassess-decide"), meta(11), actors[11],
 		newProposal.ID, ReviewDecisionInput{Outcome: "ASSESSMENT_INCOMPLETE",
 			DecisionReference: "synthetic/peo02s/reassessment",
 			Reason:            "Further independent verification required; do not clear any previous hold"}); err != nil {
@@ -227,14 +227,15 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 		"founding-governance/" + appeal.ID,
 		"founding-governance/" + adjudication.ID,
 		"founding-governance/" + newProposal.ID,
+		"founding-governance/" + revisedDecision.ID,
 	}
 	if err = db.pool.QueryRow(ctx, `SELECT count(*) FROM audit_events
        WHERE target=ANY($1::text[]) AND action LIKE 'founding_governance.documentary_%'`,
 		targets).Scan(&audit); err != nil {
 		t.Fatal(err)
 	}
-	if audit != 5 {
-		t.Fatalf("expected exactly five committed, nonreplayed review/appeal audit facts, got %d", audit)
+	if audit != 6 {
+		t.Fatalf("expected exactly six committed, nonreplayed review/appeal audit facts, got %d", audit)
 	}
 	// Source event/evidence claims are synthetic-only. These tests DO NOT
 	// establish external statutory applicability or live PEP acceptance.
