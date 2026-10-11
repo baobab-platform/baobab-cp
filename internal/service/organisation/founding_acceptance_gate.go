@@ -86,7 +86,7 @@ func (g FoundingAcceptanceGate) Assess(ctx context.Context, reg FirstPartyRegist
 	if err != nil {
 		return empty, err
 	}
-	if result.AssessedAt.IsZero() || result.AssessedAt.After(now.Add(time.Minute)) {
+	if result.AssessedAt.IsZero() || result.AssessedAt.After(now.Add(time.Second)) ||\n        now.Sub(result.AssessedAt) > 30*time.Second {
 		return empty, ErrFoundingAcceptance
 	}
 	out := FoundingAcceptanceReport{RegistryDigest: reg.Digest, AssessedAt: now,
