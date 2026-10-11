@@ -41,12 +41,12 @@ func (v SealedVault) Seal(ctx context.Context, evidenceID string, plaintext []by
 	nonce := make([]byte, aead.NonceSize())
 	if _, err := rand.Read(nonce); err != nil { return "", ErrCustody }
 	ciphertext := aead.Seal(nonce, nonce, plaintext, []byte(evidenceID))
-	if err := os.MkdirAll(v.Directory, 0700); err != nil { return "", ErrCustody }
+	if err := os.MkdirAll(v.Directory, 0700); err != nil { return "", fmt.Errorf("%w: directory creation failed", ErrCustody) }
 	dir, err := os.Open(v.Directory)
 	if err != nil { return "", ErrCustody }
 	defer dir.Close()
 	info, err := dir.Stat()
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 { return "", ErrCustody }
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 { return "", fmt.Errorf("%w: directory permissions rejected", ErrCustody) }
 	name := sha256.Sum256([]byte(evidenceID))
 	path := filepath.Join(v.Directory, hex.EncodeToString(name[:])+".sealed")
 	// O_EXCL avoids replacing an existing immutable source response; a retry
