@@ -122,7 +122,8 @@ describe("FE-03B confidential OIDC exchange and verification", () => {
     const tokens = await exchangeAuthorizationCode(metadata, cfg, "one-time-code", randomBytes(32).toString("base64url"),
       "protected-confidential-client-secret", fetcher);
     expect(called).toBe(true);
-    expect(tokens.access_token).toBe(accessToken);\n    expect(tokens.token_type).toBe("Bearer");
+    expect(tokens.access_token).toBe(accessToken);
+    expect(tokens.token_type).toBe("Bearer");
     await expect(exchangeAuthorizationCode({ ...metadata, token_endpoint: "https://evil.example.test/token" },
       cfg, "code", randomBytes(32).toString("base64url"), "secret", fetcher)).rejects.toThrow(OidcBoundaryError);
     await expect(exchangeAuthorizationCode(metadata, cfg, "code", "not-a-pkce-verifier", "secret", fetcher))
