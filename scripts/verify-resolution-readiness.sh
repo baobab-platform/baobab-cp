@@ -25,4 +25,8 @@ test -d "${SHARED_CONTRACTS_DIR:-}" || { echo "SHARED_CONTRACTS_DIR is required 
 
 go test -race ./...
 go vet ./...
-test -z "$(gofmt -l cmd internal)"
+unformatted="$(gofmt -l cmd internal)"
+if [[ -n "$unformatted" ]]; then
+  printf 'Go source requires gofmt:\\n%s\\n' "$unformatted" >&2
+  exit 1
+fi
