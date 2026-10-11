@@ -126,3 +126,59 @@ func TestPEO02SPersistenceRejectsUnapprovedReviewWithoutSideEffects(t *testing.T
 		t.Fatalf("invalid review wrote a scoped restriction or grant: count=%d err=%v", count, err)
 	}
 }
+
+
+func TestPEO01PolicyCatalogueWorkloadApproverCannotAttestHumanReview(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("PostgreSQL 17 integration DB not configured")
+	}
+	ctx := context.Background()
+	db, err := Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.ApplyMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var human, workload string
+	if err := db.pool.QueryRow(ctx, `INSERT INTO identity.principal(actor_type)
+        VALUES('human') RETURNING principal_id::text`).Scan(&human); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.pool.QueryRow(ctx, `INSERT INTO identity.principal(actor_type)
+        VALUES('workload') RETURNING principal_id::text`).Scan(&workload); err != nil {
+		t.Fatal(err)
+	}
+	policy := "synthetic/peo01/independent-human-" + domain.NewUUIDv7()
+	now := time.Now().UTC()
+	for i, approver := range []string{workload, human} {
+		requirement := "synthetic.platform.doc-" + domain.NewUUIDv7()
+		_, err := db.pool.Exec(ctx, `INSERT INTO admission.founding_documentary_policy_requirement
+        (policy_reference,requirement_id,requirement_authority,authority_basis_reference,
+         approved_by,approved_at,effective_from,effective_to)
+        VALUES($1,$2,'PLATFORM_DOCUMENTARY','synthetic/source-policy',
+        $3::uuid,$4,$5,$6)`, policy, requirement, approver,
+			now.Add(-time.Hour), now.Add(-time.Hour), now.Add(time.Hour))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var governed bool
+		err = db.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1
+          FROM admission.founding_documentary_policy_requirement p
+          JOIN identity.principal a ON a.principal_id=p.approved_by
+          WHERE p.policy_reference=$1 AND p.requirement_id=$2
+            AND p.requirement_authority='PLATFORM_DOCUMENTARY'
+            AND a.actor_type='human' AND p.approved_by<>$3::uuid
+            AND length(btrim(p.authority_basis_reference))>0
+            AND p.approved_at<=$4 AND p.effective_from<=$5 AND p.effective_to>$5)`,
+			policy, requirement, domain.NewUUIDv7(), now, now).Scan(&governed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if governed != (i == 1) {
+			t.Fatalf("workload policy approval accepted or human policy approval rejected: approver=%d governed=%v", i, governed)
+		}
+	}
+}
