@@ -82,7 +82,7 @@ func ValidateCertification(spec Specification, cert Certification, now time.Time
 	if spec.SourceID != "esrc_cipc" || cert.SourceID != spec.SourceID ||
 		spec.HTTPMethod != http.MethodGet || spec.Version == "" ||
 		spec.IDField == "" || spec.NameField == "" || spec.StatusField == "" ||
-		spec.ReferenceField == "" || spec.SubscriptionField == "" ||
+		spec.ReferenceField == "" || !strings.HasPrefix(spec.SubscriptionField, "X-") ||\n\t\tstrings.ContainsAny(spec.SubscriptionField, " \\r\\n:") ||
 		strings.TrimSpace(cert.ProposedBy) == "" || strings.TrimSpace(cert.ApprovedBy) == "" ||
 		cert.ProposedBy == cert.ApprovedBy || cert.ApprovalRecord == "" ||
 		cert.ApprovedAt.After(now) || !cert.ExpiresAt.After(now) ||
@@ -152,7 +152,7 @@ func (c CIPCTransport) Lookup(ctx context.Context, registrationNumber string) (R
 	var empty Record
 	now := c.now()
 	if c.Secrets == nil || ctx == nil || registrationNumber == "" ||
-		strings.ContainsAny(registrationNumber, "/\\?#&\r\n") ||
+		strings.ContainsAny(registrationNumber, "\\?#&%\r\n") ||
 		len(registrationNumber) > 80 ||
 		ValidateCertification(c.Spec, c.Certification, now, c.AllowLoopback) != nil {
 		return empty, ErrUncertified
