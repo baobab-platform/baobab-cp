@@ -22,6 +22,16 @@ type DocumentVaultReader interface {
 	Open(context.Context, authority.ScanProof) ([]byte, error)
 }
 
+// Lease marker is package-private and injected only inside an active,
+// row-locked PostgreSQL callback. OpenScanned never trusts a plain context or
+// a stale EvidenceRecord snapshot on its own.
+type scannedDocumentLeaseKey struct{}
+type scannedDocumentLease struct {
+	evidenceID string
+	actorID string
+	clientID string
+}
+
 // VerifiedScannedArtifactReader is the concrete OEV-02 custody bridge for
 // DocumentExtractionWorker, with a separately configured independent scanner
 // public key per exact scanner ID and scanner version.
@@ -40,6 +50,11 @@ func (r VerifiedScannedArtifactReader) OpenScanned(ctx context.Context, e verifi
 		actor.ActorType != "workload" || actor.ActorID == "" ||
 		e.EvidenceID == "" || e.ArtifactID == "" || e.Status != verification.EvidenceAvail ||
 		e.EvidenceType != "DOCUMENT" || e.ExpiresAt != nil && !e.ExpiresAt.After(r.Now().UTC()) {
+		return empty, ErrScannedArtifactUnavailable
+	}
+	lease, ok := ctx.Value(scannedDocumentLeaseKey{}).(scannedDocumentLease)
+	if !ok || lease.evidenceID != e.EvidenceID || lease.actorID != actor.ActorID ||
+		lease.clientID != actor.ClientID {
 		return empty, ErrScannedArtifactUnavailable
 	}
 	p, err := r.Proofs.FindScanProof(ctx, e.EvidenceID, e.ArtifactID)
@@ -78,7 +93,12 @@ func (r VerifiedScannedArtifactReader) WithDocumentLease(ctx context.Context, ca
 		actor.ClientID != r.AllowedClientID || run == nil {
 		return ErrScannedArtifactUnavailable
 	}
-	if err := locker.WithLockedDocument(ctx, caseID, claimID, evidenceID, actor.ActorID, run); err != nil {
+	if err := locker.WithLockedDocument(ctx, caseID, claimID, evidenceID, actor.ActorID, func(lockedCtx context.Context) error {
+		leaseCtx := context.WithValue(lockedCtx, scannedDocumentLeaseKey{}, scannedDocumentLease{
+			evidenceID: evidenceID, actorID: actor.ActorID, clientID: actor.ClientID,
+		})
+		return run(leaseCtx)
+	}); err != nil {
 		return ErrScannedArtifactUnavailable
 	}
 	return nil
