@@ -29,6 +29,12 @@ export async function GET(request: NextRequest) {
     const now = Date.now();
     const expiresAt = Math.min(id.expiresAt, now + tokens.expires_in * 1000, now + 900_000);
     if (expiresAt - now < 1000) throw new Error("expired credential");
+    // Signed ID token proves authentication; current CP-audience introspection
+    // separately proves this principal may present its access token now.
+    await requireCurrentAccessToken({
+      principalId: id.subject, accessToken: tokens.access_token,
+      csrfToken: "", expiresAt,
+    }, settings);
     const session = await store.createSession(id.subject, tokens.access_token, expiresAt);
     const response = NextResponse.redirect(new URL("/workspace", settings.origin), { status: 303 });
     response.cookies.set(authCookie(session, Math.floor((expiresAt - now) / 1000), "strict"));
