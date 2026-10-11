@@ -65,7 +65,7 @@ function isTrustedHttps(value: string, allowLocal = false): URL {
 export function validateOidcMetadata(config: OidcConfiguration, metadata: OidcMetadata, allowLocal = false): void {
   const issuer = isTrustedHttps(config.issuer, allowLocal);
   const redirect = isTrustedHttps(config.redirectUri, allowLocal);
-  if (issuer.href !== metadata.issuer || config.clientId.length < 1 || config.clientId.length > 256 ||
+  if (config.issuer !== metadata.issuer || config.clientId.length < 1 || config.clientId.length > 256 ||
     redirect.pathname === "/" || !metadata.code_challenge_methods_supported?.includes("S256") ||
     !metadata.response_types_supported?.includes("code")) {
     throw new OidcBoundaryError();
@@ -103,9 +103,27 @@ export async function discoverOidc(
   }
   let data: unknown;
   try {
-    const content = await result.text();
-    if (content.length > 65_536) throw new OidcBoundaryError();
-    data = JSON.parse(content);
+    // Cap actual network bytes BEFORE buffering, not the string length
+    // after an attacker-controlled discovery document has been read.
+    if (Number(result.headers.get("content-length")) > 65_536) throw new OidcBoundaryError();
+    if (!result.body) throw new OidcBoundaryError();
+    const reader = result.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        length += part.value.byteLength;
+        if (length > 65_536) throw new OidcBoundaryError();
+        chunks.push(part.value);
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+    }
+    data = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(
+      Buffer.concat(chunks.map((value) => Buffer.from(value)), length),
+    ));
   } catch {
     throw new OidcBoundaryError();
   }
@@ -127,8 +145,9 @@ export function beginAuthorization(
   config: OidcConfiguration,
   metadata: OidcMetadata,
   now: number = Date.now(),
+  allowLocal = false,
 ): { authorizationUrl: string; pending: PendingAuthorization } {
-  validateOidcMetadata(config, metadata);
+  validateOidcMetadata(config, metadata, allowLocal);
   if (!Number.isSafeInteger(now) || now <= 0) throw new OidcBoundaryError();
   const state = randomBytes(32).toString("base64url");
   const nonce = randomBytes(32).toString("base64url");
@@ -173,7 +192,7 @@ export function validateAuthorizationCallback(
   const code = callback.get("code") ?? "";
   if (!/^[A-Za-z0-9_-]{43}$/.test(pending.state) || !/^[A-Za-z0-9_-]{43}$/.test(pending.nonce) ||
     !/^[A-Za-z0-9_-]{43}$/.test(pending.codeVerifier) ||
-    received.length !== pending.state.length || code.length === 0 || code.length > MAX_CODE_LENGTH ||
+    !/^[A-Za-z0-9_-]{43}$/.test(received) || code.length === 0 || code.length > MAX_CODE_LENGTH ||
     callback.has("iss") && callback.get("iss") !== config.issuer ||
     !timingSafeEqual(Buffer.from(received), Buffer.from(pending.state))) {
     throw new OidcBoundaryError();
