@@ -99,8 +99,8 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 		ClientID: "baobab-independent-scanner-staging", CorrelationID: domain.NewUUIDv7()}
 	pipeline := ScannedArtifactIngestor{
 		Attester: authority.IndependentDocumentAttester{
-			Scanner: syntheticAlwaysCleanScanner{},
-			Signer: syntheticEd25519Signer{key: scannerPriv},
+			Scanner:   syntheticAlwaysCleanScanner{},
+			Signer:    syntheticEd25519Signer{key: scannerPriv},
 			ScannerID: "synthetic-independent-scanner", ScannerVersion: "v1",
 			Now: func() time.Time { return now },
 		},
@@ -160,9 +160,11 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 }
 
 type syntheticAlwaysCleanScanner struct{}
+
 func (syntheticAlwaysCleanScanner) ScanDocument(context.Context, []byte) error { return nil }
 
-type syntheticEd25519Signer struct { key ed25519.PrivateKey }
-func (s syntheticEd25519Signer) Sign(payload []byte) ([]byte,error) {
-	return ed25519.Sign(s.key,payload),nil
+type syntheticEd25519Signer struct{ key ed25519.PrivateKey }
+
+func (s syntheticEd25519Signer) Sign(payload []byte) ([]byte, error) {
+	return ed25519.Sign(s.key, payload), nil
 }

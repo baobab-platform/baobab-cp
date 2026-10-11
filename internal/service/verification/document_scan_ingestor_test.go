@@ -21,13 +21,21 @@ func (s *syntheticScanAttester) ScanAndAttest(context.Context, string, string, s
 	return s.proof, s.err
 }
 
-type syntheticScannedWriter struct{ calls int; err error }
+type syntheticScannedWriter struct {
+	calls int
+	err   error
+}
+
 func (s *syntheticScannedWriter) Seal(context.Context, authority.ScanProof, []byte) error {
 	s.calls++
 	return s.err
 }
 
-type syntheticScanRegistrar struct{ calls int; err error }
+type syntheticScanRegistrar struct {
+	calls int
+	err   error
+}
+
 func (s *syntheticScanRegistrar) RegisterScannedArtifact(context.Context, authority.ScanProof, repository.AuditActor) error {
 	s.calls++
 	return s.err

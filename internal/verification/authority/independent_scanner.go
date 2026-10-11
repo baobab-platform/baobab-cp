@@ -154,7 +154,7 @@ func (a IndependentDocumentAttester) ScanAndAttest(ctx context.Context, evidence
 	sum := sha256.Sum256(document)
 	proof := ScanProof{
 		EvidenceID: evidenceID, ArtifactID: artifactID, MediaType: mediaType,
-		Digest: "sha256:" + hex.EncodeToString(sum[:]),
+		Digest:    "sha256:" + hex.EncodeToString(sum[:]),
 		ScannerID: a.ScannerID, ScannerVersion: a.ScannerVersion, Outcome: "CLEAN",
 		ScannedAt: a.Now().UTC().Truncate(time.Microsecond),
 	}

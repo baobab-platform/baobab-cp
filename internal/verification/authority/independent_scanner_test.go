@@ -74,8 +74,8 @@ func TestPEO03LIndependentClamdScanAndMountedSignature(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	attester := IndependentDocumentAttester{
-		Scanner: ClamdUnixScanner{SocketPath: syntheticClamd(t, []byte("stream: OK\x00"), document)},
-		Signer: MountedScanSigningKey{PrivateKeyPath: keyFile},
+		Scanner:   ClamdUnixScanner{SocketPath: syntheticClamd(t, []byte("stream: OK\x00"), document)},
+		Signer:    MountedScanSigningKey{PrivateKeyPath: keyFile},
 		ScannerID: "synthetic-clamd-independent", ScannerVersion: "clamav-fixture-v1",
 		Now: func() time.Time { return now },
 	}
@@ -111,23 +111,22 @@ func TestPEO03LNoSignatureForInfectedOrUnavailableScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
-		name string
+		name  string
 		reply []byte
 	}{
 		{"infected", []byte("stream: Eicar-Test-Signature FOUND\x00")},
 		{"scanner error", []byte("stream: scan failed ERROR\x00")},
 		{"no scan response", nil},
 		{"malformed clean", []byte("stream: OK\n")},
-	}{
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			attester := IndependentDocumentAttester{
-				Scanner: ClamdUnixScanner{SocketPath: syntheticClamd(t, tc.reply, document)},
-				Signer: MountedScanSigningKey{PrivateKeyPath: path},
+				Scanner:   ClamdUnixScanner{SocketPath: syntheticClamd(t, tc.reply, document)},
+				Signer:    MountedScanSigningKey{PrivateKeyPath: path},
 				ScannerID: "synthetic-independent", ScannerVersion: "v1",
 				Now: time.Now,
 			}
-			if _, err := attester.ScanAndAttest(context.Background(), "evr_scanner123", "eart_scanner123", "application/pdf", document);
-				!errors.Is(err, ErrIndependentScanUnavailable) {
+			if _, err := attester.ScanAndAttest(context.Background(), "evr_scanner123", "eart_scanner123", "application/pdf", document); !errors.Is(err, ErrIndependentScanUnavailable) {
 				t.Fatalf("untrusted scan produced signing proof: %v", err)
 			}
 		})
