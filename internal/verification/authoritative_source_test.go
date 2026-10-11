@@ -33,13 +33,13 @@ func (f fakeVerifiedRegistration) ResolveVerifiedRegistration(_ context.Context,
 
 func syntheticRegistration(now time.Time) VerifiedRegistrationResolver {
 	return fakeVerifiedRegistration{binding: VerifiedRegistrationBinding{
-		CaseID: "vcase_synthetic01",
-		Subject: syntheticCIPCClaim().Subject,
+		CaseID:             "vcase_synthetic01",
+		Subject:            syntheticCIPCClaim().Subject,
 		RegistrationNumber: "2020/123456/07",
-		ClaimID: "ecl_verifiedreg01",
-		ResultID: "vres_verifiedreg01",
-		SourceID: "esrc_cipc",
-		FreshnessUntil: now.Add(time.Hour),
+		ClaimID:            "ecl_verifiedreg01",
+		ResultID:           "vres_verifiedreg01",
+		SourceID:           "esrc_cipc",
+		FreshnessUntil:     now.Add(time.Hour),
 	}}
 }
 
@@ -182,8 +182,7 @@ func TestPEO03BCompanyNameCannotBorrowUnrelatedRegistryIdentifier(t *testing.T) 
 		Registry: registry, Certified: true, AdapterID: "baobab.cipc",
 		AllowSynthetic: true,
 	}
-	if _, err := missing.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now);
-		!errors.Is(err, ErrUntrustedObservation) || registry.calls != 0 {
+	if _, err := missing.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now); !errors.Is(err, ErrUntrustedObservation) || registry.calls != 0 {
 		t.Fatalf("unbound company name was accepted: %v", err)
 	}
 	for _, change := range []func(*VerifiedRegistrationBinding){
@@ -197,8 +196,7 @@ func TestPEO03BCompanyNameCannotBorrowUnrelatedRegistryIdentifier(t *testing.T) 
 		change(&binding.binding)
 		missing.Registrations = binding
 		before := registry.calls
-		if _, err := missing.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now);
-			!errors.Is(err, ErrUntrustedObservation) || registry.calls != before {
+		if _, err := missing.LookupCIPC(context.Background(), "vcase_synthetic01", claim, now); !errors.Is(err, ErrUntrustedObservation) || registry.calls != before {
 			t.Fatalf("foreign or expired registration was accepted: %v", err)
 		}
 	}
