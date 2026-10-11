@@ -36,11 +36,11 @@ type CIPCIntake struct {
 }
 
 type custodiedRegistry struct {
-	transport  authority.CIPCTransport
-	vault      authority.SealedVault
-	evidenceID   string
+	transport     authority.CIPCTransport
+	vault         authority.SealedVault
+	evidenceID    string
 	attemptDigest string
-	ttl          time.Duration
+	ttl           time.Duration
 }
 
 func (c custodiedRegistry) LookupCompany(ctx context.Context, number string) (verification.CompanyRecord, error) {
