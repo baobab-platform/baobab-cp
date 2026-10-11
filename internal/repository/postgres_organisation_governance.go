@@ -41,6 +41,14 @@ func (r *PostgresRepository) ListTenantsByDefaultLegalEntity(ctx context.Context
 
 func (r *PostgresRepository) ApplyFirstPartyGovernance(ctx context.Context, g FirstPartyGovernance, actor AuditActor) (GovernanceOutcome, error) {
 	var out GovernanceOutcome
+	// This compatibility method predates ADR-BCP-026/027 and promotes
+	// Shared first-party registry *identity* into a verified legal person.
+	// Modern annotated first-party entries use EnsureFirstPartyOperatingIdentity.
+	// Legacy unannotated fixtures may use it only in disposable environments.
+	// Production and staging MUST use OEV-03 source-backed registration proof.
+	if !sourceObservationTestEnvironment(r.Environment) {
+		return out, errors.New("legacy first-party governance cannot verify legal incorporation in staging or production")
+	}
 	if g.LegalEntityID == "" || g.LegalName == "" || g.EvidenceReference == "" || g.At.IsZero() {
 		return out, errors.New("first-party governance: legal_entity_id, legal_name, evidence_reference and at are required")
 	}
