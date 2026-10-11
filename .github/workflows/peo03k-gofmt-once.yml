@@ -1,8 +1,10 @@
 name: PEO-03K one-off gofmt
 on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: [main]
   push:
     branches: [feat/peo03k-scanned-custody-candidate-ledger]
-    paths: [.github/workflows/peo03k-gofmt-once.yml]
 permissions:
   contents: write
 jobs:
