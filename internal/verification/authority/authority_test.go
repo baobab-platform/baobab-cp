@@ -14,150 +14,184 @@ import (
 )
 
 type fixtureSecrets struct{}
-func (fixtureSecrets) OAuthCredentials(context.Context) (string,string,string,error) {
-	return "synthetic-client","synthetic-secret","synthetic-subscription",nil
+
+func (fixtureSecrets) OAuthCredentials(context.Context) (string, string, string, error) {
+	return "synthetic-client", "synthetic-secret", "synthetic-subscription", nil
 }
 
-func fixtureTransport(t *testing.T) (CIPCTransport,func()) {
+func fixtureTransport(t *testing.T) (CIPCTransport, func()) {
 	t.Helper()
-	now:=time.Date(2026,10,11,8,0,0,0,time.UTC)
-	server:=httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
-		if r.URL.Path=="/synthetic-token"{
-			if r.Method!=http.MethodPost || r.Header.Get("Content-Type")!="application/x-www-form-urlencoded" {
+	now := time.Date(2026, 10, 11, 8, 0, 0, 0, time.UTC)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/synthetic-token" {
+			if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
 				t.Error("token request is not form-urlencoded")
 			}
-			w.Header().Set("Content-Type","application/json")
+			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"access_token":"synthetic-secret-token","token_type":"Bearer"}`))
 			return
 		}
-		if r.URL.Path=="/synthetic-companies/2020%2F123456%2F07" || r.URL.Path=="/synthetic-companies/2020/123456/07"{
-			if r.Header.Get("Authorization")!="Bearer synthetic-secret-token" ||
-				r.Header.Get("X-Synthetic-Subscription")!="synthetic-subscription" {
+		if r.URL.Path == "/synthetic-companies/2020%2F123456%2F07" || r.URL.Path == "/synthetic-companies/2020/123456/07" {
+			if r.Header.Get("Authorization") != "Bearer synthetic-secret-token" ||
+				r.Header.Get("X-Synthetic-Subscription") != "synthetic-subscription" {
 				t.Error("missing test IAM bearer or subscription")
 			}
-			w.Header().Set("Content-Type","application/json")
+			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{
-				"reg":"2020/123456/07","name":"Synthetic Test Company",
-				"status":"ACTIVE","ref":"synthetic-issuer-ref-0001"})
+				"reg": "2020/123456/07", "name": "Synthetic Test Company",
+				"status": "ACTIVE", "ref": "synthetic-issuer-ref-0001"})
 			return
 		}
-		http.NotFound(w,r)
+		http.NotFound(w, r)
 	}))
-	spec:=Specification{SourceID:"esrc_cipc",OfficialOrigin:server.URL,
-		OAuthTokenURL:server.URL+"/synthetic-token",
-		CompanyLookupURL:server.URL+"/synthetic-companies/{registration_number}",
-		HTTPMethod:http.MethodGet,SubscriptionField:"X-Synthetic-Subscription",
-		IDField:"reg",NameField:"name",StatusField:"status",ReferenceField:"ref",
-		Version:"synthetic-approved-test-v1"}
-	cert:=Certification{SourceID:"esrc_cipc",SpecDigest:Digest(spec),ProposedBy:"prn_maker",
-		ApprovedBy:"prn_checker",ApprovedAt:now.Add(-time.Hour),ExpiresAt:now.Add(time.Hour),
-		ApprovalRecord:"synthetic-approved-fixture"}
-	return CIPCTransport{Spec:spec,Certification:cert,Secrets:fixtureSecrets{},
-		Client:server.Client(),AllowLoopback:true,Now:func() time.Time {return now}},server.Close
+	spec := Specification{SourceID: "esrc_cipc", OfficialOrigin: server.URL,
+		OAuthTokenURL:    server.URL + "/synthetic-token",
+		CompanyLookupURL: server.URL + "/synthetic-companies/{registration_number}",
+		HTTPMethod:       http.MethodGet, SubscriptionField: "X-Synthetic-Subscription",
+		IDField: "reg", NameField: "name", StatusField: "status", ReferenceField: "ref",
+		Version: "synthetic-approved-test-v1"}
+	cert := Certification{SourceID: "esrc_cipc", SpecDigest: Digest(spec), ProposedBy: "prn_maker",
+		ApprovedBy: "prn_checker", ApprovedAt: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour),
+		ApprovalRecord: "synthetic-approved-fixture"}
+	return CIPCTransport{Spec: spec, Certification: cert, Secrets: fixtureSecrets{},
+		Client: server.Client(), AllowLoopback: true, Now: func() time.Time { return now }}, server.Close
 }
 
-func TestPEO03FCIPCTLSOAuthAndImmutableSourceDigest(t *testing.T){
-	c,closeServer:=fixtureTransport(t);defer closeServer()
-	record,err:=c.Lookup(context.Background(),"2020/123456/07")
-	if err!=nil {t.Fatal(err)}
-	if record.RegistrationNumber!="2020/123456/07" || record.LegalName!="Synthetic Test Company" ||
-		record.SourceReference!="synthetic-issuer-ref-0001" {t.Fatalf("wrong company mapping: %+v",record)}
-	d:=sha256.Sum256(record.RawResponse)
-	if record.Digest!="sha256:"+hex.EncodeToString(d[:]) {t.Fatal("provider response digest mismatch")}
-	if strings.Contains(c.String(),"synthetic-secret") {t.Fatal("OAuth credentials exposed")}
+func TestPEO03FCIPCTLSOAuthAndImmutableSourceDigest(t *testing.T) {
+	c, closeServer := fixtureTransport(t)
+	defer closeServer()
+	record, err := c.Lookup(context.Background(), "2020/123456/07")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.RegistrationNumber != "2020/123456/07" || record.LegalName != "Synthetic Test Company" ||
+		record.SourceReference != "synthetic-issuer-ref-0001" {
+		t.Fatalf("wrong company mapping: %+v", record)
+	}
+	d := sha256.Sum256(record.RawResponse)
+	if record.Digest != "sha256:"+hex.EncodeToString(d[:]) {
+		t.Fatal("provider response digest mismatch")
+	}
+	if strings.Contains(c.String(), "synthetic-secret") {
+		t.Fatal("OAuth credentials exposed")
+	}
 }
 
-func TestPEO03FNoUnapprovedSourceOrURL(t *testing.T){
-	c,stop:=fixtureTransport(t);defer stop()
-	for _,tc:=range []struct{name string;change func(*CIPCTransport)}{
-		{"expired",func(c *CIPCTransport){c.Certification.ExpiresAt=c.Now().Add(-time.Second)}},
-		{"self-approved",func(c *CIPCTransport){c.Certification.ApprovedBy=c.Certification.ProposedBy}},
-		{"changed-spec",func(c *CIPCTransport){c.Spec.CompanyLookupURL="https://127.0.0.1/fake/{registration_number}"}},
-		{"source-confusion",func(c *CIPCTransport){c.Spec.SourceID="esrc_sarstcs"}},
-		{"http-origin",func(c *CIPCTransport){c.Spec.OfficialOrigin="http://example.com"}},
-		{"unexpected-host",func(c *CIPCTransport){c.Spec.OAuthTokenURL="https://other.example.com/token"}},
-		{"missing-credential",func(c *CIPCTransport){c.Secrets=nil}},
-		{"no-loopback-production",func(c *CIPCTransport){c.AllowLoopback=false}},
+func TestPEO03FNoUnapprovedSourceOrURL(t *testing.T) {
+	c, stop := fixtureTransport(t)
+	defer stop()
+	for _, tc := range []struct {
+		name   string
+		change func(*CIPCTransport)
 	}{
-		t.Run(tc.name,func(t *testing.T){bad:=c;tc.change(&bad)
-			_,err:=bad.Lookup(context.Background(),"2020/123456/07")
-			if !errors.Is(err,ErrUncertified){t.Fatalf("unapproved config accepted: %v",err)}
+		{"expired", func(c *CIPCTransport) { c.Certification.ExpiresAt = c.Now().Add(-time.Second) }},
+		{"self-approved", func(c *CIPCTransport) { c.Certification.ApprovedBy = c.Certification.ProposedBy }},
+		{"changed-spec", func(c *CIPCTransport) { c.Spec.CompanyLookupURL = "https://127.0.0.1/fake/{registration_number}" }},
+		{"source-confusion", func(c *CIPCTransport) { c.Spec.SourceID = "esrc_sarstcs" }},
+		{"http-origin", func(c *CIPCTransport) { c.Spec.OfficialOrigin = "http://example.com" }},
+		{"unexpected-host", func(c *CIPCTransport) { c.Spec.OAuthTokenURL = "https://other.example.com/token" }},
+		{"missing-credential", func(c *CIPCTransport) { c.Secrets = nil }},
+		{"no-loopback-production", func(c *CIPCTransport) { c.AllowLoopback = false }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bad := c
+			tc.change(&bad)
+			_, err := bad.Lookup(context.Background(), "2020/123456/07")
+			if !errors.Is(err, ErrUncertified) {
+				t.Fatalf("unapproved config accepted: %v", err)
+			}
 		})
 	}
-	for _,bad:=range []string{"../secret","2020/123456/07?admin=true","company#other","",strings.Repeat("a",81)}{
-		if _,err:=c.Lookup(context.Background(),bad);!errors.Is(err,ErrUncertified){
-			t.Fatalf("untrusted company reference accepted: %q %v",bad,err)
+	for _, bad := range []string{"../secret", "2020/123456/07?admin=true", "company#other", "", strings.Repeat("a", 81)} {
+		if _, err := c.Lookup(context.Background(), bad); !errors.Is(err, ErrUncertified) {
+			t.Fatalf("untrusted company reference accepted: %q %v", bad, err)
 		}
 	}
 }
 
-func TestPEO03FResponseMismatchRejects(t *testing.T){
-	c,closeServer:=fixtureTransport(t);defer closeServer()
-	_,err:=c.Lookup(context.Background(),"2020/123456/08")
-	if !errors.Is(err,ErrUnavailable){t.Fatalf("unexpected company lookup passed: %v",err)}
+func TestPEO03FResponseMismatchRejects(t *testing.T) {
+	c, closeServer := fixtureTransport(t)
+	defer closeServer()
+	_, err := c.Lookup(context.Background(), "2020/123456/08")
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("unexpected company lookup passed: %v", err)
+	}
 }
 
-func TestPEO03FSealedCustodyTamperAndIdentityBinding(t *testing.T){
-	key:=make([]byte,32)
-	for i:=range key {key[i]=byte(i+1)}
-	vault:=SealedVault{Directory:t.TempDir(),Key:key}
-	data:=[]byte(`{"official_source":"synthetic-only","company":"Test"}`)
-	ref,err:=vault.Seal(context.Background(),"evr_fixture00000001",data)
-	if err!=nil || !strings.HasPrefix(ref,"sealed-sha256:"){t.Fatalf("seal: %s %v",ref,err)}
-	got,err:=vault.Open(context.Background(),"evr_fixture00000001")
-	if err!=nil || string(got)!=string(data){t.Fatalf("open: %v",err)}
-	if replay,sealErr:=vault.Seal(context.Background(),"evr_fixture00000001",data);sealErr!=nil||replay!=ref{
-		t.Fatalf("identical encrypted evidence replay could not recover: %s %v",replay,sealErr)
+func TestPEO03FSealedCustodyTamperAndIdentityBinding(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 1)
 	}
-	if _,err=vault.Seal(context.Background(),"evr_fixture00000001",[]byte("different record"));!errors.Is(err,ErrCustody){
-		t.Fatalf("different response overwrote immutable ciphertext: %v",err)
+	vault := SealedVault{Directory: t.TempDir(), Key: key}
+	data := []byte(`{"official_source":"synthetic-only","company":"Test"}`)
+	ref, err := vault.Seal(context.Background(), "evr_fixture00000001", data)
+	if err != nil || !strings.HasPrefix(ref, "sealed-sha256:") {
+		t.Fatalf("seal: %s %v", ref, err)
 	}
-	if _,err=vault.Open(context.Background(),"evr_some_other_id");!errors.Is(err,ErrCustody){
-		t.Fatalf("foreign evidence ID read source contents: %v",err)
+	got, err := vault.Open(context.Background(), "evr_fixture00000001")
+	if err != nil || string(got) != string(data) {
+		t.Fatalf("open: %v", err)
 	}
-	bad:=vault;bad.Key=make([]byte,32)
-	if _,err=bad.Open(context.Background(),"evr_fixture00000001");!errors.Is(err,ErrCustody){
-		t.Fatalf("wrong key opened source response: %v",err)
+	if replay, sealErr := vault.Seal(context.Background(), "evr_fixture00000001", data); sealErr != nil || replay != ref {
+		t.Fatalf("identical encrypted evidence replay could not recover: %s %v", replay, sealErr)
+	}
+	if _, err = vault.Seal(context.Background(), "evr_fixture00000001", []byte("different record")); !errors.Is(err, ErrCustody) {
+		t.Fatalf("different response overwrote immutable ciphertext: %v", err)
+	}
+	if _, err = vault.Open(context.Background(), "evr_some_other_id"); !errors.Is(err, ErrCustody) {
+		t.Fatalf("foreign evidence ID read source contents: %v", err)
+	}
+	bad := vault
+	bad.Key = make([]byte, 32)
+	if _, err = bad.Open(context.Background(), "evr_fixture00000001"); !errors.Is(err, ErrCustody) {
+		t.Fatalf("wrong key opened source response: %v", err)
 	}
 }
 
 func TestPEO03FAssistedSARSIndependentHumanWitness(t *testing.T) {
-	now:=time.Date(2026,10,11,10,0,0,0,time.UTC)
-	f:=AssistedFinding{IntentID:"sars_synthetic_0001",CaseID:"vcase_1",ClaimID:"ecl_1",
-		SourceID:"esrc_sarstcs",EvidenceID:"evr_synthetic1",OfficialReference:"ref-sha256:"+strings.Repeat("b",64),
-		ObservedAt:now.Add(-time.Minute),FreshnessUntil:now.Add(time.Hour),
-		ResponseDigest:"sha256:"+strings.Repeat("a",64),ProvenanceRef:"sealed://synthetic-evidence",
-		Witness:"prn_witness",Status:"PENDING"}
-	if err:=ValidateAssistedProposal(f,now);err!=nil {t.Fatalf("witnessed portal finding refused: %v",err)}
-	for _,checker:=range []string{"","prn_witness"} {
-		if err:=ValidateAssistedApproval(f,checker,now);!errors.Is(err,ErrAssistedReview){
-			t.Fatalf("self-approval passed: %q %v",checker,err)
+	now := time.Date(2026, 10, 11, 10, 0, 0, 0, time.UTC)
+	f := AssistedFinding{IntentID: "sars_synthetic_0001", CaseID: "vcase_1", ClaimID: "ecl_1",
+		SourceID: "esrc_sarstcs", EvidenceID: "evr_synthetic1", OfficialReference: "ref-sha256:" + strings.Repeat("b", 64),
+		ObservedAt: now.Add(-time.Minute), FreshnessUntil: now.Add(time.Hour),
+		ResponseDigest: "sha256:" + strings.Repeat("a", 64), ProvenanceRef: "sealed://synthetic-evidence",
+		Witness: "prn_witness", Status: "PENDING"}
+	if err := ValidateAssistedProposal(f, now); err != nil {
+		t.Fatalf("witnessed portal finding refused: %v", err)
+	}
+	for _, checker := range []string{"", "prn_witness"} {
+		if err := ValidateAssistedApproval(f, checker, now); !errors.Is(err, ErrAssistedReview) {
+			t.Fatalf("self-approval passed: %q %v", checker, err)
 		}
 	}
-	if err:=ValidateAssistedApproval(f,"prn_independent",now);err!=nil {t.Fatal(err)}
-	f.ResponseDigest="sha256:"+strings.Repeat("z",64)
-	if err:=ValidateAssistedProposal(f,now);!errors.Is(err,ErrAssistedReview){
-		t.Fatalf("nonhex digest accepted: %v",err)
+	if err := ValidateAssistedApproval(f, "prn_independent", now); err != nil {
+		t.Fatal(err)
 	}
-	f.ResponseDigest="sha256:"+strings.Repeat("a",64)
-	f.SourceID="esrc_cipc"
-	if err:=ValidateAssistedProposal(f,now);!errors.Is(err,ErrAssistedReview){
-		t.Fatalf("assisted SARS review claimed CIPC authority: %v",err)
+	f.ResponseDigest = "sha256:" + strings.Repeat("z", 64)
+	if err := ValidateAssistedProposal(f, now); !errors.Is(err, ErrAssistedReview) {
+		t.Fatalf("nonhex digest accepted: %v", err)
+	}
+	f.ResponseDigest = "sha256:" + strings.Repeat("a", 64)
+	f.SourceID = "esrc_cipc"
+	if err := ValidateAssistedProposal(f, now); !errors.Is(err, ErrAssistedReview) {
+		t.Fatalf("assisted SARS review claimed CIPC authority: %v", err)
 	}
 }
 
 func TestPEO03FReverificationRequiresFreshIndependentEvidence(t *testing.T) {
-	now:=time.Date(2026,10,11,10,0,0,0,time.UTC)
-	row:=DueObservation{ObservationID:"aobs_1",CaseID:"vcase_1",ClaimID:"ecl_1",EvidenceID:"evr_1",
-		SourceID:"esrc_cipc",LastObserved:now.Add(-48*time.Hour),FreshnessUntil:now.Add(-time.Minute)}
-	p,err:=PlanReverification(row,now,true)
-	if err!=nil||!p.Execute||p.Reason!="EVIDENCE_EXPIRED"{t.Fatalf("expiry not queued: %+v %v",p,err)}
-	row.Suspended=true
-	if p,err:=PlanReverification(row,now,true);!errors.Is(err,ErrReverification)||p.Execute{
+	now := time.Date(2026, 10, 11, 10, 0, 0, 0, time.UTC)
+	row := DueObservation{ObservationID: "aobs_1", CaseID: "vcase_1", ClaimID: "ecl_1", EvidenceID: "evr_1",
+		SourceID: "esrc_cipc", LastObserved: now.Add(-48 * time.Hour), FreshnessUntil: now.Add(-time.Minute)}
+	p, err := PlanReverification(row, now, true)
+	if err != nil || !p.Execute || p.Reason != "EVIDENCE_EXPIRED" {
+		t.Fatalf("expiry not queued: %+v %v", p, err)
+	}
+	row.Suspended = true
+	if p, err := PlanReverification(row, now, true); !errors.Is(err, ErrReverification) || p.Execute {
 		t.Fatal("suspended provider was executed")
 	}
-	row.Suspended=false
-	if p,err:=PlanReverification(row,now,false);!errors.Is(err,ErrReverification)||p.Execute{
+	row.Suspended = false
+	if p, err := PlanReverification(row, now, false); !errors.Is(err, ErrReverification) || p.Execute {
 		t.Fatal("uncertified provider was executed")
 	}
 }
