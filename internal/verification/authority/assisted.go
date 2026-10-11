@@ -3,6 +3,7 @@ package authority
 import (
 	"context"
 	"errors"
+	"encoding/hex"
 	"strings"
 	"time"
 )
@@ -47,6 +48,7 @@ func ValidateAssistedProposal(f AssistedFinding, now time.Time) error {
 		f.OfficialReference=="" || len(f.OfficialReference)>256 ||
 		len(f.ProvenanceRef)<8 || len(f.ProvenanceRef)>512 ||
 		len(f.ResponseDigest)!=71 || !strings.HasPrefix(f.ResponseDigest,"sha256:") ||
+		!isLowerHexDigest(f.ResponseDigest) ||
 		f.Witness=="" || f.Checker!="" || f.Status!="PENDING" ||
 		f.ObservedAt.After(now) || now.Sub(f.ObservedAt)>5*time.Minute ||
 		!f.FreshnessUntil.After(now) || !f.FreshnessUntil.After(f.ObservedAt) {
@@ -65,4 +67,10 @@ func ValidateAssistedApproval(f AssistedFinding, checker string, now time.Time) 
 		return ErrAssistedReview
 	}
 	return nil
+}
+
+func isLowerHexDigest(d string) bool {
+	if len(d)!=71||!strings.HasPrefix(d,"sha256:"){return false}
+	raw,err:=hex.DecodeString(d[7:])
+	return err==nil&&len(raw)==32&&strings.ToLower(d)==d
 }
