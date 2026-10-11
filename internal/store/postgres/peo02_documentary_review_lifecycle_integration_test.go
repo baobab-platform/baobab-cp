@@ -201,7 +201,8 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
 	revisedDecision, err := db.DecideDocumentaryReview(ctx, key("reassess-decide"), meta(11), actors[11],
 		newProposal.ID, ReviewDecisionInput{Outcome: "ASSESSMENT_INCOMPLETE",
 			DecisionReference: "synthetic/peo02s/reassessment",
-			Reason:            "Further independent verification required; do not clear any previous hold"}); err != nil {
+			Reason:            "Further independent verification required; do not clear any previous hold"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	blocked, err := db.DocumentaryScopeBlocked(ctx, operating, "trade.checkout", "ZA")
