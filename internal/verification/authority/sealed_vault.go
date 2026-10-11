@@ -2,6 +2,7 @@ package authority
 
 import (
 	"context"
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -55,6 +56,16 @@ func (v SealedVault) Seal(ctx context.Context, evidenceID string, plaintext []by
 	// O_EXCL avoids replacing an existing immutable source response; a retry
 	// must reconcile its existing evidence binding rather than overwrite it.
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if errors.Is(err, os.ErrExist) {
+		// Only byte-identical replay under the same authenticated evidence
+		// ID may recover from a failed metadata commit. Never overwrite
+		// different issuer data or treat it as the old observation.
+		existing, openErr := v.Open(ctx, evidenceID)
+		if openErr != nil || !bytes.Equal(existing, plaintext) {
+			return "", ErrCustody
+		}
+		return "sealed-sha256:" + hex.EncodeToString(name[:]), nil
+	}
 	if err != nil { return "", ErrCustody }
 	_, err = file.Write(ciphertext)
 	if err == nil { err = file.Sync() }
