@@ -24,14 +24,14 @@ func (s scanProofFixture) FindScanProof(_ context.Context, _, _ string) (authori
 func (s scanProofFixture) WithLockedDocument(ctx context.Context, _, _, _, _ string, run func(context.Context) error) error {
 	return run(ctx) // synthetic fixture only, PostgreSQL integration verifies real row locks.
 }
-func readWithSyntheticLease(r VerifiedScannedArtifactReader,e verification.Evidence,actor repository.AuditActor)(ScannedDocument,error){
+func readWithSyntheticLease(r VerifiedScannedArtifactReader, e verification.Evidence, actor repository.AuditActor) (ScannedDocument, error) {
 	var doc ScannedDocument
-	err:=r.WithDocumentLease(context.Background(),"vcase_fixture","ecl_fixture",e.EvidenceID,actor,func(ctx context.Context)error{
+	err := r.WithDocumentLease(context.Background(), "vcase_fixture", "ecl_fixture", e.EvidenceID, actor, func(ctx context.Context) error {
 		var openErr error
-		doc,openErr=r.OpenScanned(ctx,e,actor)
+		doc, openErr = r.OpenScanned(ctx, e, actor)
 		return openErr
 	})
-	return doc,err
+	return doc, err
 }
 
 func TestPEO03KReaderRequiresIndependentScannerSignatureAndWorkload(t *testing.T) {

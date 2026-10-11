@@ -28,8 +28,8 @@ type DocumentVaultReader interface {
 type scannedDocumentLeaseKey struct{}
 type scannedDocumentLease struct {
 	evidenceID string
-	actorID string
-	clientID string
+	actorID    string
+	clientID   string
 }
 
 // VerifiedScannedArtifactReader is the concrete OEV-02 custody bridge for
