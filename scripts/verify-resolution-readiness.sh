@@ -28,5 +28,8 @@ go vet ./...
 unformatted="$(gofmt -l cmd internal)"
 if [[ -n "$unformatted" ]]; then
   printf 'Go source requires gofmt:\\n%s\\n' "$unformatted" >&2
+  while IFS= read -r source; do
+    [[ -z "$source" ]] || gofmt -d "$source" >&2
+  done <<< "$unformatted"
   exit 1
 fi
