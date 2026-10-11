@@ -85,31 +85,45 @@ ALTER TABLE admission.documentary_review_intent
 CREATE OR REPLACE FUNCTION admission.documentary_review_protect()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP='DELETE' OR (TG_OP='UPDATE' AND (
-       (TG_TABLE_NAME='documentary_review_intent' AND
-        (ROW(NEW.review_id,NEW.deferral_id,NEW.milestone_month,NEW.revision,
-            NEW.reopened_from_appeal_id,NEW.organisation_id,
-            NEW.proposed_by,NEW.idempotency_key,NEW.request_digest,NEW.assessment,
-            NEW.policy_reference,NEW.created_at)
-         IS DISTINCT FROM
-         ROW(OLD.review_id,OLD.deferral_id,OLD.milestone_month,OLD.revision,
-             OLD.reopened_from_appeal_id,OLD.organisation_id,
-             OLD.proposed_by,OLD.idempotency_key,OLD.request_digest,OLD.assessment,
-             OLD.policy_reference,OLD.created_at)
-         OR OLD.state<>'PENDING' OR NEW.state<>'DECIDED'))
-       OR (TG_TABLE_NAME='documentary_review_appeal' AND
-        (ROW(NEW.appeal_id,NEW.decision_id,NEW.raised_by,NEW.idempotency_key,
-             NEW.reason,NEW.evidence_reference,NEW.raised_at)
-         IS DISTINCT FROM
-         ROW(OLD.appeal_id,OLD.decision_id,OLD.raised_by,OLD.idempotency_key,
-             OLD.reason,OLD.evidence_reference,OLD.raised_at)
-         OR OLD.state<>'FILED' OR NEW.state<>'DECIDED'))
-       OR TG_TABLE_NAME NOT IN ('documentary_review_intent','documentary_review_appeal')
-      )) THEN
-      RAISE EXCEPTION 'PEO-02 review history is append-only and state transitions are forward only'
-        USING ERRCODE='check_violation';
+  IF TG_OP='DELETE' THEN
+    RAISE EXCEPTION 'PEO-02 review history cannot be deleted'
+      USING ERRCODE='check_violation';
   END IF;
-  RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
+  -- PL/pgSQL boolean conditions are not a safe table-type discriminator:
+  -- PostgreSQL may evaluate NEW.appeal_id on a review_intent row (or
+  -- NEW.review_id on an appeal) even if a preceding OR/AND would appear
+  -- to short-circuit. Keep mutually exclusive table checks as statements.
+  IF TG_TABLE_NAME='documentary_review_intent' THEN
+    IF ROW(NEW.review_id,NEW.deferral_id,NEW.milestone_month,NEW.revision,
+           NEW.reopened_from_appeal_id,NEW.organisation_id,NEW.proposed_by,
+           NEW.idempotency_key,NEW.request_digest,NEW.assessment,
+           NEW.policy_reference,NEW.created_at)
+       IS DISTINCT FROM
+       ROW(OLD.review_id,OLD.deferral_id,OLD.milestone_month,OLD.revision,
+           OLD.reopened_from_appeal_id,OLD.organisation_id,OLD.proposed_by,
+           OLD.idempotency_key,OLD.request_digest,OLD.assessment,
+           OLD.policy_reference,OLD.created_at)
+       OR OLD.state<>'PENDING' OR NEW.state<>'DECIDED'
+    THEN
+      RAISE EXCEPTION 'PEO-02 review intent is immutable apart from PENDING to DECIDED'
+        USING ERRCODE='check_violation';
+    END IF;
+  ELSIF TG_TABLE_NAME='documentary_review_appeal' THEN
+    IF ROW(NEW.appeal_id,NEW.decision_id,NEW.raised_by,NEW.idempotency_key,
+           NEW.reason,NEW.evidence_reference,NEW.raised_at)
+       IS DISTINCT FROM
+       ROW(OLD.appeal_id,OLD.decision_id,OLD.raised_by,OLD.idempotency_key,
+           OLD.reason,OLD.evidence_reference,OLD.raised_at)
+       OR OLD.state<>'FILED' OR NEW.state<>'DECIDED'
+    THEN
+      RAISE EXCEPTION 'PEO-02 appeal is immutable apart from FILED to DECIDED'
+        USING ERRCODE='check_violation';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'PEO-02 review decisions and restrictions are immutable'
+      USING ERRCODE='check_violation';
+  END IF;
+  RETURN NEW;
 END $$;
 
 CREATE TRIGGER documentary_review_intent_guard BEFORE UPDATE OR DELETE
