@@ -2,7 +2,6 @@ package postgres
 
 import (
     "context"
-    "encoding/json"
     "fmt"
     "os"
     "testing"
@@ -181,11 +180,17 @@ func TestPEO02SFullDocumentaryReviewAppealAndScopedHoldLifecycle(t *testing.T) {
         t.Fatalf("appeal or reassessment mutated original 24-month grace: %d %v",changedOriginal,err)
     }
     var audit int
+    targets := []string{
+      "founding-governance/"+proposal.ID,
+      "founding-governance/"+decision.ID,
+      "founding-governance/"+appeal.ID,
+      "founding-governance/"+adjudication.ID,
+      "founding-governance/"+newProposal.ID,
+    }
     if err=db.pool.QueryRow(ctx,`SELECT count(*) FROM audit_events
-       WHERE action LIKE 'founding_governance.documentary_%'
-       AND payload::text LIKE '%'`,).Scan(&audit);err!=nil{t.Fatal(err)}
-    _=audit // Audit commits are asserted by foundingAudit in the functions.
-    // Source event/evidence claims are synthetic-only. These tests do NOT
+       WHERE target=ANY($1::text[]) AND action LIKE 'founding_governance.documentary_%'`,
+       targets).Scan(&audit);err!=nil{t.Fatal(err)}
+    if audit != 5 {t.Fatalf("expected exactly five committed, nonreplayed review/appeal audit facts, got %d",audit)}
+    // Source event/evidence claims are synthetic-only. These tests DO NOT
     // establish external statutory applicability or live PEP acceptance.
-    _=json.Valid
 }
