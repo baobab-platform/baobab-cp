@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 
-import { parseServerEnv } from "@/server/env";
+import { authConfigSource, parseServerEnv } from "@/server/env";
 
 import { OidcBoundaryError, type OidcConfiguration } from "./oidc-protocol";
 import { RedisConfidentialSessionStore, TlsRedisCommands } from "./redis-sessions";
@@ -36,7 +36,7 @@ function protectedURL(value: string, origin?: string): URL {
 }
 
 /** Explicit runtime approval; no public or production enablement by default. */
-export function readAuthSettings(source: Record<string, string | undefined> = process.env): AuthSettings {
+export function readAuthSettings(source: Record<string, string | undefined> = authConfigSource()): AuthSettings {
   if (source.CP_CONSOLE_AUTH_ENABLED !== "true" ||
       !["integration", "staging", "development"].includes(source.CONSOLE_ENVIRONMENT ?? "")) {
     throw new OidcBoundaryError();
