@@ -1,3 +1,9 @@
+// Environment-gated presentation must be decided at runtime, not during Next build.
+export const dynamic = "force-dynamic";
+
+import Link from "next/link";
+import { serverEnv } from "@/server/env";
+
 import { PageHeader } from "@/components";
 
 // The shell, sign-in and workspaces arrive in later gates
@@ -10,6 +16,9 @@ export default function Home() {
         title="Baobab Control Plane Console"
         description="The Console is being built. No administrative functions are available yet."
       />
+      {serverEnv().CONSOLE_ENVIRONMENT !== "production" ? (
+        <p><Link href="/onboarding">Explore the progressive onboarding journey preview</Link></p>
+      ) : null}
     </main>
   );
 }
