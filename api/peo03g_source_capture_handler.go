@@ -5,35 +5,23 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"io"
+		"io"
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
-
+	
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
+	"github.com/baobab-platform/baobab-cp/internal/verification/authority"
 )
 
 const officialSourceScope = "verification:source-capture"
 
 var captureRecordID = regexp.MustCompile(`^(vcase|ecl|evr)_[a-z0-9]{1,60}$`)
 
-type SourceCaptureReceipt struct {
-	ObservationID  string    `json:"observation_id"`
-	EvidenceID     string    `json:"evidence_id"`
-	CaseID         string    `json:"verification_case_id"`
-	ClaimID        string    `json:"claim_id"`
-	SourceID       string    `json:"source_id"`
-	ObservedAt     time.Time `json:"observed_at"`
-	FreshnessUntil time.Time `json:"freshness_until"`
-	AuthorityGranted bool   `json:"authority_granted"`
-}
-
 type SourceCaptureService interface {
-	Capture(context.Context, string, string, string, string, repository.AuditActor) (SourceCaptureReceipt,error)
+	Capture(context.Context,string,string,string,string,repository.AuditActor) (authority.CaptureReceipt,error)
 }
 
 type sourceCaptureHandler struct {
@@ -101,4 +89,4 @@ func (h sourceCaptureHandler) capture(w http.ResponseWriter,r *http.Request) {
 	writeJSON(w,http.StatusCreated,out)
 }
 
-var errSourceUnavailable = errors.New("no independently authorised source")
+
