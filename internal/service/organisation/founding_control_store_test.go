@@ -75,7 +75,7 @@ func TestPEO04APostgresIndependentControlEvidenceIsImmutable(t *testing.T) {
 	// current, must BLOCK as ambiguous until a governed supersession.
 	other:=proof
 	other.ObservedAt=other.ObservedAt.Add(time.Second)
-	other.ExpiresAt=other.ExpiresAt.Add(time.Second)
+	other.ExpiresAt=other.ExpiresAt.Add(time.Hour)
 	other.Signature=ed25519.Sign(private,other.signingPayload())
 	if err=store.Record(ctx,other,approval);err!=nil{t.Fatal(err)}
 	if _,err=store.ReadIndependentControlProof(ctx,proof.RelationshipID);!errors.Is(err,ErrUntrustedCorporateProof){
@@ -95,6 +95,10 @@ func TestPEO04APostgresIndependentControlEvidenceIsImmutable(t *testing.T) {
 	renewer := PostgresControlProofStore{Pool: pool,
 		Trust: map[string]IndependentControlTrust{latest.SignerID: approvedTrust},
 		Now: func() time.Time { return atExpiry }}
+	if current, readErr := renewer.ReadIndependentControlProof(ctx, proof.RelationshipID); readErr != nil ||
+		ControlProofFingerprint(current) != ControlProofFingerprint(other) {
+		t.Fatalf("expired historical proof should not block live renewal: %v", readErr)
+	}
 	// Previous overlapping proof is expired but 'other' remains active;
 	// this test also ensures the newest live proof does not silently win.
 	if err = renewer.Record(ctx, latest, IndependentProofApproval{
