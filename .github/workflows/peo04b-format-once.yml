@@ -2,7 +2,8 @@ name: PEO-04B temporary gofmt
 on:
   push:
     branches: [feat/peo04b-founding-onboarding-qualification]
-    paths: [.github/workflows/peo04b-format-once.yml]
+  pull_request:
+    branches: [main]
 permissions:
   contents: write
 jobs:
