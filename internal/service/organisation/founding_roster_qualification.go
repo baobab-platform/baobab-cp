@@ -83,11 +83,9 @@ func (p PostgresFoundingSnapshot) SnapshotFoundingEntity(ctx context.Context, fi
  AND jsonb_array_length(evidence_references)>0),false)
  FROM registry.legal_entity_profile WHERE organisation_id=$1::uuid`, row.OrganisationID, at).
 		Scan(&row.LegalProfileCount, &row.LegalProfileVerified)
+	row.LegalProfileVerified = row.LegalProfileVerified && row.LegalProfileCount == 1
 	if err != nil {
 		return row, err
-	}
-	if len(row.TenantIDs) != 1 || !row.PrimaryEnforced {
-		return row, nil
 	}
 	err = p.Pool.QueryRow(ctx, `SELECT EXISTS(
  SELECT 1 FROM admission.founding_group_sponsorship s
@@ -106,6 +104,11 @@ func (p PostgresFoundingSnapshot) SnapshotFoundingEntity(ctx context.Context, fi
  )`, row.OrganisationID, at).Scan(&row.SponsorshipEligible)
 	if err != nil {
 		return row, err
+	}
+	// Sponsorship may be approved BEFORE an authorised Tenant exists.
+	// A mandate, unlike sponsorship, must already bind one PRIMARY Tenant.
+	if len(row.TenantIDs) != 1 || !row.PrimaryEnforced {
+		return row, nil
 	}
 	err = p.Pool.QueryRow(ctx, `SELECT count(*) FROM registry.operating_legal_actor_mandate m
  JOIN registry.legal_entity_profile lp ON lp.legal_entity_id=m.responsible_legal_entity_id
