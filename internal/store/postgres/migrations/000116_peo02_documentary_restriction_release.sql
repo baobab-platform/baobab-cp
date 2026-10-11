@@ -43,10 +43,11 @@ CREATE TABLE admission.documentary_restriction_release_decision (
   decided_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   UNIQUE(decided_by,idempotency_key)
 );
--- A restricted scope can be released only once. Rejected intents may be
--- replaced by a new proposal with newly verified evidence.
-CREATE UNIQUE INDEX documentary_restriction_one_approved_release
- ON admission.documentary_restriction_release_decision(restriction_id)
+-- Each restriction/source-result pair can be independently released only once.
+-- A revoked/expired result re-imposes the negative hold automatically; later
+-- independently verified successor results may support a NEW approval.
+CREATE UNIQUE INDEX documentary_restriction_one_approval_per_source_result
+ ON admission.documentary_restriction_release_decision(restriction_id,verification_result_id)
  WHERE outcome='APPROVE';
 
 CREATE FUNCTION admission.documentary_restriction_release_immutable()
@@ -74,7 +75,17 @@ CREATE OR REPLACE VIEW admission.active_documentary_remediation_restriction AS
  WHERE r.status='ACTIVE'
    AND NOT EXISTS (
       SELECT 1 FROM admission.documentary_restriction_release_decision d
+      JOIN evidence.result result ON result.result_id=d.verification_result_id
+      JOIN evidence.claim claim ON claim.claim_id=result.claim_id
+      JOIN evidence.verification_case verification_case ON verification_case.case_id=result.case_id
       WHERE d.restriction_id=r.restriction_id AND d.outcome='APPROVE'
+        AND result.outcome='VERIFIED' AND claim.status='VERIFIED'
+        AND claim.current_result_id=result.result_id
+        AND verification_case.status='VERIFIED'
+        AND verification_case.subject_type='ORGANISATION'
+        AND verification_case.subject_id=r.organisation_id::text
+        AND (result.document->>'freshness_until') IS NOT NULL
+        AND (result.document->>'freshness_until')::timestamptz>clock_timestamp()
    );
 
 REVOKE ALL ON admission.documentary_release_source_policy,
