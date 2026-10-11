@@ -32,6 +32,13 @@ type ScannedDocumentReader interface {
 	OpenScanned(context.Context, verification.Evidence, repository.AuditActor) (ScannedDocument, error)
 }
 
+// DocumentAccessLease holds canonical case->claim->evidence row locks during
+// custody decryption AND OCR delivery. A revoked artifact must never be read
+// from a stale EvidenceRecord snapshot while a restriction is committing.
+type DocumentAccessLease interface {
+	WithDocumentLease(context.Context, string, string, string, repository.AuditActor, func(context.Context) error) error
+}
+
 type DocumentCandidateProcessor interface {
 	Extract(context.Context, string, string, string, []byte) (authority.DocumentExtractionReceipt, error)
 }
@@ -135,24 +142,39 @@ func (w DocumentExtractionWorker) Extract(ctx context.Context, caseID, claimID, 
 		}
 		return prior, nil
 	}
-	doc, err := w.Custody.OpenScanned(ctx, e, actor)
-	if err != nil || doc.ScanOutcome != "CLEAN" || doc.ScanAttestation == "" ||
-		doc.ScannedAt.IsZero() || doc.ScannedAt.After(now) ||
-		doc.EvidenceID != evidenceID || doc.ArtifactID != e.ArtifactID ||
-		len(doc.Bytes) < 8 || len(doc.Bytes) > 8*1024*1024 {
+	lease, supported := w.Custody.(DocumentAccessLease)
+	if !supported {
 		return deny, ErrDocumentExtractionDenied
 	}
-	sum := sha256.Sum256(doc.Bytes)
-	expectedDigest := "sha256:" + hex.EncodeToString(sum[:])
-	if doc.SHA256 != expectedDigest {
-		return deny, ErrDocumentExtractionDenied
-	}
-	receipt, err := w.Processor.Extract(ctx, evidenceID, e.Status, doc.MediaType, doc.Bytes)
-	if err != nil || receipt.EvidenceID != evidenceID ||
-		receipt.DocumentDigest != expectedDigest ||
-		receipt.Standing != "DOCUMENT_CANDIDATE_ONLY" ||
-		receipt.ProcessorID == "" || receipt.ProcessorVersion == "" ||
-		receipt.ObservedAt.IsZero() || receipt.ObservedAt.After(w.Now().UTC().Add(time.Second)) {
+	var receipt authority.DocumentExtractionReceipt
+	// Restriction writers are serialized against both plaintext access and
+	// the entire bounded processor HTTP call. The lock is released before
+	// candidate persistence, where the ledger rechecks all current state.
+	err = lease.WithDocumentLease(ctx, caseID, claimID, evidenceID, actor, func(lockedCtx context.Context) error {
+		doc, openErr := w.Custody.OpenScanned(lockedCtx, e, actor)
+		if openErr != nil || doc.ScanOutcome != "CLEAN" || doc.ScanAttestation == "" ||
+			doc.ScannedAt.IsZero() || doc.ScannedAt.After(now) ||
+			doc.EvidenceID != evidenceID || doc.ArtifactID != e.ArtifactID ||
+			len(doc.Bytes) < 8 || len(doc.Bytes) > 8*1024*1024 {
+			return ErrDocumentExtractionDenied
+		}
+		sum := sha256.Sum256(doc.Bytes)
+		expectedDigest := "sha256:" + hex.EncodeToString(sum[:])
+		if doc.SHA256 != expectedDigest {
+			return ErrDocumentExtractionDenied
+		}
+		var extractErr error
+		receipt, extractErr = w.Processor.Extract(lockedCtx, evidenceID, e.Status, doc.MediaType, doc.Bytes)
+		if extractErr != nil || receipt.EvidenceID != evidenceID ||
+			receipt.DocumentDigest != expectedDigest ||
+			receipt.Standing != "DOCUMENT_CANDIDATE_ONLY" ||
+			receipt.ProcessorID == "" || receipt.ProcessorVersion == "" ||
+			receipt.ObservedAt.IsZero() || receipt.ObservedAt.After(w.Now().UTC().Add(time.Second)) {
+			return ErrDocumentExtractionDenied
+		}
+		return nil
+	})
+	if err != nil {
 		return deny, ErrDocumentExtractionDenied
 	}
 	attempt := DocumentCandidateAttempt{
