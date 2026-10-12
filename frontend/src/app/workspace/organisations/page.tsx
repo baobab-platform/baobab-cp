@@ -4,6 +4,7 @@ import { ArrowRight, Building2, ChevronRight, Filter, FolderSearch, Search, Shie
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { directoryPageHref, parseDirectoryPageRequest, parseDirectoryPageResult } from "@/features/console/directory-page-model";
+import { DirectorySearchInput } from "@/features/console/DirectorySearchInput";
 import { invokeProgressive } from "@/server/bff/progressive";
 import { authenticatedConsoleActor } from "@/server/console/scoped-context";
 
@@ -51,8 +52,7 @@ export default async function OrganisationsDirectory({
           <form method="GET" action="/workspace/organisations" className="grid items-end gap-4 md:grid-cols-2 xl:grid-cols-[minmax(14rem,2fr)_1fr_1fr_1fr_1fr_auto]">
             <div className="space-y-2">
               <label htmlFor="org-query" className="block text-xs font-bold uppercase tracking-wide text-muted-foreground">Organisation name</label>
-              <input id="org-query" name="q" type="search" defaultValue={criteria?.q ?? ""} maxLength={80}
-                placeholder="Search current access…" className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-focus"/>
+              <DirectorySearchInput key={criteria?.q ?? ""} defaultQuery={criteria?.q ?? ""} />
             </div>
             <div className="space-y-2">
               <label htmlFor="org-verification" className="block text-xs font-bold uppercase tracking-wide text-muted-foreground">Verification</label>
