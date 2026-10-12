@@ -26,7 +26,7 @@ func TestCX05GDurableExportAndRevocation(t *testing.T) {
 	}
 	intent := domain.ConsoleDatasetIntent{Kind: domain.ConsoleExport, MakerPrincipalID: maker.ActorID,
 		Purpose: "audited staging disclosure", RecipientReference: "review-case-cx05g",
-		IdempotencyKey: "cx05g-export-"+domain.NewUUIDv7(), SourceFingerprint: hash,
+		IdempotencyKey: "cx05g-export-" + domain.NewUUIDv7(), SourceFingerprint: hash,
 		TargetIDs: []string{id}, ValidUntil: now.Add(time.Hour)}
 	grants := func(principal, org, perm string) bool {
 		return org == id && (principal == maker.ActorID || principal == checker.ActorID) &&
@@ -112,7 +112,7 @@ func TestCX05GBulkAtomicRevisionAndIndependentApproval(t *testing.T) {
 	}
 	intent := domain.ConsoleDatasetIntent{Kind: domain.ConsoleBulk, MakerPrincipalID: maker.ActorID,
 		Action: "organisation.metadata.update", Purpose: "approved internal labels",
-		RecipientReference: "case-cx05g-bulk", IdempotencyKey: "cx05g-bulk-"+domain.NewUUIDv7(),
+		RecipientReference: "case-cx05g-bulk", IdempotencyKey: "cx05g-bulk-" + domain.NewUUIDv7(),
 		SourceFingerprint: hash, ChangeFingerprint: changeHash,
 		TargetIDs: ids, ValidUntil: now.Add(time.Hour)}
 	grants := func(principal, org, perm string) bool {
