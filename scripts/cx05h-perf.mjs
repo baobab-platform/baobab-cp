@@ -27,7 +27,7 @@ async function execute() {
   const token = setting("CX05_STAGING_GRANTED_TOKEN");
   const minimum = Number(setting("CX05_STAGING_MIN_VISIBLE"));
   const limit = Number(setting("CX05_STAGING_PERF_P95_MS"));
-  const count = Number(process.env.CX05_STAGING_PERF_SAMPLES ?? "128");
+  const count = Number(process.env.CX05_STAGING_PERF_SAMPLES || "128");
   if (!Number.isSafeInteger(minimum) || minimum < 5001 ||
       !Number.isSafeInteger(limit) || limit < 50 || limit > 2500 ||
       !Number.isSafeInteger(count) || count < 64 || count > 1024) {
