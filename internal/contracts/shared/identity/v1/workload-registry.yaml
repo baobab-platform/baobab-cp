@@ -414,52 +414,6 @@ workloads:
     rotation_owner: baobab-platform/baobab-trade-docs
     status: PROVISIONED
 
-  # PEO-03G: dedicated, non-authorising CIPC lookup identity.
-  # It does not act for an applicant or decide verification; credentials and
-  # activation require a separate, protected proof with CP. Never reuse a
-  # production credential here. CP's independent client allowlist must name
-  # the exact client_id; registry allocation cannot make a route available.
-  baobab-cipc-verifier-staging:
-    repository: baobab-platform/baobab-cp
-    owner: baobab-platform/baobab-cp
-    runtime: "certification-bound staging CIPC source observation worker"
-    environment: staging
-    allowed_audiences: ["baobab-control-plane"]
-    allowed_scopes: ["verification:source-capture"]
-    credential_type: federated_workload_token
-    rotation_owner: baobab-platform/baobab-iam
-    status: PROVISIONED
-
-  # PEO-03J independent document extractor. Its identity is not the CIPC
-  # registry verifier: text extraction is non-authorising candidate evidence.
-  # Staging issuance/CP acceptance and encrypted custody proof are mandatory
-  # before ACTIVE promotion. No production credential is allocated here.
-  baobab-document-extractor-staging:
-    repository: baobab-platform/baobab-cp
-    owner: baobab-platform/baobab-cp
-    runtime: "scanned-evidence document candidate extraction staging worker"
-    environment: staging
-    allowed_audiences: ["baobab-control-plane"]
-    allowed_scopes: ["verification:document-extract"]
-    credential_type: federated_workload_token
-    rotation_owner: baobab-platform/baobab-iam
-    status: PROVISIONED
-
-  # PEO-03K custody implementation extension: isolated malware signer. Separation is
-  # mandatory: this principal is NOT an OCR extractor or CIPC source verifier.
-  # Scanner private Ed25519 signing key is provided only to the isolated
-  # scanner process, never via IAM registry or to the CP/extractor.
-  baobab-independent-scanner-staging:
-    repository: baobab-platform/baobab-cp
-    owner: baobab-platform/baobab-cp
-    runtime: "independent malware scan and signed evidence attestation staging"
-    environment: staging
-    allowed_audiences: ["baobab-control-plane"]
-    allowed_scopes: ["verification:scan-attest"]
-    credential_type: federated_workload_token
-    rotation_owner: baobab-platform/baobab-iam
-    status: PROVISIONED
-
   # MP2-C staging IAM authority consumer. It is distinct from browser,
   # administrator and provider-native identities and may call only the private
   # Control Plane federation authority surface. PROVISIONED until Hydra issues
