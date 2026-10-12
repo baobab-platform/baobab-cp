@@ -98,7 +98,9 @@ Public trust file shape:
 ```
 
 It contains public keys only. Removing the current key, expiring its approval
-or changing the key denies in-flight intake before commit. Keep signed/approved
+or changing the key denies in-flight intake before commit. Signed scan timestamps
+must fall within the matching approval's effective window; later trust cannot
+retroactively admit a backdated proof. Keep signed/approved
 AV/version/update-policy evidence outside source code; the shape above does
 not independently certify a provider.
 

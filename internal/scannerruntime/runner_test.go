@@ -98,6 +98,16 @@ func TestMountedTrustIndependentApprovalAndRevocation(t *testing.T) {
 	if _, err = trust.ScannerKey(context.Background(), record.ScannerID, record.ScannerVersion); err != nil {
 		t.Fatal(err)
 	}
+	proof := authority.ScanProof{ScannerID: record.ScannerID, ScannerVersion: record.ScannerVersion, ScannedAt: now}
+	if _, err = trust.ScannerProofKey(context.Background(), proof); err != nil {
+		t.Fatal(err)
+	}
+	for _, scannedAt := range []time.Time{record.EffectiveFrom.Add(-time.Microsecond), record.ExpiresAt} {
+		proof.ScannedAt = scannedAt
+		if _, err = trust.ScannerProofKey(context.Background(), proof); err == nil {
+			t.Fatal("proof outside approval window admitted")
+		}
+	}
 	bad := record
 	bad.ApprovedBy = bad.ProposedBy
 	if err = os.WriteFile(path, write(bad), 0600); err != nil {
@@ -130,6 +140,9 @@ func TestIsolatedScannerUnixScanThenExactDurableReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
 	socket := filepath.Join(dir, "clamd.sock")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {

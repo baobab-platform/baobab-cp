@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/baobab-platform/baobab-cp/internal/verification/authority"
 	"io"
 	"os"
 	"path/filepath"
@@ -124,6 +125,27 @@ func (m MountedScannerTrust) ScannerKey(ctx context.Context, id, version string)
 			key, _ := hex.DecodeString(r.PublicKeyHex)
 			return ed25519.PublicKey(key), nil
 		}
+	}
+	return nil, ErrConfiguration
+}
+
+// ScannerProofKey binds the independently signed timestamp to the SAME
+// current approval record used for key selection. Trust granted later cannot
+// retroactively admit proofs prepared before that approval's effective window.
+func (m MountedScannerTrust) ScannerProofKey(ctx context.Context, p authority.ScanProof) (ed25519.PublicKey, error) {
+	records, err := m.records(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range records {
+		if r.ScannerID != p.ScannerID || r.ScannerVersion != p.ScannerVersion {
+			continue
+		}
+		if p.ScannedAt.IsZero() || p.ScannedAt.Before(r.EffectiveFrom) || !p.ScannedAt.Before(r.ExpiresAt) {
+			return nil, ErrConfiguration
+		}
+		key, _ := hex.DecodeString(r.PublicKeyHex)
+		return ed25519.PublicKey(key), nil
 	}
 	return nil, ErrConfiguration
 }

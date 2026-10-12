@@ -354,7 +354,7 @@ type intakeTrustFixture struct {
 	calls, revokeAt int
 }
 
-func (s *intakeTrustFixture) ScannerKey(context.Context, string, string) (ed25519.PublicKey, error) {
+func (s *intakeTrustFixture) ScannerProofKey(context.Context, authority.ScanProof) (ed25519.PublicKey, error) {
 	s.calls++
 	if s.revokeAt > 0 && s.calls >= s.revokeAt {
 		return nil, errors.New("synthetic trust revoked")

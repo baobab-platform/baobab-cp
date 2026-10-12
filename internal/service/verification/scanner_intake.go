@@ -10,10 +10,11 @@ import (
 )
 
 // ScannerKeyReader must read current independently approved public trust,
-// never a public key supplied in the document request. It is invoked again
+// including the proof timestamp within its approval window, never a public
+// key supplied in the document request. It is invoked again
 // before commit so removing trust denies even an in-flight custody operation.
 type ScannerKeyReader interface {
-	ScannerKey(context.Context, string, string) (ed25519.PublicKey, error)
+	ScannerProofKey(context.Context, authority.ScanProof) (ed25519.PublicKey, error)
 }
 
 type ScannedArtifactIntake struct {
@@ -37,7 +38,7 @@ func (s ScannedArtifactIntake) Receive(ctx context.Context, in authority.ScanSub
 		if current(c) != nil {
 			return authority.ErrScannerIntake
 		}
-		key, err := s.Trust.ScannerKey(c, in.Proof.ScannerID, in.Proof.ScannerVersion)
+		key, err := s.Trust.ScannerProofKey(c, in.Proof)
 		if err != nil || authority.VerifyScanProof(in.Proof, key, s.Now()) != nil {
 			return authority.ErrScannerIntake
 		}
@@ -46,7 +47,7 @@ func (s ScannedArtifactIntake) Receive(ctx context.Context, in authority.ScanSub
 	if check(ctx) != nil {
 		return empty, authority.ErrScannerIntake
 	}
-	key, err := s.Trust.ScannerKey(ctx, in.Proof.ScannerID, in.Proof.ScannerVersion)
+	key, err := s.Trust.ScannerProofKey(ctx, in.Proof)
 	if err != nil {
 		return empty, authority.ErrScannerIntake
 	}
