@@ -50,7 +50,9 @@ export function readAuthSettings(source: Record<string, string | undefined> = au
   const callback = protectedURL(config.redirectUri);
   if (callback.pathname !== "/api/auth/callback" || config.clientId.length < 1 ||
       config.clientId.length > 256) throw new OidcBoundaryError();
-  const introspect = protectedURL(source.CP_OIDC_INTROSPECTION_URL ?? "");
+  const introspect = protectedURL(source.CP_OIDC_INTROSPECTION_URL ?? "", issuer.origin);
+  // Introspection transports the confidential client secret. A distinct
+  // unapproved host could exfiltrate it even when the token issuer is pinned.
   const secret = source.CP_OIDC_CLIENT_SECRET ?? "";
   const redisHost = source.CP_REDIS_TLS_HOST ?? "";
   const redisUsername = source.CP_REDIS_USERNAME ?? "";
