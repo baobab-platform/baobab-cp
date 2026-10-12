@@ -184,10 +184,11 @@ func (r *PostgresRepository) ProposeConsoleDataset(ctx context.Context, intent d
 	if err != nil {
 		return result, err
 	}
+	state := "PENDING_APPROVAL"
 	if tag.RowsAffected() == 0 {
 		var existing string
-		if err := tx.QueryRow(ctx, `SELECT digest FROM operations.console_dataset_plan
-			WHERE maker=$1 AND idempotency_key=$2`, actor.ActorID, intent.IdempotencyKey).Scan(&existing); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT digest,state FROM operations.console_dataset_plan
+			WHERE maker=$1 AND idempotency_key=$2`, actor.ActorID, intent.IdempotencyKey).Scan(&existing, &state); err != nil {
 			return result, err
 		}
 		if existing != digest {
@@ -201,7 +202,7 @@ func (r *PostgresRepository) ProposeConsoleDataset(ctx context.Context, intent d
 	if err := tx.Commit(ctx); err != nil {
 		return result, err
 	}
-	return ConsoleDatasetResult{Digest: digest, Kind: intent.Kind, State: "PENDING_APPROVAL"}, nil
+	return ConsoleDatasetResult{Digest: digest, Kind: intent.Kind, State: state}, nil
 }
 
 // ApproveConsoleDataset requires a distinct, independently authorised human,
@@ -279,6 +280,12 @@ func (r *PostgresRepository) ExecuteConsoleDataset(ctx context.Context, digest s
 		return result, err
 	}
 	if state == "COMPLETED" {
+		// Idempotency never reveals an operation receipt to an unrelated actor
+		// or to one whose current authority has been withdrawn.
+		if (actor.ActorID != intent.MakerPrincipalID && actor.ActorID != approval.CheckerPrincipalID) ||
+			domain.CanExecuteIntent(intent, approval, at, allowed, true) != nil {
+			return result, ErrConsoleDatasetDenied
+		}
 		return ConsoleDatasetResult{Digest: digest, Kind: intent.Kind, State: state}, nil
 	}
 	if state != "APPROVED" {
