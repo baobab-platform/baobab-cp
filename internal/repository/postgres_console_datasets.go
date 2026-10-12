@@ -328,7 +328,9 @@ func (r *PostgresRepository) ExecuteConsoleDataset(ctx context.Context, digest s
 	}
 	if intent.Kind == domain.ConsoleExport {
 		artifact, err = r.encryptConsoleDataset(digest, artifact)
-		if err != nil {return result, ErrConsoleDatasetDenied}
+		if err != nil {
+			return result, ErrConsoleDatasetDenied
+		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE operations.console_dataset_plan
 		SET state='COMPLETED',artifact=$2,executed_at=$3,updated_at=$3 WHERE digest=$1`,
@@ -384,9 +386,13 @@ func (r *PostgresRepository) ReadConsoleDatasetExport(ctx context.Context, diges
 		digest).Scan(&artifact); err != nil {
 		return nil, err
 	}
-	if len(artifact) == 0 {return nil, ErrConsoleDatasetDenied}
+	if len(artifact) == 0 {
+		return nil, ErrConsoleDatasetDenied
+	}
 	artifact, err = r.decryptConsoleDataset(digest, artifact)
-	if err != nil {return nil, ErrConsoleDatasetDenied}
+	if err != nil {
+		return nil, ErrConsoleDatasetDenied
+	}
 	if _, err := tx.Exec(ctx, `UPDATE operations.console_dataset_plan
 		SET download_count=download_count+1 WHERE digest=$1`, digest); err != nil {
 		return nil, err

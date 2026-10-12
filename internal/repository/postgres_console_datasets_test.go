@@ -12,7 +12,9 @@ import (
 
 func TestCX05GDurableExportAndRevocation(t *testing.T) {
 	f := newOrgFixture(t)
-	if err := f.repo.SetConsoleDatasetKey(bytes.Repeat([]byte{0x42}, 32)); err != nil { t.Fatal(err) }
+	if err := f.repo.SetConsoleDatasetKey(bytes.Repeat([]byte{0x42}, 32)); err != nil {
+		t.Fatal(err)
+	}
 	id := f.organisation(t, "CX05G export fixture")
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	maker := AuditActor{ActorID: "prn_cx05g_maker", ActorType: "human", CorrelationID: domain.NewUUIDv7()}
