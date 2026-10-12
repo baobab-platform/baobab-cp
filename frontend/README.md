@@ -4,14 +4,19 @@ The Baobab Control Plane Console is the administrative frontend defined by ADR-B
 application that runs as its own container and reaches the Go Control Plane API only from the server. The browser
 never calls the Control Plane directly, and never holds a token.
 
-Gates FE-01 (foundation), FE-02 (design system) and FE-05 (generated typed client and drift CI) are implemented.
-**As of 9 October 2026, there is no FE-03 OIDC/BFF browser session, protected Console shell or operating
-workspace.** The home page is intentionally a placeholder; it is not a production administrative application.
-The backend has since implemented many administrative APIs that September's [historical FE-00 snapshot]
-(../docs/frontend/fe-00-architecture-lock.md) called missing. Use the [current FE-00 rebaseline]
-(../docs/frontend/fe-00-refresh-2026-10-09.md) before starting the next gate. IAM provider-neutral federation
-and progressive organisation-first onboarding must be reconciled with ADR-IAM-0033 and ADR-BCP-026/027;
-no identity, authority or production readiness is inferred from a successfully rendered page.
+FE-01/02/05 foundations, FE-03's confidential session and BFF, and substantial
+CX-01–CX-05 operating interfaces are implemented. These include Organisation
+360°, exact-grant directories, context switching, enterprise record tables and
+nonproduction-gated export/bulk workbenches. The earlier 9 October FE-00
+snapshot is historical rather than a current implementation inventory.
+See the [CX-05 maintainer guide](../docs/development/cx05-maintainer-guide.md)
+and [current Console programme](../docs/frontend/cp-console-experience-programme.md).
+
+**Production status:** This is deployable code, not a completed live IAM/CP/AWS
+certificate. Privileged sessions need a real issuer, encrypted Redis, controlled
+CP credentials and current permissions. The governed dataset Console and API
+flags default off and are refused in production. No browser token, fake
+readiness decision or inherited group administration is permitted.
 
 ## Stack
 
@@ -88,8 +93,17 @@ Configuration is read only on the server, by `src/server/env.ts`. It is validate
 | `CONSOLE_ENVIRONMENT` | yes | `development`, `integration`, `staging` or `production` |
 | `CP_API_BASE_URL` | yes | The Control Plane API the server calls. It must be https, except `localhost` in development. |
 
-Nothing uses the `NEXT_PUBLIC_` prefix. Next.js inlines such variables into browser bundles, so startup refuses any
-`NEXT_PUBLIC_` variable whose name suggests a secret.
+For confidential OIDC routes, configure the `CP_CONSOLE_AUTH_ENABLED`, issuer, client ID/secret,
+callback, introspection URL, TLS Redis host/credentials and 32-byte base64 session key
+through the server-only validated auth configuration. Never expose those in a
+`NEXT_PUBLIC_` variable. See `src/server/auth/runtime.ts` for exact validation.
+
+The optional governed dataset workbench requires `CX05_DATASET_CONSOLE_ENABLED=true`
+and the separately approved CP-side `CX05_DATASET_API_ENABLED=true` with
+`CP_CONSOLE_DATASET_KEY_B64`. Both remain **OFF by default and nonproduction-only**.
+An enablement flag does not grant `organisation.export`, `organisation.bulk.propose`,
+`organisation.bulk.approve` or `organisation.manage` and cannot replace
+the IAM session assurance evaluation.
 
 ## Develop
 
@@ -110,8 +124,19 @@ context to the workspace manifests and this directory. It builds with the Node 2
 Both base images are pinned by digest. `GET /healthz` reports liveness only, and the image's `HEALTHCHECK` calls it
 through `healthcheck.mjs`, because the runtime image has no shell.
 
-Every response carries baseline security headers (`next.config.ts`), including `frame-ancestors 'none'`. A
-nonce-based Content-Security-Policy comes with authentication (FE-03), and FE-17 hardens it.
+Every response carries baseline security headers (`next.config.ts`), including `frame-ancestors 'none'`. The confidential-client authentication and its same-origin CSRF boundary are
+implemented, while CSP and browser-hardening work remains subject to its
+separate acceptance gates.
+
+## Diagnosing governed Console operations
+
+`src/server/bff/console-datasets.ts` is the fixed-path, same-origin HTTP
+boundary; `src/app/api/workspace/datasets/route.ts` obtains the confidential
+server-side session and CSRF proof; `src/features/console/dataset-command-model.ts`
+validates the action DTO; the workbench renders an independent reviewer flow.
+The backend's authoritative counterpart is `api/console_dataset_handler.go`.
+Do not infer caller identity or permission from a browser organisation ID.
+See [the complete operation/state and security map](../docs/development/cx05-maintainer-guide.md).
 
 ## CI
 

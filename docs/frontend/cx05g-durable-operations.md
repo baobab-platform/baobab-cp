@@ -11,7 +11,12 @@
 
 ## Scope / operational blocks
 
-The adapter is **internal to CP and not publicly routable**. To expose these operations, publish a versioned Shared dataset-operation API and add explicit CP authenticated handlers, IAM current-authority adapters, a Console BFF, CSRF, response redaction and operational review UI. Tests do not substitute for cross-service IAM and protected staging proof.
+**Later implementation note (12 October 2026):** CX-05K and CX-05L/M have now
+added versioned Shared API contracts, authenticated nonproduction CP handlers,
+current-grant evaluation and a CSRF-protected Console BFF and workbench.
+This section describes the **original CX-05G delivery boundary**, not the
+current complete code inventory. Runtime flags are still off by default;
+protected cross-service staging acceptance is outstanding.
 
 The proposed plan documents and redacted CSV are currently stored in PostgreSQL. Production publication additionally requires managed encryption, retention/purge policy, privacy/legal review, quotas and operational backups. The presence of this code is NOT permission to enable any direct download API.
 
