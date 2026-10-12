@@ -2,7 +2,7 @@
 
 **Normative scope:** ADR-BCP-026 §7, §14 PEO-06; ADR-BCP-027 scoped legal actors; ADR-BCP-019 BFF and frontend acceptance; FE-00 rebaseline of 9 October 2026.
 
-**Status:** PEO-06A is a non-authorising, accessible, browser-rendered *showcase increment*, not the applicant/operator workflow. Package 5 PEO-05A–D is merged; its protected live AWS/IAM/provider acceptance remains external.
+**Status (12 October 2026):** PEO-06A showcase, PEO-06B provider-neutral OIDC and durable session foundation, PEO-06C applicant workflow, PEO-06D independent governance workflow and PEO-06F synthetic accessibility/keyboard tests are merged. The PEO-06E plan-digest and readiness extension is implemented in a separate review increment. All are **code-level increments**, not evidence of a completed protected IAM/AWS multi-browser acceptance or production activation. Package 5 PEO-05A–D remains merged with protected live certification outstanding.
 
 ## Delivery gates
 
@@ -28,6 +28,10 @@ Do not announce the Console as live until FE-03 is complete and CI + protected b
 
 ## Remaining implementation / acceptance
 
-All **PEO-06B–F coding gates remain outstanding** after this first bounded increment. In particular, no one should reuse the older Keycloak-specific admin-session assumptions: ADR-IAM-0033 establishes provider neutrality with permanent Keycloak federation. A proper OIDC confidential client and protected, revocable cross-instance session store are required before a live applicant form; generating a fake bearer/token or writing it to localStorage is prohibited.
+**Coding status:** FE-03B/FE-03C, applicant and reviewer BFF, governed commands, read-only operation polling and synthetic accessibility regressions have shipped through reviewed PRs #348, #349 and #350. The supplementary PEO-06E immutable plan/readiness view and provenance tests are pending this PR's acceptance.
+
+**Operational evidence remains outstanding:** live approved IAM client, signing keys and introspection; protected Redis HA, TLS/ACL and encryption-key custody; 2-replica callback replay, session revocation, same-site cookie and CSRF verification; current reviewer/decider/requester/authoriser admission across distinct humans; production-approved CP feature gates; actual provider and evidence sources; and automated real Chromium/Firefox/WebKit responsive WCAG 2.2 AA/320px browser E2E. The synthetic jsdom axe suite does **not** replace real browser testing. No enabling of the production auth runtime is authorised by this programme. The permanent Keycloak federation architecture remains behind the provider-neutral OIDC BFF: browser JavaScript never receives IAM or CP bearer credentials.
+
+**Future gate:** run independently approved protected staging scenarios and attach immutable test artifacts. Only then assess FE-03/PEO-06 operational acceptance and production activation.
 
 CI: `pnpm --filter @baobab-platform/cp-console typecheck`, `lint`, `test`, `build`, and the pinned contract/client drift gate. Protected end-to-end credentials and browser tests require an independently configured staging environment.
