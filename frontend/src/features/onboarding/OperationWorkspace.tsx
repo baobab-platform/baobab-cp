@@ -109,7 +109,7 @@ export function OperationWorkspace() {
         <h2>Execution operation</h2>
         <div className={styles.formGrid}>
           <label>Control Plane operation ID
-            <input value={id} onChange={(e) => setId(e.target.value)} required
+            <input value={id} disabled={loading} onChange={(e) => { setId(e.target.value); setOperation(null); }} required
               maxLength={128} placeholder="op_..." autoComplete="off" />
           </label>
         </div>
@@ -139,11 +139,11 @@ export function OperationWorkspace() {
           A stale plan is never displayed as authorised.</p>
         <div className={styles.formGrid}>
           <label>Tenant ID
-            <input value={tenantId} onChange={(e) => setTenantId(e.target.value)}
+            <input value={tenantId} disabled={loading} onChange={(e) => { setTenantId(e.target.value); setProvisioning(null); setPlan(null); setReadiness(null); }}
               placeholder="ten_..." maxLength={128} autoComplete="off" />
           </label>
           <label>Tenant provisioning ID
-            <input value={provisioningId} onChange={(e) => setProvisioningId(e.target.value)}
+            <input value={provisioningId} disabled={loading} onChange={(e) => { setProvisioningId(e.target.value); setProvisioning(null); setPlan(null); setReadiness(null); }}
               placeholder="tp_..." maxLength={128} autoComplete="off" />
           </label>
         </div>
