@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { parseOrganisation, parseOrganisationIamLinks, parseOrganisationAudit } from "@/features/console/organisation-model";
 import { OrganisationIntegrations, parseOrganisationOverview } from "@/features/console/OrganisationIntegrations";
+import { OrganisationGovernancePanel, parseOrganisationGovernance } from "@/features/console/OrganisationGovernancePanel";
 import { hasExactScopedPermission, requireScopedContext } from "@/server/console/scoped-context";
 import { invokeProgressive } from "@/server/bff/progressive";
 
@@ -50,6 +51,9 @@ export default async function Organisation360({
   const overviewRead = await invokeProgressive({ action: "organisation-overview", id: organisationId }, actor.accessToken)
     .then((response) => response.data).catch(() => null);
   const overview = parseOrganisationOverview(overviewRead, organisationId);
+  const governanceRead = await invokeProgressive({ action: "organisation-governance", id: organisationId }, actor.accessToken)
+    .then((response) => response.data).catch(() => null);
+  const governance = parseOrganisationGovernance(governanceRead, organisationId);
   const iam = parseOrganisationIamLinks(iamRead, organisationId);
   const audit = canAudit ? parseOrganisationAudit(auditRead) : null;
 
@@ -101,6 +105,7 @@ export default async function Organisation360({
         </div>
       </div>
       <OrganisationIntegrations record={overview} available={overview !== null} />
+      <OrganisationGovernancePanel record={governance} />
       <Card><CardHeader><FileCheck2 aria-hidden="true" className="size-6 text-primary" />
         <CardTitle>Identity federation references</CardTitle>
         <CardDescription>IAM organisation links do not themselves grant Console authority</CardDescription>
@@ -128,7 +133,7 @@ export default async function Organisation360({
       </CardContent></Card>
       <div className="flex gap-3 rounded-lg border border-border bg-card p-4 text-sm leading-relaxed text-muted-foreground">
         <Info aria-hidden="true" className="size-5 shrink-0 text-primary" />
-        <p>The corporate and legal panels display Control Plane source-backed facts and their verification states, not automatically verified status. Linked tenants, markets, subscriptions, Digital Estates, accepted legal-actor mandates and provider readiness still require independently scoped read models; their absence here is not evidence of absence in Control Plane.</p>
+        <p>The corporate and legal panels display Control Plane source-backed facts and their verification states, not automatically verified status. Linked tenants, markets, subscriptions, Digital Estates, recorded legal-actor mandates and immutable provisioning readiness are independently scoped. Any unavailable source is not evidence of absence, and provider certification still requires independent evidence.</p>
       </div>
     </section>
   );

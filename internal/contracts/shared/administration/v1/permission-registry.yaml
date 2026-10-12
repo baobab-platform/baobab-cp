@@ -443,6 +443,15 @@ permissions:
     read_only: false
     description: "Suspend or terminally revoke federation trust or approval at the exact target scope. Current authority is required even for an emergency or the original maker."
 
+  # CX-04C: no inference from organisation.view, tenant.view or write permissions.
+  - key: legal-actor-mandate.view
+    domain: ORGANISATION
+    risk_class: MODERATE
+    scope_levels: [ORGANISATION, TENANT]
+    delegable: false
+    read_only: true
+    description: "Read bounded redacted legal-actor mandate lifecycle for an explicitly authorised organisation and tenant. Not a permission to approve, activate, export evidence, or treat a corporate relationship as legal authority."
+
   # LA-04C: governed, independent nonactivating decisions.
   - key: legal-actor-mandate.propose
     domain: ORGANISATION

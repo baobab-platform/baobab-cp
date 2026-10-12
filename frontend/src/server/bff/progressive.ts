@@ -7,7 +7,7 @@ import { serverEnv } from "@/server/env";
 export type ProgressiveReadAction = "application" | "review-queue" | "review-application" | "operation"
   | "provisioning" | "provisioning-plan" | "provisioning-readiness" | "effective-authority"
   | "organisation-entity" | "organisation-iam-links" | "organisation-audit" | "tenant-record"
-  | "organisation-overview" | "organisation-directory" | "organisation-directory-page";
+  | "organisation-overview" | "organisation-directory" | "organisation-directory-page" | "organisation-governance";
 export type ProgressiveWriteAction =
   | "create" | "update" | "submit" | "review" | "decide" | "request-onboarding"
   | "authorise-onboarding" | "register-tenant";
@@ -89,7 +89,7 @@ export function resolveProgressiveCommand(command: ProgressiveCommand): { method
   }
   // CX-03/CX-04: server-side-only, GET-only canonical reference reads.
   // Browser /api/workspace/v2 action allowlists are deliberately unchanged.
-  if (["organisation-entity", "organisation-iam-links", "organisation-audit", "tenant-record", "organisation-overview"].includes(action)) {
+  if (["organisation-entity", "organisation-iam-links", "organisation-audit", "tenant-record", "organisation-overview", "organisation-governance"].includes(action)) {
     const canonicalId = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/;
     const tenantPattern = /^tn_[a-z0-9]{3,60}$/;
     const allowedId = action === "tenant-record" ? tenantPattern : canonicalId;
@@ -102,6 +102,7 @@ export function resolveProgressiveCommand(command: ProgressiveCommand): { method
       : action === "organisation-entity" ? `/v1/canonical-entities/${safeId}`
       : action === "organisation-iam-links" ? `/v1/canonical-entities/${safeId}/iam-organisations`
       : action === "organisation-overview" ? `/v1/organisations/${safeId}/overview`
+      : action === "organisation-governance" ? `/v1/organisations/${safeId}/governance`
       : `/v1/organisations/${safeId}/audit?limit=25`;
     return { method: "GET", path };
   }

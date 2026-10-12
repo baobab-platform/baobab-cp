@@ -1,0 +1,42 @@
+name: CX-04C pinned contract and Go source bootstrap (temporary)
+on:
+  push:
+    branches: [feat/cx04c-mandates-readiness]
+    paths:
+      - .github/workflows/cx04c-bootstrap.yml
+permissions:
+  contents: write
+jobs:
+  generate:
+    if: github.repository == 'baobab-platform/baobab-cp' && github.ref == 'refs/heads/feat/cx04c-mandates-readiness'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+      - name: Verify exact pinned Shared governance contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -m1 'source_commit:' contracts.lock.yaml | awk '{print $2}')" = "9507ce1bfbe16106b9f79f93f6313c2440489912"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: frontend/.node-version
+      - name: Format and regenerate pinned client
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm --filter @baobab-platform/cp-console generate:cp-client
+          pnpm --filter @baobab-platform/cp-console check:cp-client
+          gofmt -w api/organisation_governance_handler.go api/organisation_governance_handler_test.go api/router.go api/openapi_drift_test.go api/admin_shadow.go internal/repository/postgres_console_governance.go cmd/controlplane/main.go
+      - name: Commit generated and formatted source only
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/generated/control-plane/openapi.d.ts api/organisation_governance_handler.go api/organisation_governance_handler_test.go api/router.go api/openapi_drift_test.go api/admin_shadow.go internal/repository/postgres_console_governance.go cmd/controlplane/main.go
+          if ! git diff --cached --quiet; then
+            git commit -m "build(cx04c): format governance source and regenerate Shared API client"
+            git push origin HEAD:refs/heads/feat/cx04c-mandates-readiness
+          fi
