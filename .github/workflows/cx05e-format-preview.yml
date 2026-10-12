@@ -1,0 +1,24 @@
+name: CX-05E Read-only Format Preview
+on:
+  push:
+    branches:
+      - feat/cx05e-governed-export-bulk-gates
+permissions:
+  contents: read
+jobs:
+  preview:
+    if: github.repository == 'baobab-platform/baobab-cp'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Print exact gofmt source as base64 for audited application
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in internal/domain/console_dataset_operation.go internal/domain/console_dataset_operation_test.go; do
+            printf '@@CX05FMT_BEGIN %s\n' "$path"
+            gofmt "$path" | base64 -w0
+            printf '\n@@CX05FMT_END %s\n' "$path"
+          done
