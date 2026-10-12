@@ -40,6 +40,87 @@ sources:
     access_classification: INTERNAL
     effective_from: "2026-01-01T00:00:00Z"
     status: ACTIVE
+  # CIPC Companies API is documented at developer.cipc.co.za. Registry authority
+  # is distinct from an approved Baobab API subscription and adapter certification.
+  # SARS TCS and VAT vendor verification have different authorised access routes.
+  # Neither currently has a Baobab-approved provider integration or delegated
+  # operator verification baseline; registration is therefore SUSPENDED.
+  - source_id: esrc_sarstcs
+    source_class: TAX_AUTHORITY
+    name: South African Revenue Service Tax Compliance Status verification
+    jurisdiction: ZA
+    authority_reference: https://www.sars.gov.za/guide-to-the-tax-compliance-status-functionality-on-efiling/
+    trusted_for:
+      - {claim_type: TAX_COMPLIANCE_STATUS, jurisdiction: ZA}
+    access_classification: RESTRICTED
+    effective_from: "2026-10-11T00:00:00Z"
+    status: SUSPENDED
+  - source_id: esrc_sarsvat
+    source_class: TAX_AUTHORITY
+    name: South African Revenue Service VAT vendor verification
+    jurisdiction: ZA
+    authority_reference: https://www.sars.gov.za/
+    trusted_for:
+      - {claim_type: VAT_REGISTRATION, jurisdiction: ZA}
+    access_classification: RESTRICTED
+    effective_from: "2026-10-11T00:00:00Z"
+    status: SUSPENDED
+  # PEO-03E: multi-authority employer and customs evidence profiles.
+  # All source bindings are held SUSPENDED: no authorised machine credential,
+  # operator protocol, provider certification or claim-specific government
+  # response semantics has been accepted by Baobab. Registration ≠ filing,
+  # contribution payment or ongoing regulatory compliance.
+  - source_id: esrc_sarspaye
+    source_class: TAX_AUTHORITY
+    name: SARS PAYE employer-registration authority
+    jurisdiction: ZA
+    authority_reference: https://www.sars.gov.za/types-of-tax/pay-as-you-earn/registering/
+    trusted_for:
+      - {claim_type: PAYE_EMPLOYER_REGISTRATION, jurisdiction: ZA}
+    access_classification: RESTRICTED
+    effective_from: "2026-10-11T00:00:00Z"
+    status: SUSPENDED
+  - source_id: esrc_sarssdl
+    source_class: TAX_AUTHORITY
+    name: SARS skills-development-levy employer registration
+    jurisdiction: ZA
+    authority_reference: https://www.sars.gov.za/types-of-tax/pay-as-you-earn/registering/
+    trusted_for:
+      - {claim_type: SDL_EMPLOYER_REGISTRATION, jurisdiction: ZA}
+    access_classification: RESTRICTED
+    effective_from: "2026-10-11T00:00:00Z"
+    status: SUSPENDED
+  - source_id: esrc_sarsuif
+    source_class: TAX_AUTHORITY
+    name: SARS UIF contribution-registration channel
+    jurisdiction: ZA
+    authority_reference: https://www.sars.gov.za/types-of-tax/pay-as-you-earn/registering/
+    trusted_for:
+      - {claim_type: UIF_EMPLOYER_REGISTRATION, jurisdiction: ZA}
+    access_classification: RESTRICTED
+    effective_from: "2026-10-11T00:00:00Z"
+    status: SUSPENDED
+  - source_id: esrc_uifdept
+    source_class: REGULATORY_AUTHORITY
+    name: South African Unemployment Insurance Fund employer-registration channel
+    jurisdiction: ZA
+    authority_reference: https://www.labour.gov.za/
+    trusted_for:
+      - {claim_type: UIF_EMPLOYER_REGISTRATION, jurisdiction: ZA}
+    access_classification: RESTRICTED
+    effective_from: "2026-10-11T00:00:00Z"
+    status: SUSPENDED
+  - source_id: esrc_sarscustoms
+    source_class: REGULATORY_AUTHORITY
+    name: SARS Customs trader registration and authorised customs operations
+    jurisdiction: ZA
+    authority_reference: https://www.sars.gov.za/customs-and-excise/
+    trusted_for:
+      - {claim_type: CUSTOMS_TRADER_REGISTRATION, jurisdiction: ZA}
+      - {claim_type: CUSTOMS_OPERATOR_AUTHORISATION, jurisdiction: ZA}
+    access_classification: RESTRICTED
+    effective_from: "2026-10-11T00:00:00Z"
+    status: SUSPENDED
   # Material an applicant or a reviewer uploads on the applicant's behalf.
   # It corroborates; it is never an authority (sections 9, 180).
   - source_id: esrc_applicant
