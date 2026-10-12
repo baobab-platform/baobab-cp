@@ -43,6 +43,27 @@ permissions:
     delegable: true
     read_only: true
     description: "View organisation configuration."
+  - key: organisation.export
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: true
+    description: "Authorise audited, purpose-bound and redacted organisation directory exports. Requires separately effective exact organisation.view and limits; it is never implicit in read access."
+  - key: organisation.bulk.propose
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Propose a bounded and immutable bulk metadata plan at an exact Organisation scope; this cannot approve or execute the plan."
+  - key: organisation.bulk.approve
+    domain: ORGANISATION
+    risk_class: CRITICAL
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Independently approve an immutable bounded bulk plan for an exact Organisation; requester and checker must differ. This does not execute, create grants, or confer a sibling Organisation's authority."
   - key: organisation.manage
     domain: ORGANISATION
     risk_class: MODERATE
