@@ -5979,7 +5979,7 @@ paths:
           description: Governed readGovernedDataset result
           content:
             application/json:
-              schema: { $ref: './console-dataset.schema.json#/$defs/Receipt' }
+              schema: { $ref: './console-dataset.schema.json#/$defs/ReviewReceipt' }
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
