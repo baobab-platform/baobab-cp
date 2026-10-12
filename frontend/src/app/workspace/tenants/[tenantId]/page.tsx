@@ -21,7 +21,8 @@ export default async function TenantContext({ params }: { params: Promise<{ tena
   const tenant = parseTenant(result?.data, tenantId);
   if (!tenant) notFound();
   const details = [
-    ["Tenant ID", tenant.tenant_id], ["Legal entity reference", tenant.legal_entity_id],
+    ["Tenant ID", tenant.tenant_id],
+    ["Default legal-entity projection (not an authority)", tenant.legal_entity_id?.trim() || "Not recorded"],
     ["Data residency", tenant.residency_region], ["Isolation strategy", tenant.isolation_strategy],
     ["Desired state", tenant.desired_state], ["Observed state", tenant.observed_state],
     ["Revision", String(tenant.revision)],
@@ -54,8 +55,24 @@ export default async function TenantContext({ params }: { params: Promise<{ tena
             </div>
             <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Desired and observed state are separate. Neither label certifies provisioning readiness or commercial activation.</p></CardContent>
           </Card>
-          <Card><CardHeader><ShieldCheck aria-hidden="true" className="size-6 text-primary" /><CardTitle>Enterprise isolation</CardTitle></CardHeader>
-            <CardContent><p className="text-sm text-muted-foreground">Selecting a tenant does not confer access to its corporate parent, subsidiaries, markets or other tenants.</p></CardContent>
+          <Card><CardHeader><ShieldCheck aria-hidden="true" className="size-6 text-primary" /><CardTitle>Organisation-first identity and legal responsibility</CardTitle>
+            <CardDescription>ADR-BCP-027 · separate canonical concepts</CardDescription></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                This Tenant is a separate operational and access boundary. The authoritative PRIMARY Organisation
+                relationship is governed independently by the Control Plane and is not inferred from a legal
+                entity field in this legacy read.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {tenant.legal_entity_id?.trim()
+                  ? "The DEFAULT legal-entity reference is a compatibility projection, not proof that the referenced company is independently verified or authorised for this transaction."
+                  : "No DEFAULT legal entity is recorded. An unincorporated operating business may still have its own Tenant; regulated activities require a separately verified and effective legal-actor mandate."}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Selecting this Tenant confers no parent, subsidiary, market, finance or payment permission.
+                Transaction authority requires fresh, independently scoped CP and provider checks.
+              </p>
+            </CardContent>
           </Card>
         </div>
       </div>
