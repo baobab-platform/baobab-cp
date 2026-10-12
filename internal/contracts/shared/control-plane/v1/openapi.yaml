@@ -5918,6 +5918,143 @@ paths:
           $ref: "#/components/responses/Unprocessable"
         "500":
           $ref: "#/components/responses/InternalError"
+  /admin/datasets/preview:
+    post:
+      tags: [Administration]
+      operationId: previewGovernedDataset
+      summary: Authenticated, explicitly permissioned dataset lifecycle operation
+      security:
+        - adminOidc: [canonical:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './console-dataset.schema.json#/$defs/PreviewRequest' }
+      responses:
+        "200":
+          description: Governed previewGovernedDataset result
+          content:
+            application/json:
+              schema: { $ref: './console-dataset.schema.json#/$defs/PreviewResponse' }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /admin/datasets:
+    post:
+      tags: [Administration]
+      operationId: proposeGovernedDataset
+      summary: Authenticated, explicitly permissioned dataset lifecycle operation
+      security:
+        - adminOidc: [changeset:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './console-dataset.schema.json#/$defs/ProposalRequest' }
+      responses:
+        "201":
+          description: Governed proposeGovernedDataset result
+          content:
+            application/json:
+              schema: { $ref: './console-dataset.schema.json#/$defs/Receipt' }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /admin/datasets/{digest}:
+    parameters:
+      - name: digest
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[0-9a-f]{64}$' }
+    get:
+      tags: [Administration]
+      operationId: readGovernedDataset
+      summary: Authenticated, explicitly permissioned dataset lifecycle operation
+      security:
+        - adminOidc: [canonical:read]
+      responses:
+        "200":
+          description: Governed readGovernedDataset result
+          content:
+            application/json:
+              schema: { $ref: './console-dataset.schema.json#/$defs/ReviewReceipt' }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /admin/datasets/{digest}/approve:
+    parameters:
+      - name: digest
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[0-9a-f]{64}$' }
+    post:
+      tags: [Administration]
+      operationId: approveGovernedDataset
+      summary: Authenticated, explicitly permissioned dataset lifecycle operation
+      security:
+        - adminOidc: [changeset:approve]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: './console-dataset.schema.json#/$defs/DecisionRequest' }
+      responses:
+        "200":
+          description: Governed approveGovernedDataset result
+          content:
+            application/json:
+              schema: { $ref: './console-dataset.schema.json#/$defs/Receipt' }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /admin/datasets/{digest}/execute:
+    parameters:
+      - name: digest
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[0-9a-f]{64}$' }
+    post:
+      tags: [Administration]
+      operationId: executeGovernedDataset
+      summary: Authenticated, explicitly permissioned dataset lifecycle operation
+      security:
+        - adminOidc: [changeset:write]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Governed executeGovernedDataset result
+          content:
+            application/json:
+              schema: { $ref: './console-dataset.schema.json#/$defs/Receipt' }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /admin/datasets/{digest}/download:
+    parameters:
+      - name: digest
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[0-9a-f]{64}$' }
+    get:
+      tags: [Administration]
+      operationId: downloadGovernedDataset
+      summary: Authenticated, explicitly permissioned dataset lifecycle operation
+      security:
+        - adminOidc: [canonical:read]
+      responses:
+        "200":
+          description: Governed downloadGovernedDataset result
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
   /admin/changesets:
     parameters:
       - $ref: "#/components/parameters/CorrelationId"

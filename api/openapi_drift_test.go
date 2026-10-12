@@ -38,6 +38,11 @@ func fullRouter(t *testing.T) chi.Routes {
 		Environment:            "integration",
 		OrganisationOverview:   struct{ organisationOverviewReader }{},
 		OrganisationGovernance: struct{ governanceEvidenceReader }{},
+		// The published dataset API is nonproduction/opt-in. Exercise its
+		// complete route registration with typed, noninvoked dependencies,
+		// not by weakening the strict OpenAPI-to-router invariant.
+		ConsoleDatasets: struct{ consoleDatasetStore }{},
+		ConsoleDatasetsEnabled: true,
 		EventIngress:           &eventingress.Receiver{},
 		IamOrganisations: struct {
 			repository.IamOrganisationRepository
