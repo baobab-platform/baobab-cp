@@ -3,10 +3,20 @@ import { Activity, Clock3, FileCheck2, Fingerprint, LockKeyhole, ShieldCheck, Sh
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
+const distinctScope = (items: string[]) => new Set(items).size === items.length;
+const activityScope = z.array(z.string().min(3).max(160)).min(1).max(100)
+  .refine(distinctScope, "Duplicate activity scope");
+const marketScope = z.array(z.string().regex(/^[A-Z]{2}$/)).min(1).max(100)
+  .refine(distinctScope, "Duplicate market scope");
+const capabilityScope = z.array(z.string().min(3).max(120)).max(100)
+  .refine(distinctScope, "Duplicate capability scope");
+
 const mandate = z.object({
   mandate_id:z.string().uuid(), tenant_id:z.string(), legal_entity_id:z.string(),
   status:z.enum(["PENDING","ACTIVE","SUSPENDED","REVOKED","EXPIRED"]),
-  roles:z.array(z.string()).min(1), effective_from:z.string(),
+  roles:z.array(z.string()).min(1),
+  activity_scope:activityScope.optional(), market_scope:marketScope.optional(),
+  capability_scope:capabilityScope.optional(), effective_from:z.string(),
   effective_to:z.string().optional(), provenance:z.string(),
   evidence_count:z.number().int().nonnegative(),
   decision:z.enum(["APPROVE","REJECT"]).optional(),
@@ -120,6 +130,12 @@ export function OrganisationGovernancePanel({record}: {record:OrganisationGovern
                   </div>
                   <p className="break-all text-xs font-semibold">{m.legal_entity_id}</p>
                   <p className="text-xs text-muted-foreground">Roles: {m.roles.join(", ")}</p>
+                  <p className="text-xs text-muted-foreground">Activity restrictions: {m.activity_scope?.length
+                    ? m.activity_scope.join(", ") : "Scope not returned — no activity authorisation is asserted."}</p>
+                  <p className="text-xs text-muted-foreground">Mandated markets: {m.market_scope?.length
+                    ? m.market_scope.join(", ") : "Scope not returned — no market permission is asserted."}</p>
+                  <p className="text-xs text-muted-foreground">Capability restrictions: {m.capability_scope?.length
+                    ? m.capability_scope.join(", ") : "No capability filter shown; grants and provider readiness remain independent."}</p>
                   <p className="text-xs text-muted-foreground">Provenance: {m.provenance} · Evidence references: {m.evidence_count}</p>
                   <p className="text-xs text-muted-foreground">Effective from {m.effective_from}{m.effective_to?" until "+m.effective_to:""}</p>
                   <p className="text-xs text-muted-foreground">Verification reference recorded: {m.verification_reference_present?"Yes":"No"} · Decision at: {m.decided_at??"Not recorded"}</p>

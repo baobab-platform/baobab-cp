@@ -15,6 +15,8 @@ const allowed={
     mandates:[{
       mandate_id:"0199d000-1111-7777-8000-111111111111",tenant_id:tenant,
       legal_entity_id:"le_redacted",status:"PENDING",roles:["SELLER_OF_RECORD"],
+      activity_scope:["wholesale-order"],market_scope:["ZA","UG"],
+      capability_scope:["commerce.order.manage"],
       effective_from:"2026-10-12T10:00:00Z",provenance:"independent-review",
       evidence_count:2,verification_reference_present:false,
     }],
@@ -70,6 +72,21 @@ describe("CX-04C independent mandate and readiness boundary",()=>{
     }]},org)).toBeNull();
   });
 
+  it("rejects malformed or contradictory scope projections rather than implying universal authority", () => {
+    const root = allowed.tenants[0]!;
+    const m = root.mandates[0]!;
+    for (const invalid of [
+      { ...m, activity_scope:[] },
+      { ...m, activity_scope:["wholesale-order","wholesale-order"] },
+      { ...m, market_scope:["uganda"] },
+      { ...m, market_scope:["ZA","ZA"] },
+      { ...m, capability_scope:["x"] },
+      { ...m, capability_scope:["commerce.order.manage","commerce.order.manage"] },
+    ]) {
+      expect(parseOrganisationGovernance({...allowed,tenants:[{...root,mandates:[invalid]}]},org)).toBeNull();
+    }
+  });
+
   it("reconciles fresh governance only to the independently visible PRIMARY tenant set", () => {
     const now = Date.parse("2026-10-12T10:00:30Z");
     const projected = parseOrganisationGovernance(allowed, org);
@@ -87,6 +104,9 @@ describe("CX-04C independent mandate and readiness boundary",()=>{
     expect(screen.getByText("STALE")).toBeTruthy();
     expect(screen.getByText("PENDING")).toBeTruthy();
     expect(container.textContent).toContain("Provisioning snapshots are immutable observations");
+    expect(container.textContent).toContain("Activity restrictions: wholesale-order");
+    expect(container.textContent).toContain("Mandated markets: ZA, UG");
+    expect(container.textContent).toContain("Capability restrictions: commerce.order.manage");
     await expectAccessible(container);
   });
   it("renders clear denied and absent states",async()=>{

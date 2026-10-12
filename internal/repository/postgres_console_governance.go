@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -17,6 +18,9 @@ type OrganisationMandateFact struct {
 	LegalEntityID                string     `json:"legal_entity_id"`
 	Status                       string     `json:"status"`
 	Roles                        []string   `json:"roles"`
+	ActivityScope                []string   `json:"activity_scope"`
+	MarketScope                  []string   `json:"market_scope"`
+	CapabilityScope              []string   `json:"capability_scope"`
 	EffectiveFrom                time.Time  `json:"effective_from"`
 	EffectiveTo                  *time.Time `json:"effective_to,omitempty"`
 	Provenance                   string     `json:"provenance"`
@@ -39,12 +43,51 @@ var ErrGovernanceReadbackTooLarge = errors.New("governance read exceeds bounded 
 
 const governanceReadLimit = 100
 
+// Bounded readback is descriptive only: the PEP must still evaluate an exact
+// activity/market/capability for each operation. Reject corrupted or excessive
+// scope data rather than render misleading global-looking mandates.
+func boundedMandateScope(values []string, minCount, minLen, maxLen int) bool {
+	if len(values) < minCount || len(values) > governanceReadLimit {
+		return false
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		// Shared counts characters and permits whitespace in activity/capability
+		// values. Preserve the immutable value exactly; readback must not reject
+		// a contract-valid proposal or silently broaden it by normalization.
+		length := utf8.RuneCountInString(value)
+		if !utf8.ValidString(value) || length < minLen || length > maxLen {
+			return false
+		}
+		if _, exists := seen[value]; exists {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
+}
+
+func validMandateMarketScope(values []string) bool {
+	if !boundedMandateScope(values, 1, 2, 2) {
+		return false
+	}
+	for _, value := range values {
+		for _, ch := range value {
+			if ch < 'A' || ch > 'Z' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // No evidence references, maker/checker personal identifiers or freeform
 // authority basis are disclosed. Status and approval are not activation.
 func (r *PostgresRepository) ReadOrganisationMandateFacts(ctx context.Context, organisationID, tenantID string) ([]OrganisationMandateFact, error) {
 	rows, err := r.pool.Query(ctx, `
         SELECT m.mandate_id::text,m.tenant_id,m.responsible_legal_entity_id,
-          m.status,m.roles,m.effective_from,m.effective_to,m.provenance,
+          m.status,m.roles,m.activity_scope,m.market_scope,m.capability_scope,
+          m.effective_from,m.effective_to,m.provenance,
           cardinality(m.evidence_references),
           d.decision,d.decided_at,m.approved_at,
           COALESCE(length(m.legal_actor_verification_reference)>0,false)
@@ -61,11 +104,15 @@ func (r *PostgresRepository) ReadOrganisationMandateFacts(ctx context.Context, o
 	for rows.Next() {
 		var v OrganisationMandateFact
 		if err := rows.Scan(&v.MandateID, &v.TenantID, &v.LegalEntityID, &v.Status,
-			&v.Roles, &v.EffectiveFrom, &v.EffectiveTo, &v.Provenance, &v.EvidenceCount,
+			&v.Roles, &v.ActivityScope, &v.MarketScope, &v.CapabilityScope,
+			&v.EffectiveFrom, &v.EffectiveTo, &v.Provenance, &v.EvidenceCount,
 			&v.Decision, &v.DecidedAt, &v.ApprovedAt, &v.VerificationReferencePresent); err != nil {
 			return nil, err
 		}
-		if v.TenantID != tenantID || len(facts) >= governanceReadLimit {
+		if v.TenantID != tenantID || len(facts) >= governanceReadLimit ||
+			!boundedMandateScope(v.ActivityScope, 1, 3, 160) ||
+			!validMandateMarketScope(v.MarketScope) ||
+			!boundedMandateScope(v.CapabilityScope, 0, 3, 120) {
 			return nil, ErrGovernanceReadbackTooLarge
 		}
 		facts = append(facts, v)

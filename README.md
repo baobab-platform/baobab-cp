@@ -69,6 +69,7 @@ The Console implementation includes:
 - Next.js 16, React 19, Node.js 24, strict TypeScript, tested accessible primitives and the separately deployed informational landing page.
 - An OIDC confidential-client login/callback/logout flow, encrypted Redis-backed server session, revocation introspection, same-origin CSRF validation and a server-only Control Plane BFF. Activation is **explicitly gated to nonproduction**.
 - CX-01–CX-04 role-filtered navigation, accessible command palette, exact-scope enterprise context switching and Organisation 360° read models with independent governance/source reconciliation.
+- Organisation 360° displays permission-filtered mandate activity, market and capability restrictions from immutable CP records (Shared #297). Readback never grants transaction authority; engines must resolve the current mandate again before execution. See [scope integration](docs/frontend/cx04c-mandates-readiness.md).
 - CX-05 server-indexed organisation directory (up to 20,000 *independently granted* candidates, 50-row pages), enterprise record tables, and a read-only-until-authorised dataset operations experience.
 - Governed export and bulk operations: Shared-authored API schemas; CP human IAM/ACR and exact-grant guards; immutable approval digests; durable PostgreSQL proposals, auditable download, atomic versioned metadata mutation, AES-256-GCM CSV at rest and expiry cleanup. See the [maintainer guide](docs/development/cx05-maintainer-guide.md).
 
