@@ -41,7 +41,9 @@ No document plaintext, data key or OCR text is stored there.
    must match an independently approved mounted policy.
 2. Generate a per-object AES-256 data key using KMS and persist its envelope,
    random GCM nonce and ciphertext digest in a separately committed PENDING
-   intent **before** upload. That connection does not lock canonical evidence.
+   intent **before** upload. An exclusive lazy intent pool (maximum two connections) reserves capacity
+   independently of admissions, including a one-connection admission pool.
+   That connection does not lock canonical evidence.
    A crash before upload therefore also has a discoverable intent.
 3. Upload ciphertext with `If-None-Match: *`, checksum, COMPLIANCE retention
    and explicit legal-hold status. Bucket owner, region, prefix, federated role
@@ -201,7 +203,8 @@ Unit tests exercise actual SDK request construction (conditional checksums,
 COMPLIANCE, owner and version binding, no retention bypass, absence confirmation,
 non-PII KMS context/key pinning), AEAD tampering/proof drift and fresh approvals.
 PG17 tests exercise durable attachment/replay, rollback orphans, quarantine
-and grace, active-upload fencing, holds, rewrap without ciphertext changes,
+and grace, active-upload fencing, saturated/one-connection admission pool safety, leased
+proof reads without extra connections, holds, rewrap without ciphertext changes,
 retained-context denial, staged/failed/retried deletion, lost DB receipts after remote erasure, encrypted
 candidate purge, stale revision approvals and destruction audit.
 The hosted full Go/race/readiness suites run PG17 and Unix scanner tests; local

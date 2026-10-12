@@ -10,6 +10,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/verification"
 	"github.com/baobab-platform/baobab-cp/internal/verification/authority"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // RetentionPolicy is a versioned purpose/jurisdiction/classification policy,
@@ -68,6 +69,26 @@ func scanCustody(row pgx.Row) (authority.CustodyObject, error) {
 	var o authority.CustodyObject
 	err := row.Scan(&o.EvidenceID, &o.ArtifactID, &o.ProofHash, &o.ObjectKey, &o.VersionID, &o.KeyID, &o.WrappedKey, &o.Nonce, &o.CipherDigest, &o.PolicyID, &o.PolicyVersion, &o.RetainUntil, &o.DeleteAfter, &o.OrphanAfter, &o.QuarantinedAt, &o.LegalHold, &o.State, &o.Revision, &o.PolicyHash)
 	return o, err
+}
+
+// custodyIntentPool reserves independent connections exclusively for the
+// autocommitted intent. It shares TLS/DSN/role configuration, not admission
+// capacity; pool_max_conns=1 and saturated concurrent admission pools work.
+func (r *PostgresRepository) custodyIntentPool(ctx context.Context) (*pgxpool.Pool, error) {
+	r.custodyIntentMu.Lock()
+	defer r.custodyIntentMu.Unlock()
+	if r.custodyIntents == nil {
+		cfg := r.pool.Config()
+		cfg.MaxConns = 2
+		cfg.MinConns = 0
+		cfg.MinIdleConns = 0
+		pool, err := pgxpool.NewWithConfig(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		r.custodyIntents = pool
+	}
+	return r.custodyIntents, nil
 }
 
 // Seal requires the private live admission lease. A second connection commits
@@ -131,7 +152,11 @@ func (d DurableDocumentVault) Seal(ctx context.Context, p authority.ScanProof, d
 		if !o.RetainUntil.After(d.Now()) {
 			return authority.ErrDocumentCustody
 		}
-		_, err = d.Repository.pool.Exec(ctx, `INSERT INTO evidence.document_custody(evidence_id,artifact_id,proof_hash,object_key,key_id,wrapped_key,nonce,cipher_digest,policy_id,policy_version,retain_until,delete_after,orphan_after,policy_hash,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING')`, o.EvidenceID, o.ArtifactID, o.ProofHash, o.ObjectKey, o.KeyID, o.WrappedKey, o.Nonce, o.CipherDigest, o.PolicyID, o.PolicyVersion, o.RetainUntil, o.DeleteAfter, o.OrphanAfter, o.PolicyHash)
+		intentPool, poolErr := d.Repository.custodyIntentPool(ctx)
+		if poolErr != nil {
+			return authority.ErrDocumentCustody
+		}
+		_, err = intentPool.Exec(ctx, `INSERT INTO evidence.document_custody(evidence_id,artifact_id,proof_hash,object_key,key_id,wrapped_key,nonce,cipher_digest,policy_id,policy_version,retain_until,delete_after,orphan_after,policy_hash,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'PENDING')`, o.EvidenceID, o.ArtifactID, o.ProofHash, o.ObjectKey, o.KeyID, o.WrappedKey, o.Nonce, o.CipherDigest, o.PolicyID, o.PolicyVersion, o.RetainUntil, o.DeleteAfter, o.OrphanAfter, o.PolicyHash)
 		if err != nil {
 			return authority.ErrDocumentCustody
 		}

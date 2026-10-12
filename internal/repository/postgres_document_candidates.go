@@ -91,9 +91,21 @@ func (d DocumentLedger) FindScanProof(ctx context.Context, evidenceID, artifactI
 	if d.PostgresRepository == nil || ctx == nil || ctx.Err() != nil {
 		return p, ErrDocumentLedgerDenied
 	}
-	err := d.pool.QueryRow(ctx, `SELECT evidence_id,artifact_id,media_type,document_digest,scanner_id,scanner_version,scan_outcome,scanned_at,signature
- FROM evidence.scanned_artifact WHERE evidence_id=$1 AND artifact_id=$2`, evidenceID, artifactID).
-		Scan(&p.EvidenceID, &p.ArtifactID, &p.MediaType, &p.Digest, &p.ScannerID, &p.ScannerVersion, &p.Outcome, &p.ScannedAt, &p.Signature)
+	// A canonical read lease already owns a connection. Reuse its transaction
+	// rather than borrowing a second pooled connection for proof metadata.
+	var row pgx.Row
+	l, ok := ctx.Value(custodyReadKey{}).(*custodyReadLease)
+	query := `SELECT evidence_id,artifact_id,media_type,document_digest,scanner_id,scanner_version,scan_outcome,scanned_at,signature
+ FROM evidence.scanned_artifact WHERE evidence_id=$1 AND artifact_id=$2`
+	if ok && l != nil {
+		if !l.active || l.repo != d.PostgresRepository || l.evidence != evidenceID || l.artifact != artifactID {
+			return p, ErrDocumentLedgerDenied
+		}
+		row = l.tx.QueryRow(ctx, query, evidenceID, artifactID)
+	} else {
+		row = d.pool.QueryRow(ctx, query, evidenceID, artifactID)
+	}
+	err := row.Scan(&p.EvidenceID, &p.ArtifactID, &p.MediaType, &p.Digest, &p.ScannerID, &p.ScannerVersion, &p.Outcome, &p.ScannedAt, &p.Signature)
 	if err != nil {
 		return authority.ScanProof{}, ErrDocumentLedgerDenied
 	}

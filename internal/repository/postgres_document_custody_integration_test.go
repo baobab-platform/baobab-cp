@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -104,7 +105,8 @@ func TestP002CDurableCustodyLifecyclePostgres(t *testing.T) {
 	if dsn == "" {
 		t.Skip("requires disposable PostgreSQL 17 TEST_DATABASE_URL")
 	}
-	ctx := context.Background()
+	ctx, stop := context.WithTimeout(context.Background(), 90*time.Second)
+	defer stop()
 	store, err := postgres.Open(ctx, dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -113,11 +115,24 @@ func TestP002CDurableCustodyLifecyclePostgres(t *testing.T) {
 	if err = store.ApplyMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
-	repo, err := Open(ctx, dsn)
+	parsed, parseErr := url.Parse(dsn)
+	if parseErr != nil {
+		t.Fatal(parseErr)
+	}
+	qparams := parsed.Query()
+	qparams.Set("pool_max_conns", "1")
+	qparams.Set("pool_min_conns", "0")
+	parsed.RawQuery = qparams.Encode()
+	repo, err := Open(ctx, parsed.String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repo.Close()
+	observer, err := Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer observer.Close()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	clock := now
 	backend := &custodyFixtureBackend{objects: map[string]authority.CustodyObject{}, bodies: map[string][]byte{}, key: bytes.Repeat([]byte{0x31}, 32)}
@@ -160,7 +175,7 @@ func TestP002CDurableCustodyLifecyclePostgres(t *testing.T) {
 		return CustodyApproval{Operation: op, EvidenceID: o.EvidenceID, ArtifactID: o.ArtifactID, ProofHash: o.ProofHash, ExpectedState: o.State, ExpectedRevision: o.Revision, ExpectedVersion: o.VersionID, ProposedBy: "synthetic-maker", ApprovedBy: "synthetic-checker", ApprovalReference: "synthetic-maintenance-approval", EffectiveFrom: clock.Add(-time.Minute), ExpiresAt: clock.Add(time.Hour)}
 	}
 	get := func(p authority.ScanProof) authority.CustodyObject {
-		o, e := scanCustody(repo.pool.QueryRow(ctx, custodySelect, p.EvidenceID, p.ArtifactID))
+		o, e := scanCustody(observer.pool.QueryRow(ctx, custodySelect, p.EvidenceID, p.ArtifactID))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -195,6 +210,10 @@ func TestP002CDurableCustodyLifecyclePostgres(t *testing.T) {
 	read := func() error {
 		return ledger.WithLockedDocument(ctx, c, cl, p.EvidenceID, "prn_synthetic_extractor", func(locked context.Context) error {
 			saved = locked
+			proof, proofErr := ledger.FindScanProof(locked, p.EvidenceID, p.ArtifactID)
+			if proofErr != nil || authority.CustodyProofHash(proof) != authority.CustodyProofHash(p) {
+				return errors.New("leased proof read failed with one admission connection")
+			}
 			plain, e := vault.Open(locked, p)
 			if e != nil || !bytes.Equal(plain, doc) {
 				return errors.New("synthetic read failed")
@@ -353,18 +372,27 @@ func TestP002CDurableCustodyLifecyclePostgres(t *testing.T) {
 	c3, cl3, p3, doc3 := fixture()
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	var unblock sync.Once
+	free := func() { unblock.Do(func() { close(release) }) }
+	defer free()
 	done := make(chan error, 1)
 	backend.onCreate = func() { close(entered); <-release }
 	go func() { done <- ingest(c3, cl3, p3, doc3, true) }()
-	<-entered
+	select {
+	case <-entered:
+	case early := <-done:
+		t.Fatalf("upload ended before fence observation: %v", early)
+	case <-ctx.Done():
+		t.Fatal("upload fixture timed out before observation")
+	}
 	waiting := get(p3)
 	a := job(waiting, "RECONCILE")
 	short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
-	if _, err = vault.Maintain(short, a, maintainer); err == nil {
+	if _, err = (DurableDocumentVault{Repository: observer, Backend: backend, Policies: vault.Policies, Prefix: vault.Prefix, Now: vault.Now}).Maintain(short, a, maintainer); err == nil {
 		t.Fatal("cleanup raced active upload")
 	}
 	cancel()
-	close(release)
+	free()
 	if err = <-done; err != nil {
 		t.Fatal(err)
 	}
