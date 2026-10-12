@@ -12,6 +12,7 @@ import (
  "time"
 
  "github.com/baobab-platform/baobab-cp/internal/administration"
+ "github.com/baobab-platform/baobab-cp/internal/auth"
  "github.com/baobab-platform/baobab-cp/internal/domain"
  "github.com/baobab-platform/baobab-cp/internal/repository"
  "github.com/go-chi/chi/v5"
@@ -93,7 +94,12 @@ func (h consoleDatasetHandler) actor(w http.ResponseWriter,r *http.Request)(stri
 // grantMatrix reloads ACTIVE identity and evaluated permission facts for
 // EACH maker/checker on every command. Only EXACT organisation anchors count.
 // Corporate group membership, platform role and related tenants add nothing.
-func (h consoleDatasetHandler) grantMatrix(ctx context.Context,principals []string,at time.Time)(repository.ConsoleDatasetPermission,error){
+func (h consoleDatasetHandler) grantMatrix(ctx context.Context,principals []string,at time.Time,actingID string)(repository.ConsoleDatasetPermission,error){
+ // Assured permissions are granted only to the currently authenticated actor.
+ // Another principal's dormant maker grants are checked for lifecycle and
+ // exact scope, but can never substitute for acting-user step-up evidence.
+ token,tokenOK:=auth.PrincipalFromContext(ctx)
+ if !tokenOK||token.ActorType!="human"{return nil,repository.ErrConsoleDatasetDenied}
  visible:=map[string]bool{}
  seen:=map[string]bool{}
  for _,id:=range principals {
@@ -115,6 +121,20 @@ func (h consoleDatasetHandler) grantMatrix(ctx context.Context,principals []stri
      (s.Mode!=""&&s.Mode!=administration.ModeExact)||
      (s.Environment!=""&&s.Environment!=h.environment)||
      !domain.IsUUID(s.OrganisationID){continue}
+   if id==actingID {
+    // Risk class and grant-level min ACR, authentication age and
+    // phishing-resistant step-up are evaluated on the verified token.
+    evaluation:=administration.Evaluate(administration.Request{
+      PrincipalID:id,PrincipalActive:true,Action:g.Permission,
+      Resource:administration.Resource{Environment:h.environment,OrganisationID:s.OrganisationID},
+      Now:at,Session:administration.Session{
+       ACR:token.Assurance.ACR,AMR:token.Assurance.AMR,
+       AuthenticatedAt:token.Assurance.AuthenticatedAt,
+      },
+      Grants:grants,Sources:sources,Relations:rel,
+    })
+    if !evaluation.Allowed(){continue}
+   }
    visible[id+"|"+strings.ToLower(s.OrganisationID)+"|"+g.Permission]=true
   }
  }
@@ -124,7 +144,7 @@ func (h consoleDatasetHandler) grantMatrix(ctx context.Context,principals []stri
 }
 func (h consoleDatasetHandler) permitted(ctx context.Context,ids []string,actor string,
  kind string,at time.Time)(repository.ConsoleDatasetPermission,error){
- allowed,err:=h.grantMatrix(ctx,[]string{actor},at)
+ allowed,err:=h.grantMatrix(ctx,[]string{actor},at,actor)
  if err!=nil{return nil,err}
  cap:=1000
  if kind==domain.ConsoleBulk{cap=50}
@@ -163,9 +183,15 @@ func (h consoleDatasetHandler) preview(w http.ResponseWriter,r *http.Request){
  var changesHash any=nil
  if req.Kind==domain.ConsoleBulk {
   var hash string
-  hash,err=domain.BulkChangeFingerprint(consoleChanges(req.Changes))
-  if err!=nil||len(req.Changes)!=len(req.TargetIDs){h.failure(w,r,err);return}
-  changesHash=hash
+  if len(req.Changes)==0 {
+   // Version-only source preview is permitted for bulk proposers; a
+   // versioned change hash is required before an actual proposal.
+   changesHash=nil
+  } else {
+   hash,err=domain.BulkChangeFingerprint(consoleChanges(req.Changes))
+   changesHash=hash
+  }
+  if err!=nil || (len(req.Changes)!=0 && len(req.Changes)!=len(req.TargetIDs)){h.failure(w,r,err);return}
  }
  projected:=make([]map[string]any,0,len(rows))
  for _,row:=range rows{
@@ -209,12 +235,17 @@ func (h consoleDatasetHandler) descriptor(w http.ResponseWriter,r *http.Request)
  digest:=chi.URLParam(r,"digest")
  description,err:=h.repo.GetConsoleDatasetDescriptor(r.Context(),digest)
  if err!=nil{h.failure(w,r,err);return repository.ConsoleDatasetDescriptor{},"",repository.AuditActor{},nil,false}
+ // Knowledge of a digest never grants authority. For approval review any
+ // independent checker with current exact target grants may inspect the
+ // immutable summary, but the maker may not approve their own proposal.
  if principal!=description.Intent.MakerPrincipalID && principal!=description.CheckerID &&
-   strings.HasSuffix(r.URL.Path,"/approve")==false {h.failure(w,r,nil);return repository.ConsoleDatasetDescriptor{},"",repository.AuditActor{},nil,false}
+   !strings.HasSuffix(r.URL.Path,"/approve") && r.Method!="GET" {
+   h.failure(w,r,nil);return repository.ConsoleDatasetDescriptor{},"",repository.AuditActor{},nil,false
+ }
  if principal==description.Intent.MakerPrincipalID && strings.HasSuffix(r.URL.Path,"/approve"){
   h.failure(w,r,nil);return repository.ConsoleDatasetDescriptor{},"",repository.AuditActor{},nil,false
  }
- all,err:=h.grantMatrix(r.Context(),[]string{principal,description.Intent.MakerPrincipalID,description.CheckerID},h.clock())
+ all,err:=h.grantMatrix(r.Context(),[]string{principal,description.Intent.MakerPrincipalID,description.CheckerID},h.clock(),principal)
  if err!=nil{h.failure(w,r,err);return repository.ConsoleDatasetDescriptor{},"",repository.AuditActor{},nil,false}
  for _,id:=range description.Intent.TargetIDs{
   if !all(principal,id,"organisation.view")||
@@ -231,7 +262,14 @@ func (h consoleDatasetHandler) descriptor(w http.ResponseWriter,r *http.Request)
 func (h consoleDatasetHandler) get(w http.ResponseWriter,r *http.Request){
  desc,_,_,_,ok:=h.descriptor(w,r);if !ok{return}
  w.Header().Set("Cache-Control","no-store")
- writeJSON(w,http.StatusOK,map[string]any{"digest":chi.URLParam(r,"digest"),"kind":desc.Intent.Kind,"state":desc.State})
+ writeJSON(w,http.StatusOK,map[string]any{
+  "digest":chi.URLParam(r,"digest"),"kind":desc.Intent.Kind,"state":desc.State,
+  "target_ids":desc.Intent.TargetIDs,"purpose":desc.Intent.Purpose,
+  "recipient_reference":desc.Intent.RecipientReference,
+  "source_fingerprint":desc.Intent.SourceFingerprint,
+  "change_fingerprint":desc.Intent.ChangeFingerprint,
+  "valid_until":desc.Intent.ValidUntil,
+ })
 }
 func (h consoleDatasetHandler) approve(w http.ResponseWriter,r *http.Request){
  desc,_,actor,allowed,ok:=h.descriptor(w,r);if !ok{return}
