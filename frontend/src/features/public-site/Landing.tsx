@@ -68,7 +68,7 @@ export function Landing() {
 
       <SiteSection eyebrow="THE PLATFORM" title="Complexity behind the scenes. Clarity for your business." className={styles.lightSection}>
         <div className={styles.introRow}>
-          <p>The platform's Control Plane coordinates authorised business intent while specialist engines remain responsible for their own work. You see one coherent experience—not a pile of unrelated software.</p>
+          <p>The platform&apos;s Control Plane coordinates authorised business intent while specialist engines remain responsible for their own work. You see one coherent experience—not a pile of unrelated software.</p>
           <Link href="/architecture" className={styles.textLink}>Discover the architecture <span aria-hidden="true">↗</span></Link>
         </div>
         <div className={styles.featureGrid}>
