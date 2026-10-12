@@ -117,3 +117,7 @@ nonce-based Content-Security-Policy comes with authentication (FE-03), and FE-17
 
 `.github/workflows/frontend.yml` runs only when `frontend/` or the workspace files change. It installs from the
 lockfile, then typechecks, lints, tests, builds, audits dependencies and builds the image.
+
+## Additional UI foundation (PR #353)
+
+The public website uses Tailwind CSS v4, Lucide React and checked-in shadcn/ui primitives with Radix Slot. The established Console CSS modules and design tokens remain authoritative. See [Tailwind/shadcn integration](../docs/frontend/tailwind-shadcn.md).

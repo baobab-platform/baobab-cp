@@ -1,24 +1,9 @@
-// Environment-gated presentation must be decided at runtime, not during Next build.
-export const dynamic = "force-dynamic";
+import type { Metadata } from "next";
+import { Landing } from "@/features/public-site/Landing";
 
-import Link from "next/link";
-import { serverEnv } from "@/server/env";
-
-import { PageHeader } from "@/components";
-
-// The shell, sign-in and workspaces arrive in later gates
-// (docs/frontend/fe-00-architecture-lock.md section 9). This page shows no
-// data, so it cannot show invented data (prompt section 102).
-export default function Home() {
-  return (
-    <main id="main" className="page">
-      <PageHeader
-        title="Baobab Control Plane Console"
-        description="The Console is being built. No administrative functions are available yet."
-      />
-      {serverEnv().CONSOLE_ENVIRONMENT !== "production" ? (
-        <p><Link href="/onboarding">Explore the progressive onboarding journey preview</Link></p>
-      ) : null}
-    </main>
-  );
-}
+/** Public information entry; privileged work stays under /workspace. */
+export const metadata: Metadata = {
+  title: "Baobab Platform | One platform. Every business possibility.",
+  description: "Explore Baobab's governed enterprise architecture, solutions, progressive onboarding and developer resources.",
+};
+export default function Home() { return <Landing />; }

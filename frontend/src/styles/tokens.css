@@ -46,6 +46,30 @@
   --status-revoked-bg: #fdf2fa;
   --status-revoked-fg: #9e165f;
 
+  /* Canonical Baobab public brand values — reusable by Tailwind and shadcn/ui. */
+  --baobab-forest: #103d2d;
+  --baobab-deep: #092a20;
+  --baobab-gold: #fca300;
+  --baobab-ink: #17252c;
+  --baobab-ivory: #f7f6f0;
+
+  /* Shadcn semantic aliases: always resolve to Baobab-owned sources above. */
+  --ui-background: var(--color-canvas);
+  --ui-foreground: var(--color-text);
+  --ui-card: var(--color-surface);
+  --ui-card-foreground: var(--color-text);
+  --ui-muted: var(--status-neutral-bg);
+  --ui-muted-foreground: var(--color-text-muted);
+  --ui-primary: var(--color-primary);
+  --ui-primary-foreground: var(--color-on-primary);
+  --ui-primary-hover: var(--color-primary-hover);
+  --ui-destructive: var(--color-danger);
+  --ui-destructive-foreground: var(--color-on-danger);
+  --ui-border: var(--color-border);
+  --ui-border-strong: var(--color-border-strong);
+  --ui-ring: var(--color-focus);
+  --ui-link: var(--color-link);
+
   /* Typography */
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
