@@ -1,9 +1,9 @@
 import "server-only";
 
-import { serverEnv } from "@/server/env";
+import { authConfigSource,serverEnv } from "@/server/env";
 
 export function datasetConsoleEnabled(): boolean {
- return process.env.CX05_DATASET_CONSOLE_ENABLED==="true" &&
+ return authConfigSource().CX05_DATASET_CONSOLE_ENABLED==="true" &&
    ["development","integration","staging"].includes(serverEnv().CONSOLE_ENVIRONMENT);
 }
 export function datasetEndpoint(path:string):URL {

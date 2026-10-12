@@ -9,7 +9,7 @@ const download=(digest:string)=>"/api/workspace/datasets?action=download&digest=
 export function DatasetOperationsWorkbench({organisationId,csrfToken,canExport,canBulk,canApprove}:{
  organisationId:string;csrfToken:string;canExport:boolean;canBulk:boolean;canApprove:boolean;
 }){
- const [mode,setMode]=useState<"REDACTED_CSV_EXPORT"|"BULK_METADATA_PROPOSAL">("REDACTED_CSV_EXPORT");
+ const [mode,setMode]=useState<"REDACTED_CSV_EXPORT"|"BULK_METADATA_PROPOSAL">(canExport?"REDACTED_CSV_EXPORT":"BULK_METADATA_PROPOSAL");
  const [purpose,setPurpose]=useState("");
  const [recipient,setRecipient]=useState("");
  const [label,setLabel]=useState("");
