@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -11,8 +12,8 @@ import { expectAccessible } from "./axe";
 
 describe("Baobab Tailwind/shadcn integration", () => {
   it("keeps semantics in the owned CSS tokens, not shadcn-generated hex values", () => {
-    const css = readFileSync(new URL("../../src/styles/globals.css", import.meta.url), "utf8");
-    const tokens = readFileSync(new URL("../../src/styles/tokens.css", import.meta.url), "utf8");
+    const css = readFileSync(resolve(process.cwd(), "src/styles/globals.css"), "utf8");
+    const tokens = readFileSync(resolve(process.cwd(), "src/styles/tokens.css"), "utf8");
     expect(css).toContain('@import "tailwindcss"');
     expect(css).toContain("--color-primary: var(--ui-primary)");
     expect(css).toContain("--color-status-revoked-bg: var(--status-revoked-bg)");

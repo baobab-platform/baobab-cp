@@ -71,3 +71,7 @@ component interfaces until an explicitly scoped replacement PR with tests.
 - Neither a button, status badge nor architecture illustration can set
   admission, legal verification, plan approval, provider health or activation.
 - Public publication gates still apply (see `public-platform-website.md`).
+
+## Security baseline and UI roll-out
+
+PostCSS is pinned at **8.5.28** in the package manifest and workspace overrides to remove the reported high-severity source-map path traversal vulnerabilities affecting <=8.5.17. New shadcn primitives are used as presentation only; no admin authority changes. The new Console frame provides responsive, visually refined work surfaces using real, existing routes. Role-specific privileges remain with CP/IAM. Do not show fabricated metrics, contexts or green-status indicators.
