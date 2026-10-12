@@ -6,8 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -52,7 +52,11 @@ func boundedMandateScope(values []string, minCount, minLen, maxLen int) bool {
 	}
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		if len(value) < minLen || len(value) > maxLen || strings.TrimSpace(value) != value {
+		// Shared counts characters and permits whitespace in activity/capability
+		// values. Preserve the immutable value exactly; readback must not reject
+		// a contract-valid proposal or silently broaden it by normalization.
+		length := utf8.RuneCountInString(value)
+		if !utf8.ValidString(value) || length < minLen || length > maxLen {
 			return false
 		}
 		if _, exists := seen[value]; exists {

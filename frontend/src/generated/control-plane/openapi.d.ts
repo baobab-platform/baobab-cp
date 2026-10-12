@@ -5478,8 +5478,12 @@ export interface components {
         /** @enum {string} */
         lifecycleStatus: "DRAFT" | "VALIDATED" | "ACTIVE" | "DEPRECATED" | "SUSPENDED" | "MIGRATING" | "QUARANTINED" | "RETIRED";
         MandateSummary: {
+            /** @description Bounded, redacted current mandate activities; read-only and never a transaction authorisation. */
+            activity_scope?: string[];
             /** Format: date-time */
             approved_at?: string;
+            /** @description Optional capability restrictions; no ability to derive a capability grant from their display. */
+            capability_scope?: string[];
             /** Format: date-time */
             decided_at?: string;
             /** @enum {string} */
@@ -5492,6 +5496,8 @@ export interface components {
             legal_entity_id: string;
             /** Format: uuid */
             mandate_id: string;
+            /** @description Mandated markets only. A market listed here is not an entitlement or statutory permission. */
+            market_scope?: string[];
             provenance: string;
             roles: string[];
             /** @enum {string} */

@@ -1,23 +1,28 @@
 package repository
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // LA-07: a readback projection must never expand the recorded mandate into a
 // false all-markets/all-activities permission or leak arbitrarily large data.
 func TestBoundedMandateScope(t *testing.T) {
 	cases := []struct {
-		name string
-		values []string
+		name     string
+		values   []string
 		minCount int
-		minLen int
-		maxLen int
-		want bool
+		minLen   int
+		maxLen   int
+		want     bool
 	}{
 		{"allowed activity", []string{"wholesale-order"}, 1, 3, 160, true},
 		{"missing mandatory activity", nil, 1, 3, 160, false},
 		{"duplicate activity", []string{"trade.export", "trade.export"}, 1, 3, 160, false},
 		{"short activity", []string{"x"}, 1, 3, 160, false},
-		{"spaced activity", []string{" trade.export"}, 1, 3, 160, false},
+		{"contract-valid spaced activity", []string{" trade.export "}, 1, 3, 160, true},
+		{"contract-valid unicode activity", []string{strings.Repeat("界", 160)}, 1, 3, 160, true},
+		{"too many unicode characters", []string{strings.Repeat("界", 161)}, 1, 3, 160, false},
 		{"empty optional capability filter", []string{}, 0, 3, 120, true},
 		{"capability too long", []string{string(make([]byte, 121))}, 0, 3, 120, false},
 	}
@@ -32,9 +37,9 @@ func TestBoundedMandateScope(t *testing.T) {
 
 func TestValidMandateMarketScope(t *testing.T) {
 	for _, tt := range []struct {
-		name string
+		name    string
 		markets []string
-		want bool
+		want    bool
 	}{
 		{"two countries", []string{"ZA", "UG"}, true},
 		{"no market", nil, false},

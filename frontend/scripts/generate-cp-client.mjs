@@ -40,7 +40,7 @@ if (process.argv.includes("--check")) {
     let first = 0;
     while (first < committed.length && first < generated.length &&
       committed[first] === generated[first]) first++;
-    const loc = generated.slice(0, first).split("\\n").length;
+    const loc = generated.slice(0, first).split("\n").length;
     console.error(
       `Generated client drift at character ${first}, near line ${loc}. ` +
       `Committed ${committed.length} bytes; expected ${generated.length} bytes.`,

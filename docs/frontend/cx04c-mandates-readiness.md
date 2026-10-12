@@ -1,6 +1,6 @@
 # CX-04C — governed legal-actor mandate and attested readiness readback
 
-**Source:** Shared `9507ce1bfbe16106b9f79f93f6313c2440489912`.
+**Source:** Shared `e875e738d2dd3022964ee539327ff647712dcd18` (merged Shared #297).
 **Production acceptance:** NOT IMPLIED by passing GitHub checks.
 
 This increment adds a separate, nonproduction-gated, read-only
@@ -29,7 +29,8 @@ mandate approval, tenant activation or provider certification paths.
 
 ## Projection semantics
 
-- Mandates display only status, roles, legal-entity reference, window,
+- Mandates display source-backed activity, market and optional capability
+  restrictions, as well as status, roles, legal-entity reference, window,
   provenance, decision status/time, evidence **count** and presence of
   recorded verification reference. No evidence text, actor identity,
   unrestricted addresses, basis document or reviewer personal ID is shared.
@@ -47,6 +48,21 @@ mandate approval, tenant activation or provider certification paths.
 - The protected Organisation 360 view shows distinct mandate and
   readiness cards using existing Tailwind v4, shadcn/ui tokens, Lucide and
   consistent stale/empty/error states.
+
+## LA-07 scope integration and reproducible client
+
+Readback now includes the immutable mandate `activity_scope`, `market_scope`
+and `capability_scope` columns, with bounded arrays, duplicate checks and
+uppercase two-letter market codes. Missing mandatory scopes or invalid stored
+values fail closed. Activity and capability strings retain their exact
+contract-valid whitespace and Unicode; projection must not normalize an
+immutable scope or reject a value accepted by the proposal contract. An empty capability filter does not grant a capability;
+current grants, legal-actor resolution and provider policy still apply.
+
+Regenerate the entire OpenAPI client after changing the Shared pin or any
+embedded referenced schema. Updating its header alone misses declarations
+expanded from schema references. Console CI verifies exact generated output;
+Go CI and resolution readiness independently require formatted source.
 
 ## Remaining independent external acceptance
 
