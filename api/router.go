@@ -30,6 +30,10 @@ import (
 type correlationKey struct{}
 
 type Dependencies struct {
+	// OrganisationOverview reads domain-owned organisation relationships for a
+	// nonproduction Console overview. Nil leaves this route unregistered.
+	OrganisationOverview organisationOverviewReader
+
 	// EventIngress backs POST /v1/integration/events, the signed delivery of canonical engine events (Shared control-plane/v1
 	// receiveEngineEvent). Nil skips the route. EventWake is nudged after an event is recorded.
 	EventIngress *eventingress.Receiver
@@ -675,7 +679,14 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/platform-account-binding/end", accounts.end)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(nil, true)).Get("/v1/tenants/{tenantID}/platform-account-bindings", accounts.list)
 	}
-	if dependencies.OrganisationObservability != nil {
+	if dependencies.OrganisationOverview != nil && dependencies.AdministrativeGrants != nil &&
+        peoRoutesPermittedIn(dependencies.Environment) {
+        overview := organisationOverviewHandler{reader: dependencies.OrganisationOverview,
+            grants: dependencies.AdministrativeGrants, identities: a.identities, environment: dependencies.Environment}
+        r.With(a.authorize(a.adminVerifier, "human", "canonical:read"),
+            a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/overview", overview.get)
+    }
+    if dependencies.OrganisationObservability != nil {
 		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisation-drift", obs.drift)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/audit", obs.audit)

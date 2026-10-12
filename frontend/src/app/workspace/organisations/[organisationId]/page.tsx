@@ -8,6 +8,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { parseOrganisation, parseOrganisationIamLinks, parseOrganisationAudit } from "@/features/console/organisation-model";
+import { OrganisationIntegrations, parseOrganisationOverview } from "@/features/console/OrganisationIntegrations";
 import { hasExactScopedPermission, requireScopedContext } from "@/server/console/scoped-context";
 import { invokeProgressive } from "@/server/bff/progressive";
 
@@ -46,6 +47,9 @@ export default async function Organisation360({
     canAudit ? invokeProgressive({ action: "organisation-audit", id: organisationId }, actor.accessToken)
       .then((response) => response.data).catch(() => null) : Promise.resolve(null),
   ]);
+  const overviewRead = await invokeProgressive({ action: "organisation-overview", id: organisationId }, actor.accessToken)
+    .then((response) => response.data).catch(() => null);
+  const overview = parseOrganisationOverview(overviewRead, organisationId);
   const iam = parseOrganisationIamLinks(iamRead, organisationId);
   const audit = canAudit ? parseOrganisationAudit(auditRead) : null;
 
@@ -92,10 +96,11 @@ export default async function Organisation360({
           <Card><CardHeader><ShieldCheck aria-hidden="true" className="size-6 text-primary" />
             <CardTitle>Legal and mandate evidence</CardTitle>
           </CardHeader><CardContent>
-            <p className="text-sm leading-relaxed text-muted-foreground">Verification and legal-actor mandate status require dedicated governed evidence reads. No applicant claim or IAM link is represented as verified legal status here.</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">Incorporation evidence states are shown in the linked legal-entity panel below when the CP overview is available. Operating legal-actor mandates still require separate governed acceptance and source evidence: no applicant claim or IAM link is represented as an accepted mandate.</p>
           </CardContent></Card>
         </div>
       </div>
+      <OrganisationIntegrations record={overview} available={overview !== null} />
       <Card><CardHeader><FileCheck2 aria-hidden="true" className="size-6 text-primary" />
         <CardTitle>Identity federation references</CardTitle>
         <CardDescription>IAM organisation links do not themselves grant Console authority</CardDescription>
@@ -123,7 +128,7 @@ export default async function Organisation360({
       </CardContent></Card>
       <div className="flex gap-3 rounded-lg border border-border bg-card p-4 text-sm leading-relaxed text-muted-foreground">
         <Info aria-hidden="true" className="size-5 shrink-0 text-primary" />
-        <p>Organisation 360° currently displays only verified, directly retrievable canonical and IAM/audit references. Corporate graphs, legal-actor mandates, registered subsidiaries, subscribed services and market participation will appear only when their independently authorised relationship read models are integrated.</p>
+        <p>The corporate and legal panels display Control Plane source-backed facts and their verification states, not automatically verified status. Linked tenants, markets, subscriptions, Digital Estates, accepted legal-actor mandates and provider readiness still require independently scoped read models; their absence here is not evidence of absence in Control Plane.</p>
       </div>
     </section>
   );
