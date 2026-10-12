@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ArrowUpRight, Globe2, Layers3, ShoppingBag, PanelsTopLeft, LockKeyhole } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { enterpriseContextHref } from "./enterprise-context-model";
 
 const text = z.string().min(1);
 export const tenantOverviewSchema = z.object({
@@ -47,8 +48,9 @@ function SourceList({ visible, empty, children }: {
 /** These are only PRIMARY-linked tenants for which CP confirmed a current
  * exact tenant.view grant. Related legal entities alone provide no access.
  */
-export function OrganisationTenantIntegrations({ tenants }: {
+export function OrganisationTenantIntegrations({ tenants, organisationId }: {
   tenants: readonly TenantOverviewProjection[];
+  organisationId?: string;
 }) {
   return (
     <section aria-label="Authorised organisation tenants and services" className="space-y-5">
@@ -70,10 +72,18 @@ export function OrganisationTenantIntegrations({ tenants }: {
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Layers3 aria-hidden="true" className="size-6 text-primary" />
-              <Link className="inline-flex items-center gap-2 text-xs font-semibold text-primary underline-offset-4 hover:underline"
-                href={"/workspace/tenants/" + encodeURIComponent(tenant.tenant_id)}>
-                Open authorised tenant <ArrowUpRight aria-hidden="true" className="size-4" />
-              </Link>
+              <div className="flex flex-wrap gap-4">
+                <Link className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-primary underline-offset-4 hover:underline"
+                  href={"/workspace/tenants/" + encodeURIComponent(tenant.tenant_id)} prefetch={false}>
+                  Open authorised tenant <ArrowUpRight aria-hidden="true" className="size-4" />
+                </Link>
+                {organisationId ? (
+                  <Link className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-primary underline-offset-4 hover:underline"
+                    href={enterpriseContextHref(organisationId, tenant.tenant_id)} prefetch={false}>
+                    Open governed context <ArrowUpRight aria-hidden="true" className="size-4" />
+                  </Link>
+                ) : null}
+              </div>
             </div>
             <CardTitle>{tenant.display_name}</CardTitle>
             <CardDescription>{tenant.tenant_id} · {tenant.mapping_role} association · Source: {tenant.mapping_provenance}</CardDescription>
