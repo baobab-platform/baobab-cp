@@ -35,10 +35,10 @@ func operation(method, path string) string {
 func fullRouter(t *testing.T) chi.Routes {
 	t.Helper()
 	h := New(Dependencies{
-        Environment: "integration",
-        OrganisationOverview: struct{ organisationOverviewReader }{},
-        OrganisationGovernance: struct{ governanceEvidenceReader }{},
-		EventIngress: &eventingress.Receiver{},
+		Environment:            "integration",
+		OrganisationOverview:   struct{ organisationOverviewReader }{},
+		OrganisationGovernance: struct{ governanceEvidenceReader }{},
+		EventIngress:           &eventingress.Receiver{},
 		IamOrganisations: struct {
 			repository.IamOrganisationRepository
 		}{},
