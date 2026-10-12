@@ -21,3 +21,5 @@ The CP Console is the administrative frontend defined by ADR-BCP-019. It lives i
 - [CX-04B exact authority directory and tenant service integration](cx04b-directory-tenants.md): bounded source-backed directory, tenant mappings, markets, subscriptions and Digital Estates.
 
 - [CX-05A: caller-filtered organisation search tables](cx05a-authorised-organisation-table.md): read-only server-side filtering, stable order, cursor paging, accessibility and scale limits.
+
+- [CX-04C: independently governed mandates and readiness](cx04c-mandates-readiness.md): exact permission boundaries, source provenance, freshness and external acceptance limits.

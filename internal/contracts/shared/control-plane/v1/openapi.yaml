@@ -3990,6 +3990,45 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /organisations/{organisation_id}/governance:
+    get:
+      tags: [Organisations]
+      operationId: getOrganisationGovernance
+      summary: Current-caller, source-evidenced legal mandates and readiness
+      description: >-
+        Nonproduction, read-only, bounded and redacted source projection.
+        Requires canonical:read bearer and CP platform admin, current exact
+        organisation.view and an independently verified exact tenant.view
+        for each returned tenant. Mandates are visible only with separate
+        current exact legal-actor-mandate.view for that tenant and readiness
+        only with independent exact readiness.view. No group inheritance,
+        accepted mandate inference, provider certification, raw evidence
+        or cross-tenant access. Snapshot age >24h is explicitly STALE.
+      security:
+        - adminOidc: [canonical:read]
+      parameters:
+        - name: organisation_id
+          in: path
+          required: true
+          schema:
+            $ref: ./domain.schema.json#/$defs/canonicalEntityId
+      responses:
+        "200":
+          description: Caller-scoped redacted governance source projection
+          content:
+            application/json:
+              schema:
+                $ref: ../../organisation/v1/governance-readback.schema.json#/$defs/OrganisationGovernance
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /organisations/{organisation_id}/overview:
     parameters:
       - name: organisation_id

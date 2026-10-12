@@ -32,7 +32,8 @@ type correlationKey struct{}
 type Dependencies struct {
 	// OrganisationOverview reads domain-owned organisation relationships for a
 	// nonproduction Console overview. Nil leaves this route unregistered.
-	OrganisationOverview organisationOverviewReader
+	OrganisationOverview   organisationOverviewReader
+	OrganisationGovernance governanceEvidenceReader
 
 	// EventIngress backs POST /v1/integration/events, the signed delivery of canonical engine events (Shared control-plane/v1
 	// receiveEngineEvent). Nil skips the route. EventWake is nudged after an event is recorded.
@@ -687,6 +688,15 @@ func New(dependencies Dependencies) http.Handler {
 			a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/overview", overview.get)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/directory", overview.directory)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/directory/page", overview.directoryPage)
+	}
+	if dependencies.OrganisationOverview != nil && dependencies.OrganisationGovernance != nil &&
+		dependencies.AdministrativeGrants != nil && peoRoutesPermittedIn(dependencies.Environment) {
+		governance := organisationGovernanceHandler{overview: dependencies.OrganisationOverview,
+			evidence: dependencies.OrganisationGovernance, grants: dependencies.AdministrativeGrants,
+			identities: a.identities, environment: dependencies.Environment}
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"),
+			a.requireAdminRole(nil, true)).
+			Get("/v1/organisations/{organisationID}/governance", governance.get)
 	}
 	if dependencies.OrganisationObservability != nil {
 		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}
