@@ -3907,6 +3907,52 @@ paths:
           $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /organisations/{organisation_id}/overview:
+    parameters:
+      - name: organisation_id
+        in: path
+        required: true
+        schema:
+          $ref: ./domain.schema.json#/$defs/canonicalEntityId
+      - $ref: "#/components/parameters/CorrelationId"
+    get:
+      tags: [Organisations]
+      operationId: getOrganisationOverview
+      summary: Bounded, exact-scope Organisation 360 source projection
+      description: >-
+        Read-only, nonproduction-gated Console composition of the authoritative
+        Organisation profile, legal-entity verification states, corporate links,
+        corporate-group memberships and platform affiliations. Requires the
+        authenticated caller's current EXACT organisation.view AdministrativeGrant
+        for this same organisation in addition to the canonical:read token scope
+        and Control Plane platform-admin role. Does not infer corporate group
+        permissions, linked-tenant rights, current mandates, activation, source
+        certification, legal incorporation or downstream service authority.
+        All arrays are complete only up to the bounded size; an oversized
+        result fails closed with 503, never silently truncates.
+      security:
+        - adminOidc: [canonical:read]
+      responses:
+        "200":
+          description: The caller-scoped Organisation 360 projection
+          headers:
+            Cache-Control:
+              description: Private, no-store
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: ../../organisation/v1/overview.schema.json#/$defs/OrganisationOverview
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /organisations/{organisation_id}/audit:
     parameters:
       - name: organisation_id

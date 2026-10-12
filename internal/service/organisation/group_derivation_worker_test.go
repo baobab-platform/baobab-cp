@@ -272,6 +272,21 @@ func TestCorporateGroupIsNeverAnAccessPath(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			// CX-04 permits a *read-only presentation projection* of group
+			// membership after an independently established exact
+			// organisation.view AdministrativeGrant. That metadata is not
+			// an authorisation input. Keep a targeted guard so changes to
+			// this explicitly permitted reader cannot convert membership
+			// into an access shortcut.
+			if path == filepath.Join(root, "api/organisation_overview_handler.go") {
+				code := string(raw)
+				if !strings.Contains(code, "grant.Scope.Level == administration.LevelOrganisation") ||
+					!strings.Contains(code, "grant.Permission == \"organisation.view\"") ||
+					strings.Contains(code, "grant.Scope.Level == administration.LevelCorporateGroup") {
+					t.Errorf("%s must use an exact Organisation grant, never a corporate group to decide access", path)
+				}
+				return nil
+			}
 			if strings.Contains(string(raw), "corporate_group") || strings.Contains(string(raw), "CorporateGroup") {
 				t.Errorf("%s reads corporate groups; group membership is never an access path", path)
 			}
