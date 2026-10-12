@@ -35,6 +35,8 @@ func operation(method, path string) string {
 func fullRouter(t *testing.T) chi.Routes {
 	t.Helper()
 	h := New(Dependencies{
+        Environment: "integration",
+        OrganisationOverview: struct{ organisationOverviewReader }{},
 		EventIngress: &eventingress.Receiver{},
 		IamOrganisations: struct {
 			repository.IamOrganisationRepository
