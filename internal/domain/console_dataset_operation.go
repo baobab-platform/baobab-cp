@@ -43,6 +43,7 @@ type ConsoleDatasetApproval struct {
 }
 type ConsoleDatasetRecord struct {
  OrganisationID, DisplayName, Status, VerificationState, SourceAuthority, Jurisdiction string
+ Revision int64
 }
 type ConsoleMetadataChange struct {
  OrganisationID string
@@ -60,12 +61,13 @@ func DatasetSourceFingerprint(input []ConsoleDatasetRecord)(string,error){
  for i,r:=range rows {
   if !consoleUUID.MatchString(r.OrganisationID)||len(r.DisplayName)==0||len(r.DisplayName)>500||
    len(r.SourceAuthority)==0||len(r.SourceAuthority)>200||len(r.Status)>60||
-   len(r.VerificationState)>60||len(r.Jurisdiction)>80 {return "",errors.New("invalid export record")}
+   len(r.VerificationState)>60||len(r.Jurisdiction)>80||r.Revision<0 {return "",errors.New("invalid export record")}
   if i>0&&rows[i-1].OrganisationID==r.OrganisationID{return "",errors.New("duplicate source record")}
   for _,v:=range []string{r.OrganisationID,r.DisplayName,r.Status,r.VerificationState,r.SourceAuthority,r.Jurisdiction}{
    if !utf8.ValidString(v)||strings.ContainsRune(v,0){return "",errors.New("invalid export field")}
    fmt.Fprintf(h,"%d:%s",len(v),v)
   }
+  fmt.Fprintf(h,"revision:%d;",r.Revision)
  }
  return hex.EncodeToString(h.Sum(nil)),nil
 }
@@ -91,6 +93,10 @@ func (r ConsoleDatasetIntent) CanonicalDigest(now time.Time)(string,error){
   len(r.IdempotencyKey)<16||len(r.IdempotencyKey)>128||
   !consoleHash.MatchString(r.SourceFingerprint)||
   !r.ValidUntil.After(now)||r.ValidUntil.After(now.Add(24*time.Hour)){return "",errors.New("invalid operation provenance, digest or expiry")}
+ // Delimited canonical encoding must not accept delimiter bytes in any field.
+ for _,v:=range []string{r.Kind,r.MakerPrincipalID,r.Purpose,r.RecipientReference,r.IdempotencyKey,r.Action}{
+  if strings.ContainsRune(v,0){return "",errors.New("NUL is forbidden in plan fields")}
+ }
  cap:=maxConsoleBulkRows
  if r.Kind==ConsoleExport {
   cap=maxConsoleExportRows
@@ -112,7 +118,7 @@ func (r ConsoleDatasetIntent) CanonicalDigest(now time.Time)(string,error){
 // audit reservation and the CURRENT exact grants for EVERY affected resource.
 // A visible ancestor or sibling never gives permission to export or mutate.
 func CanExecuteIntent(intent ConsoleDatasetIntent, approval ConsoleDatasetApproval,
- now time.Time, allowed func(id,permission string)bool,auditReserved bool)error{
+ now time.Time, allowed func(principalID,id,permission string)bool,auditReserved bool)error{
  digest,err:=intent.CanonicalDigest(now);if err!=nil{return err}
  if digest!=approval.PlanDigest||approval.CheckerPrincipalID==""||
   approval.CheckerPrincipalID==intent.MakerPrincipalID||approval.ApprovedAt.IsZero()||
@@ -120,12 +126,22 @@ func CanExecuteIntent(intent ConsoleDatasetIntent, approval ConsoleDatasetApprov
   return errors.New("independent current approval and audited plan are required")
  }
  for _,id:=range intent.TargetIDs {
-  if !allowed(id,"organisation.view"){return errors.New("missing exact organisation view grant")}
+  // Evaluate grants for the ACTUAL maker and checker as distinct principals.
+  if !allowed(intent.MakerPrincipalID,id,"organisation.view")||
+     !allowed(approval.CheckerPrincipalID,id,"organisation.view"){
+   return errors.New("missing independently scoped maker/checker organisation view")
+  }
   if intent.Kind==ConsoleExport{
-   if !allowed(id,"organisation.export"){return errors.New("missing independent export permission")}
+   if !allowed(intent.MakerPrincipalID,id,"organisation.export")||
+      !allowed(approval.CheckerPrincipalID,id,"organisation.export"){
+    return errors.New("disclosure permission missing for maker or checker")
+   }
   } else {
-   if !allowed(id,"organisation.bulk.propose")||!allowed(id,"organisation.bulk.approve")||
-    !allowed(id,"organisation.manage"){return errors.New("missing independent proposal, approval or per-target management permission")}
+   if !allowed(intent.MakerPrincipalID,id,"organisation.bulk.propose")||
+      !allowed(intent.MakerPrincipalID,id,"organisation.manage")||
+      !allowed(approval.CheckerPrincipalID,id,"organisation.bulk.approve"){
+    return errors.New("independent proposal, management or checker approval permission missing")
+   }
   }
  }
  return nil
@@ -139,7 +155,7 @@ func safeConsoleCSVCell(s string)string{
 // BuildApprovedRedactedCSV may ONLY be invoked after the caller has reserved
 // a durable audit and obtained a separate current checker approval.
 func BuildApprovedRedactedCSV(intent ConsoleDatasetIntent, approval ConsoleDatasetApproval,
- rows []ConsoleDatasetRecord, now time.Time, allowed func(string,string)bool,
+ rows []ConsoleDatasetRecord, now time.Time, allowed func(string,string,string)bool,
  auditReserved bool)([]byte,error){
  if intent.Kind!=ConsoleExport{return nil,errors.New("not export")}
  if err:=CanExecuteIntent(intent,approval,now,allowed,auditReserved);err!=nil{return nil,err}
@@ -165,7 +181,7 @@ type CommitConsoleMetadataBatch func(context.Context,string,[]ConsoleMetadataCha
 // transaction adapter. It never loops over unauthorised public update APIs.
 func ApplyApprovedMetadataBulk(ctx context.Context,intent ConsoleDatasetIntent,
  approval ConsoleDatasetApproval,source []ConsoleDatasetRecord,changes []ConsoleMetadataChange,
- now time.Time,allowed func(string,string)bool,auditReserved bool,commit CommitConsoleMetadataBatch)error{
+ now time.Time,allowed func(string,string,string)bool,auditReserved bool,commit CommitConsoleMetadataBatch)error{
  if intent.Kind!=ConsoleBulk||commit==nil{return errors.New("bulk transaction adapter is unavailable")}
  if err:=CanExecuteIntent(intent,approval,now,allowed,auditReserved);err!=nil{return err}
  current,err:=DatasetSourceFingerprint(source);if err!=nil{return err}
@@ -173,7 +189,16 @@ func ApplyApprovedMetadataBulk(ctx context.Context,intent ConsoleDatasetIntent,
   return errors.New("bulk source or target count changed")
  }
  approved:=make(map[string]bool,len(intent.TargetIDs));for _,id:=range intent.TargetIDs{approved[id]=true}
- for _,c:=range changes{if !approved[c.OrganisationID]{return errors.New("foreign bulk target")}}
+ currentSource:=make(map[string]int64,len(source))
+ for _,r:=range source{
+  if !approved[r.OrganisationID]||r.Revision<1{return errors.New("foreign or unversioned approved source")}
+  currentSource[r.OrganisationID]=r.Revision
+ }
+ for _,c:=range changes{
+  if !approved[c.OrganisationID]||currentSource[c.OrganisationID]!=c.ExpectedVersion {
+   return errors.New("target is absent from current source or has a changed revision")
+  }
+ }
  hash,err:=BulkChangeFingerprint(changes);if err!=nil{return err}
  if hash!=intent.ChangeFingerprint{return errors.New("bulk values changed after approval")}
  digest,err:=intent.CanonicalDigest(now);if err!=nil{return err}
