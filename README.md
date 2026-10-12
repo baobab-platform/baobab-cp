@@ -67,6 +67,15 @@ records CP/Shared/IAM and native engine baselines, branch/PR reconciliation,
 contract-consumer differences, sequential task sets and authentic acceptance
 prerequisites. CP #379 is merged with all final-head workflows green.
 
+P0-02B adds a default-off authenticated private scanner intake and a separately
+executed `cmd/independent-scanner` command. JWT/introspection, fresh exact
+workload profile, current approved public trust and canonical admission are
+rechecked before custody/commit; CP never loads the signing key. Exact signed
+jobs support reviewed replay after ambiguous delivery. See the
+[scanner runtime runbook](docs/migrations/P0-02B-authenticated-scanner-runtime.md).
+The committed scanner remains PROVISIONED; protected live activation is not
+implied by code or CI.
+
 The scanner pipeline now binds canonical case/claim/evidence admission before
 custody, holds row locks through proof/audit registration and rechecks expiry
 before commit. Direct registration without the lease denies. See the

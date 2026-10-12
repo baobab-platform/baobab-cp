@@ -1,0 +1,45 @@
+openapi: 3.1.0
+info:
+  title: Private independent scanner intake
+  version: 1.0.0
+paths:
+  /internal/evidence/v1/scanned-artifacts:
+    post:
+      operationId: receiveIndependentScannedArtifact
+      description: >-
+        Private authenticated staging/integration intake, OFF by default.
+        Requires current active scanner token/registry/trust and canonical
+        case/claim/evidence admission before custody. Production is refused.
+        A scan proof never promotes evidence state or grants legal authority.
+      security:
+        - ScannerWorkload: [verification:scan-attest]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: scanner-intake.schema.json#/$defs/ScanSubmission
+      responses:
+        '201':
+          description: Immutable proof and redacted audit committed, including exact replay.
+          content:
+            application/json:
+              schema:
+                $ref: scanner-intake.schema.json#/$defs/ScanReceipt
+        '400':
+          description: Malformed or oversized signed document request.
+        '401':
+          description: Unauthenticated, revoked or invalid scanner token.
+        '403':
+          description: Incorrect workload, scope, lifecycle or environment.
+        '503':
+          description: Current admission, independent trust, custody or database unavailable.
+components:
+  securitySchemes:
+    ScannerWorkload:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /oauth2/token
+          scopes:
+            verification:scan-attest: Independent scan-proof custody only.

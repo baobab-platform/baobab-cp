@@ -24,6 +24,7 @@ import (
 	svcorg "github.com/baobab-platform/baobab-cp/internal/service/organisation"
 	"github.com/baobab-platform/baobab-cp/internal/service/subscription"
 	"github.com/baobab-platform/baobab-cp/internal/store"
+	"github.com/baobab-platform/baobab-cp/internal/verification/authority"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -32,7 +33,7 @@ type correlationKey struct{}
 type Dependencies struct {
 	// ConsoleDatasets is disabled unless the runtime injects an encrypted,
 	// nonproduction-only transactional store and current grant readers.
-	ConsoleDatasets consoleDatasetStore
+	ConsoleDatasets        consoleDatasetStore
 	ConsoleDatasetsEnabled bool
 	// OrganisationOverview reads domain-owned organisation relationships for a
 	// nonproduction Console overview. Nil leaves this route unregistered.
@@ -128,6 +129,11 @@ type Dependencies struct {
 	DocumentaryRestrictionEnabled   bool
 	DocumentaryRestriction          documentaryRestrictionReader
 	DocumentaryRestrictionClientIDs []string
+	// P0-02B is a separate default-off private scanner boundary. Its verifier
+	// MUST compose current token introspection and fresh registry authority.
+	ScannerIntakeEnabled bool
+	ScannerIntake        ScannerIntakeService
+	ScannerVerifier      auth.TokenVerifier
 	// PEO-03G: certified official-source intake; separate nonproduction toggle.
 	SourceCaptureEnabled   bool
 	SourceCapture          SourceCaptureService
@@ -759,6 +765,13 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/documentary-restrictions/{restrictionID}/release-proposals", release.propose)
 		r.With(a.authorize(a.adminVerifier, "human", "admission:decide"), a.requireAdminRole(nil, true)).
 			Post("/v2/documentary-restrictions/release-proposals/{intentID}/decision", release.decide)
+	}
+	if dependencies.ScannerIntakeEnabled && dependencies.ScannerIntake != nil &&
+		dependencies.ScannerVerifier != nil && dependencies.WorkloadRegistry != nil &&
+		(dependencies.Environment == "staging" || dependencies.Environment == "integration") {
+		h := scannerIntakeHandler{verifier: dependencies.ScannerVerifier, service: dependencies.ScannerIntake}
+		r.With(documentaryRestrictionNoStore, a.authorize(dependencies.ScannerVerifier, "workload", authority.ScannerScope)).
+			Post(authority.ScannerIntakePath, h.receive)
 	}
 	if dependencies.SourceCaptureEnabled && dependencies.SourceCapture != nil &&
 		dependencies.WorkloadRegistry != nil && peoRoutesPermittedIn(dependencies.Environment) {

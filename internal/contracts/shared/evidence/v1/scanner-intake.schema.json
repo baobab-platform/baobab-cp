@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/evidence/v1/scanner-intake.schema.json",
+  "title": "P0-02B private independent scanner intake",
+  "description": "Authenticated independent signed CLEAN proof and bounded confidential document custody. No evidence availability, incorporation, legal-actor or capability authority is granted.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ScanSubmission"
+    },
+    {
+      "$ref": "#/$defs/ScanReceipt"
+    }
+  ],
+  "$defs": {
+    "ScanProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id",
+        "artifact_id",
+        "media_type",
+        "digest",
+        "scanner_id",
+        "scanner_version",
+        "outcome",
+        "scanned_at",
+        "signature_base64"
+      ],
+      "properties": {
+        "evidence_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceRecordId",
+          "minLength": 8
+        },
+        "artifact_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceArtifactId",
+          "minLength": 8
+        },
+        "media_type": {
+          "enum": [
+            "application/pdf",
+            "image/png",
+            "image/jpeg"
+          ]
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "scanner_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 96
+        },
+        "scanner_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96
+        },
+        "outcome": {
+          "const": "CLEAN"
+        },
+        "scanned_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$",
+          "maxLength": 32
+        },
+        "signature_base64": {
+          "type": "string",
+          "minLength": 88,
+          "maxLength": 88,
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        }
+      }
+    },
+    "ScanSubmission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verification_case_id",
+        "claim_id",
+        "proof",
+        "document_base64"
+      ],
+      "properties": {
+        "verification_case_id": {
+          "$ref": "domain.schema.json#/$defs/verificationCaseId"
+        },
+        "claim_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceClaimId"
+        },
+        "proof": {
+          "$ref": "#/$defs/ScanProof"
+        },
+        "document_base64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "minLength": 12,
+          "maxLength": 11184812,
+          "description": "Confidential bytes, 8 MiB decoded maximum. Private TLS intake only; never log, audit or return this field."
+        }
+      }
+    },
+    "ScanReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verification_case_id",
+        "claim_id",
+        "evidence_id",
+        "artifact_id",
+        "digest",
+        "standing",
+        "authority_granted"
+      ],
+      "properties": {
+        "verification_case_id": {
+          "$ref": "domain.schema.json#/$defs/verificationCaseId"
+        },
+        "claim_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceClaimId"
+        },
+        "evidence_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceRecordId"
+        },
+        "artifact_id": {
+          "$ref": "domain.schema.json#/$defs/evidenceArtifactId"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "standing": {
+          "const": "SCAN_PROOF_RECORDED"
+        },
+        "authority_granted": {
+          "const": false
+        }
+      }
+    }
+  }
+}
