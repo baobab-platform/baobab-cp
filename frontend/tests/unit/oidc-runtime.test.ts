@@ -40,6 +40,7 @@ describe("FE-03C protected server-side runtime", () => {
       { CONSOLE_ENVIRONMENT: "production" }, { CP_CONSOLE_AUTH_ENABLED: "false" },
       { CP_OIDC_REDIRECT_URI: "http://console.example.test/api/auth/callback" },
       { CP_OIDC_CLIENT_SECRET: "" },
+      { CP_OIDC_INTROSPECTION_URL: "https://lookalike.example.test/introspect" },
       { CP_REDIS_TLS_PORT: "not-a-port" },
       { CP_CONSOLE_SESSION_KEY_B64: "" },
     ]) {
