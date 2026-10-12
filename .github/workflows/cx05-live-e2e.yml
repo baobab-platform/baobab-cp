@@ -1,0 +1,43 @@
+name: CX-05 Protected Live E2E Acceptance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cx05-live-staging
+  cancel-in-progress: false
+jobs:
+  protected-readback:
+    runs-on: ubuntu-24.04
+    environment: staging
+    timeout-minutes: 25
+    env:
+      CX05_STAGING_CP_URL: ${{ secrets.CX05_STAGING_CP_URL }}
+      CX05_STAGING_GRANTED_TOKEN: ${{ secrets.CX05_STAGING_GRANTED_TOKEN }}
+      CX05_STAGING_DENIED_TOKEN: ${{ secrets.CX05_STAGING_DENIED_TOKEN }}
+      CX05_STAGING_REVOKED_TOKEN: ${{ secrets.CX05_STAGING_REVOKED_TOKEN }}
+      CX05_STAGING_OWN_ORG_UUID: ${{ secrets.CX05_STAGING_OWN_ORG_UUID }}
+      CX05_STAGING_FOREIGN_ORG_UUID: ${{ secrets.CX05_STAGING_FOREIGN_ORG_UUID }}
+      CX05_STAGING_MIN_VISIBLE: 5001
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - name: Require live HTTPS CP and protected independent identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in CX05_STAGING_CP_URL CX05_STAGING_GRANTED_TOKEN CX05_STAGING_DENIED_TOKEN CX05_STAGING_REVOKED_TOKEN CX05_STAGING_OWN_ORG_UUID CX05_STAGING_FOREIGN_ORG_UUID; do
+            if test -z "${!key:-}"; then echo "::error::Missing protected staging prerequisite: $key"; exit 1; fi
+          done
+      - name: Run live caller-bound staging acceptance
+        run: node scripts/cx05-live-e2e.mjs
+      - name: Retain non-authorising evidence for independent decision
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cx05-live-staging-evidence
+          path: cx05-evidence/cx05-staging-report.json
+          retention-days: 30
+          if-no-files-found: warn
