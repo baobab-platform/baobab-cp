@@ -34,15 +34,48 @@ export type OrganisationGovernance=z.infer<typeof governance>;
 export function parseOrganisationGovernance(input: unknown, id: string):OrganisationGovernance|null {
   const parsed=governance.safeParse(input);
   if(!parsed.success || parsed.data.organisation_id!==id ||
+     new Set(parsed.data.tenants.map(t=>t.tenant_id)).size !== parsed.data.tenants.length ||
      parsed.data.tenants.some(t=>
        (!t.mandates_visible && t.mandates.length>0) ||
        (!t.readiness_visible && t.readiness!==undefined) ||
        (t.readiness_visible && t.readiness===undefined) ||
+       new Set(t.mandates.map(m=>m.mandate_id)).size !== t.mandates.length ||
        t.mandates.some(m=>m.tenant_id!==t.tenant_id) ||
+       (t.readiness?.state==="READY" &&
+         (t.readiness.source!=="IMMUTABLE_PROVISIONING_SNAPSHOT" ||
+          !t.readiness.overall_ready ||
+          t.readiness.desired_state_version!==t.readiness.observed_state_version ||
+          t.readiness.blocking_reasons.length>0)) ||
+       (t.readiness?.state==="UNKNOWN" && t.readiness.source!=="NO_SNAPSHOT") ||
        (t.readiness!==undefined && t.readiness.tenant_id!==t.tenant_id) ||
        (t.readiness?.source==="NO_SNAPSHOT" && t.readiness.state!=="UNKNOWN")))return null;
   return parsed.data;
 }
+/**
+ * CX-04D: cross-source reconciliation for a joined Organisation 360 panel.
+ * Authority is still enforced independently by CP for each source. UI must
+ * not display a governance tenant absent from the current PRIMARY association
+ * list or mix evaluations from materially different points in time.
+ */
+export function reconcileOrganisationGovernance(
+  governance: OrganisationGovernance | null,
+  overviewTenantIds: readonly string[] | null,
+  overviewEvaluatedAt: string | undefined,
+  now = Date.now(),
+): OrganisationGovernance | null {
+  if (!governance || !overviewTenantIds || !overviewEvaluatedAt) return null;
+  const governanceAt = Date.parse(governance.evaluated_at);
+  const overviewAt = Date.parse(overviewEvaluatedAt);
+  if (!Number.isFinite(governanceAt) || !Number.isFinite(overviewAt) ||
+      governanceAt > now + 60_000 || overviewAt > now + 60_000 ||
+      governanceAt < now - 300_000 || overviewAt < now - 300_000 ||
+      Math.abs(governanceAt - overviewAt) > 300_000) return null;
+  const permitted = new Set(overviewTenantIds);
+  if (permitted.size !== overviewTenantIds.length ||
+      governance.tenants.some((tenant) => !permitted.has(tenant.tenant_id))) return null;
+  return governance;
+}
+
 const labels:Record<string,"neutral"|"success"|"warning"|"failure">={
   READY:"success",BLOCKED:"failure",STALE:"warning",UNKNOWN:"neutral",
   ACTIVE:"success",SUSPENDED:"warning",REVOKED:"failure",EXPIRED:"failure",

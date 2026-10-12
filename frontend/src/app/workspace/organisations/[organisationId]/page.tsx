@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { parseOrganisation, parseOrganisationIamLinks, parseOrganisationAudit } from "@/features/console/organisation-model";
 import { OrganisationIntegrations, parseOrganisationOverview } from "@/features/console/OrganisationIntegrations";
-import { OrganisationGovernancePanel, parseOrganisationGovernance } from "@/features/console/OrganisationGovernancePanel";
+import { OrganisationGovernancePanel, parseOrganisationGovernance, reconcileOrganisationGovernance } from "@/features/console/OrganisationGovernancePanel";
 import { hasExactScopedPermission, requireScopedContext } from "@/server/console/scoped-context";
 import { invokeProgressive } from "@/server/bff/progressive";
 
@@ -53,7 +53,11 @@ export default async function Organisation360({
   const overview = parseOrganisationOverview(overviewRead, organisationId);
   const governanceRead = await invokeProgressive({ action: "organisation-governance", id: organisationId }, actor.accessToken)
     .then((response) => response.data).catch(() => null);
-  const governance = parseOrganisationGovernance(governanceRead, organisationId);
+  const governance = reconcileOrganisationGovernance(
+    parseOrganisationGovernance(governanceRead, organisationId),
+    overview?.tenants?.map((tenant) => tenant.tenant_id) ?? null,
+    overview?.evaluated_at,
+  );
   const iam = parseOrganisationIamLinks(iamRead, organisationId);
   const audit = canAudit ? parseOrganisationAudit(auditRead) : null;
 
