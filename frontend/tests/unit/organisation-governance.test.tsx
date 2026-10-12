@@ -2,7 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { OrganisationGovernancePanel, parseOrganisationGovernance } from "@/features/console/OrganisationGovernancePanel";
+import { OrganisationGovernancePanel, parseOrganisationGovernance, reconcileOrganisationGovernance } from "@/features/console/OrganisationGovernancePanel";
 import { resolveProgressiveCommand } from "@/server/bff/progressive";
 import { expectAccessible } from "./axe";
 
@@ -51,6 +51,37 @@ describe("CX-04C independent mandate and readiness boundary",()=>{
       ...allowed.tenants[0]!,readiness:{...allowed.tenants[0]!.readiness,source:"NO_SNAPSHOT",state:"READY"},
     }]},org)).toBeNull();
   });
+  it("rejects duplicate tenant or mandate sources and contradictory READY claims", () => {
+    expect(parseOrganisationGovernance({...allowed, tenants:[allowed.tenants[0],allowed.tenants[0]]}, org)).toBeNull();
+    expect(parseOrganisationGovernance({...allowed,tenants:[{
+      ...allowed.tenants[0]!, mandates: [
+        allowed.tenants[0]!.mandates[0]!,allowed.tenants[0]!.mandates[0]!,
+      ],
+    }]},org)).toBeNull();
+    expect(parseOrganisationGovernance({...allowed,tenants:[{
+      ...allowed.tenants[0]!, readiness: {
+        ...allowed.tenants[0]!.readiness, state:"READY", overall_ready:false,
+      },
+    }]},org)).toBeNull();
+    expect(parseOrganisationGovernance({...allowed,tenants:[{
+      ...allowed.tenants[0]!, readiness: {
+        ...allowed.tenants[0]!.readiness, state:"UNKNOWN",
+      },
+    }]},org)).toBeNull();
+  });
+
+  it("reconciles fresh governance only to the independently visible PRIMARY tenant set", () => {
+    const now = Date.parse("2026-10-12T10:00:30Z");
+    const projected = parseOrganisationGovernance(allowed, org);
+    expect(reconcileOrganisationGovernance(projected,[tenant],"2026-10-12T10:00:05Z",now)).not.toBeNull();
+    expect(reconcileOrganisationGovernance(projected,[],"2026-10-12T10:00:05Z",now)).toBeNull();
+    expect(reconcileOrganisationGovernance(projected,["tn_sibling"],"2026-10-12T10:00:05Z",now)).toBeNull();
+    expect(reconcileOrganisationGovernance(projected,[tenant,tenant],"2026-10-12T10:00:05Z",now)).toBeNull();
+    expect(reconcileOrganisationGovernance(projected,null,"2026-10-12T10:00:05Z",now)).toBeNull();
+    expect(reconcileOrganisationGovernance(projected,[tenant],"2026-10-12T09:45:00Z",now)).toBeNull();
+    expect(reconcileOrganisationGovernance(projected,[tenant],"2026-10-12T10:00:05Z",now + 600_000)).toBeNull();
+  });
+
   it("renders stale evidence and pending, never invented provider certification",async()=>{
     const {container}=render(<OrganisationGovernancePanel record={parseOrganisationGovernance(allowed,org)}/>);
     expect(screen.getByText("STALE")).toBeTruthy();
