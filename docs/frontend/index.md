@@ -8,3 +8,4 @@ The CP Console is the administrative frontend defined by ADR-BCP-019. It lives i
   contract matrices, the historical gap list, the BFF threat model, risks and the original gate sequence.
 - FE-01 foundation: tooling, configuration, image and CI (`frontend/README.md`).
 - FE-02 design system: tokens and accessible components (`frontend/README.md`, "Design system").
+\n- [Public platform website foundation and publication gates](public-platform-website.md): website information architecture, Console links, Figma handoff and honest release criteria.\n

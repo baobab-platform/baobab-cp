@@ -1,10 +1,10 @@
 # Baobab Control Plane
 
-**Control Plane API + CP Console** · [Architecture decisions](docs/adr/index.md) · [Console implementation](docs/frontend/index.md) · [Shared contracts](https://github.com/baobab-platform/shared)
+**Control Plane API + CP Console + public website foundation** · [Architecture decisions](docs/adr/index.md) · [Console implementation](docs/frontend/index.md) · [Shared contracts](https://github.com/baobab-platform/shared)
 
 Baobab Control Plane (`baobab-cp`) owns the platform's **canonical organisation and tenant control state**: admission and onboarding, governed tenancy and relationships, capability entitlements, provisioning desired state, readiness, and platform administration. Its Go API is the authority; the co-located Next.js Console is a separately deployed human interface over that API.
 
-> **Readiness (9 October 2026):** The Go backend is under active implementation, with substantial runtime and API support. The CP Console has its foundation, design system and generated client, **but no production-ready authentication flow or operational workspace yet**. Neither a passing backend CI run nor the existence of a Console container certifies end-to-end production onboarding.
+> **Readiness (9 October 2026):** The Go backend is under active implementation, with substantial runtime and API support. The CP Console includes protected onboarding code-level journeys, but **live IAM/AWS acceptance and production enablement are not yet demonstrated**. Neither a passing backend CI run nor the existence of a Console container certifies end-to-end production onboarding.
 
 ## Repository at a glance
 
@@ -64,12 +64,12 @@ In particular:
 
 The backend includes API/domain work for admission, organisation resolution, tenant registration/onboarding, markets, mappings, subscriptions/classification, capability registry and resolution, provider topology, changesets, AdministrativeGrants/effective authority, durable operations, evidence/verification, engine releases and deployment observations. **Presence of handlers is not a blanket claim that all programmes have completed production certification**; consult the current tests and accepted ADRs for each operation.
 
-The Console currently has:
+The Console implementation includes:
 
 - Next.js 16 / React 19 / TypeScript strict with Node.js 24, pnpm workspace and an independent Dockerfile.
 - Owned accessible UI primitives, semantic status tokens, component tests and a non-production `/design-system` showcase.
 - An OpenAPI-generated client from the pinned Shared contract, server-only CP client, fail-closed unsupported-operation handling and Console CI.
-- A placeholder `/` page: **no live operational dashboard, admission review or tenant administration**.
+- A public informational platform landing page at `/` and secondary public routes (publication-gated, no-index); privileged Console journeys remain under `/workspace`. See [website plan](docs/frontend/public-platform-website.md).
 
 Next gates are (1) refresh the FE-00 architecture and API/authority matrix, (2) finish IAM confidential-client integration and FE-03 browser/BFF session security, (3) build the contextual shell and authority-aware navigation, then (4) deliver the applicant → admission → onboarding → provisioning → readiness vertical slice. No fake production APIs or browser-owned administrative authority.
 
