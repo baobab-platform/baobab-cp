@@ -2,17 +2,20 @@ name: CX05 bounded contract client regeneration
 on:
   push:
     branches: [feat/cx05n-shared-dataset-sync]
+  pull_request:
+    branches: [main]
 permissions:
   contents: write
 jobs:
   generate:
-    if: github.repository == 'baobab-platform/baobab-cp'
+    if: github.repository == 'baobab-platform/baobab-cp' && github.head_ref == 'feat/cx05n-shared-dataset-sync'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: true
+          ref: feat/cx05n-shared-dataset-sync
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version-file: frontend/.node-version
