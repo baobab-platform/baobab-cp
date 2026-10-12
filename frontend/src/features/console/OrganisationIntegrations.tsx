@@ -172,7 +172,7 @@ export function OrganisationIntegrations({
           </CardContent>
         </Card>
       </div>
-      <OrganisationTenantIntegrations tenants={record.tenants ?? []} />
+      <OrganisationTenantIntegrations tenants={record.tenants ?? []} organisationId={record.organisation_id} />
       <p className="flex gap-2 rounded-lg border border-border bg-card p-4 text-xs leading-relaxed text-muted-foreground">
         <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-primary" />
         No organisation, legal person, corporate group, mandate, platform affiliation, tenant,
