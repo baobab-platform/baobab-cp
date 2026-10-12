@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 
 import { serverEnv } from "@/server/env";
 
-export type ProgressiveReadAction = "application" | "review-queue" | "review-application" | "operation"\n  | "provisioning" | "provisioning-plan" | "provisioning-readiness";
+export type ProgressiveReadAction = "application" | "review-queue" | "review-application" | "operation"
+  | "provisioning" | "provisioning-plan" | "provisioning-readiness";
 export type ProgressiveWriteAction =
   | "create" | "update" | "submit" | "review" | "decide" | "request-onboarding"
   | "authorise-onboarding" | "register-tenant";
@@ -14,6 +15,7 @@ export type ProgressiveAction = ProgressiveReadAction | ProgressiveWriteAction;
 export type ProgressiveCommand = {
   action: ProgressiveAction;
   id?: string;
+  tenantId?: string;
   body?: Record<string, unknown>;
   idempotencyKey?: string;
 };
@@ -46,7 +48,20 @@ const bodyFields: Partial<Record<ProgressiveWriteAction, readonly string[]>> = {
 
 /** No arbitrary path, method, selector, headers or tenant ID can be supplied. */
 export function resolveProgressiveCommand(command: ProgressiveCommand): { method: "GET" | "POST" | "PATCH"; path: string; body?: Record<string, unknown> } {
-  const { action, id, body } = command;
+  const { action, id, body, tenantId } = command;
+  // A provisioning read always binds the exact tenant to the resource and
+  // remains independently authorised by Control Plane tenant:read policy.
+  if (action === "provisioning" || action === "provisioning-plan" ||
+      action === "provisioning-readiness") {
+    if (!validIdentifier(tenantId) || !validIdentifier(id) || body !== undefined ||
+        command.idempotencyKey !== undefined) {
+      throw new ProgressiveBffError(400, "INVALID_PROVISIONING_REFERENCE");
+    }
+    const route = `/v1/tenants/${encodeURIComponent(tenantId)}/provisioning/${encodeURIComponent(id)}`;
+    return { method: "GET", path: route + (action === "provisioning-plan" ? "/plan" :
+      action === "provisioning-readiness" ? "/readiness" : "") };
+  }
+  if (tenantId !== undefined) throw new ProgressiveBffError(400, "INVALID_TENANT_SELECTOR");
   let method: "GET" | "POST" | "PATCH";
   let path: string;
   switch (action) {
