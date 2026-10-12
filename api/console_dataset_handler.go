@@ -268,7 +268,7 @@ func (h consoleDatasetHandler) get(w http.ResponseWriter,r *http.Request){
   "recipient_reference":desc.Intent.RecipientReference,
   "source_fingerprint":desc.Intent.SourceFingerprint,
   "change_fingerprint":desc.Intent.ChangeFingerprint,
-  "valid_until":desc.Intent.ValidUntil,
+  "valid_until":desc.Intent.ValidUntil,"changes":desc.Changes,
  })
 }
 func (h consoleDatasetHandler) approve(w http.ResponseWriter,r *http.Request){
