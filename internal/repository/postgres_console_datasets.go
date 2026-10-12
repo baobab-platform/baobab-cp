@@ -117,7 +117,7 @@ func (r *PostgresRepository) ProposeConsoleDataset(ctx context.Context, intent d
 	if err := validateActor(actor); err != nil {
 		return result, err
 	}
-	if actor.ActorID != intent.MakerPrincipalID || allowed == nil {
+	if actor.ActorType != "human" || actor.ActorID != intent.MakerPrincipalID || allowed == nil {
 		return result, ErrConsoleDatasetDenied
 	}
 	digest, err := intent.CanonicalDigest(at)
@@ -213,7 +213,7 @@ func (r *PostgresRepository) ApproveConsoleDataset(ctx context.Context, digest, 
 	if err := validateActor(actor); err != nil {
 		return result, err
 	}
-	if allowed == nil || evidence == "" {
+	if actor.ActorType != "human" || allowed == nil || evidence == "" {
 		return result, ErrConsoleDatasetDenied
 	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
@@ -360,7 +360,7 @@ func (r *PostgresRepository) ReadConsoleDatasetExport(ctx context.Context, diges
 	if err != nil {
 		return nil, err
 	}
-	if state != "COMPLETED" || intent.Kind != domain.ConsoleExport || !at.Before(intent.ValidUntil) ||
+	if actor.ActorType != "human" || state != "COMPLETED" || intent.Kind != domain.ConsoleExport || !at.Before(intent.ValidUntil) ||
 		(actor.ActorID != intent.MakerPrincipalID && actor.ActorID != approval.CheckerPrincipalID) {
 		return nil, ErrConsoleDatasetDenied
 	}
