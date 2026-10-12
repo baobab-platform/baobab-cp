@@ -18,6 +18,8 @@ const requirements = [
   ["requires_intelligence", "Use market intelligence"],
 ] as const;
 
+const marketChoices = [["ZA", "South Africa"], ["UG", "Uganda"]] as const;
+
 export function ApplicantWorkspace() {
   const [operatingName, setOperatingName] = useState("");
   const [form, setForm] = useState("UNINCORPORATED_ORGANISATION");
@@ -25,6 +27,7 @@ export function ApplicantWorkspace() {
   const [legalName, setLegalName] = useState("");
   const [registration, setRegistration] = useState("");
   const [market, setMarket] = useState("ZA");
+  const [requestedMarkets, setRequestedMarkets] = useState<string[]>(["ZA"]);
   const [representative, setRepresentative] = useState("");
   const [representativeRole, setRepresentativeRole] = useState("Founder");
   const [requirementsSelected, setRequirementsSelected] = useState<Requirement[]>([]);
@@ -37,18 +40,35 @@ export function ApplicantWorkspace() {
     setRequirementsSelected((old) => enabled ? [...new Set([...old, value])] : old.filter((item) => item !== value));
   }
 
+  // Preserve applicant declarations absent from this form without copying
+  // authoritative verification or legal-entity/grant decisions into a draft.
+  const previousIdentity = draft?.business_identity ?? {};
+  const retainedBusinessClaims = Object.fromEntries(
+    ["trading_names", "proposed_responsible_organisation_id", "declared_relationship_reference"]
+      .filter((key) => previousIdentity[key] !== undefined)
+      .map((key) => [key, previousIdentity[key]]),
+  );
+  const previousRepresentative = previousIdentity.authorised_representative;
+  const retainedRepresentative = previousRepresentative && typeof previousRepresentative === "object" &&
+    !Array.isArray(previousRepresentative) ? previousRepresentative : {};
+  const extraRegistrationIdentifiers = Array.isArray(previousIdentity.registration_identifiers)
+    ? previousIdentity.registration_identifiers.filter((item: unknown) =>
+      !!item && typeof item === "object" &&
+      (item as Record<string, unknown>).type !== "COMPANY_REGISTRATION")
+    : [];
   const businessIdentity: Record<string, unknown> = {
+    ...retainedBusinessClaims,
     operating_name: operatingName.trim(),
     organisation_form: form,
     operating_country: market,
     incorporation_claim: claim,
     authorised_representative: {
-      full_name: representative.trim(), role: representativeRole.trim(),
+      ...retainedRepresentative, full_name: representative.trim(), role: representativeRole.trim(),
     },
     ...(claim === "INCORPORATED_CLAIMED" ? {
       legal_name: legalName.trim(),
       jurisdiction_of_incorporation: market,
-      registration_identifiers: [{
+      registration_identifiers: [...extraRegistrationIdentifiers, {
         type: "COMPANY_REGISTRATION", value: registration.trim(), issuing_jurisdiction: market,
       }],
     } : {}),
@@ -57,14 +77,30 @@ export function ApplicantWorkspace() {
   function loadForm(app: ApplicationView) {
     setDraft(app);
     const b = app.business_identity ?? {};
-    if (typeof b.operating_name === "string") setOperatingName(b.operating_name);
-    if (typeof b.organisation_form === "string") setForm(b.organisation_form);
-    if (typeof b.incorporation_claim === "string") setClaim(b.incorporation_claim);
-    if (typeof b.legal_name === "string") setLegalName(b.legal_name);
-    if (app.requested_markets?.[0]?.country_code) setMarket(app.requested_markets[0].country_code);
+    setOperatingName(typeof b.operating_name === "string" ? b.operating_name : "");
+    setForm(typeof b.organisation_form === "string" ? b.organisation_form : "UNINCORPORATED_ORGANISATION");
+    setClaim(typeof b.incorporation_claim === "string" ? b.incorporation_claim : "UNKNOWN");
+    setLegalName(typeof b.legal_name === "string" ? b.legal_name : "");
+    const identifiers = Array.isArray(b.registration_identifiers) ? b.registration_identifiers : [];
+    const companyRegistration = identifiers.find((item: unknown) => item !== null &&
+      typeof item === "object" && (item as Record<string, unknown>).type === "COMPANY_REGISTRATION") as
+      Record<string, unknown> | undefined;
+    setRegistration(typeof companyRegistration?.value === "string" ? companyRegistration.value : "");
+    setMarket(typeof b.operating_country === "string" ? b.operating_country : "ZA");
+    const requested = (app.requested_markets ?? []).map((item) => item.country_code)
+      .filter((country) => /^[A-Z]{2}$/.test(country));
+    setRequestedMarkets([...new Set(requested)]);
     const rep = b.authorised_representative as Record<string, unknown> | undefined;
-    if (typeof rep?.full_name === "string") setRepresentative(rep.full_name);
-    if (typeof rep?.role === "string") setRepresentativeRole(rep.role);
+    setRepresentative(typeof rep?.full_name === "string" ? rep.full_name : "");
+    setRepresentativeRole(typeof rep?.role === "string" ? rep.role : "");
+    setRequirementsSelected(requirements.flatMap(([key]) =>
+      app.requirements?.[key] === true ? [key] : []));
+  }
+
+  function toggleMarket(country: string, enabled: boolean) {
+    setRequestedMarkets((old) => enabled
+      ? [...new Set([...old, country])]
+      : old.filter((item) => item !== country));
   }
 
   async function save(e: FormEvent<HTMLFormElement>) {
@@ -75,10 +111,17 @@ export function ApplicantWorkspace() {
       if (claim === "INCORPORATED_CLAIMED" && (!legalName.trim() || !registration.trim())) {
         throw new Error("An incorporated-company claim needs its actual legal name and declared registration number.");
       }
+      if (requestedMarkets.length === 0) {
+        throw new Error("Select at least one requested market. Operating country is not market participation.");
+      }
       const body = {
         business_identity: businessIdentity,
-        requirements: Object.fromEntries(requirementsSelected.map((key) => [key, true])),
-        requested_markets: [{ country_code: market }],
+        requirements: {
+          ...(draft?.requirements ?? {}),
+          ...Object.fromEntries(requirements.map(([key]) => [key, requirementsSelected.includes(key)])),
+        },
+        requested_markets: requestedMarkets.map((country_code) =>
+          draft?.requested_markets?.find((item) => item.country_code === country_code) ?? { country_code }),
         ...(draft ? { version: draft.version } : {}),
       };
       const app = await sendWorkspaceCommand<ApplicationView>({
@@ -167,7 +210,7 @@ export function ApplicantWorkspace() {
               <option value="OTHER">Other recognised form</option>
             </select>
           </label>
-          <label>Operating country / requested market
+          <label>Operating country
             <select value={market} onChange={(e) => setMarket(e.target.value)}>
               <option value="ZA">South Africa</option>
               <option value="UG">Uganda</option>
@@ -198,6 +241,20 @@ export function ApplicantWorkspace() {
             <input required maxLength={100} value={representativeRole}
               onChange={(e) => setRepresentativeRole(e.target.value)} />
           </label>
+          <fieldset className={styles.wide}>
+            <legend>Requested markets — separate from operating country and legal presence</legend>
+            <div className={styles.checks}>
+              {marketChoices.map(([code, label]) => (
+                <label key={code}>
+                  <input type="checkbox" checked={requestedMarkets.includes(code)}
+                    onChange={(e) => toggleMarket(code, e.target.checked)} />
+                  Request {label}
+                </label>
+              ))}
+            </div>
+            {requestedMarkets.some((country) => !marketChoices.some(([code]) => code === country)) ?
+              <p className={styles.note}>Other markets in this saved application remain retained without being silently deleted. Their eligibility requires separate review.</p> : null}
+          </fieldset>
           <fieldset className={styles.wide}>
             <legend>Business goals — request only what you need</legend>
             <div className={styles.checks}>
