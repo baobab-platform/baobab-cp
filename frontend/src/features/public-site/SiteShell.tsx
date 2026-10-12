@@ -61,7 +61,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
 }
 
 function SiteFooter() {
-  const footer = [
+  const footer: { heading: string; links: [string, string][] }[] = [
     { heading: "Platform", links: [["Overview", "/platform"], ["Architecture", "/architecture"], ["Trust", "/trust"], ["Markets", "/markets"]] },
     { heading: "Solutions", links: [["Solutions", "/solutions"], ["Industries", "/industries"], ["Getting started", "/start"], ["FAQs", "/faq"]] },
     { heading: "Developers", links: [["Developer centre", "/developers"], ["Documentation", "/documentation"], ["Status", "/status"], ["Console", "/workspace"]] },
@@ -94,7 +94,7 @@ function SiteFooter() {
 }
 
 export function SiteSection({ eyebrow, title, children, className = "" }: {
-  eyebrow: string; title: string; children: ReactNode; className?: string
+  eyebrow: string; title: string; children: ReactNode; className?: string | undefined
 }) {
   return (
     <section className={className}>
