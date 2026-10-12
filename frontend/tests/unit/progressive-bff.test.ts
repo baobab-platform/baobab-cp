@@ -20,6 +20,30 @@ describe("PEO-06C/D/E explicit Control Plane BFF", () => {
       .toBe("/v1/admin/operations/op_example1");
   });
 
+  it("resolves only exact read-only tenant provisioning, immutable plan and readiness routes", () => {
+    const tenantId = "ten_1234567890";
+    const provisioningId = "tprov_9876543210";
+    for (const [action, suffix] of [
+      ["provisioning", ""],
+      ["provisioning-plan", "/plan"],
+      ["provisioning-readiness", "/readiness"],
+    ] as const) {
+      expect(resolveProgressiveCommand({ action, id: provisioningId, tenantId })).toEqual({
+        method: "GET",
+        path: `/v1/tenants/${tenantId}/provisioning/${provisioningId}${suffix}`,
+      });
+    }
+    for (const attack of [
+      { action: "provisioning-plan", id: provisioningId },
+      { action: "provisioning-readiness", id: provisioningId, tenantId: "../../other" },
+      { action: "provisioning", id: provisioningId, tenantId, body: { force_ready: true } },
+      { action: "application", id, tenantId },
+      { action: "review-queue", tenantId },
+    ]) {
+      expect(() => resolveProgressiveCommand(attack as never)).toThrow(ProgressiveBffError);
+    }
+  });
+
   it("refuses privilege-escalating body fields, path traversal and direct actor selectors", () => {
     const attacks = [
       { action: "create", body: { ...body, applicant_principal_id: "admin" } },
