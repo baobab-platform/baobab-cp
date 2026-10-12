@@ -66,3 +66,7 @@ scanner entrypoint, durable Object Lock/KMS custody, retention/orphan recovery,
 real AV signature/update policy, approved OCR and official-source certification,
 protected acceptance and independent signoff. See the
 [complete sequenced plan](../reconciliation/adr026-027-completion-plan-2026-10-12.md).
+
+## P0-02B follow-up
+
+[Authenticated private intake and isolated executable composition](P0-02B-authenticated-scanner-runtime.md) now implements the network/runtime boundary. CP holds only public signing trust and rechecks current IAM/registry/trust before custody/commit; independent scanner jobs retain exact signed proofs for explicit replay. Protected live acceptance and durable cloud custody remain open.

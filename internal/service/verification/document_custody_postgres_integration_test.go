@@ -97,7 +97,7 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 		ScannerKeys:     map[string]ed25519.PublicKey{"synthetic-independent-scanner/v1": scannerPub},
 		Now:             func() time.Time { return now }}
 	scannerActor := repository.AuditActor{ActorID: "prn_scanner", ActorType: "workload",
-		ClientID: "baobab-independent-scanner-staging", CorrelationID: domain.NewUUIDv7()}
+		ClientID: "baobab-independent-scanner-staging", TokenID: "synthetic-scan-token", CorrelationID: domain.NewUUIDv7()}
 	scanCounter := &countedCleanScanner{}
 	pipeline := ScannedArtifactIngestor{
 		Attester: authority.IndependentDocumentAttester{
@@ -250,6 +250,42 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 	if _, err = db.Exec(ctx, `UPDATE evidence.record SET document=$2::jsonb WHERE evidence_id=$1`, evidenceID, encode(proofRecord)); err != nil {
 		t.Fatal(err)
 	}
+	// P0-02B: CP receives an independent signed proof, with no scanner or
+	// private signing key in its intake composition. IAM/registry checks are
+	// refreshed before custody and before the admission transaction commits.
+	trustReader := &intakeTrustFixture{key: scannerPub}
+	intakeVault := &intakeVaultFixture{vault: vault}
+	intake := ScannedArtifactIntake{Repository: base, Vault: intakeVault, Trust: trustReader, Now: ledger.Now}
+	submission := authority.ScanSubmission{CaseID: caseID, ClaimID: claimID, Proof: signed, Document: content}
+	checks := 0
+	current := func(context.Context) error { checks++; return nil }
+	receipt, err := intake.Receive(ctx, submission, scannerActor, current)
+	if err != nil || receipt.AuthorityGranted || receipt.Standing != "SCAN_PROOF_RECORDED" || checks != 3 || intakeVault.calls != 1 {
+		t.Fatalf("authenticated split intake failed: %+v %v, checks=%d seals=%d", receipt, err, checks, intakeVault.calls)
+	}
+	bad := submission
+	bad.Proof.Signature = append([]byte(nil), signed.Signature...)
+	bad.Proof.Signature[0] ^= 1
+	before := intakeVault.calls
+	if _, err := intake.Receive(ctx, bad, scannerActor, current); err == nil || intakeVault.calls != before {
+		t.Fatal("tampered independent signature reached custody")
+	}
+	checks = 0
+	if _, err := intake.Receive(ctx, submission, scannerActor, func(context.Context) error {
+		checks++
+		if checks >= 3 {
+			return errors.New("synthetic in-flight token revocation")
+		}
+		return nil
+	}); err == nil {
+		t.Fatal("revoked in-flight token returned committed scan receipt")
+	}
+	trustReader.calls = 0
+	trustReader.revokeAt = 4
+	if _, err := intake.Receive(ctx, submission, scannerActor, current); err == nil {
+		t.Fatal("removed in-flight scanner trust returned committed receipt")
+	}
+	trustReader.revokeAt = 0
 	reader := VerifiedScannedArtifactReader{Proofs: ledger, Vault: vault, ScannerKeys: ledger.ScannerKeys,
 		AllowedClientID: ledger.ExtractorClientID, Now: ledger.Now}
 	processor := &extractionProcessorFixture{now: now}
@@ -286,6 +322,10 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
   document=jsonb_set(document,'{status}','"RESTRICTED"') WHERE evidence_id=$1`, evidenceID); err != nil {
 		t.Fatal(err)
 	}
+	before = intakeVault.calls
+	if _, err := intake.Receive(ctx, submission, scannerActor, current); err == nil || intakeVault.calls != before {
+		t.Fatal("restricted evidence admitted signed intake custody")
+	}
 	if _, err = worker.Extract(ctx, caseID, claimID, evidenceID, key, extractor); !errors.Is(err, ErrDocumentExtractionDenied) {
 		t.Fatalf("restricted private candidates leaked from PostgreSQL: %v", err)
 	}
@@ -306,4 +346,28 @@ type syntheticEd25519Signer struct{ key ed25519.PrivateKey }
 
 func (s syntheticEd25519Signer) Sign(payload []byte) ([]byte, error) {
 	return ed25519.Sign(s.key, payload), nil
+}
+
+// Synthetic trust/transport ports are deliberately not government/scanner certification.
+type intakeTrustFixture struct {
+	key             ed25519.PublicKey
+	calls, revokeAt int
+}
+
+func (s *intakeTrustFixture) ScannerKey(context.Context, string, string) (ed25519.PublicKey, error) {
+	s.calls++
+	if s.revokeAt > 0 && s.calls >= s.revokeAt {
+		return nil, errors.New("synthetic trust revoked")
+	}
+	return s.key, nil
+}
+
+type intakeVaultFixture struct {
+	vault authority.ScannedDocumentVault
+	calls int
+}
+
+func (s *intakeVaultFixture) Seal(ctx context.Context, p authority.ScanProof, b []byte) error {
+	s.calls++
+	return s.vault.Seal(ctx, p, b)
 }

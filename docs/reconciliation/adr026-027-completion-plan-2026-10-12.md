@@ -75,7 +75,7 @@ support must not be published from a passing stale lock.
 |---|---|---|
 | 1 | P0-01 — scope integration | #379 fixed/reviewed/merged. Keep scope arrays read-only, source-backed and independently permission filtered. Completed at code/CI level. |
 | 2 | P0-02A — scanner admission/custody | Before scanning/sealing, hold current case → claim → evidence locks, bind subject/purpose/artifact and independent scanner actor. Reuse the transaction for immutable proof/audit; deny direct registration and expiry at commit. Unit/race and PG17 denial/replay/lock tests. |
-| 3 | P0-02B — authenticated runtime composition | Shared-first private scanner intake/receipt contract if needed; separate scanner process/signer, issuer/audience/scope/current registry checks, source/extractor identity separation, cancellation and revocation negatives. Never mount scanner private keys in CP/OCR. |
+| 3 | P0-02B — authenticated runtime composition | Implemented Shared #298/#299 contract and [CP private intake/isolated command](../migrations/P0-02B-authenticated-scanner-runtime.md), current JWT/introspection/registry/trust and durable exact replay; protected acceptance pending. Remaining operator evidence: separate scanner process/signer, issuer/audience/scope/current registry checks, source/extractor identity separation, cancellation and revocation negatives. Never mount scanner private keys in CP/OCR. |
 | 4 | P0-02C — durable custody/source acceptance | Approved S3 Object Lock/KMS or equivalent adapter; retention/orphan reconciliation/key rotation, quarantine and deletion evidence; certified official-source/OCR transport. Contract/component code can precede account credentials; actual certification cannot. |
 | 5 | P0-03 — truthful founding records and mandates | Use existing registration/control/mandate workflows; independent Nabhold/Thamani facts and separate corporate control evidence; four Organisations/Tenants; explicit roles/markets/activities/dates and different maker/checker. Real decisions and supplied evidence required. |
 | 6 | P0-04A — native contract convergence | Audit actual consumed schemas, update exact engine locks/embedded contracts, regenerate consumers, prove positive and negative wire compatibility. Separate PR per owning engine. |
@@ -88,6 +88,8 @@ support must not be published from a passing stale lock.
 | 13 | P1-01 | Actual protected IAM/CP/engine deployment, exact active workload profiles, certified providers and independently recorded integration evidence. Infrastructure PRs do not establish deployment. |
 | 14 | P1-02 | Four-business protected qualification, revocation/isolation, representative volume, failure/replay/drift, migration/backfill, rollback/restore and historical actor attribution. |
 | 15 | P1-03 / PEO-07 / LA-07 | Capability-specific independent legal/provider/security/operations signoff and EA-09B. No blanket whole-tenant promotion. |
+
+P0-02B implements code/runtime composition, while real scanner activation and protected acceptance remain unproven. P0-02C remains independently open.
 
 P0-02A is a bounded security closure of existing PEO-03L code. It is not full
 P0-02 completion, a new canonical capability or live scanner acceptance.

@@ -25,15 +25,15 @@ const MaxScannedDocumentBytes = 8 * 1024 * 1024
 // bytes, not a claim that a legal entity is valid. The scanner's private key
 // must NEVER be provisioned to the Control Plane.
 type ScanProof struct {
-	EvidenceID     string
-	ArtifactID     string
-	MediaType      string
-	Digest         string
-	ScannerID      string
-	ScannerVersion string
-	Outcome        string
-	ScannedAt      time.Time
-	Signature      []byte
+	EvidenceID     string    `json:"evidence_id"`
+	ArtifactID     string    `json:"artifact_id"`
+	MediaType      string    `json:"media_type"`
+	Digest         string    `json:"digest"`
+	ScannerID      string    `json:"scanner_id"`
+	ScannerVersion string    `json:"scanner_version"`
+	Outcome        string    `json:"outcome"`
+	ScannedAt      time.Time `json:"scanned_at"`
+	Signature      []byte    `json:"signature_base64"`
 }
 
 // SigningPayload provides the canonical bytes for the independent scanner.

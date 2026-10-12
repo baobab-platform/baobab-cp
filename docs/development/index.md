@@ -18,6 +18,8 @@ The [root README](../../README.md) explains the whole CP repository; the
 - [ADR-BCP-026/027 completion plan](../reconciliation/adr026-027-completion-plan-2026-10-12.md)
   records current cross-repository baselines and sequential acceptance tasks.
 
+- [Authenticated scanner runtime](../migrations/P0-02B-authenticated-scanner-runtime.md) maps private intake, current IAM/registry/public trust, isolated signing and durable exact replay.
+
 ## Required maintenance discipline
 
 For changed behavior, update the Shared contract where necessary, Go and

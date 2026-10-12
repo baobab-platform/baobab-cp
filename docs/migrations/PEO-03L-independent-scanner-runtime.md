@@ -61,3 +61,7 @@ Unit tests exercise real Unix-socket protocol framing with a fake clamd server, 
 5. Obtain external account configuration/provider approvals and live operational evidence. Do not mark CIPC/SARS, PSP or corporate status VERIFIED from this workflow.
 
 **Sequence rule:** This is Package 1 of eight. Complete its non-cloud implementation and protected staging acceptance; do NOT declare Package 2 completed or evaluate EA v2.1 on its behalf.
+
+## P0-02B follow-up
+
+[Authenticated private intake and isolated executable composition](P0-02B-authenticated-scanner-runtime.md) now implements the network/runtime boundary. CP holds only public signing trust and rechecks current IAM/registry/trust before custody/commit; independent scanner jobs retain exact signed proofs for explicit replay. Protected live acceptance and durable cloud custody remain open.
