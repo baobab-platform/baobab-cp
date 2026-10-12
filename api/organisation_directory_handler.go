@@ -30,7 +30,7 @@ type organisationDirectoryResponse struct {
 // exactDirectoryIDs is a display listing boundary, not an authorisation
 // decision for subsequent operations. Every detail request checks again.
 func exactDirectoryIDs(authority administration.EffectiveAuthority, environment string) ([]string, bool) {
-    return boundedDirectoryIDs(authority, environment, maxOverviewRows)
+	return boundedDirectoryIDs(authority, environment, maxOverviewRows)
 }
 
 func boundedDirectoryIDs(authority administration.EffectiveAuthority, environment string, max int) ([]string, bool) {

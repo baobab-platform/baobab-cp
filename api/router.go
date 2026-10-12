@@ -686,7 +686,7 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"),
 			a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/overview", overview.get)
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/directory", overview.directory)
-        r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil,true)).Get("/v1/organisations/directory/page", overview.directoryPage)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/directory/page", overview.directoryPage)
 	}
 	if dependencies.OrganisationObservability != nil {
 		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}
