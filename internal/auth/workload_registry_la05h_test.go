@@ -30,6 +30,9 @@ func TestLA05HStagingAssessorProfilesRemainInert(t *testing.T) {
 		if registry.AllowsScope(client, "context:resolve") {
 			t.Errorf("PROVISIONED assessor %s received runtime context authority", client)
 		}
+		if registry.AllowsScope(client, "documentary:restriction-assess") {
+			t.Errorf("PROVISIONED assessor %s acquired CP documentary restriction authority", client)
+		}
 		if registry.AllowsContextPurpose(client, ContextPurposeRuntime) {
 			t.Errorf("PROVISIONED assessor %s received runtime context purpose", client)
 		}
@@ -45,6 +48,9 @@ func TestLA05HStagingAssessorProfilesRemainInert(t *testing.T) {
 	} {
 		if registry.AllowsScope(id, "legal-actor:assess") {
 			t.Errorf("production workload %s silently gained legal-actor assessment", id)
+		}
+		if registry.AllowsScope(id, "documentary:restriction-assess") {
+			t.Errorf("production workload %s silently gained private documentary assessment", id)
 		}
 	}
 }
