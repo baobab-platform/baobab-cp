@@ -31,3 +31,10 @@ The CP Console is the administrative frontend defined by ADR-BCP-019. It lives i
 - [CX-05C: permission-scoped enterprise resource tables](cx05c-permission-scoped-record-tables.md): eight resource tables with explicit denial and bounded read models; high-volume indexing remains a separate gate.
 
 - [CX-05D: indexed high-volume authorised directory](cx05d-high-volume-directory.md): bounded 20k exact-grant SQL read model, per-request snapshots, retained fail-closed cursors and staging performance gate.
+
+- [CX-05G: transactional dataset operations](cx05g-durable-operations.md): immutable plan and maker/checker approval, atomic bulk metadata and download audit.
+- [CX-05H: protected staging load protocol](cx05h-protected-performance.md): real HTTPS ≥5,001-grant p95 gate, not yet an externally signed certificate.
+- [CX-05J: encrypted CSV and expiration](cx05j-artifact-encryption-retention.md): AES-256-GCM, artifact scrubbing, retention loops and outstanding KMS/backup proof.
+- [CX-05K: IAM-authenticated CP dataset API](cx05k-governed-api-runtime.md): exact scoped grants, current assurance and nonproduction registration.
+- [CX-05L/M: CSRF-protected Console workbench](cx05l-governed-workbench.md): independent proposal inspection, exact-grant UI and server-only BFF.
+- [CX-05 engineering maintainer guide](../development/cx05-maintainer-guide.md): trace route to transaction, operational knobs, security reasons, testing and live release gates.

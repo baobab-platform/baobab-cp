@@ -4,7 +4,7 @@
 
 Baobab Control Plane (`baobab-cp`) owns the platform's **canonical organisation and tenant control state**: admission and onboarding, governed tenancy and relationships, capability entitlements, provisioning desired state, readiness, and platform administration. Its Go API is the authority; the co-located Next.js Console is a separately deployed human interface over that API.
 
-> **Readiness (9 October 2026):** The Go backend is under active implementation, with substantial runtime and API support. The CP Console includes protected onboarding code-level journeys, but **live IAM/AWS acceptance and production enablement are not yet demonstrated**. Neither a passing backend CI run nor the existence of a Console container certifies end-to-end production onboarding.
+> **Implementation snapshot — 12 October 2026:** The CP API and protected Console/BFF are implemented for organisation-first navigation, Organisation 360°, indexed directory and governed datasets. Dataset operations are **nonproduction-only and explicitly disabled by default**; protected IAM/AWS staging acceptance, verified high-volume performance and unrestricted production enablement remain unproven. Passing CI certifies the commit's tests, not live onboarding or issuer integration.
 
 ## Repository at a glance
 
@@ -13,7 +13,7 @@ Baobab Control Plane (`baobab-cp`) owns the platform's **canonical organisation 
 | Control Plane API | `api/`, `cmd/controlplane/` | Authenticated APIs, authoritative policy checks and administrative commands | Substantial implementation; individual routes remain subject to runtime/contract verification |
 | Domain and persistence | `internal/` | Canonical state, lifecycle services, Postgres repositories, reconciler and events | Actively evolving; do not infer production acceptance |
 | Migrations | `internal/store/postgres/migrations/` | Versioned Postgres schema changes | Real migrations; run before the API |
-| CP Console | `frontend/` | Next.js App Router application, future confidential-client BFF | FE-01/02/05 foundations; no authenticated operator journeys |
+| CP Console | `frontend/` | Next.js App Router, confidential session/BFF, governed workspace | Authenticated code-level journeys, CX-01–05 components; staging proof and production publication remain gated |
 | Contract pin | `contracts.lock.yaml` | Exact authoritative `shared` revision | Enforced by contract and generated-client tests |
 | Architecture & programme | `docs/adr/`, `docs/frontend/` | Decisions, design constraints and progress | Consult accepted amendments and latest implementation evidence |
 
@@ -44,7 +44,7 @@ Baobab Control Plane (`baobab-cp`) owns the platform's **canonical organisation 
    infrastructure = deployment / infrastructure authority
 ```
 
-The diagram describes the intended Console session boundary; its OIDC login, callback, session, logout and token custody **are not yet implemented in the frontend**. The browser must never hold privileged API credentials or call privileged CP endpoints directly.
+The Console's OIDC login/callback/logout and Redis-backed confidential session boundary are now implemented as nonproduction-gated code. The browser must never hold privileged CP bearer credentials or call privileged CP endpoints directly. The login flow, IAM introspection, current grants and CP/AWS runtime have **not** been certified together in protected staging.
 
 ### What CP owns — and what it does not
 
@@ -66,12 +66,13 @@ The backend includes API/domain work for admission, organisation resolution, ten
 
 The Console implementation includes:
 
-- Next.js 16 / React 19 / TypeScript strict with Node.js 24, pnpm workspace and an independent Dockerfile.
-- Owned accessible UI primitives, semantic status tokens, component tests and a non-production `/design-system` showcase.
-- An OpenAPI-generated client from the pinned Shared contract, server-only CP client, fail-closed unsupported-operation handling and Console CI.
-- A public informational platform landing page at `/` and secondary public routes (publication-gated, no-index); privileged Console journeys remain under `/workspace`. See [website plan](docs/frontend/public-platform-website.md).
+- Next.js 16, React 19, Node.js 24, strict TypeScript, tested accessible primitives and the separately deployed informational landing page.
+- An OIDC confidential-client login/callback/logout flow, encrypted Redis-backed server session, revocation introspection, same-origin CSRF validation and a server-only Control Plane BFF. Activation is **explicitly gated to nonproduction**.
+- CX-01–CX-04 role-filtered navigation, accessible command palette, exact-scope enterprise context switching and Organisation 360° read models with independent governance/source reconciliation.
+- CX-05 server-indexed organisation directory (up to 20,000 *independently granted* candidates, 50-row pages), enterprise record tables, and a read-only-until-authorised dataset operations experience.
+- Governed export and bulk operations: Shared-authored API schemas; CP human IAM/ACR and exact-grant guards; immutable approval digests; durable PostgreSQL proposals, auditable download, atomic versioned metadata mutation, AES-256-GCM CSV at rest and expiry cleanup. See the [maintainer guide](docs/development/cx05-maintainer-guide.md).
 
-Next gates are (1) refresh the FE-00 architecture and API/authority matrix, (2) finish IAM confidential-client integration and FE-03 browser/BFF session security, (3) build the contextual shell and authority-aware navigation, then (4) deliver the applicant → admission → onboarding → provisioning → readiness vertical slice. No fake production APIs or browser-owned administrative authority.
+**Current release boundaries:** `CX05_DATASET_API_ENABLED` and `CX05_DATASET_CONSOLE_ENABLED` default off; CP refuses production activation of these routes and requires a 32-byte managed encryption key. Independently verified IAM step-up, provider evidence, protected staging E2E, database-performance evidence, key rotation and backups are not established by CI. Do not treat an authenticated UI preview or corporate-group membership as a grant. The completed CX gates are *implementation increments*, not unrestricted operational acceptance.
 
 See the [Console overview](docs/frontend/index.md), [dated FE-00 rebaseline](docs/frontend/fe-00-refresh-2026-10-09.md) and [frontend developer guide](frontend/README.md).
 
@@ -125,7 +126,7 @@ make frontend-typecheck frontend-lint frontend-test frontend-build
 make frontend-image
 ```
 
-This runs the **Console foundation and its placeholder**, not an authenticated administrative application. Its `/healthz` endpoint is liveness, **not platform readiness**. The frontend must not be exposed as a working administration experience before FE-03 and protected-route tests are complete.
+This runs the Console development application; privileged workspace routes require the separately configured, live IAM issuer, confidential-client settings, TLS Redis session store and current CP authority. With those absent they fail closed. `/healthz` indicates liveness, **not production readiness**. Do not set the governance feature flags or use fabricated tokens to bypass acceptance.
 
 ## Related repositories
 
@@ -144,4 +145,4 @@ This runs the **Console foundation and its placeholder**, not an authenticated a
 
 Start with the [ADR register](docs/adr/index.md). Read the **accepted** BCP-017 through BCP-027 decisions and amendments, plus the applicable Shared contracts, before changing a governed lifecycle. The [FE-00 historical snapshot](docs/frontend/fe-00-architecture-lock.md) is not a current readiness report.
 
-For changes: [CONTRIBUTING.md](CONTRIBUTING.md). For vulnerabilities: [SECURITY.md](SECURITY.md). See [LICENSE](LICENSE). Sensitive evidence, secrets, bearer tokens and live tenant information must not enter test fixtures, screenshots or the browser bundle.
+For changes: [CONTRIBUTING.md](CONTRIBUTING.md) and [developer documentation](docs/development/index.md). New governed operations must update their Shared schema/pin, API and BFF tests, runbook, README and maintenance comments in the same PR. Never claim successful live staging without recorded evidence.  For vulnerabilities: [SECURITY.md](SECURITY.md). See [LICENSE](LICENSE). Sensitive evidence, secrets, bearer tokens and live tenant information must not enter test fixtures, screenshots or the browser bundle.
