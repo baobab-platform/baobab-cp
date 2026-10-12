@@ -13,6 +13,11 @@ The [root README](../../README.md) explains the whole CP repository; the
 - [API contract lock](../../contracts.lock.yaml) names the exact Shared
   revision. Never edit generated TypeScript client types directly.
 
+- [Scanner admission and custody](../migrations/PEO-03L2-scanner-admission-custody.md)
+  explains lock order, same-transaction proof/audit, denial and orphan handling.
+- [ADR-BCP-026/027 completion plan](../reconciliation/adr026-027-completion-plan-2026-10-12.md)
+  records current cross-repository baselines and sequential acceptance tasks.
+
 ## Required maintenance discipline
 
 For changed behavior, update the Shared contract where necessary, Go and

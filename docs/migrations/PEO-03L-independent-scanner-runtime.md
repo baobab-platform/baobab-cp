@@ -3,6 +3,14 @@
 **Authority:** Accepted ADR-BCP-026 and ADR-BCP-027; extends PEO-03H/J/K.
 **Status:** Code-level scanner and custody composition. This is NOT externally certified malware scanning or activated production evidence verification.
 
+## Canonical admission follow-up
+
+[P0-02A / PEO-03L2](PEO-03L2-scanner-admission-custody.md) adds current
+case/claim/evidence admission before scan/seal, a bounded canonical lock lease,
+same-transaction proof/audit registration and expiry recheck before commit.
+Use the new case/claim selectors when composing `ScannedArtifactIngestor`.
+Token verification, scanner activation and protected acceptance remain open.
+
 ## Implemented increment
 
 ```text
@@ -19,7 +27,7 @@ IndependentDocumentAttester.ScanAndAttest
   |  timestamp truncated to PostgreSQL microseconds before signing
   v
 ScannedArtifactIngestor.Ingest
-  |  scanner client and actor preflight; no applicant/browser route
+  |  scanner client/actor and current case/claim/evidence lease; no applicant/browser route
   |  seal artifact into AES-GCM immutable custody
   |  register signed proof via DocumentLedger (lock and independent public key)
   v

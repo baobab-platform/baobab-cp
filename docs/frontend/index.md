@@ -38,3 +38,5 @@ The CP Console is the administrative frontend defined by ADR-BCP-019. It lives i
 - [CX-05K: IAM-authenticated CP dataset API](cx05k-governed-api-runtime.md): exact scoped grants, current assurance and nonproduction registration.
 - [CX-05L/M: CSRF-protected Console workbench](cx05l-governed-workbench.md): independent proposal inspection, exact-grant UI and server-only BFF.
 - [CX-05 engineering maintainer guide](../development/cx05-maintainer-guide.md): trace route to transaction, operational knobs, security reasons, testing and live release gates.
+
+- [12 October completion plan](../reconciliation/adr026-027-completion-plan-2026-10-12.md): cross-engine evidence/mandate prerequisites and the remaining CX-06–10 sequence. Scope UI completion does not close LA-07 operational acceptance.
