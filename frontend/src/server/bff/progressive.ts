@@ -5,7 +5,8 @@ import { randomUUID } from "node:crypto";
 import { serverEnv } from "@/server/env";
 
 export type ProgressiveReadAction = "application" | "review-queue" | "review-application" | "operation"
-  | "provisioning" | "provisioning-plan" | "provisioning-readiness" | "effective-authority";
+  | "provisioning" | "provisioning-plan" | "provisioning-readiness" | "effective-authority"
+  | "organisation-entity" | "organisation-iam-links" | "organisation-audit" | "tenant-record";
 export type ProgressiveWriteAction =
   | "create" | "update" | "submit" | "review" | "decide" | "request-onboarding"
   | "authorise-onboarding" | "register-tenant";
@@ -49,6 +50,23 @@ const bodyFields: Partial<Record<ProgressiveWriteAction, readonly string[]>> = {
 /** No arbitrary path, method, selector, headers or tenant ID can be supplied. */
 export function resolveProgressiveCommand(command: ProgressiveCommand): { method: "GET" | "POST" | "PATCH"; path: string; body?: Record<string, unknown> } {
   const { action, id, body, tenantId } = command;
+  // CX-03/CX-04: server-side-only, GET-only canonical reference reads.
+  // Browser /api/workspace/v2 action allowlists are deliberately unchanged.
+  if (["organisation-entity", "organisation-iam-links", "organisation-audit", "tenant-record"].includes(action)) {
+    const canonicalId = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/;
+    const tenantPattern = /^tn_[a-z0-9]{3,60}$/;
+    const allowedId = action === "tenant-record" ? tenantPattern : canonicalId;
+    if (!id || !allowedId.test(id) || body !== undefined || tenantId !== undefined ||
+        command.idempotencyKey !== undefined) {
+      throw new ProgressiveBffError(400, "INVALID_CONTEXT_REFERENCE");
+    }
+    const safeId = encodeURIComponent(id);
+    const path = action === "tenant-record" ? `/v1/tenants/${safeId}`
+      : action === "organisation-entity" ? `/v1/canonical-entities/${safeId}`
+      : action === "organisation-iam-links" ? `/v1/canonical-entities/${safeId}/iam-organisations`
+      : `/v1/organisations/${safeId}/audit?limit=25`;
+    return { method: "GET", path };
+  }
   // A provisioning read always binds the exact tenant to the resource and
   // remains independently authorised by Control Plane tenant:read policy.
   if (action === "provisioning" || action === "provisioning-plan" ||
