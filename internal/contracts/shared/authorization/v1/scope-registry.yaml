@@ -465,50 +465,6 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
-  # PEO-03G/ADR-BCP-026: transport admission to retrieve a fresh issuer
-  # observation through CP's certified server-side CIPC connector.
-  # No applicant, browser, self-attesting engine or generic administrator
-  # receives this scope. The ACTIVE registry entry, provider certification,
-  # explicit client allowlist and OEV-03 evidence guards are separate gates.
-  - name: "verification:source-capture"
-    description: >-
-      Permit a separately registered official-source verification workload
-      to request one server-side CIPC observation for an already governed
-      verification case, claim and evidence record. Does not accept a source
-      response from the caller, verify a claim, confer corporate status,
-      resolve a tax obligation, release a documentary restriction or activate
-      a tenant. Must be independently proven before workload activation.
-    audience: ["baobab-control-plane"]
-    allowed_actors: ["workload"]
-    grants_authority: false
-
-  # PEO-03J: transport admission only for a separately registered
-  # scanned-document extraction worker. Candidate text is NOT a source
-  # observation, VERIFIED status, corporate registration or tax authority.
-  # PEO-03K custody implementation extension: independent scan admission.
-  # Not an OCR processor, issuer verification, legal-actor or tenant operation.
-  - name: "verification:scan-attest"
-    description: >-
-      Permit a separately governed scanner workload to submit an independently
-      signed clean-scan observation for an existing EvidenceRecord. Control
-      Plane must validate exact scanner trust anchor, artifact digest, actor,
-      evidence lifecycle and independent antivirus verdict before admission.
-      Scope provides transport only and grants no verification/tenant authority.
-    audience: ["baobab-control-plane"]
-    allowed_actors: ["workload"]
-    grants_authority: false
-
-  - name: "verification:document-extract"
-    description: >-
-      Authorise a dedicated workload to request internal candidate extraction
-      for an existing UNDER_VERIFICATION claim with an AVAILABLE and independently
-      malware-scanned evidence artifact. Requires CP-side exact workload,
-      case, claim, evidence and custody attestation binding. Grants no applicant,
-      tax, CIPC, claim-verification, tenant or legal-actor authority.
-    audience: ["baobab-control-plane"]
-    allowed_actors: ["workload"]
-    grants_authority: false
-
   - name: "verification:read"
     description: >-
       Read verification cases, their claims, checks, results and
