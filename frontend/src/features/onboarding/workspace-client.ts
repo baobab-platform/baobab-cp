@@ -42,9 +42,10 @@ export async function sendWorkspaceCommand<T = unknown>(command: WorkspaceComman
   return await response.json() as T;
 }
 
-export async function readWorkspace<T = unknown>(action: string, id?: string): Promise<T> {
+export async function readWorkspace<T = unknown>(action: string, id?: string, tenantId?: string): Promise<T> {
   const query = new URLSearchParams({ action });
   if (id) query.set("id", id);
+  if (tenantId) query.set("tenantId", tenantId);
   const response = await fetch(`/api/workspace/v2?${query}`, {
     method: "GET", credentials: "same-origin", cache: "no-store",
   });

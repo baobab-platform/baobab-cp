@@ -22,14 +22,20 @@ export async function GET(request: NextRequest) {
     const session = await currentSession(createAuthStore(settings),
       request.cookies.get(SESSION_COOKIE)?.value, settings);
     const action = request.nextUrl.searchParams.get("action");
-    if (!["application", "review-application", "review-queue", "operation"].includes(action ?? "") ||
-        Array.from(request.nextUrl.searchParams.keys()).some((key) => key !== "action" && key !== "id")) {
+    if (!["application", "review-application", "review-queue", "operation",
+          "provisioning", "provisioning-plan", "provisioning-readiness"].includes(action ?? "") ||
+        Array.from(request.nextUrl.searchParams.keys()).some((key) => key !== "action" && key !== "id" && key !== "tenantId")) {
       throw new ProgressiveBffError(400, "INVALID_READ_ACTION");
     }
+    if (["action", "id", "tenantId"].some((key) => request.nextUrl.searchParams.getAll(key).length > 1)) {
+      throw new ProgressiveBffError(400, "DUPLICATE_SELECTOR");
+    }
     const id = request.nextUrl.searchParams.get("id") ?? undefined;
+    const tenantId = request.nextUrl.searchParams.get("tenantId") ?? undefined;
     const command: ProgressiveCommand = {
       action: action as ProgressiveReadAction,
       ...(id !== undefined ? { id } : {}),
+      ...(tenantId !== undefined ? { tenantId } : {}),
     };
     const data = await invokeProgressive(command, session.accessToken);
     return NextResponse.json(data.data, { status: data.status, headers: { "Cache-Control": "no-store" } });
