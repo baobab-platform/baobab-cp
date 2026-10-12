@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -102,6 +103,46 @@ func main() {
 	}
 	defer resolverRepository.Close()
 	resolverRepository.Environment = cfg.Environment
+	// Dataset endpoints remain off by default and cannot be switched on in
+	// production without a separately accepted release. Never log key bytes.
+	consoleDatasetsEnabled := os.Getenv("CX05_DATASET_API_ENABLED") == "true"
+	if consoleDatasetsEnabled {
+		if !api.OrganisationFirstV2PermittedIn(cfg.Environment) {
+			slog.Error("governed dataset API disabled outside nonproduction")
+			os.Exit(1)
+		}
+		rawKey, decodeErr := base64.StdEncoding.Strict().DecodeString(os.Getenv("CP_CONSOLE_DATASET_KEY_B64"))
+		if decodeErr != nil || len(rawKey) != 32 || resolverRepository.SetConsoleDatasetKey(rawKey) != nil {
+			slog.Error("invalid or absent governed dataset encryption key")
+			os.Exit(1)
+		}
+		// Retention is independent of whether users download the artifact.
+		go func() {
+			purge := func() {
+				for {
+					removed, err := resolverRepository.PurgeExpiredConsoleDatasetArtifacts(ctx, time.Now().UTC(), 250)
+					if err != nil {
+						slog.Warn("dataset retention purge unavailable", "error", err)
+						return
+					}
+					if removed < 250 {
+						return
+					}
+				}
+			}
+			purge()
+			ticker := time.NewTicker(time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					purge()
+				}
+			}
+		}()
+	}
 	resolution := service.ResolutionService{Pipeline: resolver.ResolutionPipeline{}, Repository: resolverRepository}
 	identity := service.IdentityService{Repository: resolverRepository, Provision: service.WorkloadOnlyProvisioningPolicy}
 	// Canonical was previously never set here, leaving the
@@ -338,7 +379,7 @@ func main() {
 			AllowedClientID: "baobab-cipc-verifier-staging",
 			Now:             time.Now, AllowSynthetic: false}
 	}
-	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{EventIngress: eventIngress, EventWake: eventWake, FederationCanonical: &service.FederationIdentityEvidenceService{Repository: resolverRepository, Environment: cfg.Environment, EngineInstanceID: cfg.FederationSourceEngineInstanceID, Now: time.Now}, FederationGovernanceTargets: resolverRepository, IdentityRuntimeProfiles: resolverRepository, Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, OrganisationMappings: resolverRepository, Mappings: resolverRepository, Operations: resolverRepository, AdministrativeGrants: resolverRepository, AdministrativeGrantAdmin: resolverRepository, ShadowEvidence: resolverRepository, EnforcementRollback: cfg.EnforcementRollback, ProviderMigrations: resolverRepository, EngineReleases: resolverRepository, ProviderCertifications: resolverRepository, DesiredReleases: resolverRepository, DeploymentObservations: resolverRepository, ReleaseDrift: resolverRepository, ReleaseReadiness: resolverRepository, WorkloadRegistry: workloadRegistry, SubjectVerifiers: &auth.AudienceVerifiers{Issuer: cfg.WorkloadOIDCIssuer}, EngineMigrationTasks: resolverRepository, Changesets: resolverRepository, Markets: resolverRepository, Verification: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, MarketParticipations: resolverRepository, CapabilityResolutions: resolverRepository, OrganisationObservability: resolverRepository, OrganisationOverview: resolverRepository, OrganisationGovernance: resolverRepository, PlatformAccounts: resolverRepository, Metrics: metrics.Default, FoundingGovernance: db, FoundingGovernanceEnabled: os.Getenv("PEO_FOUNDING_GOVERNANCE_ENABLED") == "true", DocumentaryReviewEnabled: os.Getenv("PEO_DOCUMENTARY_REVIEW_DECISIONS_ENABLED") == "true", DocumentaryReview: db, DocumentaryReleaseEnabled: os.Getenv("PEO_DOCUMENTARY_RELEASE_DECISIONS_ENABLED") == "true", DocumentaryRelease: db, DocumentaryRestrictionEnabled: os.Getenv("PEO_DOCUMENTARY_SCOPE_PDP_ENABLED") == "true", DocumentaryRestriction: db, DocumentaryRestrictionClientIDs: strings.Split(os.Getenv("PEO_DOCUMENTARY_SCOPE_CONSUMERS"), ","), SourceCaptureEnabled: sourceCapture != nil, SourceCapture: sourceCapture, SourceCaptureClientIDs: strings.Split(os.Getenv("PEO_SOURCE_CAPTURE_CLIENT_IDS"), ","), AssistedWitnessEnabled: os.Getenv("PEO_ASSISTED_WITNESS_ENABLED") == "true", AssistedWitness: resolverRepository, ProgressiveApplications: db, ProgressiveApplicationsEnabled: os.Getenv("PEO_PROGRESSIVE_ADMISSION_ENABLED") == "true", ProgressiveBridge: db, ProgressiveBridgeEnabled: os.Getenv("PEO_PROGRESSIVE_BRIDGE_ENABLED") == "true", OrganisationFirstV2: cfg.OrganisationFirstV2Enabled, Applications: applications, Classifications: classifications, CurrentInternalAuthorityEnabled: os.Getenv("PEO_INTERNAL_AUTHORITY_ENABLED") == "true", CurrentInternalAuthorityClientID: os.Getenv("PEO_SUBSCRIPTIONS_WORKLOAD_CLIENT_ID"), Onboarding: &onboarding.Service{Repo: resolverRepository, Admissions: resolverRepository}, TenantBootstrapRegistration: cfg.TenantBootstrapRegistration, LegalActorMandatesV2: cfg.LegalActorMandateCommandsEnabled, LegalActorMandates: db, LegalActorLifecycleEnabled: cfg.LegalActorMandateLifecycleEnabled, LegalActorLifecycle: db, LegalActorAssessmentEnabled: cfg.LegalActorAssessmentEnabled, LegalActorAssessment: db, Environment: cfg.Environment}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	srv := &http.Server{Addr: cfg.HTTPAddress, Handler: api.New(api.Dependencies{EventIngress: eventIngress, EventWake: eventWake, FederationCanonical: &service.FederationIdentityEvidenceService{Repository: resolverRepository, Environment: cfg.Environment, EngineInstanceID: cfg.FederationSourceEngineInstanceID, Now: time.Now}, FederationGovernanceTargets: resolverRepository, IdentityRuntimeProfiles: resolverRepository, Store: db, AdminVerifier: adminVerifier, WorkloadVerifier: workloadVerifier, Resolution: resolution, Canonical: canonical, Identity: identity, Contexts: resolverRepository, PlatformContextTTL: cfg.PlatformContextTTL, Identities: resolverRepository, Memberships: resolverRepository, Provisioning: resolverRepository, OrganisationMappings: resolverRepository, Mappings: resolverRepository, Operations: resolverRepository, AdministrativeGrants: resolverRepository, AdministrativeGrantAdmin: resolverRepository, ShadowEvidence: resolverRepository, EnforcementRollback: cfg.EnforcementRollback, ProviderMigrations: resolverRepository, EngineReleases: resolverRepository, ProviderCertifications: resolverRepository, DesiredReleases: resolverRepository, DeploymentObservations: resolverRepository, ReleaseDrift: resolverRepository, ReleaseReadiness: resolverRepository, WorkloadRegistry: workloadRegistry, SubjectVerifiers: &auth.AudienceVerifiers{Issuer: cfg.WorkloadOIDCIssuer}, EngineMigrationTasks: resolverRepository, Changesets: resolverRepository, Markets: resolverRepository, Verification: resolverRepository, IamOrganisations: resolverRepository, OrganisationAdmission: resolverRepository, Counterparties: resolverRepository, MarketParticipations: resolverRepository, CapabilityResolutions: resolverRepository, OrganisationObservability: resolverRepository, OrganisationOverview: resolverRepository, OrganisationGovernance: resolverRepository, ConsoleDatasets: resolverRepository, ConsoleDatasetsEnabled: consoleDatasetsEnabled, PlatformAccounts: resolverRepository, Metrics: metrics.Default, FoundingGovernance: db, FoundingGovernanceEnabled: os.Getenv("PEO_FOUNDING_GOVERNANCE_ENABLED") == "true", DocumentaryReviewEnabled: os.Getenv("PEO_DOCUMENTARY_REVIEW_DECISIONS_ENABLED") == "true", DocumentaryReview: db, DocumentaryReleaseEnabled: os.Getenv("PEO_DOCUMENTARY_RELEASE_DECISIONS_ENABLED") == "true", DocumentaryRelease: db, DocumentaryRestrictionEnabled: os.Getenv("PEO_DOCUMENTARY_SCOPE_PDP_ENABLED") == "true", DocumentaryRestriction: db, DocumentaryRestrictionClientIDs: strings.Split(os.Getenv("PEO_DOCUMENTARY_SCOPE_CONSUMERS"), ","), SourceCaptureEnabled: sourceCapture != nil, SourceCapture: sourceCapture, SourceCaptureClientIDs: strings.Split(os.Getenv("PEO_SOURCE_CAPTURE_CLIENT_IDS"), ","), AssistedWitnessEnabled: os.Getenv("PEO_ASSISTED_WITNESS_ENABLED") == "true", AssistedWitness: resolverRepository, ProgressiveApplications: db, ProgressiveApplicationsEnabled: os.Getenv("PEO_PROGRESSIVE_ADMISSION_ENABLED") == "true", ProgressiveBridge: db, ProgressiveBridgeEnabled: os.Getenv("PEO_PROGRESSIVE_BRIDGE_ENABLED") == "true", OrganisationFirstV2: cfg.OrganisationFirstV2Enabled, Applications: applications, Classifications: classifications, CurrentInternalAuthorityEnabled: os.Getenv("PEO_INTERNAL_AUTHORITY_ENABLED") == "true", CurrentInternalAuthorityClientID: os.Getenv("PEO_SUBSCRIPTIONS_WORKLOAD_CLIENT_ID"), Onboarding: &onboarding.Service{Repo: resolverRepository, Admissions: resolverRepository}, TenantBootstrapRegistration: cfg.TenantBootstrapRegistration, LegalActorMandatesV2: cfg.LegalActorMandateCommandsEnabled, LegalActorMandates: db, LegalActorLifecycleEnabled: cfg.LegalActorMandateLifecycleEnabled, LegalActorLifecycle: db, LegalActorAssessmentEnabled: cfg.LegalActorAssessmentEnabled, LegalActorAssessment: db, Environment: cfg.Environment}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		slog.Info("control plane listening", "address", cfg.HTTPAddress)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
