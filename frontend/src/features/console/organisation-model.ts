@@ -18,7 +18,10 @@ const canonical = z.object({
 
 const tenant = z.object({
   tenant_id: z.string(),
-  legal_entity_id: z.string(),
+  // ADR-BCP-027: a pre-incorporation Tenant may have no DEFAULT legal actor.
+  // The v1 API currently returns an empty string; nullable v2 projections
+  // must not be mistaken for missing tenant identity.
+  legal_entity_id: z.string().nullish(),
   display_name: z.string(),
   isolation_strategy: z.string(),
   residency_region: z.string(),

@@ -104,6 +104,20 @@ describe("CX-03 exact-scope context and CX-04 Organisation 360", () => {
     expect(parseOrganisationAudit({ items: [{ audit_id: "id", occurred_at: "now", action: "audit.read" }] })).toBeNull();
   });
 
+  it("accepts a tenant without fictitious incorporation while preserving exact tenant authority", () => {
+    const base = {
+      tenant_id: tenant.id, display_name: "Unincorporated operating business",
+      isolation_strategy: "row_level_security", residency_region: "af-south-1",
+      desired_state: "provisioning", observed_state: "pending", revision: 1,
+    };
+    expect(parseTenant({ ...base, legal_entity_id: "" }, tenant.id)?.legal_entity_id).toBe("");
+    expect(parseTenant({ ...base, legal_entity_id: null }, tenant.id)?.legal_entity_id).toBeNull();
+    expect(parseTenant(base, tenant.id)?.legal_entity_id).toBeUndefined();
+    // Optional DEFAULT legal entity never relaxes tenant identity matching.
+    expect(parseTenant({ ...base, legal_entity_id: null }, "tn_sibling")).toBeNull();
+    expect(parseTenant({ ...base, legal_entity_id: { id: "le_fabricated" } }, tenant.id)).toBeNull();
+  });
+
   it("renders an accessible selector and never navigates to an unauthorised typed ID", async () => {
     push.mockClear();
     const user = userEvent.setup();
