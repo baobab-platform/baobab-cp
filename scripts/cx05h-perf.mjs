@@ -49,7 +49,6 @@ async function execute() {
           Accept: "application/json", "Cache-Control": "no-store" },
         signal: controller.signal,
       });
-      const elapsed = performance.now() - start;
       if (response.status !== 200) { rejected++; return; }
       const json = await response.json();
       if (!Number.isInteger(json.total_visible) || json.total_visible < minimum ||
@@ -59,7 +58,7 @@ async function execute() {
         cursorFailures++; return;
       }
       visible = json.total_visible;
-      latencies.push(elapsed);
+      latencies.push(performance.now() - start);
     } catch {
       rejected++;
     } finally {
