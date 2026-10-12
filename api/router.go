@@ -30,6 +30,10 @@ import (
 type correlationKey struct{}
 
 type Dependencies struct {
+	// ConsoleDatasets is disabled unless the runtime injects an encrypted,
+	// nonproduction-only transactional store and current grant readers.
+	ConsoleDatasets consoleDatasetStore
+	ConsoleDatasetsEnabled bool
 	// OrganisationOverview reads domain-owned organisation relationships for a
 	// nonproduction Console overview. Nil leaves this route unregistered.
 	OrganisationOverview   organisationOverviewReader
@@ -679,6 +683,18 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/platform-account-binding", accounts.bind)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:write"), a.requireAdminRole(nil, true)).Post("/v1/tenants/{tenantID}/platform-account-binding/end", accounts.end)
 		r.With(a.authorize(a.adminVerifier, "human", "tenant:read"), a.requireAdminRole(nil, true)).Get("/v1/tenants/{tenantID}/platform-account-bindings", accounts.list)
+	}
+	if dependencies.ConsoleDatasetsEnabled && dependencies.ConsoleDatasets != nil && dependencies.AdministrativeGrants != nil &&
+		dependencies.Identities != nil && peoRoutesPermittedIn(dependencies.Environment) {
+		datasets := consoleDatasetHandler{repo: dependencies.ConsoleDatasets,
+			grants: dependencies.AdministrativeGrants, identities: dependencies.Identities,
+			environment: dependencies.Environment}
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read")).Post("/v1/admin/datasets/preview", datasets.preview)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:write")).Post("/v1/admin/datasets", datasets.propose)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read")).Get("/v1/admin/datasets/{digest}", datasets.get)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:approve")).Post("/v1/admin/datasets/{digest}/approve", datasets.approve)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:write")).Post("/v1/admin/datasets/{digest}/execute", datasets.execute)
+		r.With(a.authorize(a.adminVerifier, "human", "canonical:read")).Get("/v1/admin/datasets/{digest}/download", datasets.download)
 	}
 	if dependencies.OrganisationOverview != nil && dependencies.AdministrativeGrants != nil &&
 		peoRoutesPermittedIn(dependencies.Environment) {
