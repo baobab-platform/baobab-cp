@@ -30,7 +30,7 @@ func TestCX05ExpiredArtifactPurge(t *testing.T){
       _,err:=f.admin.Exec(context.Background(),`INSERT INTO operations.console_dataset_plan
          (digest,kind,maker,idempotency_key,intent,expires_at,state,artifact)
          VALUES($1,'REDACTED_CSV_EXPORT',$1,$1,'{}'::jsonb,$2,'PENDING_APPROVAL',$3)`,
-         item.digest,item.expires,[]byte("CX1encrypted-test-value"))
+         item.digest,item.expires,append([]byte(consoleCipherPrefix), bytes.Repeat([]byte{0x5a}, 48)...))
       if err!=nil{t.Fatal(err)}
     }
     t.Cleanup(func(){f.admin.Exec(context.Background(),`DELETE FROM operations.console_dataset_plan WHERE digest=ANY($1)`,[]string{expired,unexpired})})
