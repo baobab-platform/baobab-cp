@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
+import { OrganisationTenantIntegrations, tenantOverviewSchema } from "./OrganisationTenantIntegrations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, GitBranch, Landmark, Network, ShieldCheck } from "lucide-react";
 
@@ -34,6 +35,7 @@ const overview = z.object({
   corporate_relationships: z.array(link).max(100),
   corporate_group_memberships: z.array(group).max(100),
   platform_relationships: z.array(platform).max(100),
+  tenants: z.array(tenantOverviewSchema).max(100).optional(),
 }).passthrough();
 
 export type OrganisationOverviewProjection = z.infer<typeof overview>;
@@ -45,7 +47,12 @@ export function parseOrganisationOverview(input: unknown, expectedId: string): O
       result.data.profile.canonical_entity_id !== expectedId ||
       result.data.legal_entities.some((record) => !record.legal_entity_id) ||
       result.data.corporate_relationships.some((record) =>
-        record.source_organisation_id !== expectedId && record.target_organisation_id !== expectedId)) {
+        record.source_organisation_id !== expectedId && record.target_organisation_id !== expectedId) ||
+      (result.data.tenants ?? []).some((tenant) =>
+        tenant.mapping_role !== "PRIMARY_ORGANISATION" ||
+        (!tenant.markets_visible && tenant.market_participations.length > 0) ||
+        (!tenant.subscriptions_visible && tenant.subscriptions.length > 0) ||
+        (!tenant.estates_visible && tenant.digital_estates.length > 0))) {
     return null;
   }
   return result.data;
@@ -165,6 +172,7 @@ export function OrganisationIntegrations({
           </CardContent>
         </Card>
       </div>
+      <OrganisationTenantIntegrations tenants={record.tenants ?? []} />
       <p className="flex gap-2 rounded-lg border border-border bg-card p-4 text-xs leading-relaxed text-muted-foreground">
         <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-primary" />
         No organisation, legal person, corporate group, mandate, platform affiliation, tenant,

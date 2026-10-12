@@ -7,7 +7,7 @@ import { serverEnv } from "@/server/env";
 export type ProgressiveReadAction = "application" | "review-queue" | "review-application" | "operation"
   | "provisioning" | "provisioning-plan" | "provisioning-readiness" | "effective-authority"
   | "organisation-entity" | "organisation-iam-links" | "organisation-audit" | "tenant-record"
-  | "organisation-overview";
+  | "organisation-overview" | "organisation-directory";
 export type ProgressiveWriteAction =
   | "create" | "update" | "submit" | "review" | "decide" | "request-onboarding"
   | "authorise-onboarding" | "register-tenant";
@@ -51,6 +51,14 @@ const bodyFields: Partial<Record<ProgressiveWriteAction, readonly string[]>> = {
 /** No arbitrary path, method, selector, headers or tenant ID can be supplied. */
 export function resolveProgressiveCommand(command: ProgressiveCommand): { method: "GET" | "POST" | "PATCH"; path: string; body?: Record<string, unknown> } {
   const { action, id, body, tenantId } = command;
+  // Exact server-owned caller directory: no selector, bearer or filter from the browser.
+  if (action === "organisation-directory") {
+    if (id !== undefined || body !== undefined || tenantId !== undefined ||
+        command.idempotencyKey !== undefined) {
+      throw new ProgressiveBffError(400, "INVALID_DIRECTORY_REQUEST");
+    }
+    return { method: "GET", path: "/v1/organisations/directory" };
+  }
   // CX-03/CX-04: server-side-only, GET-only canonical reference reads.
   // Browser /api/workspace/v2 action allowlists are deliberately unchanged.
   if (["organisation-entity", "organisation-iam-links", "organisation-audit", "tenant-record", "organisation-overview"].includes(action)) {

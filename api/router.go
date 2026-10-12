@@ -681,10 +681,11 @@ func New(dependencies Dependencies) http.Handler {
 	}
 	if dependencies.OrganisationOverview != nil && dependencies.AdministrativeGrants != nil &&
 		peoRoutesPermittedIn(dependencies.Environment) {
-		overview := organisationOverviewHandler{reader: dependencies.OrganisationOverview,
+		overview := organisationOverviewHandler{reader: dependencies.OrganisationOverview, tenantStore: dependencies.Store,
 			grants: dependencies.AdministrativeGrants, identities: a.identities, environment: dependencies.Environment}
 		r.With(a.authorize(a.adminVerifier, "human", "canonical:read"),
 			a.requireAdminRole(nil, true)).Get("/v1/organisations/{organisationID}/overview", overview.get)
+        r.With(a.authorize(a.adminVerifier, "human", "canonical:read"), a.requireAdminRole(nil, true)).Get("/v1/organisations/directory", overview.directory)
 	}
 	if dependencies.OrganisationObservability != nil {
 		obs := organisationObservabilityHandler{repo: dependencies.OrganisationObservability}

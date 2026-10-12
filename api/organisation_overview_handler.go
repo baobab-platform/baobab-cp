@@ -12,6 +12,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/administration"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
+ "github.com/baobab-platform/baobab-cp/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -22,10 +23,16 @@ type organisationOverviewReader interface {
 	ListCorporateRelationshipsByOrganisation(context.Context, string, time.Time) ([]domain.CorporateRelationship, error)
 	ListCorporateGroupMemberships(context.Context, string, time.Time) ([]domain.CorporateGroupMembership, error)
 	ListPlatformRelationships(context.Context, string, time.Time) ([]domain.PlatformRelationship, error)
+    ListPrimaryTenantIDsForOrganisation(context.Context, string, time.Time) ([]string, error)
+    ListTenantOrganisationMappings(context.Context, string, time.Time) ([]domain.TenantOrganisationMapping, error)
+    ActiveMarketParticipations(context.Context, string, time.Time) ([]domain.MarketParticipation, error)
+    ListProductSubscriptionSummaries(context.Context, string) ([]repository.SubscriptionOverviewRecord, error)
+    ListDigitalEstatesForTenant(context.Context, string) ([]domain.DigitalEstate, error)
 }
 
 type organisationOverviewHandler struct {
 	reader      organisationOverviewReader
+    tenantStore store.TenantStore
 	grants      repository.AdministrativeGrantReader
 	identities  repository.IdentityRepository
 	now         func() time.Time
@@ -75,6 +82,7 @@ type organisationOverview struct {
 	OrganisationID            string                          `json:"organisation_id"`
 	EvaluatedAt               time.Time                       `json:"evaluated_at"`
 	Profile                   *domain.Organisation            `json:"profile"`
+    Tenants []tenantOverview `json:"tenants,omitempty"`
 	LegalEntities             []legalEntityOverview           `json:"legal_entities"`
 	CorporateRelationships    []corporateRelationshipOverview `json:"corporate_relationships"`
 	CorporateGroupMemberships []groupMembershipOverview       `json:"corporate_group_memberships"`
@@ -196,8 +204,9 @@ func (h organisationOverviewHandler) get(w http.ResponseWriter, r *http.Request)
 		problem(w, r, http.StatusServiceUnavailable, "AUTHORITY_UNAVAILABLE", "administrative relation unavailable", true)
 		return
 	}
+	authority := administration.Effective(actor, grants, sources, at, relations)
 	authorised := false
-	for _, grant := range administration.Effective(actor, grants, sources, at, relations).Grants {
+	for _, grant := range authority.Grants {
 		if grant.Permission == "organisation.view" && grant.Scope.Level == administration.LevelOrganisation &&
 			(grant.Scope.Mode == "" || grant.Scope.Mode == administration.ModeExact) &&
 			strings.EqualFold(grant.Scope.OrganisationID, id) &&
@@ -245,5 +254,12 @@ func (h organisationOverviewHandler) get(w http.ResponseWriter, r *http.Request)
 		problem(w, r, http.StatusServiceUnavailable, "ORGANISATION_OVERVIEW_INCOMPLETE", "inconsistent or oversized authority source", true)
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+    tenants, err := h.authorisedTenantSummaries(r.Context(), id, at, authority)
+    if err != nil {
+        problem(w, r, http.StatusServiceUnavailable, "ORGANISATION_OVERVIEW_INCOMPLETE",
+            "tenant relationship or service source unavailable", true)
+        return
+    }
+    result.Tenants = tenants
+    writeJSON(w, http.StatusOK, result)
 }
