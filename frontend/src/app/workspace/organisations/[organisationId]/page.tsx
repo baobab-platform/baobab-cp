@@ -108,6 +108,15 @@ export default async function Organisation360({
           </CardContent></Card>
         </div>
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card p-5">
+        <div><h2 className="text-lg font-bold">Enterprise resource tables</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Search authorised tenants, markets, subscriptions, Digital Estates, legal and governance summaries.</p>
+        </div>
+        <Link href={"/workspace/organisations/"+encodeURIComponent(organisationId)+"/records"}
+          prefetch={false} className="inline-flex min-h-11 items-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground">
+          Open data tables
+        </Link>
+      </div>
       <OrganisationIntegrations record={overview} available={overview !== null} />
       <OrganisationGovernancePanel record={governance} />
       <Card><CardHeader><FileCheck2 aria-hidden="true" className="size-6 text-primary" />
