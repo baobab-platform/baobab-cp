@@ -11,7 +11,8 @@ const overviewSchema = z.object({
   }),
   tenants: z.array(z.object({
     tenant_id: z.string(), mapping_role: z.string(),
-    mapping_provenance: z.string(),
+    mapping_provenance: z.string(), desired_state: z.string(),
+    observed_state: z.string(),
     markets_visible: z.boolean(),
     market_participations: z.array(z.object({
       country_code: z.string(), registry_market_id: z.string(),
@@ -91,7 +92,11 @@ export function projectEnterpriseNavigationContext(
   if (matches.length !== 1) return null;
   const mapping = matches[0]!;
   if (mapping.mapping_role !== "PRIMARY_ORGANISATION" ||
-      !mapping.mapping_provenance.trim()) return null;
+      !mapping.mapping_provenance.trim() ||
+      inactive.test(mapping.desired_state.toUpperCase()) ||
+      inactive.test(mapping.observed_state.toUpperCase()) ||
+      mapping.desired_state !== tenant.desired_state ||
+      mapping.observed_state !== tenant.observed_state) return null;
   // The CP overview has already required an exact market.view grant for
   // markets_visible. An ungranted market cannot enter this selector.
   const markets: EnterpriseMarket[] = [];
