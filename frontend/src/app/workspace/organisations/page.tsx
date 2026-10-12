@@ -9,7 +9,7 @@ import { authenticatedConsoleActor } from "@/server/console/scoped-context";
 
 export const dynamic = "force-dynamic";
 
-export const directorySchema = z.object({
+const directorySchema = z.object({
   evaluated_at: z.string(),
   items: z.array(z.object({
     organisation_id: z.string().uuid(),
@@ -20,7 +20,7 @@ export const directorySchema = z.object({
     jurisdiction: z.string().optional(),
   })).max(100),
 });
-export function parseDirectory(input: unknown) {
+function parseDirectory(input: unknown) {
   const parsed = directorySchema.safeParse(input);
   return parsed.success ? parsed.data : null;
 }
