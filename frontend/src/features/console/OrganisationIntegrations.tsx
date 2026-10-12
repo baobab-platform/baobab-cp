@@ -48,6 +48,7 @@ export function parseOrganisationOverview(input: unknown, expectedId: string): O
       result.data.legal_entities.some((record) => !record.legal_entity_id) ||
       result.data.corporate_relationships.some((record) =>
         record.source_organisation_id !== expectedId && record.target_organisation_id !== expectedId) ||
+      (result.data.tenants && new Set(result.data.tenants.map((tenant) => tenant.tenant_id)).size !== result.data.tenants.length) ||
       (result.data.tenants ?? []).some((tenant) =>
         tenant.mapping_role !== "PRIMARY_ORGANISATION" ||
         (!tenant.markets_visible && tenant.market_participations.length > 0) ||

@@ -27,3 +27,5 @@ The CP Console is the administrative frontend defined by ADR-BCP-019. It lives i
 - [CX-03B: caller-bound enterprise navigation context](cx03b-enterprise-context.md): exact organisation and tenant grants, PRIMARY mapping validation, independently visible markets and invalidation semantics.
 
 - [CX-04D: Organisation 360 source reconciliation](cx04d-integration-acceptance.md): independent readbacks are joined only across fresh, consistent and explicitly authorised tenant associations.
+
+- [CX-05C: permission-scoped enterprise resource tables](cx05c-permission-scoped-record-tables.md): eight resource tables with explicit denial and bounded read models; high-volume indexing remains a separate gate.
