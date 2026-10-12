@@ -8,6 +8,8 @@ import { parseOrganisationGovernance, reconcileOrganisationGovernance } from "@/
 import { enterpriseDomainLabels, enterpriseTableHref, parseEnterpriseTableQuery, projectEnterpriseTable } from "@/features/console/enterprise-table-model";
 import { requireScopedContext } from "@/server/console/scoped-context";
 import { invokeProgressive } from "@/server/bff/progressive";
+import {datasetConsoleEnabled} from "@/server/bff/console-datasets";
+import {hasExactScopedPermission} from "@/server/console/scoped-context";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -40,6 +42,10 @@ export default async function EnterpriseRecords({
   ) : null;
   const table = projectEnterpriseTable(overview,governance,query);
   const href = (patch:Partial<typeof query>)=>enterpriseTableHref(organisationId,{...query,...patch});
+  const current=datasetConsoleEnabled()?await invokeProgressive({action:"effective-authority"},actor.accessToken)
+    .then(x=>x.data).catch(()=>null):null;
+  const canDataset=!!current && ["organisation.export","organisation.bulk.propose","organisation.bulk.approve"]
+    .some(p=>hasExactScopedPermission(current,actor.principalId,p,"organisation",organisationId));
   const formStyle = "h-11 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-focus";
   return (
     <section aria-labelledby="enterprise-tables-title" className="space-y-6">
@@ -47,10 +53,10 @@ export default async function EnterpriseRecords({
         className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-primary underline-offset-4 hover:underline">
         <ArrowLeft aria-hidden="true" className="size-4"/>Organisation 360°
       </Link>
-      <Link href={"/workspace/organisations/"+encodeURIComponent(organisationId)+"/records/operations"}
+      {canDataset&&(      <Link href={"/workspace/organisations/"+encodeURIComponent(organisationId)+"/records/operations"}
         prefetch={false} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary underline-offset-4 hover:underline">
         Governed export and bulk operations (protected environments)
-      </Link>
+      </Link>)}
       <div className="rounded-2xl bg-brand-forest p-7 text-white sm:p-10">
         <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-200"><Database aria-hidden="true" className="size-5"/>Caller-filtered administrative records</p>
         <h1 id="enterprise-tables-title" className="mt-3 text-3xl font-bold sm:text-4xl">Enterprise data tables</h1>

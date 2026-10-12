@@ -15,8 +15,9 @@ export const preview = z.strictObject({
   changes: z.array(change).max(50).default([]),
 }).superRefine((v,ctx) => {
   if(v.kind==="BULK_METADATA_PROPOSAL" && (v.target_ids.length>50 ||
-     v.changes.length!==v.target_ids.length || new Set(v.changes.map(x=>x.organisation_id)).size!==v.target_ids.length ||
-     !v.changes.every(x=>v.target_ids.includes(x.organisation_id)))) {
+     (v.changes.length!==0 && (v.changes.length!==v.target_ids.length ||
+      new Set(v.changes.map(x=>x.organisation_id)).size!==v.target_ids.length ||
+      !v.changes.every(x=>v.target_ids.includes(x.organisation_id)))))) {
     ctx.addIssue({code:"custom",message:"Each bulk target requires one versioned change"});
   }
   if(v.kind==="REDACTED_CSV_EXPORT" && v.changes.length)ctx.addIssue({code:"custom",message:"Export cannot mutate"});

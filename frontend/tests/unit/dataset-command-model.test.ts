@@ -5,7 +5,7 @@ describe("CX-05L fixed dataset BFF boundaries",()=>{
  it("refuses untrusted principal and arbitrary request paths",()=>{
   expect(preview.safeParse({action:"preview",kind:"REDACTED_CSV_EXPORT",target_ids:[org],principal_id:"other"}).success).toBe(false);
   expect(preview.safeParse({action:"preview",kind:"REDACTED_CSV_EXPORT",target_ids:[org,org]}).success).toBe(false);
-  expect(preview.safeParse({action:"preview",kind:"BULK_METADATA_PROPOSAL",target_ids:[org],changes:[]}).success).toBe(false);
+  expect(preview.safeParse({action:"preview",kind:"BULK_METADATA_PROPOSAL",target_ids:[org],changes:[]}).success).toBe(true); // version-only bulk preview needs no export grant
  });
  it("only emits fixed CP paths and allowlisted fields",()=>{
   const p=preview.parse({action:"preview",kind:"REDACTED_CSV_EXPORT",target_ids:[org]});
