@@ -105,16 +105,29 @@ generated TypeScript client as a source-of-truth.
 
 ## Operational acceptance — not satisfied by CI
 
-Review and configure a protected `staging` environment, real IAM human maker
-and checker, provider assurance/CRITICAL step-up, CP, TLS Redis, PostgreSQL,
-independently approved encryption key management, key rotation and backup
-retention. Run the `cx05-live-e2e.yml` workflow against >=5,001
-independently authorised organisations and establish the agreed p95 budget,
-revocation, foreign-organisation isolation, multi-page consistency, export
-download, independent approval and atomic bulk negative tests. Record actual
-run IDs and independent decision evidence; no credentials, live rows or PII
-belong in GitHub artifacts. **No recorded successful protected end-to-end
-certification means the platform remains gated.**
+Review and configure a protected `staging` environment with
+real IAM identities, CP, TLS Redis, PostgreSQL, approved encryption key
+management, key rotation and backup retention.
+
+**Directory/read-path acceptance:** run the existing
+`cx05-live-e2e.yml` workflow against at least 5,001 independently granted
+organisations, an explicit p95 budget, token revocation, foreign-organisation
+denials and keyset pagination. The current `cx05-live-e2e.mjs` and
+`cx05h-perf.mjs` scripts exercise **read-only directory/organisation
+operations**; even a PASS is *not* governed dataset lifecycle certification.
+
+**Separate governed dataset acceptance — NOT YET IMPLEMENTED as a protected
+live workflow:** add authenticated maker/checker E2E coverage for
+`/v1/admin/datasets` preview, proposal, independent inspection, step-up,
+approval, execution, audited CSV download, stale revisions, replay, expiry,
+revocation and atomic multi-target denials. This requires live assurance
+including CRITICAL step-up, correctly managed encryption keys and legitimate
+independently scoped test principals. Record the dedicated workflow run IDs,
+real result and independent signoff before enabling the feature.
+
+Do not publish credentials, live rows or PII in GitHub artifacts.
+**Without both read-path and governed-dataset live evidence, production
+acceptance remains blocked.**
 
 ## Comment and review conventions
 
