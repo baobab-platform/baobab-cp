@@ -27,9 +27,17 @@ const entity = {
 
 describe("CX-04 source-authoritative organisation integration", () => {
   it("routes the overview through an exact server-owned GET path", () => {
+    expect(resolveProgressiveCommand({ action: "organisation-directory" })).toEqual({
+      method: "GET", path: "/v1/organisations/directory",
+    });
     expect(resolveProgressiveCommand({ action: "organisation-overview", id })).toEqual({
       method: "GET", path: "/v1/organisations/" + id + "/overview",
     });
+    for (const selector of [
+      { action: "organisation-directory", id },
+      { action: "organisation-directory", tenantId: "tn_foreign" },
+      { action: "organisation-directory", body: { principal_id: "other" } },
+    ]) expect(() => resolveProgressiveCommand(selector as never)).toThrow();
     for (const attack of [
       { action: "organisation-overview", id: "../other" },
       { action: "organisation-overview", id, tenantId: "tn_other" },
@@ -46,6 +54,24 @@ describe("CX-04 source-authoritative organisation integration", () => {
         source_organisation_id: "other", target_organisation_id: "another" }],
     }, id)).toBeNull();
   });
+  it("rejects tenant summaries without PRIMARY mapping or with hidden contents", () => {
+    const child = {
+      tenant_id: "tn_01k4zuribeans", display_name: "B2B",
+      mapping_role: "PRIMARY_ORGANISATION", mapping_provenance: "CP",
+      residency_region: "af-south-1", isolation_strategy: "row",
+      desired_state: "ACTIVE", observed_state: "PENDING",
+      markets_visible: false, subscriptions_visible: false, estates_visible: false,
+      market_participations: [], subscriptions: [], digital_estates: [],
+    };
+    expect(parseOrganisationOverview({ ...entity, tenants: [child] }, id)).not.toBeNull();
+    expect(parseOrganisationOverview({ ...entity, tenants: [
+      { ...child, market_participations: [{ country_code: "ZA", registry_market_id: "mkt_x", currency_code: "ZAR" }] },
+    ] }, id)).toBeNull();
+    expect(parseOrganisationOverview({ ...entity, tenants: [
+      { ...child, mapping_role: "ADDITIONAL_ORGANISATION" },
+    ] }, id)).toBeNull();
+  });
+
   it("displays unverified, pending and unavailable explicitly, never green as a default", async () => {
     const { container } = render(<OrganisationIntegrations record={parseOrganisationOverview(entity, id)} available />);
     expect(screen.getByText("PENDING REVIEW")).toBeTruthy();

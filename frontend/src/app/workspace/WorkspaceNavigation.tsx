@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, ClipboardCheck, FilePenLine, LayoutDashboard, ShieldCheck, Info } from "lucide-react";
+import { Activity, Building2, ClipboardCheck, FilePenLine, LayoutDashboard, ShieldCheck, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkspaceAuthority } from "@/features/console/authority-context";
 import { visibleConsoleRoutes } from "@/features/console/navigation-model";
@@ -12,6 +12,7 @@ const icons = {
   "/workspace/apply": FilePenLine,
   "/workspace/review": ShieldCheck,
   "/workspace/operations": Activity,
+  "/workspace/organisations": Building2,
 } as const;
 
 function NavigationItems() {

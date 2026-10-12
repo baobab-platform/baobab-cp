@@ -17,3 +17,5 @@ The CP Console is the administrative frontend defined by ADR-BCP-019. It lives i
 - [CX-03/CX-04: scoped enterprise context and Organisation 360](cx03-cx04-organisation-360.md): implemented reads, isolation and remaining canonical discovery dependencies.
 
 - [CX-04: governed Organisation 360 source integration](cx04-authoritative-integration.md): legal profiles, corporate/group/platform relationships, explicit remaining domain read contracts.
+
+- [CX-04B exact authority directory and tenant service integration](cx04b-directory-tenants.md): bounded source-backed directory, tenant mappings, markets, subscriptions and Digital Estates.

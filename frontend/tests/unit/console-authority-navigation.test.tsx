@@ -39,7 +39,7 @@ describe("CPFE-04 caller-bound, accessible Console navigation", () => {
     }, "prn_owned", now);
     expect(resolved.state).toBe("available");
     expect(visibleConsoleRoutes(resolved).map((route) => route.href)).toEqual([
-      "/workspace", "/workspace/apply", "/workspace/review", "/workspace/operations",
+      "/workspace", "/workspace/apply", "/workspace/organisations", "/workspace/review", "/workspace/operations",
     ]);
     const other = summariseEffectiveAuthority({
       principal_id: "prn_other", evaluated_at: "2026-10-12T10:00:00Z",

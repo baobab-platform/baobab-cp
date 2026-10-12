@@ -9,7 +9,7 @@ export type AuthoritySummary = {
   elevatedUntil?: string;
 };
 export type ConsoleRoute = {
-  href: "/workspace" | "/workspace/apply" | "/workspace/review" | "/workspace/operations";
+  href: "/workspace" | "/workspace/apply" | "/workspace/review" | "/workspace/operations" | "/workspace/organisations";
   label: string;
   description: string;
   access: "public-to-applicant" | "administrative";
@@ -28,6 +28,13 @@ export const consoleRoutes: readonly ConsoleRoute[] = [
     label: "My application",
     description: "Submit and follow your own business application",
     access: "public-to-applicant",
+  },
+  {
+    href: "/workspace/organisations",
+    label: "Organisations",
+    description: "Browse exactly authorised organisation records",
+    access: "administrative",
+    permissions: ["organisation.view"],
   },
   {
     href: "/workspace/review",

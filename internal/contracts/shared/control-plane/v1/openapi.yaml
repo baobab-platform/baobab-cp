@@ -3907,6 +3907,36 @@ paths:
           $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /organisations/directory:
+    get:
+      tags: [Organisations]
+      operationId: listMyOrganisations
+      summary: Caller-filtered bounded organisation directory
+      description: >-
+        Read-only, nonproduction-gated, server-authoritative directory derived only
+        from the current authenticated CP principal's effective exact organisation.view
+        grants. No caller principal, tenant or group selector; platform and corporate
+        group grants are not converted into access to subsidiaries. Results are bounded
+        to 100 and oversized collections fail closed, without claiming an exhaustive
+        enterprise listing or providing a cross-tenant search API. Requires canonical:read
+        bearer scope and Control Plane platform-administrator role in addition to
+        the current grants. No raw legal identifiers, evidence, personal data or
+        downstream authorisations appear in this response.
+      security:
+        - adminOidc: [canonical:read]
+      responses:
+        "200":
+          description: Authorised exact-scope organisations
+          content:
+            application/json:
+              schema:
+                $ref: ../../organisation/v1/overview.schema.json#/$defs/OrganisationDirectory
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /organisations/{organisation_id}/overview:
     parameters:
       - name: organisation_id
@@ -3928,6 +3958,10 @@ paths:
         and Control Plane platform-admin role. Does not infer corporate group
         permissions, linked-tenant rights, current mandates, activation, source
         certification, legal incorporation or downstream service authority.
+        Tenant summaries are included only when both an in-effect primary organisation
+        mapping and a separate exact tenant.view grant are established; markets,
+        subscriptions and Digital Estates each demand their own exact tenant
+        permission. Visibility flags distinguish no access from no records.
         All arrays are complete only up to the bounded size; an oversized
         result fails closed with 503, never silently truncates.
       security:

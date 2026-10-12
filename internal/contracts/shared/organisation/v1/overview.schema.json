@@ -214,6 +214,222 @@
           "items": {
             "$ref": "#/$defs/PlatformRelationshipOverview"
           }
+        },
+        "tenants": {
+          "type": "array",
+          "maxItems": 100,
+          "description": "Optional caller-authorised exact tenant.view projections only. Never infer tenant rights from legal incorporation, parent ownership, or holding-company affiliation. Each child subsection indicates whether the separate permission was present.",
+          "items": {
+            "$ref": "#/$defs/TenantOverview"
+          }
+        }
+      }
+    },
+    "MarketParticipationOverview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "country_code",
+        "registry_market_id",
+        "currency_code"
+      ],
+      "properties": {
+        "country_code": {
+          "type": "string",
+          "minLength": 2
+        },
+        "registry_market_id": {
+          "type": "string"
+        },
+        "currency_code": {
+          "type": "string"
+        }
+      }
+    },
+    "SubscriptionOverview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subscription_id",
+        "product_id",
+        "status",
+        "source",
+        "effective_from"
+      ],
+      "properties": {
+        "subscription_id": {
+          "type": "string"
+        },
+        "product_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "DigitalEstateOverview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "domain",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      }
+    },
+    "TenantOverview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "display_name",
+        "mapping_role",
+        "mapping_provenance",
+        "residency_region",
+        "isolation_strategy",
+        "desired_state",
+        "observed_state",
+        "markets_visible",
+        "subscriptions_visible",
+        "estates_visible",
+        "market_participations",
+        "subscriptions",
+        "digital_estates"
+      ],
+      "properties": {
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_role": {
+          "type": "string"
+        },
+        "mapping_provenance": {
+          "type": "string"
+        },
+        "residency_region": {
+          "type": "string"
+        },
+        "isolation_strategy": {
+          "type": "string"
+        },
+        "desired_state": {
+          "type": "string"
+        },
+        "observed_state": {
+          "type": "string"
+        },
+        "markets_visible": {
+          "type": "boolean"
+        },
+        "subscriptions_visible": {
+          "type": "boolean"
+        },
+        "estates_visible": {
+          "type": "boolean"
+        },
+        "market_participations": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/MarketParticipationOverview"
+          }
+        },
+        "subscriptions": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/SubscriptionOverview"
+          }
+        },
+        "digital_estates": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/DigitalEstateOverview"
+          }
+        }
+      }
+    },
+    "OrganisationDirectoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "organisation_id",
+        "display_name",
+        "status",
+        "verification_state",
+        "source_authority"
+      ],
+      "properties": {
+        "organisation_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string"
+        },
+        "verification_state": {
+          "$ref": "domain.schema.json#/$defs/verificationState"
+        },
+        "source_authority": {
+          "type": "string"
+        },
+        "jurisdiction": {
+          "type": "string"
+        }
+      }
+    },
+    "OrganisationDirectory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluated_at",
+        "items"
+      ],
+      "properties": {
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/OrganisationDirectoryEntry"
+          }
         }
       }
     }
