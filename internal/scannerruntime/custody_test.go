@@ -56,3 +56,29 @@ func TestCustodyMaintenanceApprovalsBindOperationAndSeparateReviewers(t *testing
 		}
 	}
 }
+
+func TestCustodyPoliciesKeepHistoricalVersionsAndSingleCurrentSelection(t *testing.T) {
+	now := time.Now().UTC()
+	first := ApprovedRetentionPolicy{Current: false, RetentionPolicy: repository.RetentionPolicy{ID: "synthetic-only", Version: "v1", Purpose: "ORGANISATION_ADMISSION", Jurisdiction: "ZA", Classification: "CONFIDENTIAL", MinimumHours: 1, MaximumHours: 4, OrphanGraceHours: 1, QuarantineHours: 1}, ProposedBy: "maker", ApprovedBy: "checker", ApprovalReference: "synthetic-approval", EffectiveFrom: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour)}
+	next := first
+	next.Version = "v2"
+	next.Current = true
+	next.MaximumHours = 8
+	raw, _ := json.Marshal(map[string]any{"policies": []ApprovedRetentionPolicy{first, next}})
+	path := privateFixture(t, "versioned-policies", raw)
+	m := MountedCustodyPolicies{Path: path, Now: func() time.Time { return now }}
+	if p, e := m.CustodyPolicy(context.Background(), first.ID, ""); e != nil || p.Version != "v2" {
+		t.Fatal("current version selection failed", e)
+	}
+	if p, e := m.CustodyPolicy(context.Background(), first.ID, "v1"); e != nil || p.MaximumHours != 4 {
+		t.Fatal("historical policy overwritten", e)
+	}
+	first.Current = true
+	raw, _ = json.Marshal(map[string]any{"policies": []ApprovedRetentionPolicy{first, next}})
+	if os.WriteFile(path, raw, 0600) != nil {
+		t.Fatal("fixture write failed")
+	}
+	if _, e := m.CustodyPolicy(context.Background(), first.ID, ""); e == nil {
+		t.Fatal("ambiguous current retention selected")
+	}
+}

@@ -103,8 +103,8 @@ func (d DurableDocumentVault) Seal(ctx context.Context, p authority.ScanProof, d
 	var key []byte
 	if errors.Is(err, pgx.ErrNoRows) {
 		hash := authority.CustodyProofHash(p)
-		wrapped := []byte(nil)
-		keyID := ""
+		var wrapped []byte
+		var keyID string
 		key, wrapped, keyID, err = d.Backend.GenerateKey(ctx, hash)
 		if err != nil {
 			return authority.ErrDocumentCustody
@@ -118,7 +118,16 @@ func (d DurableDocumentVault) Seal(ctx context.Context, p authority.ScanProof, d
 		if se != nil {
 			return authority.ErrDocumentCustody
 		}
-		o = authority.CustodyObject{EvidenceID: p.EvidenceID, ArtifactID: p.ArtifactID, ProofHash: hash, ObjectKey: d.Prefix + hash, KeyID: keyID, WrappedKey: wrapped, Nonce: nonce, CipherDigest: authority.CipherDigest(sealed), PolicyID: policy.ID, PolicyVersion: policy.Version, PolicyHash: policyDigest(policy), RetainUntil: e.CreatedAt.Add(time.Duration(policy.MinimumHours) * time.Hour).UTC().Truncate(time.Microsecond), DeleteAfter: e.CreatedAt.Add(time.Duration(policy.MaximumHours) * time.Hour).UTC().Truncate(time.Microsecond), OrphanAfter: d.Now().Add(time.Duration(policy.OrphanGraceHours) * time.Hour).UTC().Truncate(time.Microsecond), State: "PENDING"}
+		o = authority.CustodyObject{
+			EvidenceID: p.EvidenceID, ArtifactID: p.ArtifactID, ProofHash: hash,
+			ObjectKey: d.Prefix + hash, KeyID: keyID, WrappedKey: wrapped, Nonce: nonce,
+			CipherDigest: authority.CipherDigest(sealed),
+			PolicyID:     policy.ID, PolicyVersion: policy.Version, PolicyHash: policyDigest(policy),
+			RetainUntil: e.CreatedAt.Add(time.Duration(policy.MinimumHours) * time.Hour).UTC().Truncate(time.Microsecond),
+			DeleteAfter: e.CreatedAt.Add(time.Duration(policy.MaximumHours) * time.Hour).UTC().Truncate(time.Microsecond),
+			OrphanAfter: d.Now().Add(time.Duration(policy.OrphanGraceHours) * time.Hour).UTC().Truncate(time.Microsecond),
+			State:       "PENDING",
+		}
 		if !o.RetainUntil.After(d.Now()) {
 			return authority.ErrDocumentCustody
 		}

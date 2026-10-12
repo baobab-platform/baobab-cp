@@ -217,12 +217,34 @@ func TestP002CDurableCustodyLifecyclePostgres(t *testing.T) {
 	if err = ingest(c, cl, wrong, doc, true); err == nil {
 		t.Fatal("proof drift accepted")
 	}
+	// Encrypted derived candidates share the document's purpose cutoff.
+	ledger.CandidateKey = bytes.Repeat([]byte{0x45}, 32)
+	ledger.ExtractorClientID = "synthetic-extractor"
+	extractor := AuditActor{ActorID: "prn_synthetic_extractor", ActorType: "workload", ClientID: ledger.ExtractorClientID, CorrelationID: domain.NewUUIDv7()}
+	ocrKey := "synthetic-ocr-" + p.ArtifactID
+	candidate := authority.DocumentCandidateAttempt{CaseID: c, ClaimID: cl, EvidenceID: p.EvidenceID, ArtifactID: p.ArtifactID, ActorID: extractor.ActorID, Receipt: authority.DocumentExtractionReceipt{EvidenceID: p.EvidenceID, DocumentDigest: p.Digest, ProcessorID: "synthetic-ocr", ProcessorVersion: "v1", Standing: "DOCUMENT_CANDIDATE_ONLY", ObservedAt: now, Candidates: []authority.DocumentCandidate{{Field: "legal_name", Value: "Synthetic Ltd", Confidence: 0.7, Page: 1}}}}
+	if _, err = ledger.RecordDocumentCandidates(ctx, candidate, ocrKey, extractor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ledger.GetDocumentCandidateByKey(ctx, extractor.ActorID, ocrKey); err != nil {
+		t.Fatal(err)
+	}
+	changedPolicy := policy
+	changedPolicy.QuarantineHours++
+	vault.Policies = custodyFixturePolicy{changedPolicy}
+	if _, err = vault.Maintain(ctx, job(o, "HOLD"), maintainer); err == nil {
+		t.Fatal("policy content changed under retained version")
+	}
+	vault.Policies = custodyFixturePolicy{policy}
 	rotate := job(o, "ROTATE")
 	rotate.TargetKey = "synthetic-key-v2"
 	if _, err = vault.Maintain(ctx, rotate, maintainer); err != nil {
 		t.Fatal(err)
 	}
 	rotated := get(p)
+	if _, err = vault.Maintain(ctx, rotate, maintainer); err == nil {
+		t.Fatal("stale revision approval replayed after rotation")
+	}
 	if rotated.KeyID == o.KeyID || rotated.CipherDigest != o.CipherDigest || rotated.VersionID != o.VersionID || !bytes.Equal(rotated.Nonce, o.Nonce) || backend.creates != 1 {
 		t.Fatal("rotation rewrote ciphertext or version")
 	}
@@ -251,19 +273,39 @@ func TestP002CDurableCustodyLifecyclePostgres(t *testing.T) {
 	if _, err = vault.Maintain(ctx, stage, maintainer); err == nil {
 		t.Fatal("stale approval accepted")
 	}
+	clock = now
 	if err = read(); err == nil {
 		t.Fatal("DELETING returned plaintext")
 	}
+	if _, err = ledger.GetDocumentCandidateByKey(ctx, extractor.ActorID, ocrKey); err == nil {
+		t.Fatal("DELETING returned cached OCR plaintext")
+	}
+	clock = now.Add(5 * time.Hour)
 	backend.deleteFails = true
 	if _, err = vault.Maintain(ctx, job(get(p), "DELETE"), maintainer); err == nil || get(p).State != "DELETING" {
 		t.Fatal("failed deletion recorded as complete")
 	}
 	backend.deleteFails = false
+	// Force a DB audit failure AFTER successful remote erasure. The persisted
+	// DELETING cutoff survives rollback and a reviewed exact-version retry
+	// completes absence confirmation without deleting a second object.
+	invalidAudit := maintainer
+	invalidAudit.CorrelationID = "synthetic-invalid-uuid"
+	if _, err = vault.Maintain(ctx, job(get(p), "DELETE"), invalidAudit); err == nil || get(p).State != "DELETING" || backend.deletes != 1 {
+		t.Fatal("ambiguous DB receipt lost deletion cutoff")
+	}
 	if _, err = vault.Maintain(ctx, job(get(p), "DELETE"), maintainer); err != nil {
 		t.Fatal(err)
 	}
 	if get(p).State != "DELETED" || backend.deletes != 1 {
 		t.Fatal("no confirmed deletion tombstone")
+	}
+	var candidatesLeft int
+	if repo.pool.QueryRow(ctx, `SELECT count(*) FROM evidence.document_candidate_attempt WHERE evidence_id=$1 AND artifact_id=$2`, p.EvidenceID, p.ArtifactID).Scan(&candidatesLeft) != nil || candidatesLeft != 0 {
+		t.Fatal("encrypted derived candidates survived destruction")
+	}
+	if get(p).KeyID != "" || len(get(p).WrappedKey) != 1 {
+		t.Fatal("deleted envelope still has a key dependency")
 	}
 	var status string
 	if repo.pool.QueryRow(ctx, `SELECT status FROM evidence.record WHERE evidence_id=$1`, p.EvidenceID).Scan(&status) != nil || status != "DESTROYED" {

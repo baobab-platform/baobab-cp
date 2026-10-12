@@ -101,7 +101,7 @@ func (a *AWS) Validate(ctx context.Context) error {
 	// remove a disabled or pending-deletion historical KMS key.
 	for _, key := range a.cfg.ReadKeyARNs {
 		k, e := a.kms.DescribeKey(ctx, &kms.DescribeKeyInput{KeyId: &key})
-		if e != nil || k.KeyMetadata == nil || k.KeyMetadata.KeyState != kt.KeyStateEnabled || k.KeyMetadata.KeyUsage != kt.KeyUsageTypeEncryptDecrypt || k.KeyMetadata.KeySpec != kt.KeySpecSymmetricDefault || aws.ToString(k.KeyMetadata.Arn) != key {
+		if e != nil || k.KeyMetadata == nil || k.KeyMetadata.KeyState != kt.KeyStateEnabled || k.KeyMetadata.KeyUsage != kt.KeyUsageTypeEncryptDecrypt || k.KeyMetadata.KeySpec != kt.KeySpecSymmetricDefault || k.KeyMetadata.KeyManager != kt.KeyManagerTypeCustomer || aws.ToString(k.KeyMetadata.Arn) != key {
 			return ErrBackend
 		}
 	}

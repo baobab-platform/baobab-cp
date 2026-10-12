@@ -202,7 +202,8 @@ COMPLIANCE, owner and version binding, no retention bypass, absence confirmation
 non-PII KMS context/key pinning), AEAD tampering/proof drift and fresh approvals.
 PG17 tests exercise durable attachment/replay, rollback orphans, quarantine
 and grace, active-upload fencing, holds, rewrap without ciphertext changes,
-retained-context denial, staged/failed/retried deletion and destruction audit.
+retained-context denial, staged/failed/retried deletion, lost DB receipts after remote erasure, encrypted
+candidate purge, stale revision approvals and destruction audit.
 The hosted full Go/race/readiness suites run PG17 and Unix scanner tests; local
 checks omit only the executor's unsupported Unix-socket tests and do not alter
 CI exclusions. All cloud identities/documents in tests are synthetic.
