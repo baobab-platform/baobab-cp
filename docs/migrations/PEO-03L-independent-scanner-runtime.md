@@ -56,7 +56,7 @@ Unit tests exercise real Unix-socket protocol framing with a fake clamd server, 
 
 1. Deploy and independently assess real ClamAV (or approved malware provider), pinned signature update policy, quarantine and outage response, scanner host/container isolation, read-only signer mount, and AV version attestations.
 2. Wire authenticated IAM workload token issuance, independently governed scanner intake route, client allowlist, exact context/evidence admission and proof of revocation/negative claims in protected staging.
-3. Replace local encrypted filesystem custody with approved S3 Object Lock + KMS or an equivalent durable, audited data-residency-compliant backend; demonstrate immutable retention, erase, escrow, key denial and rotation.
+3. [P0-02C](P0-02C-durable-custody.md) implements S3 Object Lock/KMS custody, approved retention/holds, immutable version readback, key rewrap and fenced orphan/destruction jobs. Supply actual approved resources and independently demonstrate retention, erasure, escrow, key denial, rotation and residency acceptance; local custody is integration-only.
 4. Bind the operator-certified OCR model OAuth/token hook and profile, run protected PostgreSQL/AV/processor/IAM/CP E2E with real identities; record response redaction, recovery and signed audit.
 5. Obtain external account configuration/provider approvals and live operational evidence. Do not mark CIPC/SARS, PSP or corporate status VERIFIED from this workflow.
 
@@ -64,4 +64,4 @@ Unit tests exercise real Unix-socket protocol framing with a fake clamd server, 
 
 ## P0-02B follow-up
 
-[Authenticated private intake and isolated executable composition](P0-02B-authenticated-scanner-runtime.md) now implements the network/runtime boundary. CP holds only public signing trust and rechecks current IAM/registry/trust before custody/commit; independent scanner jobs retain exact signed proofs for explicit replay. Protected live acceptance and durable cloud custody remain open.
+[Authenticated private intake and isolated executable composition](P0-02B-authenticated-scanner-runtime.md) now implements the network/runtime boundary. CP holds only public signing trust and rechecks current IAM/registry/trust before custody/commit; independent scanner jobs retain exact signed proofs for explicit replay. P0-02C supplies durable cloud custody code; protected live/cloud acceptance remains open.
