@@ -26,8 +26,10 @@ type ProvisioningView = {
   current_plan?: { plan_digest: string; plan_version: number; stale: boolean };
   approval?: { decision: string; plan_digest: string };
 };
-type PlanView = { plan_digest: string; tenant_id: string; tenant_provisioning_id: string;\n  desired_state_digest?: string; desired_state_version?: number };
-type ReadinessView = { status: string; tenant_id: string; tenant_provisioning_id: string;\n  evaluated_at?: string; snapshots?: unknown[] };
+type PlanView = { plan_digest: string; tenant_id: string; tenant_provisioning_id: string;
+  desired_state_digest?: string; desired_state_version?: number };
+type ReadinessView = { status: string; tenant_id: string; tenant_provisioning_id: string;
+  evaluated_at?: string; snapshots?: unknown[] };
 
 export function OperationWorkspace() {
   const [id, setId] = useState("");
