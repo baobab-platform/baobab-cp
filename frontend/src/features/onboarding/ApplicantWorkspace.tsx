@@ -25,6 +25,7 @@ export function ApplicantWorkspace() {
   const [form, setForm] = useState("UNINCORPORATED_ORGANISATION");
   const [claim, setClaim] = useState("NOT_INCORPORATED");
   const [legalName, setLegalName] = useState("");
+  const [incorporationJurisdiction, setIncorporationJurisdiction] = useState("ZA");
   const [registration, setRegistration] = useState("");
   const [market, setMarket] = useState("ZA");
   const [requestedMarkets, setRequestedMarkets] = useState<string[]>(["ZA"]);
@@ -67,9 +68,9 @@ export function ApplicantWorkspace() {
     },
     ...(claim === "INCORPORATED_CLAIMED" ? {
       legal_name: legalName.trim(),
-      jurisdiction_of_incorporation: market,
+      jurisdiction_of_incorporation: incorporationJurisdiction,
       registration_identifiers: [...extraRegistrationIdentifiers, {
-        type: "COMPANY_REGISTRATION", value: registration.trim(), issuing_jurisdiction: market,
+        type: "COMPANY_REGISTRATION", value: registration.trim(), issuing_jurisdiction: incorporationJurisdiction,
       }],
     } : {}),
   };
@@ -81,6 +82,8 @@ export function ApplicantWorkspace() {
     setForm(typeof b.organisation_form === "string" ? b.organisation_form : "UNINCORPORATED_ORGANISATION");
     setClaim(typeof b.incorporation_claim === "string" ? b.incorporation_claim : "UNKNOWN");
     setLegalName(typeof b.legal_name === "string" ? b.legal_name : "");
+    setIncorporationJurisdiction(typeof b.jurisdiction_of_incorporation === "string"
+      ? b.jurisdiction_of_incorporation : "ZA");
     const identifiers = Array.isArray(b.registration_identifiers) ? b.registration_identifiers : [];
     const companyRegistration = identifiers.find((item: unknown) => item !== null &&
       typeof item === "object" && (item as Record<string, unknown>).type === "COMPANY_REGISTRATION") as
@@ -227,6 +230,13 @@ export function ApplicantWorkspace() {
             <>
               <label>Declared legal company name
                 <input required maxLength={300} value={legalName} onChange={(e) => setLegalName(e.target.value)} />
+              </label>
+              <label>Jurisdiction of incorporation
+                <select value={incorporationJurisdiction}
+                  onChange={(e) => setIncorporationJurisdiction(e.target.value)}>
+                  <option value="ZA">South Africa</option>
+                  <option value="UG">Uganda</option>
+                </select>
               </label>
               <label>Declared company registration number
                 <input required maxLength={128} value={registration} onChange={(e) => setRegistration(e.target.value)} />
