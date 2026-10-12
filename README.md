@@ -60,6 +60,20 @@ In particular:
 - [ADR-BCP-026](docs/adr/ADR-BCP-026%20%E2%80%94%20Progressive%20Enterprise%20Onboarding%2C%20Founding-Group%20Exemption%20and%20Capability-Specific%20Evidence%20Governance.md) and [ADR-BCP-027](docs/adr/ADR-BCP-027%20%E2%80%94%20Organisation-First%20Tenancy%2C%20Operating%20Business%2C%20Trading%20Style%20and%20Legal-Actor%20Responsibility%20Model.md) set the *new* organisation-first/progressive-onboarding target. Their acceptance is not proof that every migration, authorisation and operational gate is complete.
 - Engine-specific IDs, provider choices and grants are **derived from authorised intent**, never supplied as authoritative user preferences.
 
+## ADR-BCP-026/027 completion programme
+
+The [audited completion plan](docs/reconciliation/adr026-027-completion-plan-2026-10-12.md)
+records CP/Shared/IAM and native engine baselines, branch/PR reconciliation,
+contract-consumer differences, sequential task sets and authentic acceptance
+prerequisites. CP #379 is merged with all final-head workflows green.
+
+The scanner pipeline now binds canonical case/claim/evidence admission before
+custody, holds row locks through proof/audit registration and rechecks expiry
+before commit. Direct registration without the lease denies. See the
+[scanner admission maintainer note](docs/migrations/PEO-03L2-scanner-admission-custody.md).
+This is code-level evidence governance; scanner/OCR/source runtime composition,
+real corporate decisions and protected certification remain open.
+
 ## Current implementation and Console backlog
 
 The backend includes API/domain work for admission, organisation resolution, tenant registration/onboarding, markets, mappings, subscriptions/classification, capability registry and resolution, provider topology, changesets, AdministrativeGrants/effective authority, durable operations, evidence/verification, engine releases and deployment observations. **Presence of handlers is not a blanket claim that all programmes have completed production certification**; consult the current tests and accepted ADRs for each operation.

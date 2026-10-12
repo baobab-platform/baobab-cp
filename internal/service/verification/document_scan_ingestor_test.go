@@ -32,8 +32,16 @@ func (s *syntheticScannedWriter) Seal(context.Context, authority.ScanProof, []by
 }
 
 type syntheticScanRegistrar struct {
-	calls int
-	err   error
+	calls        int
+	err          error
+	admissionErr error
+}
+
+func (s *syntheticScanRegistrar) WithScanAdmission(ctx context.Context, caseID, claimID, evidenceID, artifactID string, actor repository.AuditActor, run func(context.Context) error) error {
+	if s.admissionErr != nil {
+		return s.admissionErr
+	}
+	return run(ctx)
 }
 
 func (s *syntheticScanRegistrar) RegisterScannedArtifact(context.Context, authority.ScanProof, repository.AuditActor) error {
@@ -53,7 +61,7 @@ func TestPEO03LScanPipelineCannotRegisterUnscannedOrWrongClient(t *testing.T) {
 	actor := repository.AuditActor{ActorType: "workload", ActorID: "prn_scanner",
 		ClientID: "baobab-independent-scanner-staging"}
 	b := []byte("%PDF-1.7\nsynthetic scanned input")
-	if _, err := svc.Ingest(context.Background(), attester.proof.EvidenceID,
+	if _, err := svc.Ingest(context.Background(), "vcase_scan", "ecl_scan", attester.proof.EvidenceID,
 		attester.proof.ArtifactID, "application/pdf", b, actor); err != nil {
 		t.Fatalf("valid synthetic sequence denied: %v", err)
 	}
@@ -61,7 +69,7 @@ func TestPEO03LScanPipelineCannotRegisterUnscannedOrWrongClient(t *testing.T) {
 		t.Fatalf("incorrect scan-seal-register sequence: %d %d %d", attester.calls, vault.calls, ledger.calls)
 	}
 	actor.ClientID = "baobab-document-extractor-staging"
-	if _, err := svc.Ingest(context.Background(), attester.proof.EvidenceID,
+	if _, err := svc.Ingest(context.Background(), "vcase_scan", "ecl_scan", attester.proof.EvidenceID,
 		attester.proof.ArtifactID, "application/pdf", b, actor); !errors.Is(err, ErrScanIngestionDenied) {
 		t.Fatalf("extractor impersonated independent scanner: %v", err)
 	}
@@ -69,8 +77,17 @@ func TestPEO03LScanPipelineCannotRegisterUnscannedOrWrongClient(t *testing.T) {
 		t.Fatal("unauthorised scan actor reached scanner, custody or ledger")
 	}
 	actor.ClientID = svc.AllowedClientID
+	ledger.admissionErr = errors.New("current case/claim/evidence admission denied")
+	if _, err := svc.Ingest(context.Background(), "vcase_scan", "ecl_scan", attester.proof.EvidenceID,
+		attester.proof.ArtifactID, "application/pdf", b, actor); !errors.Is(err, ErrScanIngestionDenied) {
+		t.Fatalf("failed canonical admission allowed custody: %v", err)
+	}
+	if attester.calls != 1 || vault.calls != 1 || ledger.calls != 1 {
+		t.Fatal("denied admission reached scan, custody or proof registration")
+	}
+	ledger.admissionErr = nil
 	attester.err = errors.New("malware scanner denied input")
-	if _, err := svc.Ingest(context.Background(), attester.proof.EvidenceID,
+	if _, err := svc.Ingest(context.Background(), "vcase_scan", "ecl_scan", attester.proof.EvidenceID,
 		attester.proof.ArtifactID, "application/pdf", b, actor); !errors.Is(err, ErrScanIngestionDenied) {
 		t.Fatalf("failed scan was treated as CLEAN: %v", err)
 	}
@@ -79,7 +96,7 @@ func TestPEO03LScanPipelineCannotRegisterUnscannedOrWrongClient(t *testing.T) {
 	}
 	attester.err = nil
 	attester.proof.Outcome = "INFECTED"
-	if _, err := svc.Ingest(context.Background(), attester.proof.EvidenceID,
+	if _, err := svc.Ingest(context.Background(), "vcase_scan", "ecl_scan", attester.proof.EvidenceID,
 		attester.proof.ArtifactID, "application/pdf", b, actor); err == nil {
 		t.Fatal("infected proof was registered")
 	}
@@ -88,7 +105,7 @@ func TestPEO03LScanPipelineCannotRegisterUnscannedOrWrongClient(t *testing.T) {
 	}
 	attester.proof.Outcome = "CLEAN"
 	vault.err = errors.New("mounted custody unavailable")
-	if _, err := svc.Ingest(context.Background(), attester.proof.EvidenceID,
+	if _, err := svc.Ingest(context.Background(), "vcase_scan", "ecl_scan", attester.proof.EvidenceID,
 		attester.proof.ArtifactID, "application/pdf", b, actor); err == nil {
 		t.Fatal("unavailable custody yielded a scan registration")
 	}

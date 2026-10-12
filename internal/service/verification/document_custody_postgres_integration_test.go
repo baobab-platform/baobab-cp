@@ -17,6 +17,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/baobab-platform/baobab-cp/internal/verification"
 	"github.com/baobab-platform/baobab-cp/internal/verification/authority"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -97,16 +98,89 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 		Now:             func() time.Time { return now }}
 	scannerActor := repository.AuditActor{ActorID: "prn_scanner", ActorType: "workload",
 		ClientID: "baobab-independent-scanner-staging", CorrelationID: domain.NewUUIDv7()}
+	scanCounter := &countedCleanScanner{}
 	pipeline := ScannedArtifactIngestor{
 		Attester: authority.IndependentDocumentAttester{
-			Scanner:   syntheticAlwaysCleanScanner{},
+			Scanner:   scanCounter,
 			Signer:    syntheticEd25519Signer{key: scannerPriv},
 			ScannerID: "synthetic-independent-scanner", ScannerVersion: "v1",
 			Now: func() time.Time { return now },
 		},
 		Vault: vault, Ledger: ledger, AllowedClientID: scannerActor.ClientID,
 	}
-	signed, err := pipeline.Ingest(ctx, evidenceID, artifactID, "application/pdf", content, scannerActor)
+	// Admission must deny before scanner/custody side effects, including a
+	// correctly authenticated scanner pointing at another claim or subject.
+	for _, tc := range []struct {
+		name   string
+		mutate func(*verification.Case, *verification.Claim, *verification.Evidence)
+	}{
+		{"case no longer verifying", func(c *verification.Case, _ *verification.Claim, _ *verification.Evidence) { c.Status = "COMPLETED" }},
+		{"claim not under verification", func(_ *verification.Case, cl *verification.Claim, _ *verification.Evidence) { cl.Status = "ASSERTED" }},
+		{"evidence not linked", func(_ *verification.Case, cl *verification.Claim, _ *verification.Evidence) { cl.EvidenceIDs = nil }},
+		{"claim belongs to foreign organisation", func(_ *verification.Case, cl *verification.Claim, _ *verification.Evidence) {
+			cl.Subject.SubjectID = domain.NewUUIDv7()
+		}},
+		{"evidence belongs to foreign organisation", func(_ *verification.Case, _ *verification.Claim, e *verification.Evidence) {
+			e.Subject.SubjectID = domain.NewUUIDv7()
+		}},
+		{"evidence wrong purpose", func(_ *verification.Case, _ *verification.Claim, e *verification.Evidence) {
+			e.Purpose = "LEGAL_ACTOR_AUTHORITY"
+		}},
+		{"claim wrong purpose", func(_ *verification.Case, cl *verification.Claim, _ *verification.Evidence) {
+			cl.Purpose = "LEGAL_ACTOR_AUTHORITY"
+		}},
+		{"self asserted claim", func(_ *verification.Case, cl *verification.Claim, _ *verification.Evidence) {
+			cl.AssertedBy = scannerActor.ActorID
+		}},
+		{"wrong artifact", func(_ *verification.Case, _ *verification.Claim, e *verification.Evidence) {
+			e.ArtifactID = "eart_foreign"
+		}},
+		{"restricted evidence", func(_ *verification.Case, _ *verification.Claim, e *verification.Evidence) { e.Status = "RESTRICTED" }},
+		{"destroyed evidence", func(_ *verification.Case, _ *verification.Claim, e *verification.Evidence) { e.Status = "DESTROYED" }},
+		{"expired evidence", func(_ *verification.Case, _ *verification.Claim, e *verification.Evidence) { e.ExpiresAt = &now }},
+	} {
+		t.Run("scan admission/"+tc.name, func(t *testing.T) {
+			c, cl, e := vcase, claim, proofRecord
+			tc.mutate(&c, &cl, &e)
+			for _, update := range []struct {
+				query  string
+				id     string
+				record any
+			}{
+				{`UPDATE evidence.verification_case SET document=$2::jsonb WHERE case_id=$1`, caseID, c},
+				{`UPDATE evidence.claim SET document=$2::jsonb WHERE claim_id=$1`, claimID, cl},
+				{`UPDATE evidence.record SET document=$2::jsonb WHERE evidence_id=$1`, evidenceID, e},
+			} {
+				if _, err = db.Exec(ctx, update.query, update.id, encode(update.record)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err = pipeline.Ingest(ctx, caseID, claimID, evidenceID, artifactID, "application/pdf", content, scannerActor); !errors.Is(err, ErrScanIngestionDenied) {
+				t.Fatalf("invalid canonical admission accepted: %v", err)
+			}
+			if scanCounter.calls != 0 {
+				t.Fatal("denied admission reached antivirus")
+			}
+			entries, readErr := os.ReadDir(vault.Directory)
+			if readErr != nil || len(entries) != 0 {
+				t.Fatalf("denied admission created custody object: %v", readErr)
+			}
+		})
+	}
+	for _, update := range []struct {
+		query  string
+		id     string
+		record any
+	}{
+		{`UPDATE evidence.verification_case SET document=$2::jsonb WHERE case_id=$1`, caseID, vcase},
+		{`UPDATE evidence.claim SET document=$2::jsonb WHERE claim_id=$1`, claimID, claim},
+		{`UPDATE evidence.record SET document=$2::jsonb WHERE evidence_id=$1`, evidenceID, proofRecord},
+	} {
+		if _, err = db.Exec(ctx, update.query, update.id, encode(update.record)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	signed, err := pipeline.Ingest(ctx, caseID, claimID, evidenceID, artifactID, "application/pdf", content, scannerActor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,6 +188,67 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 	wrongScanner.ClientID = "baobab-cipc-verifier-staging"
 	if err = ledger.RegisterScannedArtifact(ctx, signed, wrongScanner); !errors.Is(err, repository.ErrDocumentLedgerDenied) {
 		t.Fatalf("untrusted scanner promoted CLEAN evidence: %v", err)
+	}
+	if err = ledger.RegisterScannedArtifact(ctx, signed, scannerActor); !errors.Is(err, repository.ErrDocumentLedgerDenied) {
+		t.Fatalf("direct proof replay bypassed canonical admission lease: %v", err)
+	}
+	var retained context.Context
+	err = ledger.WithScanAdmission(ctx, caseID, claimID, evidenceID, artifactID, scannerActor, func(admitted context.Context) error {
+		retained = admitted
+		return ledger.RegisterScannedArtifact(admitted, signed, scannerActor)
+	})
+	if err != nil {
+		t.Fatalf("exact proof replay under current admission denied: %v", err)
+	}
+	if err = ledger.RegisterScannedArtifact(retained, signed, scannerActor); !errors.Is(err, repository.ErrDocumentLedgerDenied) {
+		t.Fatalf("retained lease outlived its transaction: %v", err)
+	}
+	// A lifecycle write on another connection cannot pass the evidence lock
+	// while custody operates. No sleeps or probabilistic goroutine ordering.
+	err = ledger.WithScanAdmission(ctx, caseID, claimID, evidenceID, artifactID, scannerActor, func(admitted context.Context) error {
+		tx, err := db.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback(ctx)
+		if _, err = tx.Exec(ctx, `SET LOCAL lock_timeout = '100ms'`); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE evidence.record SET status='RESTRICTED' WHERE evidence_id=$1`, evidenceID); err == nil {
+			t.Fatal("concurrent evidence restriction bypassed custody lease lock")
+		}
+		var lockFailure *pgconn.PgError
+		if !errors.As(err, &lockFailure) || lockFailure.Code != "55P03" {
+			t.Fatalf("restriction failed for reason other than admission lock: %v", err)
+		}
+		return ledger.RegisterScannedArtifact(admitted, signed, scannerActor)
+	})
+	if err != nil {
+		t.Fatalf("scan lease failed concurrent restriction test: %v", err)
+	}
+	// Expiry is time-based and is not stopped by a row lock. Crossing the
+	// boundary after registration must roll back the transaction at commit.
+	expiry := now.Add(time.Second)
+	expiring := proofRecord
+	expiring.ExpiresAt = &expiry
+	if _, err = db.Exec(ctx, `UPDATE evidence.record SET document=$2::jsonb WHERE evidence_id=$1`, evidenceID, encode(expiring)); err != nil {
+		t.Fatal(err)
+	}
+	clock := now
+	clockLedger := ledger
+	clockLedger.Now = func() time.Time { return clock }
+	err = clockLedger.WithScanAdmission(ctx, caseID, claimID, evidenceID, artifactID, scannerActor, func(admitted context.Context) error {
+		if err := clockLedger.RegisterScannedArtifact(admitted, signed, scannerActor); err != nil {
+			return err
+		}
+		clock = expiry
+		return nil
+	})
+	if !errors.Is(err, repository.ErrDocumentLedgerDenied) {
+		t.Fatalf("expired admission committed: %v", err)
+	}
+	if _, err = db.Exec(ctx, `UPDATE evidence.record SET document=$2::jsonb WHERE evidence_id=$1`, evidenceID, encode(proofRecord)); err != nil {
+		t.Fatal(err)
 	}
 	reader := VerifiedScannedArtifactReader{Proofs: ledger, Vault: vault, ScannerKeys: ledger.ScannerKeys,
 		AllowedClientID: ledger.ExtractorClientID, Now: ledger.Now}
@@ -162,6 +297,10 @@ func TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle(t *testi
 type syntheticAlwaysCleanScanner struct{}
 
 func (syntheticAlwaysCleanScanner) ScanDocument(context.Context, []byte) error { return nil }
+
+type countedCleanScanner struct{ calls int }
+
+func (s *countedCleanScanner) ScanDocument(context.Context, []byte) error { s.calls++; return nil }
 
 type syntheticEd25519Signer struct{ key ed25519.PrivateKey }
 

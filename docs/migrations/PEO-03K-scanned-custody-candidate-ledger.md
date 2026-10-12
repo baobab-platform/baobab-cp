@@ -40,6 +40,13 @@ flowchart TD
 - `TestPEO03KPostgresSignedScannedArtifactEncryptedCandidateLifecycle` (when `TEST_DATABASE_URL` is supplied) covers PG17 migration, scanner registration, private scanned read, OCR candidate-only receipt, encrypted insert, durable replay and deny-after-RESTRICTED.
 - No real government responses, passwords or private tax identifiers are used.
 
+## Scanner admission hardening
+
+[PEO-03L2](PEO-03L2-scanner-admission-custody.md) now requires a current,
+row-locked canonical case/claim/evidence/artifact lease before scan/custody
+and proof registration, including replay. Raw `RegisterScannedArtifact`
+without that lease is denied; registration uses the admission transaction.
+
 ## Composition required for staging acceptance
 
 The implementation intentionally **does not activate** the workflow merely by constructing these components. An operator-owned composition root must inject:
