@@ -47,6 +47,10 @@ export default async function EnterpriseRecords({
         className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-primary underline-offset-4 hover:underline">
         <ArrowLeft aria-hidden="true" className="size-4"/>Organisation 360°
       </Link>
+      <Link href={"/workspace/organisations/"+encodeURIComponent(organisationId)+"/records/operations"}
+        prefetch={false} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary underline-offset-4 hover:underline">
+        Governed export and bulk operations (protected environments)
+      </Link>
       <div className="rounded-2xl bg-brand-forest p-7 text-white sm:p-10">
         <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-200"><Database aria-hidden="true" className="size-5"/>Caller-filtered administrative records</p>
         <h1 id="enterprise-tables-title" className="mt-3 text-3xl font-bold sm:text-4xl">Enterprise data tables</h1>
