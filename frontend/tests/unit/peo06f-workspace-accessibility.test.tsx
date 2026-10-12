@@ -50,10 +50,17 @@ describe("PEO-06F accessible governed Console forms", () => {
     const { container } = render(<main><OperationWorkspace /></main>);
     await expectAccessible(container);
     const input = screen.getByLabelText("Control Plane operation ID");
-    await user.click(input);
+    // Exercise actual sequential keyboard navigation: pointer focus would
+    // incorrectly pass even if tabIndex=-1 removed the input from tab order.
+    await user.tab();
+    expect(document.activeElement).toBe(input);
     await user.keyboard("op_test123");
     const button = screen.getByRole("button", { name: "Refresh operation state" });
     expect(button.hasAttribute("disabled")).toBe(false);
+    await user.tab();
+    expect(document.activeElement).toBe(button);
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("status")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /activate tenant/i })).toBeNull();
   });
 });
