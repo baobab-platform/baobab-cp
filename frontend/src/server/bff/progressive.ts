@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { serverEnv } from "@/server/env";
 
 export type ProgressiveReadAction = "application" | "review-queue" | "review-application" | "operation"
-  | "provisioning" | "provisioning-plan" | "provisioning-readiness";
+  | "provisioning" | "provisioning-plan" | "provisioning-readiness" | "effective-authority";
 export type ProgressiveWriteAction =
   | "create" | "update" | "submit" | "review" | "decide" | "request-onboarding"
   | "authorise-onboarding" | "register-tenant";
@@ -77,9 +77,10 @@ export function resolveProgressiveCommand(command: ProgressiveCommand): { method
     case "authorise-onboarding": method = "POST"; path = "/v2/admission/onboarding-requests"; break;
     case "register-tenant": method = "POST"; path = "/v2/admission/onboarding-requests"; break;
     case "operation": method = "GET"; path = "/v1/admin/operations"; break;
+    case "effective-authority": method = "GET"; path = "/v1/admin/effective-authority"; break;
     default: throw new ProgressiveBffError(400, "UNKNOWN_ACTION");
   }
-  const needsId = !["create", "review-queue"].includes(action);
+  const needsId = !["create", "review-queue", "effective-authority"].includes(action);
   if (needsId && !validIdentifier(id) || !needsId && id !== undefined) {
     throw new ProgressiveBffError(400, "INVALID_RESOURCE_ID");
   }

@@ -1,4 +1,7 @@
+"use client";
 import Link from "next/link";
+import { useWorkspaceAuthority } from "@/features/console/authority-context";
+import { visibleConsoleRoutes } from "@/features/console/navigation-model";
 import { Activity, ArrowRight, CheckCircle2, FilePenLine, Info, ShieldCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +27,9 @@ const workspaces = [
 ];
 
 export default function WorkspaceIndex() {
+  const authority = useWorkspaceAuthority();
+  const available = new Set(visibleConsoleRoutes(authority).map((route) => route.href));
+  const shownWorkspaces = workspaces.filter((item) => available.has(item.href as "/workspace/apply" | "/workspace/review" | "/workspace/operations"));
   return (
     <section aria-labelledby="workspace-title" className="space-y-8">
       <div className="rounded-2xl bg-brand-forest p-6 text-white sm:p-9">
@@ -42,12 +48,17 @@ export default function WorkspaceIndex() {
         <p className="text-xs font-bold uppercase tracking-wider text-primary">Explore your workspace</p>
         <h2 className="text-2xl font-bold tracking-tight text-foreground">Choose the work you need to do.</h2>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Access to reviewer and operator actions is independently determined by the Control Plane. Navigation does not confer privileges.
+          Only workspaces supported by your current effective grants are displayed. Every action is authorised again by the Control Plane.
         </p>
       </div>
 
+      {authority.state === "unavailable" ? (
+        <p role="status" className="rounded-lg border border-border bg-card p-4 text-sm leading-relaxed text-muted-foreground">
+          Administrative access information is temporarily unavailable. Your own application remains accessible; privileged workspaces are hidden until their permissions can be confirmed.
+        </p>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-3">
-        {workspaces.map(({ href, title, icon: Icon, description, action, detail }) => (
+        {shownWorkspaces.map(({ href, title, icon: Icon, description, action, detail }) => (
           <Card key={href} className="h-full justify-between border-border shadow-sm transition-shadow hover:shadow-md">
             <CardHeader>
               <div className="mb-4 flex items-center justify-between gap-3">
