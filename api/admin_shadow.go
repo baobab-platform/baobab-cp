@@ -25,12 +25,6 @@ import (
 // unregistered, never guessed, and TestEveryGuardedRouteIsMapped refuses it.
 // That test keeps this table and the router in step.
 var adminRoutePermissions = map[string]string{
-	"POST /v1/admin/datasets/preview": "organisation.view",
-	"POST /v1/admin/datasets": "organisation.view",
-	"GET /v1/admin/datasets/{digest}": "organisation.view",
-	"POST /v1/admin/datasets/{digest}/approve": "organisation.view",
-	"POST /v1/admin/datasets/{digest}/execute": "organisation.view",
-	"GET /v1/admin/datasets/{digest}/download": "organisation.view",
 	"POST /v1/tenants":                                                              "tenant.provision",
 	"POST /v1/tenants/bootstrap-registrations":                                      "tenant.provision",
 	"GET /v1/tenants/{tenantID}":                                                    "tenant.view",
