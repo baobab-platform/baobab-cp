@@ -32,6 +32,10 @@ func TestCX05GDurableExportAndRevocation(t *testing.T) {
 		return org == id && (principal == maker.ActorID || principal == checker.ActorID) &&
 			(perm == "organisation.view" || perm == "organisation.export")
 	}
+	workloadMaker := AuditActor{ActorID: maker.ActorID, ActorType: "workload", CorrelationID: domain.NewUUIDv7()}
+	if _, err := f.repo.ProposeConsoleDataset(f.ctx, intent, nil, workloadMaker, grants, now); !errors.Is(err, ErrConsoleDatasetDenied) {
+		t.Fatalf("workload maker was not rejected: %v", err)
+	}
 	proposed, err := f.repo.ProposeConsoleDataset(f.ctx, intent, nil, maker, grants, now)
 	if err != nil || proposed.State != "PENDING_APPROVAL" {
 		t.Fatalf("proposal %v %v", proposed, err)
@@ -39,6 +43,11 @@ func TestCX05GDurableExportAndRevocation(t *testing.T) {
 	replayed, err := f.repo.ProposeConsoleDataset(f.ctx, intent, nil, maker, grants, now)
 	if err != nil || replayed.Digest != proposed.Digest {
 		t.Fatalf("idempotent replay %v %v", replayed, err)
+	}
+	workloadChecker := AuditActor{ActorID: checker.ActorID, ActorType: "workload", CorrelationID: domain.NewUUIDv7()}
+	if _, err := f.repo.ApproveConsoleDataset(f.ctx, proposed.Digest, "case-cx05g",
+		workloadChecker, grants, now); !errors.Is(err, ErrConsoleDatasetDenied) {
+		t.Fatalf("workload checker was not rejected: %v", err)
 	}
 	if _, err := f.repo.ApproveConsoleDataset(f.ctx, proposed.Digest, "case-cx05g",
 		maker, grants, now); !errors.Is(err, ErrConsoleDatasetDenied) {
