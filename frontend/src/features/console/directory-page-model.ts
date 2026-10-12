@@ -31,7 +31,7 @@ const result = z.object({
   evaluated_at: z.string(),
   page_size: z.number().int().positive().max(50),
   sort: z.enum(["name-asc", "name-desc"]),
-  total_visible: z.number().int().nonnegative().max(500),
+  total_visible: z.number().int().nonnegative().max(20000),
   items: z.array(item).max(50),
   next_after: uuid.optional(),
 });
