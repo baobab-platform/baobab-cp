@@ -18,7 +18,7 @@ type ConsoleDatasetDescriptor struct {
 	Intent    domain.ConsoleDatasetIntent
 	State     string
 	CheckerID string
-	Changes []domain.ConsoleMetadataChange
+	Changes   []domain.ConsoleMetadataChange
 }
 
 func (r *PostgresRepository) GetConsoleDatasetDescriptor(ctx context.Context, digest string) (ConsoleDatasetDescriptor, error) {
