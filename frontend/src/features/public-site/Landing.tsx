@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, Blocks, BrainCircuit, Building2, ShieldCheck, ShoppingCart, Workflow, Check } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Blocks, BrainCircuit, Building2, LogIn, ShieldCheck, ShoppingCart, Workflow, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -36,8 +36,9 @@ export function Landing() {
               <h1 className="text-5xl font-extrabold leading-tight tracking-tight sm:text-6xl xl:text-7xl">One platform.<br /><em className="not-italic text-amber-200">Every business possibility.</em></h1>
               <p className="max-w-xl text-lg leading-relaxed text-emerald-100">Build, connect and manage business operations across markets through a governed, extensible enterprise foundation.</p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Button asChild variant="gold"><Link href="/platform">Explore the platform <ArrowUpRight aria-hidden="true" /></Link></Button>
-                <Link href="/start" className="inline-flex min-h-11 items-center gap-3 rounded-md border border-emerald-200 px-5 py-3 text-sm font-semibold text-white">How to get started <ArrowRight className="size-4" aria-hidden="true" /></Link>
+                <Button asChild variant="gold"><Link href="/start">Get started <ArrowUpRight aria-hidden="true" /></Link></Button>
+                <Link href="/login" className="inline-flex min-h-11 items-center gap-3 rounded-md border border-emerald-200 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-amber-200"><LogIn className="size-4" aria-hidden="true" /> Log in to Console</Link>
+                <Link href="/platform" className="inline-flex min-h-11 items-center gap-2 px-2 text-sm font-semibold text-emerald-100 underline-offset-4 hover:underline">Explore platform <ArrowRight className="size-4" aria-hidden="true" /></Link>
               </div>
               <p className="max-w-lg text-xs leading-relaxed text-emerald-100">Platform capabilities are subject to authorisation and independently verified operational readiness.</p>
             </div>
@@ -150,7 +151,7 @@ export function Landing() {
           <p>Explore Baobab, understand the operating model, and begin the governed onboarding journey when access is available.</p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Button asChild variant="gold"><Link href="/start">Get started <ArrowUpRight aria-hidden="true" /></Link></Button>
-            <Link href="/workspace" className="inline-flex min-h-11 items-center justify-center gap-3 rounded-md border border-emerald-200 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-white/10">Open secure Console <span aria-hidden="true">→</span></Link>
+            <Link href="/login" className="inline-flex min-h-11 items-center justify-center gap-3 rounded-md border border-emerald-200 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-white/10">Log in to secure Console <span aria-hidden="true">→</span></Link>
           </div>
           <p className="max-w-lg text-xs leading-relaxed text-emerald-100">Console sign-in requires authorised access and an enabled environment.</p>
         </div>

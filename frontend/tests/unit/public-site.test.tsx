@@ -9,7 +9,7 @@ import { expectAccessible } from "./axe";
 
 describe("public Baobab website", () => {
   it("keeps navigation internal links resolved and external links explicit", () => {
-    const known = new Set(["/", "/workspace", "/workspace/apply", "/workspace/review", "/workspace/operations"]);
+    const known = new Set(["/", "/login", "/signup", "/workspace", "/workspace/apply", "/workspace/review", "/workspace/operations"]);
     for (const slug of Object.keys(pages)) known.add("/" + slug);
     for (const slug of Object.keys(legalPages)) known.add("/legal/" + slug);
     for (const group of navigation) for (const item of group.links) expect(known.has(item.href)).toBe(true);
@@ -26,7 +26,10 @@ describe("public Baobab website", () => {
     expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeTruthy();
     expect(screen.getByRole("main")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1, name: /one platform/i })).toBeTruthy();
-    expect(screen.getAllByRole("link", { name: /console/i }).some((a) => a.getAttribute("href") === "/workspace")).toBe(true);
+    expect(screen.getAllByRole("link", { name: /console/i }).some((a) => a.getAttribute("href") === "/login")).toBe(true);
+    expect(screen.getAllByRole("link", { name: /log in/i }).some((a) => a.getAttribute("href") === "/login")).toBe(true);
+    expect(screen.getAllByRole("link", { name: /sign up/i }).some((a) => a.getAttribute("href") === "/signup")).toBe(true);
+    expect(screen.getAllByRole("link", { name: /get started/i }).some((a) => a.getAttribute("href") === "/start")).toBe(true);
     expect(screen.getByText(/authorised access and an enabled environment/i)).toBeTruthy();
     expect(container.textContent).toContain("before activation");
     await expectAccessible(container);
@@ -36,7 +39,8 @@ describe("public Baobab website", () => {
     const { container } = render(<SiteShell><p>Read-only platform information</p></SiteShell>);
     expect(container.querySelector("main")?.textContent).toContain("Read-only");
     expect(container.querySelector("form")).toBeNull();
-    expect(container.querySelector('a[href="/workspace"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/login"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/signup"]')).not.toBeNull();
     expect(container.querySelector('a[href="/legal/privacy"]')).not.toBeNull();
   });
 

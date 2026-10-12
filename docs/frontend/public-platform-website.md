@@ -31,7 +31,7 @@ environment gates. When authentication is not enabled, Console access remains un
 - `/platform`, `/architecture` — platform model and engine responsibility boundaries.
 - `/solutions`, `/industries`, `/markets` — business-centric solution positioning.
 - `/developers`, `/documentation` — contracts, engineering and source references.
-- `/start`, `/faq` — applicant entry guidance and authoritative caveats.
+- `/start` — dedicated, explicit public getting-started page (no dynamic slug or protected route dependency).\n- `/login` — dedicated Console sign-in gateway: starts approved OIDC only when the exact nonproduction IAM/session environment is configured; otherwise a clear unavailable state, never a credential form.\n- `/signup` — dedicated, truthful sign-up/access-request guidance. Authenticated governed application is available only in an enabled environment; no unauthorised public account creation or stored enquiry.\n- `/faq` — applicant guidance and authoritative caveats.
 - `/trust`, `/status` — trust model and explicit **unavailable** status telemetry.
 - `/company`, `/resources`, `/contact`, `/accessibility` — corporate and resource foundation.
 - `/legal/privacy`, `/legal/terms`, `/legal/cookies` — clearly labelled
@@ -100,3 +100,11 @@ Figma examples as actual company registrations or authorised tenant states.
 The public website can be prototyped and reviewed now. It must remain no-index and
 not be represented as a production-complete or legally approved service until all
 publication gates pass.
+
+## Public-to-Console CTA repair (October 2026)
+
+- Primary desktop/mobile headers now expose explicit **Log in**, **Sign up**, and **Console** actions; all public Console prompts enter `/login` instead of navigating straight to `/workspace` when the protected environment might be disabled.
+- `/start` is now a first-class App Router route and is excluded from the generic `[slug]` static parameter set. This avoids relying on the generic dynamic page for the principal conversion CTA.
+- `/login` checks the existing guarded server-side IAM configuration without disclosing secrets. When available, it performs the existing `/api/auth/login` OIDC entry; when disabled it renders a useful status, not a broken/404 user journey. The existing `/workspace` 404 security gate is preserved.
+- `/signup` explains the governed application and only offers `/workspace/apply` when the protected runtime is enabled. It does not assert public self-registration, independent verification, activation or a live provider sign-up endpoint.
+- CI covers accessible labelled CTAs, public route link closure and Console pointer continuity. The deployed website must still be updated, and its configured public and Console origins must be tested separately. A passing repository build does not prove a stale deployed revision was replaced.

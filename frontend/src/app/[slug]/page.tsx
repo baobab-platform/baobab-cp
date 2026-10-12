@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { pages } from "@/features/public-site/content";
 import { SiteShell } from "@/features/public-site/SiteShell";
 
-export function generateStaticParams() { return Object.keys(pages).map((slug) => ({ slug })); }
+export function generateStaticParams() { return Object.keys(pages).filter((slug) => slug !== "start").map((slug) => ({ slug })); }
 export const dynamicParams = false;
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;

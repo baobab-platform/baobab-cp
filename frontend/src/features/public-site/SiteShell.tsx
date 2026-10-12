@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, Menu, Network } from "lucide-react";
+import { ArrowUpRight, ChevronDown, LogIn, Menu, Network, UserRoundPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
 
@@ -35,9 +35,14 @@ export function SiteShell({ children }: { children: ReactNode }) {
               </details>
             ))}
           </nav>
-          <div className="hidden shrink-0 items-center gap-4 lg:flex">
-            <Link className="text-sm font-bold text-brand-forest" href="/workspace">Console <span aria-hidden="true">↗</span></Link>
-            <Button asChild><Link href="/start">Get started <ArrowUpRight aria-hidden="true" /></Link></Button>
+          <div className="hidden shrink-0 items-center gap-3 lg:flex">
+            <Link className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-brand-forest underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-brand-forest" href="/login">
+              <LogIn aria-hidden="true" className="size-4" /> Log in
+            </Link>
+            <Link className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-brand-forest underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-brand-forest" href="/login" aria-label="Open Control Plane Console sign in">
+              Console <ArrowUpRight aria-hidden="true" className="size-4" />
+            </Link>
+            <Button asChild variant="gold"><Link href="/signup"><UserRoundPlus aria-hidden="true" className="size-4" /> Sign up</Link></Button>
           </div>
           <details className="relative ml-auto lg:hidden">
             <summary aria-label="Open navigation" className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-semibold [&::-webkit-details-marker]:hidden">Menu <Menu aria-hidden="true" className="size-5" /></summary>
@@ -49,7 +54,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
                   {group.links.map((item) => <Link key={item.href} href={item.href}>{item.label}</Link>)}
                 </div>
               ))}
-              <Link href="/workspace">Secure Console</Link>
+              <Link href="/login" className="font-bold">Log in</Link>
+              <Link href="/signup" className="font-bold">Sign up / request access</Link>
+              <Link href="/login">Control Plane Console</Link>
               <Link href="/start">Get started</Link>
             </nav>
           </details>
@@ -64,8 +71,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
 function SiteFooter() {
   const footer: { heading: string; links: [string, string][] }[] = [
     { heading: "Platform", links: [["Overview", "/platform"], ["Architecture", "/architecture"], ["Trust", "/trust"], ["Markets", "/markets"]] },
-    { heading: "Solutions", links: [["Solutions", "/solutions"], ["Industries", "/industries"], ["Getting started", "/start"], ["FAQs", "/faq"]] },
-    { heading: "Developers", links: [["Developer centre", "/developers"], ["Documentation", "/documentation"], ["Status", "/status"], ["Console", "/workspace"]] },
+    { heading: "Solutions", links: [["Solutions", "/solutions"], ["Industries", "/industries"], ["Getting started", "/start"], ["Sign up / access", "/signup"], ["FAQs", "/faq"]] },
+    { heading: "Developers", links: [["Developer centre", "/developers"], ["Documentation", "/documentation"], ["Status", "/status"], ["Console sign in", "/login"]] },
     { heading: "Company", links: [["About", "/company"], ["Resources", "/resources"], ["Contact", "/contact"], ["Accessibility", "/accessibility"]] },
     { heading: "Legal", links: [["Privacy", "/legal/privacy"], ["Terms", "/legal/terms"], ["Cookies", "/legal/cookies"]] },
   ];
