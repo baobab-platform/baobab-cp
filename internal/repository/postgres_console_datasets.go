@@ -27,7 +27,7 @@ func consoleAudit(ctx context.Context, tx pgx.Tx, actor AuditActor, action, dige
 		return err
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO audit_events(actor_id,actor_type,correlation_id,action,target,result,payload)
-		VALUES($1,$2,$3::uuid,$4,$5,'accepted',jsonb_build_object('digest',$6))`,
+		VALUES($1,$2,$3::uuid,$4,$5,'accepted',jsonb_build_object('digest',$6::text))`,
 		actor.ActorID, actor.ActorType, actor.CorrelationID, action, "console-dataset/"+digest, digest)
 	return err
 }
