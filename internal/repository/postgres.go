@@ -54,7 +54,8 @@ var ErrCanonicalEntityLifecycleConflict = errors.New("canonical entity lifecycle
 
 // PostgresRepository is the PostgreSQL-backed repository implementation for mapping, capability, and topology data.
 type PostgresRepository struct {
-	pool *pgxpool.Pool
+	pool              *pgxpool.Pool
+	consoleDatasetKey []byte
 	// EventSource overrides defaultEventSource (outbox.go) when set;
 	// production callers normally leave this at its zero value.
 	EventSource string
