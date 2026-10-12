@@ -11,7 +11,8 @@ export type ApplicationView = {
   status: string;
   version: number;
   business_identity?: Record<string, unknown>;
-  requested_markets?: { country_code: string }[];
+  requirements?: Record<string, unknown>;
+  requested_markets?: { country_code: string; note?: string }[];
 };
 
 type SessionResponse = { authenticated: boolean; csrfToken: string };
