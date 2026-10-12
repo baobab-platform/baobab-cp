@@ -13,3 +13,5 @@ The CP Console is the administrative frontend defined by ADR-BCP-019. It lives i
 - [Tailwind v4, Lucide and shadcn/ui integration](tailwind-shadcn.md): semantic tokens, primitive ownership, accessibility and migration boundaries.
 
 - [Console experience programme v1](cp-console-experience-programme.md): CX-01–CX-10, architecture boundaries and production acceptance prerequisites.
+
+- [CX-03/CX-04: scoped enterprise context and Organisation 360](cx03-cx04-organisation-360.md): implemented reads, isolation and remaining canonical discovery dependencies.
