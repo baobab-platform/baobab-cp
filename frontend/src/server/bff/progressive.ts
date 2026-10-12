@@ -20,7 +20,7 @@ export type ProgressiveCommand = {
   tenantId?: string;
   body?: Record<string, unknown>;
   idempotencyKey?: string;
-  page?: { q?: string; sort?: string; verification?: string; status?: string; after?: string; limit?: number };
+  page?: { q?: string | undefined; sort?: string | undefined; verification?: string | undefined; status?: string | undefined; after?: string | undefined; limit?: number | undefined };
 };
 
 export class ProgressiveBffError extends Error {
