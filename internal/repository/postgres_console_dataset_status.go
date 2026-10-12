@@ -18,6 +18,7 @@ type ConsoleDatasetDescriptor struct {
 	Intent    domain.ConsoleDatasetIntent
 	State     string
 	CheckerID string
+	Changes []domain.ConsoleMetadataChange
 }
 
 func (r *PostgresRepository) GetConsoleDatasetDescriptor(ctx context.Context, digest string) (ConsoleDatasetDescriptor, error) {
@@ -25,8 +26,8 @@ func (r *PostgresRepository) GetConsoleDatasetDescriptor(ctx context.Context, di
 	if !consolePlanHash.MatchString(digest) {
 		return out, ErrConsoleDatasetDenied
 	}
-	var intentJSON []byte
-	err := r.pool.QueryRow(ctx, `SELECT intent,state,COALESCE(checker,'') FROM operations.console_dataset_plan WHERE digest=$1`, digest).Scan(&intentJSON, &out.State, &out.CheckerID)
+	var intentJSON, changesJSON []byte
+	err := r.pool.QueryRow(ctx, `SELECT intent,state,COALESCE(checker,''),changes FROM operations.console_dataset_plan WHERE digest=$1`, digest).Scan(&intentJSON, &out.State, &out.CheckerID, &changesJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, ErrConsoleDatasetDenied
 	}
@@ -34,6 +35,9 @@ func (r *PostgresRepository) GetConsoleDatasetDescriptor(ctx context.Context, di
 		return out, err
 	}
 	if err = json.Unmarshal(intentJSON, &out.Intent); err != nil {
+		return ConsoleDatasetDescriptor{}, err
+	}
+	if err = json.Unmarshal(changesJSON, &out.Changes); err != nil {
 		return ConsoleDatasetDescriptor{}, err
 	}
 	return out, nil
