@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -60,7 +60,7 @@ describe("PEO-06F accessible governed Console forms", () => {
     await user.tab();
     expect(document.activeElement).toBe(button);
     await user.keyboard("{Enter}");
-    expect(screen.getByRole("status")).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
     expect(screen.queryByRole("button", { name: /activate tenant/i })).toBeNull();
   });
 });
