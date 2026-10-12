@@ -432,6 +432,50 @@
           }
         }
       }
+    },
+    "OrganisationDirectoryPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluated_at",
+        "page_size",
+        "sort",
+        "total_visible",
+        "items"
+      ],
+      "properties": {
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "sort": {
+          "type": "string",
+          "enum": [
+            "name-asc",
+            "name-desc"
+          ]
+        },
+        "total_visible": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/OrganisationDirectoryEntry"
+          }
+        },
+        "next_after": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalEntityId"
+        }
+      }
     }
   }
 }

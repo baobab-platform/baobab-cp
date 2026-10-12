@@ -3907,6 +3907,59 @@ paths:
           $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /organisations/directory/page:
+    get:
+      tags: [Organisations]
+      operationId: pageMyOrganisations
+      summary: Permission-filtered, bounded and server-paginated Organisation directory
+      description: >-
+        Search and sort only the live caller's EXACT organisation.view source records.
+        The current caller is identified from the bearer and CP principal; no untrusted
+        principal/tenant/group selectors are accepted. A page cursor is accepted only
+        if the referenced ID remains among current authorised matching records.
+        Each request reevaluates grants and source status and is not a durable
+        snapshot guarantee. Result count is bounded at 500; larger access sets
+        return 503 without silently truncating. This endpoint is nonproduction-only.
+      security:
+        - adminOidc: [canonical:read]
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 80 }
+          description: Case-insensitive display-name match within authorised records
+        - name: sort
+          in: query
+          schema: { type: string, enum: [name-asc, name-desc], default: name-asc }
+        - name: verification
+          in: query
+          schema: { type: string, enum: [UNVERIFIED, PENDING_REVIEW, VERIFIED, CONFLICTED, REJECTED, EXPIRED] }
+        - name: status
+          in: query
+          schema: { type: string, maxLength: 40 }
+        - name: after
+          in: query
+          schema:
+            $ref: ./domain.schema.json#/$defs/canonicalEntityId
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
+      responses:
+        "200":
+          description: One caller-filtered directory page with a next cursor
+          content:
+            application/json:
+              schema:
+                $ref: ../../organisation/v1/overview.schema.json#/$defs/OrganisationDirectoryPage
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /organisations/directory:
     get:
       tags: [Organisations]

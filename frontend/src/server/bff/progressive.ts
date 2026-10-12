@@ -7,7 +7,7 @@ import { serverEnv } from "@/server/env";
 export type ProgressiveReadAction = "application" | "review-queue" | "review-application" | "operation"
   | "provisioning" | "provisioning-plan" | "provisioning-readiness" | "effective-authority"
   | "organisation-entity" | "organisation-iam-links" | "organisation-audit" | "tenant-record"
-  | "organisation-overview" | "organisation-directory";
+  | "organisation-overview" | "organisation-directory" | "organisation-directory-page";
 export type ProgressiveWriteAction =
   | "create" | "update" | "submit" | "review" | "decide" | "request-onboarding"
   | "authorise-onboarding" | "register-tenant";
@@ -20,6 +20,7 @@ export type ProgressiveCommand = {
   tenantId?: string;
   body?: Record<string, unknown>;
   idempotencyKey?: string;
+  page?: { q?: string | undefined; sort?: string | undefined; verification?: string | undefined; status?: string | undefined; after?: string | undefined; limit?: number | undefined };
 };
 
 export class ProgressiveBffError extends Error {
@@ -51,6 +52,33 @@ const bodyFields: Partial<Record<ProgressiveWriteAction, readonly string[]>> = {
 /** No arbitrary path, method, selector, headers or tenant ID can be supplied. */
 export function resolveProgressiveCommand(command: ProgressiveCommand): { method: "GET" | "POST" | "PATCH"; path: string; body?: Record<string, unknown> } {
   const { action, id, body, tenantId } = command;
+  if (action === "organisation-directory-page") {
+    if (id !== undefined || body !== undefined || tenantId !== undefined || command.idempotencyKey !== undefined) {
+      throw new ProgressiveBffError(400, "INVALID_DIRECTORY_PAGE");
+    }
+    const filters = command.page ?? {};
+    const allowed = new Set(["q", "sort", "verification", "status", "after", "limit"]);
+    if (Object.keys(filters).some((key) => !allowed.has(key))) {
+      throw new ProgressiveBffError(400, "INVALID_DIRECTORY_PAGE");
+    }
+    const q = filters.q?.trim() ?? "";
+    if (Array.from(q).length > 80 || (filters.sort && !["name-asc", "name-desc"].includes(filters.sort)) ||
+        (filters.verification && !["UNVERIFIED", "PENDING_REVIEW", "VERIFIED", "CONFLICTED", "REJECTED", "EXPIRED"].includes(filters.verification)) ||
+        (filters.status && !/^[A-Z_]{1,40}$/.test(filters.status)) ||
+        (filters.after && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.after)) ||
+        (filters.limit !== undefined && (!Number.isInteger(filters.limit) || filters.limit < 1 || filters.limit > 50))) {
+      throw new ProgressiveBffError(400, "INVALID_DIRECTORY_PAGE");
+    }
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (filters.sort) params.set("sort", filters.sort);
+    if (filters.verification) params.set("verification", filters.verification);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.after) params.set("after", filters.after);
+    if (filters.limit !== undefined) params.set("limit", String(filters.limit));
+    return { method: "GET", path: "/v1/organisations/directory/page" + (params.size ? "?" + params.toString() : "") };
+  }
+
   // Exact server-owned caller directory: no selector, bearer or filter from the browser.
   if (action === "organisation-directory") {
     if (id !== undefined || body !== undefined || tenantId !== undefined ||
