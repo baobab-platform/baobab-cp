@@ -39,16 +39,16 @@ describe("CX-04C independent mandate and readiness boundary",()=>{
     expect(parseOrganisationGovernance(allowed,org)).not.toBeNull();
     expect(parseOrganisationGovernance(allowed,"0199d000-1111-7777-8000-222222222222")).toBeNull();
     expect(parseOrganisationGovernance({...allowed,tenants:[{
-      ...allowed.tenants[0],mandates_visible:false,
+      ...allowed.tenants[0]!,mandates_visible:false,
     }]},org)).toBeNull();
     expect(parseOrganisationGovernance({...allowed,tenants:[{
-      ...allowed.tenants[0],readiness_visible:false,
+      ...allowed.tenants[0]!,readiness_visible:false,
     }]},org)).toBeNull();
     expect(parseOrganisationGovernance({...allowed,tenants:[{
-      ...allowed.tenants[0],mandates:[{...allowed.tenants[0].mandates[0],tenant_id:"tn_sibling"}],
+      ...allowed.tenants[0]!,mandates:[{...allowed.tenants[0]!.mandates[0]!,tenant_id:"tn_sibling"}],
     }]},org)).toBeNull();
     expect(parseOrganisationGovernance({...allowed,tenants:[{
-      ...allowed.tenants[0],readiness:{...allowed.tenants[0].readiness,source:"NO_SNAPSHOT",state:"READY"},
+      ...allowed.tenants[0]!,readiness:{...allowed.tenants[0]!.readiness,source:"NO_SNAPSHOT",state:"READY"},
     }]},org)).toBeNull();
   });
   it("renders stale evidence and pending, never invented provider certification",async()=>{
