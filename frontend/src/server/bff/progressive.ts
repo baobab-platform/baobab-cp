@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import { serverEnv } from "@/server/env";
 
-export type ProgressiveReadAction = "application" | "review-queue" | "review-application" | "operation";
+export type ProgressiveReadAction = "application" | "review-queue" | "review-application" | "operation"\n  | "provisioning" | "provisioning-plan" | "provisioning-readiness";
 export type ProgressiveWriteAction =
   | "create" | "update" | "submit" | "review" | "decide" | "request-onboarding"
   | "authorise-onboarding" | "register-tenant";
