@@ -33,11 +33,18 @@ jobs:
           done
       - name: Run live caller-bound staging acceptance
         run: node scripts/cx05-live-e2e.mjs
+      - name: Run bounded high-volume search performance gate
+        env:
+          CX05_STAGING_PERF_P95_MS: ${{ vars.CX05_STAGING_PERF_P95_MS }}
+          CX05_STAGING_PERF_SAMPLES: ${{ vars.CX05_STAGING_PERF_SAMPLES }}
+        run: node scripts/cx05h-perf.mjs
       - name: Retain non-authorising evidence for independent decision
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: cx05-live-staging-evidence
-          path: cx05-evidence/cx05-staging-report.json
+          path: |
+            cx05-evidence/cx05-staging-report.json
+            cx05-evidence/cx05h-perf.json
           retention-days: 30
           if-no-files-found: warn

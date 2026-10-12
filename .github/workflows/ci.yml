@@ -53,6 +53,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Validate CX-05H percentile implementation without staging credentials
+        run: node --test scripts/cx05h-perf.test.mjs
       - run: go test -race ./...
       - name: Test NBO founding-enterprise fixture guardrails
         run: python3 -m unittest discover -s scripts/showcase -p 'test_nbo_*.py'
