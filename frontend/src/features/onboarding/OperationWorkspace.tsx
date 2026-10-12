@@ -26,8 +26,8 @@ type ProvisioningView = {
   current_plan?: { plan_digest: string; plan_version: number; stale: boolean };
   approval?: { decision: string; plan_digest: string };
 };
-type PlanView = { plan_digest: string; desired_state_digest?: string; desired_state_version?: number };
-type ReadinessView = { status: string; evaluated_at?: string; snapshots?: unknown[] };
+type PlanView = { plan_digest: string; tenant_id: string; tenant_provisioning_id: string;\n  desired_state_digest?: string; desired_state_version?: number };
+type ReadinessView = { status: string; tenant_id: string; tenant_provisioning_id: string;\n  evaluated_at?: string; snapshots?: unknown[] };
 
 export function OperationWorkspace() {
   const [id, setId] = useState("");
@@ -72,7 +72,9 @@ export function OperationWorkspace() {
         readWorkspace<PlanView>("provisioning-plan", provisioningId, tenantId),
         readWorkspace<ReadinessView>("provisioning-readiness", provisioningId, tenantId),
       ]);
-      if (currentPlan.plan_digest !== record.current_plan?.plan_digest) {
+      if (currentPlan.tenant_id !== tenantId || currentPlan.tenant_provisioning_id !== provisioningId ||
+          currentReadiness.tenant_id !== tenantId || currentReadiness.tenant_provisioning_id !== provisioningId ||
+          currentPlan.plan_digest !== record.current_plan?.plan_digest) {
         // A plan changing between reads is a stale snapshot, never an
         // opportunity to display an approval bound to the older digest.
         throw new Error("Stale plan digest");
