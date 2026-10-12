@@ -52,11 +52,21 @@ export function ApplicantWorkspace() {
   const previousRepresentative = previousIdentity.authorised_representative;
   const retainedRepresentative = previousRepresentative && typeof previousRepresentative === "object" &&
     !Array.isArray(previousRepresentative) ? previousRepresentative : {};
-  const extraRegistrationIdentifiers = Array.isArray(previousIdentity.registration_identifiers)
-    ? previousIdentity.registration_identifiers.filter((item: unknown) =>
-      !!item && typeof item === "object" &&
-      (item as Record<string, unknown>).type !== "COMPANY_REGISTRATION")
-    : [];
+  const originalRegistrationIdentifiers = Array.isArray(previousIdentity.registration_identifiers)
+    ? previousIdentity.registration_identifiers : [];
+  const companyIndex = originalRegistrationIdentifiers.findIndex((item: unknown) =>
+    !!item && typeof item === "object" &&
+    (item as Record<string, unknown>).type === "COMPANY_REGISTRATION");
+  const companyIdentifier = {
+    type: "COMPANY_REGISTRATION", value: registration.trim(),
+    issuing_jurisdiction: incorporationJurisdiction,
+  };
+  // Replacing the editable company identifier at its original index retains
+  // other applicant-provided identifiers and order; no verifier is inferred.
+  const updatedRegistrationIdentifiers = companyIndex < 0
+    ? [...originalRegistrationIdentifiers, companyIdentifier]
+    : originalRegistrationIdentifiers.map((item: unknown, index: number) =>
+      index === companyIndex ? { ...(item as object), ...companyIdentifier } : item);
   const businessIdentity: Record<string, unknown> = {
     ...retainedBusinessClaims,
     operating_name: operatingName.trim(),
@@ -69,9 +79,7 @@ export function ApplicantWorkspace() {
     ...(claim === "INCORPORATED_CLAIMED" ? {
       legal_name: legalName.trim(),
       jurisdiction_of_incorporation: incorporationJurisdiction,
-      registration_identifiers: [...extraRegistrationIdentifiers, {
-        type: "COMPANY_REGISTRATION", value: registration.trim(), issuing_jurisdiction: incorporationJurisdiction,
-      }],
+      registration_identifiers: updatedRegistrationIdentifiers,
     } : {}),
   };
 
