@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
@@ -54,7 +55,11 @@ var ErrCanonicalEntityLifecycleConflict = errors.New("canonical entity lifecycle
 
 // PostgresRepository is the PostgreSQL-backed repository implementation for mapping, capability, and topology data.
 type PostgresRepository struct {
-	pool              *pgxpool.Pool
+	pool *pgxpool.Pool
+	// Intent writes must remain available while all admission connections hold
+	// canonical locks. This separate lazy pool is never used for admissions.
+	custodyIntentMu   sync.Mutex
+	custodyIntents    *pgxpool.Pool
 	consoleDatasetKey []byte
 	// EventSource overrides defaultEventSource (outbox.go) when set;
 	// production callers normally leave this at its zero value.
@@ -114,6 +119,11 @@ func Open(ctx context.Context, url string) (*PostgresRepository, error) {
 func (r *PostgresRepository) Close() {
 	if r != nil && r.pool != nil {
 		r.pool.Close()
+		r.custodyIntentMu.Lock()
+		if r.custodyIntents != nil {
+			r.custodyIntents.Close()
+		}
+		r.custodyIntentMu.Unlock()
 	}
 }
 

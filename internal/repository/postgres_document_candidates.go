@@ -44,6 +44,13 @@ func (d DocumentLedger) RegisterScannedArtifact(ctx context.Context, p authority
 		return ErrDocumentLedgerDenied
 	}
 	tx := lease.tx
+	// Durable custody is attached by Seal in this same transaction. A caller
+	// cannot register a pending/quarantined/deleted manifest as a scan proof.
+	var custodyState, custodyHash string
+	ce := tx.QueryRow(ctx, `SELECT state,proof_hash FROM evidence.document_custody WHERE evidence_id=$1 AND artifact_id=$2`, p.EvidenceID, p.ArtifactID).Scan(&custodyState, &custodyHash)
+	if ce != nil && !errors.Is(ce, pgx.ErrNoRows) || ce == nil && (custodyState != "ATTACHED" || custodyHash != authority.CustodyProofHash(p)) {
+		return ErrDocumentLedgerDenied
+	}
 	var old authority.ScanProof
 	err := tx.QueryRow(ctx, `SELECT evidence_id,artifact_id,media_type,document_digest,scanner_id,scanner_version,scan_outcome,scanned_at,signature
   FROM evidence.scanned_artifact WHERE evidence_id=$1 AND artifact_id=$2`, p.EvidenceID, p.ArtifactID).
@@ -84,9 +91,21 @@ func (d DocumentLedger) FindScanProof(ctx context.Context, evidenceID, artifactI
 	if d.PostgresRepository == nil || ctx == nil || ctx.Err() != nil {
 		return p, ErrDocumentLedgerDenied
 	}
-	err := d.pool.QueryRow(ctx, `SELECT evidence_id,artifact_id,media_type,document_digest,scanner_id,scanner_version,scan_outcome,scanned_at,signature
- FROM evidence.scanned_artifact WHERE evidence_id=$1 AND artifact_id=$2`, evidenceID, artifactID).
-		Scan(&p.EvidenceID, &p.ArtifactID, &p.MediaType, &p.Digest, &p.ScannerID, &p.ScannerVersion, &p.Outcome, &p.ScannedAt, &p.Signature)
+	// A canonical read lease already owns a connection. Reuse its transaction
+	// rather than borrowing a second pooled connection for proof metadata.
+	var row pgx.Row
+	l, ok := ctx.Value(custodyReadKey{}).(*custodyReadLease)
+	query := `SELECT evidence_id,artifact_id,media_type,document_digest,scanner_id,scanner_version,scan_outcome,scanned_at,signature
+ FROM evidence.scanned_artifact WHERE evidence_id=$1 AND artifact_id=$2`
+	if ok && l != nil {
+		if !l.active || l.repo != d.PostgresRepository || l.evidence != evidenceID || l.artifact != artifactID {
+			return p, ErrDocumentLedgerDenied
+		}
+		row = l.tx.QueryRow(ctx, query, evidenceID, artifactID)
+	} else {
+		row = d.pool.QueryRow(ctx, query, evidenceID, artifactID)
+	}
+	err := row.Scan(&p.EvidenceID, &p.ArtifactID, &p.MediaType, &p.Digest, &p.ScannerID, &p.ScannerVersion, &p.Outcome, &p.ScannedAt, &p.Signature)
 	if err != nil {
 		return authority.ScanProof{}, ErrDocumentLedgerDenied
 	}
@@ -129,6 +148,14 @@ func validateDocumentLink(ctx context.Context, tx pgx.Tx, a authority.DocumentCa
 	if err = tx.QueryRow(ctx, `SELECT document_digest FROM evidence.scanned_artifact
   WHERE evidence_id=$1 AND artifact_id=$2 AND scan_outcome='CLEAN'`, a.EvidenceID, a.ArtifactID).Scan(&recordedDigest); err != nil ||
 		recordedDigest != a.Receipt.DocumentDigest {
+		return ErrDocumentLedgerDenied
+	}
+	// OCR candidates inherit the document retention cutoff and read tombstone.
+	// Legal hold preserves bytes, but never grants a new verification purpose.
+	var custodyState string
+	var deleteAfter time.Time
+	ce := tx.QueryRow(ctx, `SELECT state,delete_after FROM evidence.document_custody WHERE evidence_id=$1 AND artifact_id=$2`, a.EvidenceID, a.ArtifactID).Scan(&custodyState, &deleteAfter)
+	if ce != nil && !errors.Is(ce, pgx.ErrNoRows) || ce == nil && (custodyState != "ATTACHED" || !deleteAfter.After(now)) {
 		return ErrDocumentLedgerDenied
 	}
 	return nil
@@ -319,7 +346,9 @@ func (d DocumentLedger) WithLockedDocument(ctx context.Context, caseID, claimID,
 		d.verifySignedArtifact(limited, tx, attempt) != nil {
 		return ErrDocumentLedgerDenied
 	}
-	if err = readAndExtract(limited); err != nil || limited.Err() != nil {
+	readLease := &custodyReadLease{tx: tx, repo: d.PostgresRepository, evidence: evidenceID, artifact: current.ArtifactID, active: true}
+	defer func() { readLease.active = false }()
+	if err = readAndExtract(context.WithValue(limited, custodyReadKey{}, readLease)); err != nil || limited.Err() != nil {
 		return ErrDocumentLedgerDenied
 	}
 	if err = tx.Commit(limited); err != nil {

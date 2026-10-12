@@ -60,13 +60,17 @@ Use `TEST_DATABASE_URL` on a disposable PostgreSQL 17 database and the exact
 resolution readiness script. Local missing DB/socket support is not a test pass;
 required hosted CI must demonstrate those integrations before merge.
 
-Still outstanding: Shared-governed private intake contract where necessary,
-actual IAM-issued active scanner credentials/current revocation, dedicated
-scanner entrypoint, durable Object Lock/KMS custody, retention/orphan recovery,
-real AV signature/update policy, approved OCR and official-source certification,
+Still outstanding: actual IAM-issued active scanner credentials/current revocation,
+real AV signature/update policy, cloud deployment/retention/restore acceptance,
+approved OCR and official-source certification,
 protected acceptance and independent signoff. See the
 [complete sequenced plan](../reconciliation/adr026-027-completion-plan-2026-10-12.md).
 
 ## P0-02B follow-up
 
-[Authenticated private intake and isolated executable composition](P0-02B-authenticated-scanner-runtime.md) now implements the network/runtime boundary. CP holds only public signing trust and rechecks current IAM/registry/trust before custody/commit; independent scanner jobs retain exact signed proofs for explicit replay. Protected live acceptance and durable cloud custody remain open.
+[Authenticated private intake and isolated executable composition](P0-02B-authenticated-scanner-runtime.md) now implements the network/runtime boundary. CP holds only public signing trust and rechecks current IAM/registry/trust before custody/commit; independent scanner jobs retain exact signed proofs for explicit replay. P0-02C supplies durable cloud custody code; protected live/cloud acceptance remains open.
+
+P0-02B implements authenticated private intake and isolated scanner composition.
+[P0-02C](P0-02C-durable-custody.md) adds the shared artifact fence, durable intent/
+version attachment, retention/holds, rewrap and approved orphan/destruction jobs.
+Local custody remains explicit integration-only; protected acceptance is separate.

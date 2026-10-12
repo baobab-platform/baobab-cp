@@ -73,6 +73,12 @@ workload profile, current approved public trust and canonical admission are
 rechecked before custody/commit; CP never loads the signing key. Exact signed
 jobs support reviewed replay after ambiguous delivery. See the
 [scanner runtime runbook](docs/migrations/P0-02B-authenticated-scanner-runtime.md).
+P0-02C adds explicit S3 Object Lock/KMS custody, a durable intent/version ledger,
+versioned retention policies, legal holds, envelope-key rewraps and fenced
+orphan quarantine. The report-first `cmd/document-custody` workload uses
+separately approved snapshot jobs and a durable cutoff before confirmed
+version-specific deletion. Staging no longer accepts local custody. See the
+[durable custody runbook](docs/migrations/P0-02C-durable-custody.md).
 The committed scanner remains PROVISIONED; protected live activation is not
 implied by code or CI.
 
@@ -80,8 +86,8 @@ The scanner pipeline now binds canonical case/claim/evidence admission before
 custody, holds row locks through proof/audit registration and rechecks expiry
 before commit. Direct registration without the lease denies. See the
 [scanner admission maintainer note](docs/migrations/PEO-03L2-scanner-admission-custody.md).
-This is code-level evidence governance; scanner/OCR/source runtime composition,
-real corporate decisions and protected certification remain open.
+This is code-level evidence governance; real scanner/OCR/source acceptance,
+corporate decisions and protected certification remain open.
 
 ## Current implementation and Console backlog
 

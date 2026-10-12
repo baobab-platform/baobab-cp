@@ -80,9 +80,9 @@ func VerifyScanProof(p ScanProof, publicKey ed25519.PublicKey, now time.Time) er
 	return nil
 }
 
-// ScannedDocumentVault is a local mounted-key encrypted artifact adapter for
-// tests and protected staging. Production S3/KMS requires its own approved
-// backend and object lifecycle controls, not shared filesystem permissions.
+// ScannedDocumentVault is an integration-only mounted-key artifact adapter.
+// Protected staging uses repository.DurableDocumentVault with explicit S3/KMS
+// composition; production still requires independent operational acceptance.
 type ScannedDocumentVault struct {
 	Directory string
 	Key       []byte
