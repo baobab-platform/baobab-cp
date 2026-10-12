@@ -18,8 +18,8 @@ type ConsoleDatasetPermission func(principal, organisation, permission string) b
 
 type ConsoleDatasetResult struct {
 	Digest string
-	Kind string
-	State string
+	Kind   string
+	State  string
 }
 
 func consoleAudit(ctx context.Context, tx pgx.Tx, actor AuditActor, action, digest string) error {
