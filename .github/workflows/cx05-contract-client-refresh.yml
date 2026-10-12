@@ -1,0 +1,36 @@
+name: CX05 bounded contract client regeneration
+on:
+  push:
+    branches: [feat/cx05n-shared-dataset-sync]
+permissions:
+  contents: write
+jobs:
+  generate:
+    if: github.repository == 'baobab-platform/baobab-cp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Use immutable package-lock dependency tree
+        run: |
+          corepack enable
+          corepack pnpm install --frozen-lockfile
+      - name: Regenerate only checked-in client types from pinned OpenAPI
+        run: corepack pnpm --filter @baobab-platform/cp-console generate:cp-client
+      - name: Commit regenerated types only
+        run: |
+          set -euo pipefail
+          git add frontend/src/generated/control-plane/openapi.d.ts
+          if git diff --cached --quiet; then
+            echo "No client changes"
+            exit 0
+          fi
+          git config user.name 'baobab-contract-sync[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(cx05n): regenerate pinned OpenAPI TypeScript types'
+          git push origin HEAD:feat/cx05n-shared-dataset-sync
