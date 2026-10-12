@@ -152,7 +152,7 @@ export const pages: Record<string, Page> = {
       { heading: "3. Provide relevant evidence", description: "Requirements depend on activities, markets, legal responsibilities and providers. Review and authorisation remain independent." },
       { heading: "4. Track setup", description: "An approved application is not an active tenant. Follow provisioning, blockers and readiness separately." },
     ],
-    action: "Open protected application workspace", href: "/workspace/apply",
+    action: "Log in to begin a protected application", href: "/login",
     note: "The Console application is environment- and authorisation-gated. Access is not general availability or automatic tenant admission.",
   },
   status: {
