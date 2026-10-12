@@ -158,6 +158,7 @@ var canonicalMigrationNames = []string{
 	"000121_cx05d_authorised_directory_index.sql",
 	"000122_cx05g_durable_console_datasets.sql",
 	"000123_cx05j_encrypted_console_artifacts.sql",
+	"000124_p002c_durable_document_custody.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

@@ -237,7 +237,7 @@ func TestCPCompositionRequiresCurrentIndependentConfigurationAndNoSigner(t *test
 	}
 	now := time.Now().UTC()
 	trust, _ := json.Marshal(map[string]any{"keys": []TrustRecord{{ScannerID: "synthetic-av", ScannerVersion: "v1", PublicKeyHex: hex.EncodeToString(pub), ProposedBy: "synthetic-maker", ApprovedBy: "synthetic-checker", ApprovalReference: "synthetic-approval", EffectiveFrom: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour)}}})
-	cfg := CPConfig{TrustFile: privateFixture(t, "trust", trust), CustodyDirectory: t.TempDir(), CustodyKeyFile: privateFixture(t, "custody", make([]byte, 32)), IntrospectionURL: "https://synthetic.example.invalid/introspect", IntrospectionClientIDFile: privateFixture(t, "id", []byte("synthetic-id")), IntrospectionClientSecretFile: privateFixture(t, "credential", []byte("synthetic-credential"))}
+	cfg := CPConfig{CustodyBackend: "local-integration", TrustFile: privateFixture(t, "trust", trust), CustodyDirectory: t.TempDir(), CustodyKeyFile: privateFixture(t, "custody", make([]byte, 32)), IntrospectionURL: "https://synthetic.example.invalid/introspect", IntrospectionClientIDFile: privateFixture(t, "id", []byte("synthetic-id")), IntrospectionClientSecretFile: privateFixture(t, "credential", []byte("synthetic-credential"))}
 	raw, _ := json.Marshal(cfg)
 	path := privateFixture(t, "cp-config", raw)
 	registry := privateFixture(t, "registry", []byte("workloads:\n  "+authority.ScannerClientID+":\n    status: ACTIVE\n    environment: integration\n    credential_type: federated_workload_token\n    allowed_audiences: [baobab-control-plane]\n    allowed_scopes: [verification:scan-attest]\n"))
@@ -245,7 +245,7 @@ func TestCPCompositionRequiresCurrentIndependentConfigurationAndNoSigner(t *test
 	if _, _, err = ComposeCP(context.Background(), "integration", path, registry, configJWTFixture{}, repo); err != nil {
 		t.Fatal(err)
 	}
-	for _, environment := range []string{"", "production", "unknown"} {
+	for _, environment := range []string{"", "staging", "production", "unknown"} {
 		if _, _, err = ComposeCP(context.Background(), environment, path, registry, configJWTFixture{}, repo); err == nil {
 			t.Fatalf("%s runtime admitted", environment)
 		}

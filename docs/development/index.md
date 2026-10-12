@@ -27,3 +27,5 @@ Console tests, operational runbook, README and code comments **in the same PR**.
 Explain *why* an authority check, lock, transaction or redaction exists; avoid
 comments that paraphrase syntax. Preserve negative tests when refactoring
 security code, and do not bypass review/CI to correct stale docs.
+
+- [Durable custody and lifecycle](../migrations/P0-02C-durable-custody.md) covers version-pinned S3/KMS, approved retention/holds, key rewrap and fenced orphan/deletion recovery.

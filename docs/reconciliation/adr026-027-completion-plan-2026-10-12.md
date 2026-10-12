@@ -89,7 +89,9 @@ support must not be published from a passing stale lock.
 | 14 | P1-02 | Four-business protected qualification, revocation/isolation, representative volume, failure/replay/drift, migration/backfill, rollback/restore and historical actor attribution. |
 | 15 | P1-03 / PEO-07 / LA-07 | Capability-specific independent legal/provider/security/operations signoff and EA-09B. No blanket whole-tenant promotion. |
 
-P0-02B implements code/runtime composition, while real scanner activation and protected acceptance remain unproven. P0-02C remains independently open.
+P0-02B implements code/runtime composition, while real scanner activation and protected acceptance remain unproven. P0-02C implements durable S3 Object Lock/KMS custody, approved retention/holds,
+key rewrap and fenced orphan/deletion jobs. See the [custody runbook](../migrations/P0-02C-durable-custody.md).
+Cloud deployment/acceptance and certified source/OCR transport remain independently open.
 
 P0-02A is a bounded security closure of existing PEO-03L code. It is not full
 P0-02 completion, a new canonical capability or live scanner acceptance.

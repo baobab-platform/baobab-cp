@@ -66,8 +66,8 @@ Enable `PEO_SCANNER_INTAKE_ENABLED=true` only after separate approval, and set
 ```json
 {
   "trust_file": "/approved/scanner/public-trust.json",
-  "custody_directory": "/approved/cp/custody",
-  "custody_key_file": "/approved/cp/custody-key.bin",
+  "custody_backend": "s3-kms",
+  "durable_custody_config_file": "/approved/cp/durable-custody.json",
   "introspection_url": "https://<APPROVED-IAM>/oauth2/introspect",
   "introspection_client_id_file": "/approved/cp/introspection-client-id",
   "introspection_client_secret_file": "/approved/cp/introspection-client-secret"
@@ -144,8 +144,9 @@ OCR, tenant bootstrap or human reviewer privileges.
 The receipt alone goes to stdout; errors are opaque. Treat the signed job as
 private evidence metadata with approved retention. No credential, raw document
 or signature belongs in workflow artifacts, logs or audit events. A failed
-commit can leave an encrypted custody orphan; P0-02C must provide governed
-reconciliation/destruction and durable S3 Object Lock/KMS custody. No auto-delete
+commit can leave a PENDING durable custody intent; [P0-02C](P0-02C-durable-custody.md)
+provides fenced reconciliation/quarantine and approved version-specific
+destruction with S3 Object Lock/KMS custody. No auto-delete
 or evidence AVAILABLE transition is inferred here.
 
 ## Verification and independent acceptance
@@ -167,7 +168,8 @@ scanner lifecycle and issuer/subject binding, independently reviewed scanner
 isolation/signature update policy, real approved public trust, actual CP/PG
 runtime, durable custody/retention/rotation, failure/recovery evidence and
 separate security/operations signoff. Nothing here fabricates those inputs or
-certifies CIPC/SARS/PSP facts. P0-02C remains the next code/operational set.
+certifies CIPC/SARS/PSP facts. P0-02C implements custody lifecycle code; actual
+cloud/source/OCR acceptance remains independently required.
 
 Protocol references: [RFC7662](https://www.rfc-editor.org/rfc/rfc7662) and
 [ClamAV INSTREAM protocol](https://docs.clamav.net/manual/Usage/ClamdProtocol.html).

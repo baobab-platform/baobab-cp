@@ -13,6 +13,7 @@ import (
 // the current, row-locked case -> claim -> evidence relationship.
 type scanAdmissionKey struct{}
 type scanAdmissionLease struct {
+	actor                         AuditActor
 	tx                            pgx.Tx
 	repository                    *PostgresRepository
 	caseID, claimID, evidenceID   string
@@ -38,8 +39,11 @@ func (d DocumentLedger) WithScanAdmission(ctx context.Context, caseID, claimID, 
 		return ErrDocumentLedgerDenied
 	}
 	defer tx.Rollback(context.Background())
+	if lockCustody(limited, tx, evidenceID, artifactID) != nil {
+		return ErrDocumentLedgerDenied
+	}
 	lease := &scanAdmissionLease{tx: tx, repository: d.PostgresRepository,
-		caseID: caseID, claimID: claimID, evidenceID: evidenceID, artifactID: artifactID,
+		caseID: caseID, claimID: claimID, evidenceID: evidenceID, artifactID: artifactID, actor: actor,
 		actorID: actor.ActorID, clientID: actor.ClientID, active: true}
 	// A retained callback context is unusable after return, even if its
 	// transaction object remains reachable. It is not a renewable permit.

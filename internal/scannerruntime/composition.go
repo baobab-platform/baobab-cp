@@ -14,6 +14,8 @@ import (
 )
 
 type CPConfig struct {
+	CustodyBackend                string `json:"custody_backend"`
+	DurableCustodyConfigFile      string `json:"durable_custody_config_file"`
 	TrustFile                     string `json:"trust_file"`
 	CustodyDirectory              string `json:"custody_directory"`
 	CustodyKeyFile                string `json:"custody_key_file"`
@@ -31,15 +33,35 @@ func ComposeCP(ctx context.Context, environment, configFile, registryFile string
 		return empty, ScannerVerifier{}, ErrConfiguration
 	}
 	var cfg CPConfig
-	if privateJSON(configFile, &cfg) != nil || !filepath.IsAbs(cfg.CustodyDirectory) {
+	if privateJSON(configFile, &cfg) != nil {
 		return empty, ScannerVerifier{}, ErrConfiguration
 	}
 	u, parseErr := url.Parse(cfg.IntrospectionURL)
 	if parseErr != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return empty, ScannerVerifier{}, ErrConfiguration
 	}
-	key, err := privateFile(cfg.CustodyKeyFile, 32)
-	if err != nil || len(key) != 32 {
+	var vault verificationservice.SealedScannedArtifactWriter
+	var err error
+	switch cfg.CustodyBackend {
+	case "local-integration":
+		if environment != "integration" || !filepath.IsAbs(cfg.CustodyDirectory) || cfg.DurableCustodyConfigFile != "" {
+			return empty, ScannerVerifier{}, ErrConfiguration
+		}
+		key, e := privateFile(cfg.CustodyKeyFile, 32)
+		if e != nil || len(key) != 32 {
+			return empty, ScannerVerifier{}, ErrConfiguration
+		}
+		vault = authority.ScannedDocumentVault{Directory: cfg.CustodyDirectory, Key: key}
+	case "s3-kms":
+		if cfg.CustodyDirectory != "" || cfg.CustodyKeyFile != "" {
+			return empty, ScannerVerifier{}, ErrConfiguration
+		}
+		durable, deployment, e := ComposeCustody(ctx, cfg.DurableCustodyConfigFile, repo)
+		if e != nil || deployment.Workload != "SCANNER_INTAKE" {
+			return empty, ScannerVerifier{}, ErrConfiguration
+		}
+		vault = durable
+	default:
 		return empty, ScannerVerifier{}, ErrConfiguration
 	}
 	verifier := ScannerVerifier{JWT: jwt, RegistryFile: registryFile, Environment: environment,
@@ -61,6 +83,6 @@ func ComposeCP(ctx context.Context, environment, configFile, registryFile string
 		return empty, ScannerVerifier{}, ErrConfiguration
 	}
 	return verificationservice.ScannedArtifactIntake{Repository: repo,
-		Vault: authority.ScannedDocumentVault{Directory: cfg.CustodyDirectory, Key: key},
+		Vault: vault,
 		Trust: trust, Now: time.Now}, verifier, nil
 }
