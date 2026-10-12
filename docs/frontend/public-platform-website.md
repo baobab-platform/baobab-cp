@@ -40,7 +40,7 @@ environment gates. When authentication is not enabled, Console access remains un
   Console and BFF. Do not attach site content to these routes.
 
 Copy and IA are centralised in `frontend/src/features/public-site/content.ts`; the
-public shell is in `SiteShell.tsx` and visual styles in `site.module.css`.
+public shell is in `SiteShell.tsx` and visual styles through Tailwind v4 utilities and Baobab semantic tokens. See [UI foundations](tailwind-shadcn.md).
 
 ## Inspiration and design
 
