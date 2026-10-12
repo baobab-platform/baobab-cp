@@ -156,6 +156,7 @@ var canonicalMigrationNames = []string{
 	"000119_peo03_scanned_artifact_candidates.sql",
 	"000120_peo04_independent_control_attestation.sql",
 	"000121_cx05d_authorised_directory_index.sql",
+	"000122_cx05g_durable_console_datasets.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
