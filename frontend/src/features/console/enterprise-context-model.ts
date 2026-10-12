@@ -1,5 +1,28 @@
-import { parseOrganisationOverview } from "./OrganisationIntegrations";
-import { parseTenant } from "./organisation-model";
+import { z } from "zod";
+
+// Standalone bounded source projections prevent cyclic imports between the
+// context model and the React Organisation 360 presentation components.
+const overviewSchema = z.object({
+  organisation_id: z.string(),
+  evaluated_at: z.iso.datetime({ offset: true }),
+  profile: z.object({
+    canonical_entity_id: z.string(), display_name: z.string().min(1),
+    status: z.string().min(1),
+  }),
+  tenants: z.array(z.object({
+    tenant_id: z.string(), mapping_role: z.string(),
+    mapping_provenance: z.string(),
+    markets_visible: z.boolean(),
+    market_participations: z.array(z.object({
+      country_code: z.string(), registry_market_id: z.string(),
+      currency_code: z.string(),
+    })).max(100),
+  })).max(100),
+});
+const tenantSchema = z.object({
+  tenant_id: z.string(), display_name: z.string().min(1),
+  desired_state: z.string().min(1), observed_state: z.string().min(1),
+});
 
 /**
  * CX-03B: a read-only navigation context, NEVER a Control Plane Context token.
@@ -51,9 +74,14 @@ export function projectEnterpriseNavigationContext(
 ): EnterpriseNavigationContext | null {
   if (!organisationID.test(organisationId) || !tenantID.test(tenantId) ||
       (requestedMarket !== undefined && !countryCode.test(requestedMarket))) return null;
-  const overview = parseOrganisationOverview(organisationSource, organisationId);
-  const tenant = parseTenant(tenantSource, tenantId);
-  if (!overview || !tenant || !overview.tenants) return null;
+  const parsedOverview = overviewSchema.safeParse(organisationSource);
+  const parsedTenant = tenantSchema.safeParse(tenantSource);
+  if (!parsedOverview.success || !parsedTenant.success) return null;
+  const overview = parsedOverview.data;
+  const tenant = parsedTenant.data;
+  if (overview.organisation_id !== organisationId ||
+      overview.profile.canonical_entity_id !== organisationId ||
+      tenant.tenant_id !== tenantId) return null;
   const at = Date.parse(overview.evaluated_at);
   if (!Number.isFinite(at) || at > now + 60_000 || at < now - 300_000) return null;
   if (inactive.test(overview.profile.status.toUpperCase()) ||
