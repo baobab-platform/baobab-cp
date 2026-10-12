@@ -41,7 +41,7 @@ describe("CX-03B caller-bound enterprise navigation scope", () => {
     const context = project();
     expect(context?.selectedMarket?.marketId).toBe("market_za");
     expect(context?.tenantName).toBe("Thamani");
-    expect(project(overview, tenantRecord, undefined)?.selectedMarket).toBeUndefined();
+    expect(projectEnterpriseNavigationContext(org, tenant, undefined, overview, tenantRecord, now)?.selectedMarket).toBeUndefined();
     expect(enterpriseContextHref(org, tenant, "ZA"))
       .toBe("/workspace/organisations/" + org + "/contexts/" + tenant + "?market=ZA");
   });
