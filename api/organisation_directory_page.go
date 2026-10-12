@@ -6,6 +6,8 @@ package api
 
 import (
 	"net/http"
+    "errors"
+    "github.com/baobab-platform/baobab-cp/internal/repository"
 	"net/url"
 	"slices"
 	"sort"
@@ -169,12 +171,41 @@ func (h organisationOverviewHandler) directoryPage(w http.ResponseWriter, r *htt
 		problem(w, r, http.StatusServiceUnavailable, "DIRECTORY_AUTHORITY_UNAVAILABLE", "relations unavailable", true)
 		return
 	}
-	ids, valid := boundedDirectoryIDs(administration.Effective(actor, grants, sources, at, rel), h.environment, maxPagedDirectoryRows)
+	// For a PostgreSQL source use an authorised UUID-array SQL query rather than
+    // N+1 profile reads. The effective grant evaluation remains canonical.
+    // Fake readers and environments without the index use bounded fallback.
+    index, indexed := h.reader.(repository.DirectoryIndexReader)
+    cap := maxPagedDirectoryRows
+    if indexed { cap = 20000 }
+    ids, valid := boundedDirectoryIDs(administration.Effective(actor, grants, sources, at, rel), h.environment, cap)
 	if !valid {
 		problem(w, r, http.StatusServiceUnavailable, "DIRECTORY_TOO_LARGE", "bounded search corpus exceeded", true)
 		return
 	}
-	candidates := make([]organisationDirectoryEntry, 0, len(ids))
+	if indexed {
+        page, err := index.SearchAuthorisedOrganisations(r.Context(), ids,
+            repository.DirectoryIndexFilter{Query:f.Query,Sort:f.Sort,Verification:f.Verification,
+                Status:f.Status,After:f.After,Limit:f.Limit})
+        if errors.Is(err,repository.ErrDirectoryIndexCursor) {
+            problem(w,r,http.StatusConflict,"DIRECTORY_CURSOR_STALE","cursor is not part of the currently authorised result",false)
+            return
+        }
+        if err!=nil {
+            problem(w,r,http.StatusServiceUnavailable,"DIRECTORY_INDEX_UNAVAILABLE","indexed directory could not complete",true)
+            return
+        }
+        response:=directoryPageResponse{EvaluatedAt:at,PageSize:f.Limit,Sort:f.Sort,
+            TotalVisible:page.TotalVisible,Items:[]organisationDirectoryEntry{},NextAfter:page.NextAfter}
+        for _,x:=range page.Items {
+            response.Items=append(response.Items,organisationDirectoryEntry{
+                OrganisationID:x.OrganisationID,DisplayName:x.DisplayName,Status:x.Status,
+                VerificationState:domain.VerificationState(x.VerificationState),
+                SourceAuthority:x.SourceAuthority,Jurisdiction:x.Jurisdiction})
+        }
+        writeJSON(w,http.StatusOK,response)
+        return
+    }
+    candidates := make([]organisationDirectoryEntry, 0, len(ids))
 	for _, id := range ids {
 		profile, err := h.reader.GetOrganisation(r.Context(), id)
 		if err != nil {
