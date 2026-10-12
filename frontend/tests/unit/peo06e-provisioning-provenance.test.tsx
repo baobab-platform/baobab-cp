@@ -76,6 +76,24 @@ describe("PEO-06E current Control Plane provisioning provenance", () => {
     expect(screen.queryByText("Yes — current digest")).toBeNull();
   });
 
+  it("locks selector inputs while fetching and clears displayed evidence when identifiers change", async () => {
+    let release: ((value: typeof record) => void) | undefined;
+    const pending = new Promise<typeof record>((resolve) => { release = resolve; });
+    mockRead.mockImplementation(async (action: string) =>
+      action === "provisioning" ? pending : action === "provisioning-plan" ? plan : readiness);
+    await display();
+    const tenantControl = screen.getByLabelText("Tenant ID");
+    const provisioningControl = screen.getByLabelText("Tenant provisioning ID");
+    expect(tenantControl.hasAttribute("disabled")).toBe(true);
+    expect(provisioningControl.hasAttribute("disabled")).toBe(true);
+    release?.(record);
+    await waitFor(() => expect(screen.getByText("PLANNED")).toBeTruthy());
+    expect(tenantControl.hasAttribute("disabled")).toBe(false);
+    fireEvent.change(tenantControl, { target: { value: "ten_other1234" } });
+    expect(screen.queryByText("PLANNED")).toBeNull();
+    expect(screen.queryByText(digest)).toBeNull();
+  });
+
   it("shows operation progress and eventual resource state, never invented percent or activation", async () => {
     mockRead.mockResolvedValue({
       operation_id: "op_123456", operation_type: "TENANT_PROVISIONING",
