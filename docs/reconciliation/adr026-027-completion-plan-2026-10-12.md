@@ -272,3 +272,63 @@ remain independent, as do P0-02C cloud/source/OCR gates.
 
 Next consumer sequence: Subscriptions, then Trade Docs. P0-04A as a whole stays
 open until those owning-engine slices converge.
+
+
+## 9. P0-04A Subscriptions follow-up — 13 October 2026
+
+Subscriptions [#40](https://github.com/baobab-platform/baobab-subscriptions/pull/40)
+implements the next owning-engine slice after Payments #36, starting at
+`66fc159423447ecc16c55c9fb1f9eabe654abc96`. Its implementation head is
+`374935303c7cac31b5a547ef23dac3a7bad18a21`; complete final-head CI/review is
+required before merge. This audit rechecked CP
+`9e782760e58b554fe48560ac449ba8ee944bf6ec`, Shared
+`a9c53087d63caa356edf54ec8037ba1713c4827f` and IAM
+`ad7989ca085831303c265f943ef2b97735f911ad`. Before opening this task's PRs,
+Subscriptions/CP/IAM had no open PRs. Shared dependency PRs #290–294 remain
+independent. Historical authority/inbox/lock branches already have their useful
+components on main; their old trees would remove subsequent migrations,
+verified-client replay and protected command-origin safeguards.
+
+The existing twenty-path lock differs only in six additive evidence document
+classes. Exact pin `a9c53087` now declares 22 files including workload/scope
+vocabulary, full immutable reference closure and hash provenance. Generated
+resources replace stale files; the packaged Java registry disables remote
+retrieval, asserts formats and permits only declared schema files. Twelve owned
+entries cover current INTERNAL eligibility, the GET tuple's three property
+grammars, the event envelope and seven founding payloads. Validation precedes
+existing tenant/subscription/reference/current lease, producer/type/subject and
+durable receipt checks. Valid negative wire facts still deny. Events never grant
+classification or current eligibility.
+
+Strict JSON rejects duplicate members recursively and trailing input. CP body
+retention is bounded during chunked reads to 16 KiB under a complete three-second
+deadline; credential files are read anew with an 8 KiB cap. Redirect-enabled
+injected clients are refused. Existing zero-charge/no-payment, verified-client
+raw-byte replay, revision/tenant isolation and protected command producer rules
+remain in force. Source comments, README, ADR-SUB-0016, ADR alignment and
+[maintenance/audit notes](https://github.com/baobab-platform/baobab-subscriptions/blob/main/docs/plans/P0-04A-subscriptions-contract-convergence.md)
+were updated.
+
+A persisted 144-vector matrix independently compares immutable owner Git blobs
+with Java across all twelve entries. Isolated packaged JAR and Docker probes
+check original byte/inventory, Java 21 targeting, actual runtime libraries and
+resource ownership without source/test classes or issuer/database configuration.
+Tests cover malformed wires, valid foreign/stale authority, slow/oversized bodies
+and invalid events leaving no PostgreSQL receipt. Local owner/generation/syntax
+checks pass. Initial hosted CI passed 48 Java tests with no failures or skips,
+144 owner/Java vectors, actual isolated JAR probes and container checks. Three
+review findings on the subscriber test helper's name/interface annotations were
+fixed and resolved without changing behaviour. Complete final-head hosted
+compilation/package/container/PostgreSQL CI remains required before merge.
+
+The only Subscriptions workload at this pin is PROVISIONED for Payments; it has
+no CP audience or `subscription:internal-authority` scope. The PROVISIONED CP
+billing producer's profile supplies no usage/founding-intake admission. These
+require separate Shared/IAM/CP review, never a consumer pin or synthetic fixture.
+No legal incorporation/mandate facts, chargeable invoice responsibility, Kill Bill,
+Payments handoff, complete billing lifecycle or protected runtime/provider
+qualification is asserted. Genuine P0-03, protected P0-04B and P0-02C
+cloud/source/OCR gates remain independent.
+
+Next owning-engine consumer: Trade Docs. P0-04A stays open until that final slice
+converges; programme completion and operational certification remain separate.
