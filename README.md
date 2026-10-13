@@ -95,8 +95,12 @@ with 130 independent owner wire vectors and packaging checks. This admits no
 workload or certified money movement. Subscriptions [PR #40](https://github.com/baobab-platform/baobab-subscriptions/pull/40)
 adds exact current INTERNAL and founding event schemas, with 144 owner wire
 vectors and isolated JAR checks. It grants no workload admission, invoice legal
-responsibility or provider readiness. Trade Docs is the final remaining consumer
-slice; see the completion plan follow-ups for exact status.
+responsibility or provider readiness. Trade Docs [PR #13](https://github.com/baobab-platform/baobab-trade-docs/pull/13)
+adds exact Shared validation and installed-wheel proof to its issuer reference,
+with 45 owner wire vectors. It retains ARCHITECTURE_ONLY maturity and no deployed
+issuer/signing/outbox runtime. These five slices converge their current consumers;
+P0-03 genuine records and P0-04B execution-point/live acceptance remain open.
+See the completion plan follow-ups for exact status.
 
 The scanner pipeline now binds canonical case/claim/evidence admission before
 custody, holds row locks through proof/audit registration and rechecks expiry
