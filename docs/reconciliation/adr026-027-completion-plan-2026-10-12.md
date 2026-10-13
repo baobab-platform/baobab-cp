@@ -218,3 +218,57 @@ later JVM/attribution safeguards.
 Next consumer sequence: Payments, Subscriptions, then Trade Docs, with distinct
 owning-engine PRs. P0-04A as a whole remains open until those slices converge;
 cloud/source/OCR and protected runtime/provider acceptance remain independent.
+
+
+## 8. P0-04A Payments follow-up — 13 October 2026
+
+Payments [#36](https://github.com/baobab-platform/baobab-payments/pull/36) implements
+the next owning-engine slice after ERP #95, starting at
+`82d472b790c5e007c4d93c569c6ba70c74d3f807`. The implementation head is
+`3bc4e8c3331f9547712856b06492e1c1ab2bade8`: all 26 checks and five workflows
+passed, with no unresolved review findings. It merged as
+`f065ddaf9dc141aba222f74f8b2481b8f2e877f0`. The audit rechecked CP
+`cadf8ce51bf416234d7a954b66414b30966dedd1`, Shared
+`a9c53087d63caa356edf54ec8037ba1713c4827f` and IAM
+`ad7989ca085831303c265f943ef2b97735f911ad`. At the audit cutoff before opening
+Payments #36 and this companion PR, Payments/CP/IAM had no open PRs.
+Shared dependency PRs #290–294 remain independent. Historical Payments branches
+were compared against current journal/CP/HyperSwitch and protected refusal work;
+no old tree was merged wholesale.
+
+The old nine-path lock changes one declared capability-domain file additively
+(`regulations`) and omitted actual context/legal/documentary/readiness schemas.
+The new exact pin declares 19 files with complete transitive closure, immutable
+Git-blob generation, stale inventory removal, SHA-256 provenance and generated
+Rust includes. Offline, format-asserting validators check both HTTP and
+consequential injected-policy boundaries before existing context/actor/operation,
+freshness, double-refresh and independent PSP checks. Merchant readiness uses the
+owner schema and retains the 503 certification refusal. CP/IAM JSON rejects
+duplicate members recursively; body retention is bounded while reading under the
+complete deadline, including chunked and slow responses.
+
+A persisted 130-vector synthetic matrix independently compares original Shared
+owner Git blobs with Rust and the standalone release executable. Docker builder
+probes validate the actual compiled binary without schema retrieval. Native
+PostgreSQL CI is triggered by authority/contract changes. README, ADR-PAY-0018,
+source comments and [maintenance/audit notes](https://github.com/baobab-platform/baobab-payments/blob/main/docs/plans/P0-04A-payments-contract-convergence.md)
+were updated. Local owner/generation/inventory/syntax checks pass. Hosted
+final-head validation passed 55 Rust tests, all 130 wire vectors, the actual
+standalone release probe, formatting/Clippy, container and native PostgreSQL
+integration. The initial formatter findings were applied without relaxing the
+gate. Immutable evidence: [Rust CI 38356152921](https://github.com/baobab-platform/baobab-payments/actions/runs/38356152921),
+[Foundation 38356154286](https://github.com/baobab-platform/baobab-payments/actions/runs/38356154286)
+and [native PostgreSQL 38356152992](https://github.com/baobab-platform/baobab-payments/actions/runs/38356152992).
+This companion document still requires its own final-head CI/review before merge.
+
+Payments has a PROVISIONED staging assessor with all three context/legal/documentary
+scopes; there is no production Payments assessment profile at this pin. Pinning
+contracts activates no workload and certifies no money movement. Public routes
+remain a protected-denied, in-memory sandbox; bounded local native journal and
+signed-webhook/settlement components do not supply protected TLS, genuine records,
+merchant/beneficiary/provider certification, full lifecycle or operational proof.
+P0-03 authentic founding/mandate acceptance and P0-04B live runtime acceptance
+remain independent, as do P0-02C cloud/source/OCR gates.
+
+Next consumer sequence: Subscriptions, then Trade Docs. P0-04A as a whole stays
+open until those owning-engine slices converge.

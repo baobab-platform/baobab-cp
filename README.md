@@ -89,8 +89,11 @@ converges consequential wire validation to Shared `a9c53087` with generated
 schema provenance. It grants no workload admission or live certification. ERP
 [PR #95](https://github.com/baobab-platform/baobab-erp/pull/95) adds matching exact
 Shared schemas to Python and the native JVM financial guard, with installed-wheel
-and isolated-JAR checks. Payments is the next owning engine, followed by
-Subscriptions and Trade Docs; see the completion plan follow-up for exact status.
+and isolated-JAR checks. Payments [PR #36](https://github.com/baobab-platform/baobab-payments/pull/36)
+adds exact CP authority/readiness schemas to the standalone Rust runtime,
+with 130 independent owner wire vectors and packaging checks. This admits no
+workload or certified money movement. Subscriptions is the next owning engine,
+followed by Trade Docs; see the completion plan follow-ups for exact status.
 
 The scanner pipeline now binds canonical case/claim/evidence admission before
 custody, holds row locks through proof/audit registration and rechecks expiry
