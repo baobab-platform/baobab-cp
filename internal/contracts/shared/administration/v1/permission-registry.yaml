@@ -504,3 +504,31 @@ permissions:
     delegable: false
     read_only: false
     description: "Immediately suspend, revoke or mark expired a mandate with immutable audit, outbox and no resurrection of the same record."
+  - key: organisation.trade-binding.propose
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Admit an exact native Trade cart binding propose command for this Organisation. Independent maker, checker and activating operator; no mandate, context or provider authority is conferred. Registered without profile assignment."
+  - key: organisation.trade-binding.approve
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Admit an exact native Trade cart binding approve command for this Organisation. Independent maker, checker and activating operator; no mandate, context or provider authority is conferred. Registered without profile assignment."
+  - key: organisation.trade-binding.activate
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Admit an exact native Trade cart binding activate command for this Organisation. Independent maker, checker and activating operator; no mandate, context or provider authority is conferred. Registered without profile assignment."
+  - key: organisation.trade-binding.revoke
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Admit an exact native Trade cart binding revoke command for this Organisation. Independent maker, checker and activating operator; no mandate, context or provider authority is conferred. Registered without profile assignment."

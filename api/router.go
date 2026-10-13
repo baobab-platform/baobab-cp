@@ -107,6 +107,7 @@ type Dependencies struct {
 	LegalActorLifecycleEnabled bool
 	LegalActorLifecycle        legalActorLifecycleStore
 	// LA-05A private assessment is separately off by default.
+	TradeBindingIntakeEnabled   bool
 	LegalActorAssessmentEnabled bool
 	LegalActorAssessment        legalActorAssessmentStore
 	// Environment names the deployment (config.Config.Environment). Planning
@@ -377,6 +378,12 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/legal-actor-mandates", mandates.propose)
 		r.With(a.authorize(a.adminVerifier, "human", "legal-actor-mandate:decide"), a.requireAdminRole(nil, true)).
 			Post("/v2/legal-actor-mandates/{mandateID}/decision", mandates.decide)
+	}
+	// P0-04B-02 human intake stays opt-in, with no role compatibility path.
+	if dependencies.TradeBindingIntakeEnabled && (dependencies.Environment == "local" || dependencies.Environment == "development" || dependencies.Environment == "integration" || dependencies.Environment == "staging") {
+		for _, operation := range []string{"propose", "approve", "activate", "revoke"} {
+			r.With(a.authorize(a.adminVerifier, "human", "trade-binding:"+operation)).Post("/internal/trade-binding/v1/"+operation+"/authorize", a.authorizeTradeBinding(operation))
+		}
 	}
 	// LA-05A grants a fresh CP legal-actor FACT only, never downstream provider
 	// permission. No production endpoint until LA-05 consumer certification.
