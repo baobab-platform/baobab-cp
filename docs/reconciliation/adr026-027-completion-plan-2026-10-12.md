@@ -172,3 +172,49 @@ Shared/IAM/CP admission review. No consumer pin update activates a workload.
 ERP is the next owning-engine P0-04A slice, followed by Payments, Subscriptions
 and Trade Docs. P0-03 genuine acceptance, P0-04B native live execution and
 P0-02C cloud/source/OCR certification remain independently open.
+
+## 7. P0-04A ERP follow-up — 13 October 2026
+
+ERP [#95](https://github.com/baobab-platform/baobab-erp/pull/95) implements the
+next owning-engine contract-convergence slice at head
+`db50884e574fe60a9ef6fc324dd4db4f5b8319dd`, following Trade #145. Its reviewed
+baseline is `0b412844f01b6a01c924bea438364282edf90d28` after ERP dependency
+PRs #89–94 were inspected and merged with complete final-head CI green and
+no unresolved review findings. The builder upgrade retains Java 17 targeting.
+CP/Shared/IAM were rechecked at `05cad8e1e0f6594de0b4978edc57b7463068867a`,
+`a9c53087d63caa356edf54ec8037ba1713c4827f` and
+`ad7989ca085831303c265f943ef2b97735f911ad`, respectively.
+
+ERP advances its lock from Shared `9e6e407` to `a9c53087`, reviewing six changed
+declared files and declaring the previously omitted legal-actor/documentary
+consumers, workload vocabulary and their reference closure. Seventeen exact
+Shared schemas with hash/entry provenance are generated for Python and the native
+JVM; regeneration removes obsolete files. Cached, format-enforcing validators
+check closed wire shapes and stored-context UUIDs before existing independent
+scope, actor, freshness, negative-veto, finance readiness and atomic attribution
+checks. Native CP response retention is bounded to 16 KiB and a complete
+three-second response deadline. No schema is downloaded at runtime.
+
+A real installed Python wheel and a standalone privately shaded OSGi JAR are
+checked for original bytes/inventory and validator operation. JVM probes also
+check Java 17 class targeting and isolated resource visibility. The synthetic
+144-vector matrix is independently compared with the pinned Shared owner, Python
+and JVM. Local tests passed; hosted CI additionally runs real PostgreSQL and
+HTTP slow-body/oversized/redirect checks. The initial hosted run exposed a missing
+runtime dependency installation in an auxiliary unit workflow and a malformed
+positive inbox fixture; these were repaired without weakening validation.
+README files, source comments, ADR follow-up and maintenance notes were updated.
+See the [ERP maintenance/audit plan](https://github.com/baobab-platform/baobab-erp/blob/main/docs/plans/P0-04A-erp-contract-convergence.md).
+Final-head CI and resolved review are mandatory before either PR merges.
+
+ERP's staging assessment profile has the required context/legal/documentary
+scopes but remains PROVISIONED. Its ACTIVE production workload lacks both private
+assessment scopes. This convergence admits no workload and certifies no native
+posting. Trusted context/readiness OSGi providers, genuine legal/control/mandate
+facts, actual Equinox/native posting/rollback and direct-bypass acceptance remain
+separate P0-03/P0-04B gates. Historical ERP branches are not merged wholesale over
+later JVM/attribution safeguards.
+
+Next consumer sequence: Payments, Subscriptions, then Trade Docs, with distinct
+owning-engine PRs. P0-04A as a whole remains open until those slices converge;
+cloud/source/OCR and protected runtime/provider acceptance remain independent.
