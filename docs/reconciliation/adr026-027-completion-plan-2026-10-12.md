@@ -279,8 +279,9 @@ open until those owning-engine slices converge.
 Subscriptions [#40](https://github.com/baobab-platform/baobab-subscriptions/pull/40)
 implements the next owning-engine slice after Payments #36, starting at
 `66fc159423447ecc16c55c9fb1f9eabe654abc96`. Its implementation head is
-`374935303c7cac31b5a547ef23dac3a7bad18a21`; complete final-head CI/review is
-required before merge. This audit rechecked CP
+`374935303c7cac31b5a547ef23dac3a7bad18a21`: all 26 checks and four workflows
+passed with no unresolved review findings. It merged as
+`52c69906343d7b1afee08a88b8d3afe118af0428`. This audit rechecked CP
 `9e782760e58b554fe48560ac449ba8ee944bf6ec`, Shared
 `a9c53087d63caa356edf54ec8037ba1713c4827f` and IAM
 `ad7989ca085831303c265f943ef2b97735f911ad`. Before opening this task's PRs,
@@ -315,11 +316,13 @@ check original byte/inventory, Java 21 targeting, actual runtime libraries and
 resource ownership without source/test classes or issuer/database configuration.
 Tests cover malformed wires, valid foreign/stale authority, slow/oversized bodies
 and invalid events leaving no PostgreSQL receipt. Local owner/generation/syntax
-checks pass. Initial hosted CI passed 48 Java tests with no failures or skips,
+checks pass. Hosted final-head CI passed 48 Java tests with no failures or skips,
 144 owner/Java vectors, actual isolated JAR probes and container checks. Three
 review findings on the subscriber test helper's name/interface annotations were
-fixed and resolved without changing behaviour. Complete final-head hosted
-compilation/package/container/PostgreSQL CI remains required before merge.
+fixed and resolved without changing behaviour. Immutable evidence:
+[Java/PostgreSQL CI 38367320601](https://github.com/baobab-platform/baobab-subscriptions/actions/runs/38367320601)
+and [Foundation 38367322553](https://github.com/baobab-platform/baobab-subscriptions/actions/runs/38367322553).
+This companion document requires its own final-head CI/review before merge.
 
 The only Subscriptions workload at this pin is PROVISIONED for Payments; it has
 no CP audience or `subscription:internal-authority` scope. The PROVISIONED CP
