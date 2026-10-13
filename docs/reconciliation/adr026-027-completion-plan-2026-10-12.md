@@ -385,3 +385,75 @@ issuance/signing/outbox against each owner's current ADRs and open PRs. Do not
 substitute synthetic success for protected acceptance or infer capability support
 from a reference wheel. Genuine P0-03 founding/control/mandate decisions and
 P0-02C cloud/source/OCR qualification remain independently open.
+
+
+## 11. P0-04B-01 Trade lifecycle follow-up — 13 October 2026
+
+The first bounded P0-04B set is Trade [#146](https://github.com/baobab-platform/baobab-trade/pull/146)
+at reviewed head `73456750a494a0f7a33c8096a747e718c7ac6777`. Trade baseline is
+`1eaddb9a67fbd05b56311b1dc22e8efe151d0ab4`; CP is
+`778958615aee984c1a933039114dc4ce0a19a5c5`. Shared/IAM are unchanged at
+`a9c53087d63caa356edf54ec8037ba1713c4827f` and
+`ad7989ca085831303c265f943ef2b97735f911ad`. All eight audited repositories
+had no open PRs before this task. Older Trade branches were inspected;
+`feat/la-05c3-trusted-native-cart-runtime` diverges from main, so current C3–C8
+and P0-04A components are retained rather than overwritten by its old base.
+
+Trade's native completeCart policy already rechecks binding, legal actor,
+documentary veto and independent Payments readiness. The C5 command persistence
+was uncomposed, its decision/audit DDL was only a reference, and approval remained
+inactive with placeholder context/activity. This increment installs the real
+Medusa migration/internal persistence path and closes storage/expiry bypasses;
+it does not complete P0-04B execution enforcement or admit live checkout.
+
+The empty storage module now always migrates while CP/IAM/Payments checkout
+clients and credentials remain lazy and protected by the existing deployment
+policy/guard. PostgreSQL fences each cart before the row lock, freezes complete
+original proposal provenance and revision, and compares approval to the stored
+JSONB snapshot. Current-clock expiry is checked after waits/I/O and again by the
+deferred COMMIT receipt constraint. Every committed row change requires its
+append-only decision and local unpublished candidate audit record. Generated CRUD
+cannot activate, rewrite, delete, replay or bypass those receipts. Approval remains
+PROPOSED; no RUNTIME UUID or legal mandate is fabricated. Legacy rows are not
+silently certified/backfilled. Recorded history blocks an unsafe destructive down
+migration.
+
+The command service now requires all named scope fields and array-valued scopes,
+valid calendar timestamps, fresh evidence and current identity/command authority
+plus CP context after evidence I/O. Revocation does not require the legal mandate
+to remain valid. Idle pool failures are handled without logging driver errors or
+credentials. Source comments, README, accepted Trade checkout ADR follow-up and
+[maintenance/rollback notes](https://github.com/baobab-platform/baobab-trade/blob/main/docs/plans/P0-04B-01-trade-binding-lifecycle.md)
+are updated. No canonical capability, event producer, broker publication or scope
+admission is added.
+
+Local validation passed 462 source tests, 88 exact-pin Shared conformance tests,
+typecheck/lint/format, Medusa build and packaged schema validation. Test discovery
+selects source directories so an earlier build's CJS test copies do not become
+extra suites. Hosted CI must apply the actual Medusa migrations to disposable
+PostgreSQL 17 and prove lifecycle, immutable scope/provenance, duplicate proposal/
+approval and approval/revocation races, direct activation/audit denial, lock-wait
+expiry, audit-I/O rollback and expiry immediately before COMMIT. Fixtures are
+synthetic storage proof and remain inactive; no IAM/CP/legal/provider or successful
+checkout acceptance is asserted. Each published Git blob and the complete tree
+match the reviewed local commit. All applicable final-head CI/review must pass
+before either owning PR is merged.
+
+### Remaining P0-04B sequence
+
+| Set | Owning boundary and evidence still required |
+| --- | --- |
+| P0-04B-02 | Trade authenticated command intake using approved Shared/IAM vocabulary; actual cart/region/channel and CP-issued owned RUNTIME handle; independently approved versioned activation/revocation |
+| Trade protected execution | Real native completeCart/replay/revocation/bypass proof, current CP actor/documentary standing, qualified merchant readiness and separately admitted workloads |
+| ERP | Native trusted context/readiness providers and atomic posting/historical actor acceptance |
+| Payments | Protected authenticated transport, qualified merchant/provider and full native money lifecycle |
+| Subscriptions | Actual invoice responsibility, protected billing and provider handoff |
+| Trade Docs | Deployed immutable versioning, actual issuer/signing and atomic outbox workflow |
+
+Current `trade:legal-seller-binding:*` scopes are local candidates, absent from
+Shared's registry. Candidate IAM/evidence HTTP gateways are not a deployed
+approved authority. Do not enable a human mutation endpoint or activation from
+these stubs. P0-04B-02 must resolve that contract/admission boundary explicitly.
+Genuine P0-03 corporate/control/mandate records and P0-02C cloud/source/OCR
+qualification remain independently open, along with protected operational
+acceptance. An approved inactive proposal is not permission to transact.
