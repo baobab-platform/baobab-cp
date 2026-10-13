@@ -5,7 +5,7 @@ with exact nondelegated HIGH `organisation.trade-binding.*` permissions. They
 are assigned to no client or profile. CP mounts the fixed
 `/internal/trade-binding/v1/{propose,approve,activate,revoke}/authorize` routes
 only with `TRADE_BINDING_INTAKE_ENABLED=true` in a recognised nonproduction
-profile. Production/unknown and default-off profiles return no route.
+profile (`development`, `test`, `integration`, `sandbox`, `staging`). Production/unknown and default-off profiles return no route.
 
 Every call cryptographically verifies the actual human IAM token at CP audience,
 resolves its existing ACTIVE canonical human by issuer+subject, reads current
@@ -27,3 +27,5 @@ mandate, tenant or context to remain active.
 No real corporate record, mandate, workload activation, human client assignment,
 merchant readiness, canonical event publication or production enablement is
 included. Follow-on P0-04B protected native checkout acceptance remains open.
+
+CP #389 merged at `beb11b0`; IAM #112 at `119f602`, both final-head CI green. Follow-up uses the established PEO allowlist and adds positive route/grant checks for every supported profile, addressing #389 review before task closure.
