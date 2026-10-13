@@ -225,11 +225,13 @@ cloud/source/OCR and protected runtime/provider acceptance remain independent.
 Payments [#36](https://github.com/baobab-platform/baobab-payments/pull/36) implements
 the next owning-engine slice after ERP #95, starting at
 `82d472b790c5e007c4d93c569c6ba70c74d3f807`. The implementation head is
-`3bc4e8c3331f9547712856b06492e1c1ab2bade8`; final-head CI/review must clear
-before merge. The audit rechecked CP
+`3bc4e8c3331f9547712856b06492e1c1ab2bade8`: all 26 checks and five workflows
+passed, with no unresolved review findings. It merged as
+`f065ddaf9dc141aba222f74f8b2481b8f2e877f0`. The audit rechecked CP
 `cadf8ce51bf416234d7a954b66414b30966dedd1`, Shared
 `a9c53087d63caa356edf54ec8037ba1713c4827f` and IAM
-`ad7989ca085831303c265f943ef2b97735f911ad`. Payments/CP/IAM had no open PRs;
+`ad7989ca085831303c265f943ef2b97735f911ad`. At the audit cutoff before opening
+Payments #36 and this companion PR, Payments/CP/IAM had no open PRs.
 Shared dependency PRs #290–294 remain independent. Historical Payments branches
 were compared against current journal/CP/HyperSwitch and protected refusal work;
 no old tree was merged wholesale.
@@ -250,11 +252,14 @@ owner Git blobs with Rust and the standalone release executable. Docker builder
 probes validate the actual compiled binary without schema retrieval. Native
 PostgreSQL CI is triggered by authority/contract changes. README, ADR-PAY-0018,
 source comments and [maintenance/audit notes](https://github.com/baobab-platform/baobab-payments/blob/main/docs/plans/P0-04A-payments-contract-convergence.md)
-were updated. Local owner/generation/inventory/syntax checks pass. The initial
-hosted run passed 55 Rust tests, all 130 wire vectors, the actual standalone
-release probe and native PostgreSQL integration; Foundation's formatter findings
-were applied without relaxing the gate. Complete hosted final-head Rust, image,
-PostgreSQL CI and resolved review remain mandatory before merge.
+were updated. Local owner/generation/inventory/syntax checks pass. Hosted
+final-head validation passed 55 Rust tests, all 130 wire vectors, the actual
+standalone release probe, formatting/Clippy, container and native PostgreSQL
+integration. The initial formatter findings were applied without relaxing the
+gate. Immutable evidence: [Rust CI 38356152921](https://github.com/baobab-platform/baobab-payments/actions/runs/38356152921),
+[Foundation 38356154286](https://github.com/baobab-platform/baobab-payments/actions/runs/38356154286)
+and [native PostgreSQL 38356152992](https://github.com/baobab-platform/baobab-payments/actions/runs/38356152992).
+This companion document still requires its own final-head CI/review before merge.
 
 Payments has a PROVISIONED staging assessor with all three context/legal/documentary
 scopes; there is no production Payments assessment profile at this pin. Pinning
