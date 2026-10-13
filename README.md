@@ -87,7 +87,10 @@ acceptance and independent human decisions remain pending. The first P0-04A
 consumer slice, [Trade #145](https://github.com/baobab-platform/baobab-trade/pull/145),
 converges consequential wire validation to Shared `a9c53087` with generated
 schema provenance. It grants no workload admission or live certification. ERP
-is the next owning engine; see the completion plan follow-up for exact status.
+[PR #95](https://github.com/baobab-platform/baobab-erp/pull/95) adds matching exact
+Shared schemas to Python and the native JVM financial guard, with installed-wheel
+and isolated-JAR checks. Payments is the next owning engine, followed by
+Subscriptions and Trade Docs; see the completion plan follow-up for exact status.
 
 The scanner pipeline now binds canonical case/claim/evidence admission before
 custody, holds row locks through proof/audit registration and rechecks expiry
