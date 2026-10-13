@@ -82,6 +82,13 @@ version-specific deletion. Staging no longer accepts local custody. See the
 The committed scanner remains PROVISIONED; protected live activation is not
 implied by code or CI.
 
+P0-03 founding-record and mandate workflows exist, but genuine protected
+acceptance and independent human decisions remain pending. The first P0-04A
+consumer slice, [Trade #145](https://github.com/baobab-platform/baobab-trade/pull/145),
+converges consequential wire validation to Shared `a9c53087` with generated
+schema provenance. It grants no workload admission or live certification. ERP
+is the next owning engine; see the completion plan follow-up for exact status.
+
 The scanner pipeline now binds canonical case/claim/evidence admission before
 custody, holds row locks through proof/audit registration and rechecks expiry
 before commit. Direct registration without the lease denies. See the

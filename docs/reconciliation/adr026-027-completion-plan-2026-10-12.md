@@ -120,3 +120,55 @@ The four founding businesses retain Option B autonomy. ZuriBeans and Equator
 remain operating Organisations without invented incorporation. Documentary
 grace applies only to enumerated platform documents, never statutory/PSP/legal
 actor authority. No successful scan or OCR candidate verifies incorporation.
+
+## 6. P0-03 / P0-04A follow-up — 13 October 2026
+
+Re-audited CP `88b896d6a73607882e9dc4bff4745142b13a5e3f`, Shared
+`a9c53087d63caa356edf54ec8037ba1713c4827f`, IAM
+`ad7989ca085831303c265f943ef2b97735f911ad`, and Trade. The initial baseline
+tables above remain dated audit history; this follow-up records subsequent work.
+
+P0-03's existing registration, independent corporate-control and scoped-mandate
+workflows were reviewed against ADR-BCP-026/027. Nabhold's declared CIPC reference
+`2026/029839/07` and Thamani's `2026/291672/07` have documentary references in
+their repositories (`nabhold:docs/go-live/evidence/G01/production/2026-01-16-cipc-registration.md`
+and `thamani:docs/legal/evidence/2026-04-09-cipc-registration.md`). Those references do not establish independent acceptance
+in CP. Genuine protected-runtime submissions, independent control evidence and
+authorised maker/checker decisions have not been supplied for this execution.
+No founding verification or mandate was invented. ZuriBeans and Equator retain
+operating-business standing without invented incorporation.
+
+Following the permitted independent-consumer sequence, Trade
+[#145](https://github.com/baobab-platform/baobab-trade/pull/145) implements the
+first P0-04A engine slice at reviewed head
+`fa4322f5c4c12a63a42c5706c3af8c5d78274e15`: exact Shared pin `a9c53087`, explicit legal-actor,
+documentary and merchant-readiness consumption, byte-identical generated schema
+closure/provenance and runtime wire validation before scope, actor, provider and
+freshness checks. README, ADR follow-up and checkout maintainer notes were
+updated. See the [Trade implementation/audit plan](https://github.com/baobab-platform/baobab-trade/blob/main/docs/plans/P0-04A-trade-contract-convergence.md).
+
+Trade #140 (pg) and #143 (ajv-formats) were reviewed and merged with final-head
+checks green before implementation. Trade #135–138 (setup-node, Foundation,
+CodeQL and upload-artifact) subsequently passed full diff/workflow review,
+final-head checks and review-thread inspection, and were merged. The exact
+workflow updates are incorporated in the implementation head above. The full
+REST response reported clean mergeability; an initial summary adapter mapped
+unknown mergeability to false, which did not establish a conflict. Remaining
+#139/#142 require failed-gate repair; #141/#144 require a separately reviewed
+Node 26 upgrade. No waiver
+or exception extension was introduced. CP had no other open PR at this audit.
+
+Trade local checks passed: 459 unit tests, 88 exact-pin conformance tests,
+typecheck, lint, formatting and Medusa build; imported schema assets load from
+the standalone built validator. The Docker image consumes the compiled server
+root and loads validators using production dependencies during image build.
+Regeneration removes obsolete schemas and conformance checks the complete
+directory inventory. Hosted final-head CI and review are mandatory for merge.
+
+Trade's staging assessor remains PROVISIONED and lacks the documentary
+assessment scope; the ACTIVE production profile lacks both private assessment
+scopes. Missing scopes and existing mapping/market scope gaps require separate
+Shared/IAM/CP admission review. No consumer pin update activates a workload.
+ERP is the next owning-engine P0-04A slice, followed by Payments, Subscriptions
+and Trade Docs. P0-03 genuine acceptance, P0-04B native live execution and
+P0-02C cloud/source/OCR certification remain independently open.
