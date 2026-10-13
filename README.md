@@ -92,8 +92,11 @@ Shared schemas to Python and the native JVM financial guard, with installed-whee
 and isolated-JAR checks. Payments [PR #36](https://github.com/baobab-platform/baobab-payments/pull/36)
 adds exact CP authority/readiness schemas to the standalone Rust runtime,
 with 130 independent owner wire vectors and packaging checks. This admits no
-workload or certified money movement. Subscriptions is the next owning engine,
-followed by Trade Docs; see the completion plan follow-ups for exact status.
+workload or certified money movement. Subscriptions [PR #40](https://github.com/baobab-platform/baobab-subscriptions/pull/40)
+adds exact current INTERNAL and founding event schemas, with 144 owner wire
+vectors and isolated JAR checks. It grants no workload admission, invoice legal
+responsibility or provider readiness. Trade Docs is the final remaining consumer
+slice; see the completion plan follow-ups for exact status.
 
 The scanner pipeline now binds canonical case/claim/evidence admission before
 custody, holds row locks through proof/audit registration and rechecks expiry
