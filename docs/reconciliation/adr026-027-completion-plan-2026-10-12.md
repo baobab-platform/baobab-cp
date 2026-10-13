@@ -508,7 +508,7 @@ remain separate outstanding sets.
 
 Implementation validation at Trade head `ffa977a2e0a4dbb8ffa145d80791b102692799a7`:
 489 source tests passed, typecheck/lint/format/build and standalone authority assets
-passed. All 32 final-head checks and five applicable workflows passed, with the
+passed. All 32 final-head checks and all applicable workflows passed, with the
 path-scoped temporary formatter legitimately skipped. The full native PG17/Medusa
 commerce suite and binding regression passed in CI run `38426513869`, core job
 `115397216139`. Trade #147 merged at `1e380b749b35b2f4af26fdf9f7c2717ac5f7c0a7`.
