@@ -335,3 +335,53 @@ cloud/source/OCR gates remain independent.
 
 Next owning-engine consumer: Trade Docs. P0-04A stays open until that final slice
 converges; programme completion and operational certification remain separate.
+
+
+## 10. P0-04A Trade Docs follow-up — 13 October 2026
+
+Trade Docs [#13](https://github.com/baobab-platform/baobab-trade-docs/pull/13)
+implements the final current-consumer slice at reviewed head
+`25c85d5a277f354203ae5ccdda0fcfdb13e0911d`. Audited main was
+`04a51f38d22c05b7232de4dc4c08f3506a1ebd38`, with only main and no open PRs
+before this task. CP main `afeab1114cdbeb375b57230f0894b826e78c076a` had no
+open PRs before this companion; Shared is unchanged at
+`a9c53087d63caa356edf54ec8037ba1713c4827f`.
+
+The LA-05F issuer reference previously lacked a consumer lock and used manual
+wire checks. It now packages twelve exact declared Shared files with full
+relative reference closure, three owned validation entries and SHA-256 provenance.
+Regeneration reads immutable Git blobs, removes stale resources and checks the
+complete inventory. Both assessment passes validate the canonical legal request/
+response and stored context UUID before existing independent issuer, operation,
+provider, thirty-second lease and final mandate-equality checks. UUID/date-time
+formats, closed fields, policy provenance and negative-resolution conditions are
+asserted; no wire-valid denial becomes issuance authority. Runtime schema
+retrieval is disabled. Source comments, README, RTD source/test reference evidence,
+ADR follow-ups and [maintenance notes](https://github.com/baobab-platform/baobab-trade-docs/blob/main/docs/plans/P0-04A-trade-docs-contract-convergence.md)
+are updated. Proposed technology/issuer/API ADRs remain Proposed.
+
+Local validation passed fourteen tests, 45 immutable-owner/reference wire vectors,
+exact generation, compile/RTD checks and a real installed reference wheel tested
+outside the source checkout. Original byte/inventory and executable validator
+checks require no Shared checkout, issuer or database. Local Python is 3.12;
+hosted CI verified Python 3.14, all fourteen tests, the exact bundle and installed
+wheel's 45 wire cases. All five final-head checks passed, including RTD, CodeQL,
+secret scanning and action pinning; no review findings remained. Trade Docs #13
+merged as `73cd1c168be39305c2e238b1f0a5b72da7821539`. Immutable CI evidence:
+[issuer/reference 38382816870](https://github.com/baobab-platform/baobab-trade-docs/actions/runs/38382816870)
+and [RTD 38382817441](https://github.com/baobab-platform/baobab-trade-docs/actions/runs/38382817441). Each published blob and the complete tree match the reviewed
+local commit. This companion requires its own CI/review before merge.
+
+Trade Docs remains ARCHITECTURE_ONLY, with a PROVISIONED staging assessor and no
+running document API, authenticated CP transport, PostgreSQL immutable versioning,
+signer, customs gateway, outbox or publisher. P0-04A is complete for the current
+five-engine consumer scope following this final reviewed/CI-verified merge; it does not
+complete the wider programme, native implementation or live certification.
+
+Next scheduled set is P0-04B execution-point enforcement: audit remaining Trade
+binding/revocation, ERP trusted native context/readiness, Payments protected money
+lifecycle, Subscriptions invoice responsibility and Trade Docs actual versioned
+issuance/signing/outbox against each owner's current ADRs and open PRs. Do not
+substitute synthetic success for protected acceptance or infer capability support
+from a reference wheel. Genuine P0-03 founding/control/mandate decisions and
+P0-02C cloud/source/OCR qualification remain independently open.
