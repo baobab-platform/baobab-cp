@@ -103,7 +103,7 @@ P0-03 genuine records and P0-04B execution-point/live acceptance remain open.
 See the completion plan follow-ups for exact status.
 
 
-P0-04B has started with Trade [PR #146](https://github.com/baobab-platform/baobab-trade/pull/146):
+P0-04B-01 is implemented in merged Trade [PR #146](https://github.com/baobab-platform/baobab-trade/pull/146):
 applied native binding lifecycle, immutable proposals, database-time expiry,
 independent inactive approval/revocation and atomic decision/local-audit receipts.
 This first slice admits no human command API, workload scope, CP-owned activation

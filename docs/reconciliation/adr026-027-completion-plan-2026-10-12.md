@@ -432,8 +432,12 @@ typecheck/lint/format, Medusa build and packaged schema validation. The actual
 native Medusa/PostgreSQL lifecycle regression passed on final Trade head
 `73456750a494a0f7a33c8096a747e718c7ac6777`, including deferred pre-COMMIT expiry.
 Its immutable proof is [CI 38388095844, native job 115264762027](https://github.com/baobab-platform/baobab-trade/actions/runs/38388095844/job/115264762027).
-The wider native commerce regression and every other applicable final-head check
-must still complete before the owning merge. Test discovery
+The wider native commerce suite also passed. All 33 final-head checks were
+clear (25 succeeded, eight non-applicable checks skipped); all five applicable
+workflows passed, with only the path-inapplicable temporary formatter skipped.
+No unresolved review findings remained. Trade #146 merged as
+`71e62d0a300444a1c1d474b5346b14c0f22abfe8`. P0-04B-01 code/native storage proof
+is complete; authenticated activation and the wider execution programme remain open. Test discovery
 selects source directories so an earlier build's CJS test copies do not become
 extra suites. The hosted native proof applies the actual Medusa migrations to disposable
 PostgreSQL 17 and verifies lifecycle, immutable scope/provenance, duplicate proposal/
