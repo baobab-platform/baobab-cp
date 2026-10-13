@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/commerce/v1/seller-binding.schema.json",
+  "title": "P0-04B-02 authenticated seller binding command admission",
+  "description": "CP verifies an actual human IAM token for the CP audience, ACTIVE canonical principal, exact nondelegated organisation administrative grant and current assurance. A response is a maximum five-second, exact-command admission check obtained directly by Trade over trusted transport, never a portable bearer grant, evidence verification or provider activation. Trade owns immutable native cart coordinates and maker/checker/operator history. CP alone issues workload-owned bounded RUNTIME contexts and legal actor facts. Registered vocabulary is not assigned to any client or profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "BindingScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cartId",
+        "tenantId",
+        "organisationId",
+        "responsibleLegalEntityId",
+        "marketCode",
+        "currencyCode",
+        "salesChannelId",
+        "regionId"
+      ],
+      "properties": {
+        "cartId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "tenantId": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 63,
+          "pattern": "^tn_[a-z0-9]+$"
+        },
+        "organisationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "format": "uuid"
+        },
+        "responsibleLegalEntityId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "marketCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Z]{2}$"
+        },
+        "currencyCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Z]{3}$"
+        },
+        "salesChannelId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "regionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "AuthorizeBindingRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "command_digest"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/BindingScope"
+        },
+        "command_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "AuthorizeBindingResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "command_digest",
+        "decision_id",
+        "principal_id",
+        "issuer",
+        "token_id",
+        "scope_name",
+        "evaluated_at",
+        "valid_until",
+        "matched_grant_ids",
+        "provider_permissions_granted"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/BindingScope"
+        },
+        "command_digest": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "decision_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "format": "uuid"
+        },
+        "principal_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "issuer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "format": "uri"
+        },
+        "token_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "scope_name": {
+          "enum": [
+            "trade-binding:propose",
+            "trade-binding:approve",
+            "trade-binding:activate",
+            "trade-binding:revoke"
+          ]
+        },
+        "evaluated_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "format": "date-time"
+        },
+        "valid_until": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "format": "date-time"
+        },
+        "matched_grant_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "provider_permissions_granted": {
+          "const": false
+        }
+      }
+    }
+  }
+}

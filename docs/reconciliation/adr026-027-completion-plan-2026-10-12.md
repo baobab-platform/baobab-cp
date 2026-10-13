@@ -466,3 +466,14 @@ these stubs. P0-04B-02 must resolve that contract/admission boundary explicitly.
 Genuine P0-03 corporate/control/mandate records and P0-02C cloud/source/OCR
 qualification remain independently open, along with protected operational
 acceptance. An approved inactive proposal is not permission to transact.
+
+## 12. P0-04B-02 — authenticated binding intake and CP-owned activation
+
+Shared #300 (`5dcff30`) defines CP human-only scope/digest admission without
+assignments. CP implements current canonical human/exact Organisation grant and
+assurance checks, default-off/nonproduction. Trade derives native cart coordinates,
+preserves original proposal/checker receipts and requires an independent third
+operator plus a bounded Trade-owned CP RUNTIME context/current legal seller fact
+for versioned activation. Atomic activation/history/native acceptance is under
+validation in this set; larger P0-04B and real P0-03 corporate/workload/provider
+acceptance remain open. Tests use synthetic authority fixtures only.

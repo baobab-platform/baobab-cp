@@ -204,3 +204,5 @@ This runs the Console development application; privileged workspace routes requi
 Start with the [ADR register](docs/adr/index.md). Read the **accepted** BCP-017 through BCP-027 decisions and amendments, plus the applicable Shared contracts, before changing a governed lifecycle. The [FE-00 historical snapshot](docs/frontend/fe-00-architecture-lock.md) is not a current readiness report.
 
 For changes: [CONTRIBUTING.md](CONTRIBUTING.md) and [developer documentation](docs/development/index.md). New governed operations must update their Shared schema/pin, API and BFF tests, runbook, README and maintenance comments in the same PR. Never claim successful live staging without recorded evidence.  For vulnerabilities: [SECURITY.md](SECURITY.md). See [LICENSE](LICENSE). Sensitive evidence, secrets, bearer tokens and live tenant information must not enter test fixtures, screenshots or the browser bundle.
+
+P0-04B-02 [Trade human command intake](docs/migrations/P0-04B-02-trade-binding-intake.md) is default-off and nonproduction only. CP verifies live exact grants; it does not grant merchant/provider authority.

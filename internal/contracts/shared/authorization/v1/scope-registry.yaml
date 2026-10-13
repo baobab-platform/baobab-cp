@@ -746,3 +746,32 @@ scopes:
     audience: ["baobab-control-plane"]
     allowed_actors: ["workload"]
     grants_authority: false
+
+  # P0-04B-02: CP human command admission; registered, never assigned.
+  - name: "trade-binding:propose"
+    description: "Human CP admission check for an exact Trade cart binding propose command. Requires current organisation.trade-binding.propose grant and assurance; never legal or provider authority. Assigned to no client."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
+  - name: "trade-binding:approve"
+    description: "Human CP admission check for an exact Trade cart binding approve command. Requires current organisation.trade-binding.approve grant and assurance; never legal or provider authority. Assigned to no client."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
+  - name: "trade-binding:activate"
+    description: "Human CP admission check for an exact Trade cart binding activate command. Requires current organisation.trade-binding.activate grant and assurance; never legal or provider authority. Assigned to no client."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
+  - name: "trade-binding:revoke"
+    description: "Human CP admission check for an exact Trade cart binding revoke command. Requires current organisation.trade-binding.revoke grant and assurance; never legal or provider authority. Assigned to no client."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
