@@ -448,32 +448,79 @@ checkout acceptance is asserted. Each published Git blob and the complete tree
 match the reviewed local commit. All applicable final-head CI/review must pass
 before either owning PR is merged.
 
-### Remaining P0-04B sequence
+### Remaining P0-04B sequence after P0-04B-02
 
 | Set | Owning boundary and evidence still required |
 | --- | --- |
-| P0-04B-02 | Trade authenticated command intake using approved Shared/IAM vocabulary; actual cart/region/channel and CP-issued owned RUNTIME handle; independently approved versioned activation/revocation |
 | Trade protected execution | Real native completeCart/replay/revocation/bypass proof, current CP actor/documentary standing, qualified merchant readiness and separately admitted workloads |
 | ERP | Native trusted context/readiness providers and atomic posting/historical actor acceptance |
 | Payments | Protected authenticated transport, qualified merchant/provider and full native money lifecycle |
 | Subscriptions | Actual invoice responsibility, protected billing and provider handoff |
 | Trade Docs | Deployed immutable versioning, actual issuer/signing and atomic outbox workflow |
 
-Current `trade:legal-seller-binding:*` scopes are local candidates, absent from
-Shared's registry. Candidate IAM/evidence HTTP gateways are not a deployed
-approved authority. Do not enable a human mutation endpoint or activation from
-these stubs. P0-04B-02 must resolve that contract/admission boundary explicitly.
+P0-04B-02 closes the authenticated intake and independent activation implementation
+boundary (section 12). The old candidate scope strings and IAM/evidence gateways
+are retired; the canonical human CP vocabulary is registered in Shared and actual
+CP admission/owned-context/legal-actor routes are composed in Trade. Intake stays
+default-off in recognised nonproduction; no human client, grant, workload or provider
+assignment is created and production checkout remains closed.
 Genuine P0-03 corporate/control/mandate records and P0-02C cloud/source/OCR
 qualification remain independently open, along with protected operational
 acceptance. An approved inactive proposal is not permission to transact.
 
 ## 12. P0-04B-02 — authenticated binding intake and CP-owned activation
 
-Shared #300 (`5dcff30`) defines CP human-only scope/digest admission without
-assignments. CP implements current canonical human/exact Organisation grant and
-assurance checks, default-off/nonproduction. Trade derives native cart coordinates,
-preserves original proposal/checker receipts and requires an independent third
-operator plus a bounded Trade-owned CP RUNTIME context/current legal seller fact
-for versioned activation. Atomic activation/history/native acceptance is under
-validation in this set; larger P0-04B and real P0-03 corporate/workload/provider
-acceptance remain open. Tests use synthetic authority fixtures only.
+Shared #300 (`5dcff30de1bc6142ad4b8801bbe3b2b66a0670ae`) defines closed human
+CP scope/digest admission and exact nondelegated Organisation HIGH permissions,
+without client, profile or workload assignments. IAM #112 (`119f602`) aligns scope
+and compiled federation provenance; CP #389 (`beb11b0`) verifies actual IAM tokens,
+ACTIVE canonical human identity, current exact grant and assurance on every call.
+CP #390 (`c739d8e`) uses the established nonproduction allowlist and proves positive
+routing in development/test/integration/sandbox/staging; production/unknown and disabled-by-default configurations deny. The pin and profile review findings are corrected and resolved.
+
+Trade #147 preserves original proposal/checker history and admits commands only
+through that owning CP endpoint. Native Medusa supplies cart channel/region/currency;
+authenticated non-withdrawal commands hold the native cart row through COMMIT.
+Activation requires a third canonical principal, authenticated maker/checker
+receipts, a fresh bounded Trade-owned CP RUNTIME context and current seller fact.
+The CP seller source is re-resolved after final human/native I/O; observed mandate
+revocation or change denies while the first fact is still unexpired.
+Versioned activation, decision and local unpublished audit records commit atomically;
+current-clock deferred constraints deny expired admission/native coordinates/legal
+leases. Old unauthenticated storage approvals cannot be promoted. Revocation retains
+all prior proof and remains possible after old context/mandate expiry and removal
+of workload credential configuration. Trade #148 additionally reads legacy immutable
+scope directly for withdrawal when no original proposal snapshot exists; no historical
+proposal is invented and those rows cannot be approved or activated.
+
+Native PostgreSQL 17/Medusa acceptance uses real native carts with explicitly synthetic
+CP ports. It covers independent activation, denied current seller/completed cart,
+legacy history, concurrent/replayed transitions, context rewrites, append-only proof,
+withdrawal and pre-COMMIT admission expiry rollback. This is runtime/contract seam
+proof, not actual IAM grant, mandate, workload admission or merchant certification.
+
+**P0-04B remains open.** The next bounded Trade set is protected native checkout
+acceptance with commit-point revocation/lease/replay fencing and independent qualified
+merchant readiness. Real P0-03 corporate/control/mandate records, authorised human
+client/grant decisions and workload/provider acceptance remain outstanding. ERP,
+Payments, Subscriptions and Trade Docs execution-point boundaries in section 11
+remain separate outstanding sets.
+
+Implementation validation at Trade head `ffa977a2e0a4dbb8ffa145d80791b102692799a7`:
+489 source tests passed, typecheck/lint/format/build and standalone authority assets
+passed. All 32 final-head checks and all applicable workflows passed, with the
+path-scoped temporary formatter legitimately skipped. The full native PG17/Medusa
+commerce suite and binding regression passed in CI run `38426513869`, core job
+`115397216139`. Trade #147 merged at `1e380b749b35b2f4af26fdf9f7c2717ac5f7c0a7`.
+Shared conformance covers 89 checks against the owning commit, including exact
+generated bytes. This programme receipt still requires its own final-head checks
+and clear review before merge.
+
+Legacy withdrawal follow-up Trade #148 head `2efaf3bcaf70b5e818fd3d19a9254580b0ae7518`:
+492 source tests pass. Its PG17 acceptance seeds an expired ACTIVE row under the
+actual original owner migration in an isolated test schema, applies the actual
+lifecycle/activation migrations, denies approval/activation and withdraws with
+current human authority while retaining null snapshots and original historical
+fields. It does not disable triggers or manufacture old audit receipts; the schema
+and new receipt remain until disposal of the explicitly marked CI database. Full
+final-head native/core checks and review are required before follow-up merge.
