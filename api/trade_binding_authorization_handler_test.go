@@ -17,7 +17,7 @@ import (
 )
 
 func TestTradeBindingIntakeAdmission(t *testing.T) {
-	for _, scenario := range []string{"allowed", "scope-only", "workload", "sibling", "delegation", "revoked", "weak-assurance", "inactive-human", "expired-token", "foreign-issuer", "production", "off", "unknown-field"} {
+	for _, scenario := range []string{"allowed", "allowed-test", "allowed-sandbox", "allowed-development", "allowed-staging", "scope-only", "workload", "sibling", "delegation", "revoked", "weak-assurance", "inactive-human", "expired-token", "foreign-issuer", "production", "off", "unknown-field"} {
 		t.Run(scenario, func(t *testing.T) {
 			now := time.Now().UTC()
 			ctx := context.Background()
@@ -35,6 +35,14 @@ func TestTradeBindingIntakeAdmission(t *testing.T) {
 			env := "integration"
 			enabled := true
 			switch scenario {
+			case "allowed-test":
+				env = "test"
+			case "allowed-sandbox":
+				env = "sandbox"
+			case "allowed-development":
+				env = "development"
+			case "allowed-staging":
+				env = "staging"
 			case "scope-only":
 				grants = nil
 			case "workload":
@@ -67,7 +75,7 @@ func TestTradeBindingIntakeAdmission(t *testing.T) {
 			r.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
-			if scenario != "allowed" {
+			if !strings.HasPrefix(scenario, "allowed") {
 				if w.Code < 400 {
 					t.Fatalf("denial bypassed: %d %s", w.Code, w.Body.String())
 				}

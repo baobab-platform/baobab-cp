@@ -380,7 +380,7 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v2/legal-actor-mandates/{mandateID}/decision", mandates.decide)
 	}
 	// P0-04B-02 human intake stays opt-in, with no role compatibility path.
-	if dependencies.TradeBindingIntakeEnabled && (dependencies.Environment == "local" || dependencies.Environment == "development" || dependencies.Environment == "integration" || dependencies.Environment == "staging") {
+	if dependencies.TradeBindingIntakeEnabled && peoRoutesPermittedIn(dependencies.Environment) {
 		for _, operation := range []string{"propose", "approve", "activate", "revoke"} {
 			r.With(a.authorize(a.adminVerifier, "human", "trade-binding:"+operation)).Post("/internal/trade-binding/v1/"+operation+"/authorize", a.authorizeTradeBinding(operation))
 		}
