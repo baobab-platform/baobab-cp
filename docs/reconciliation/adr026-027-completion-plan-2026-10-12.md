@@ -141,15 +141,21 @@ operating-business standing without invented incorporation.
 Following the permitted independent-consumer sequence, Trade
 [#145](https://github.com/baobab-platform/baobab-trade/pull/145) implements the
 first P0-04A engine slice at reviewed head
-`d42c8e6c8be1b6287b76f8152e67021576e54629`: exact Shared pin `a9c53087`, explicit legal-actor,
+`fa4322f5c4c12a63a42c5706c3af8c5d78274e15`: exact Shared pin `a9c53087`, explicit legal-actor,
 documentary and merchant-readiness consumption, byte-identical generated schema
 closure/provenance and runtime wire validation before scope, actor, provider and
 freshness checks. README, ADR follow-up and checkout maintainer notes were
 updated. See the [Trade implementation/audit plan](https://github.com/baobab-platform/baobab-trade/blob/main/docs/plans/P0-04A-trade-contract-convergence.md).
 
 Trade #140 (pg) and #143 (ajv-formats) were reviewed and merged with final-head
-checks green before implementation. Remaining dependency PRs require conflict
-refresh, failed-gate repair or a separately reviewed Node 26 upgrade. No waiver
+checks green before implementation. Trade #135–138 (setup-node, Foundation,
+CodeQL and upload-artifact) subsequently passed full diff/workflow review,
+final-head checks and review-thread inspection, and were merged. The exact
+workflow updates are incorporated in the implementation head above. The full
+REST response reported clean mergeability; an initial summary adapter mapped
+unknown mergeability to false, which did not establish a conflict. Remaining
+#139/#142 require failed-gate repair; #141/#144 require a separately reviewed
+Node 26 upgrade. No waiver
 or exception extension was introduced. CP had no other open PR at this audit.
 
 Trade local checks passed: 459 unit tests, 88 exact-pin conformance tests,
