@@ -428,10 +428,15 @@ are updated. No canonical capability, event producer, broker publication or scop
 admission is added.
 
 Local validation passed 462 source tests, 88 exact-pin Shared conformance tests,
-typecheck/lint/format, Medusa build and packaged schema validation. Test discovery
+typecheck/lint/format, Medusa build and packaged schema validation. The actual
+native Medusa/PostgreSQL lifecycle regression passed on final Trade head
+`73456750a494a0f7a33c8096a747e718c7ac6777`, including deferred pre-COMMIT expiry.
+Its immutable proof is [CI 38388095844, native job 115264762027](https://github.com/baobab-platform/baobab-trade/actions/runs/38388095844/job/115264762027).
+The wider native commerce regression and every other applicable final-head check
+must still complete before the owning merge. Test discovery
 selects source directories so an earlier build's CJS test copies do not become
-extra suites. Hosted CI must apply the actual Medusa migrations to disposable
-PostgreSQL 17 and prove lifecycle, immutable scope/provenance, duplicate proposal/
+extra suites. The hosted native proof applies the actual Medusa migrations to disposable
+PostgreSQL 17 and verifies lifecycle, immutable scope/provenance, duplicate proposal/
 approval and approval/revocation races, direct activation/audit denial, lock-wait
 expiry, audit-I/O rollback and expiry immediately before COMMIT. Fixtures are
 synthetic storage proof and remain inactive; no IAM/CP/legal/provider or successful
