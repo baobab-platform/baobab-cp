@@ -747,6 +747,22 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
+  # P0-04B ERP (ADR-SHARED-034): per-operation posting-authority resolution.
+  # CP derives tenant, Organisation, market, role, activity and mandate from
+  # the workload-owned RUNTIME context and the erp/v2 operation catalogue.
+  # AUTHORIZED is a 30-second fact for ONE operation, never a grant.
+  - name: "erp-posting-authority:resolve"
+    description: >-
+      Private workload-only Control Plane resolution of whether a bounded,
+      previously resolved RUNTIME context may perform one catalogued ERP
+      accounting operation through an engine instance bound to its tenant.
+      Requires dedicated IAM admission, ACTIVE workload registry and an
+      explicitly allowlisted caller. Cannot select a legal actor, mandate or
+      market and grants no provider, posting or finance-readiness authority.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
   # P0-04B-02: CP human command admission; registered, never assigned.
   - name: "trade-binding:propose"
     description: "Human CP admission check for an exact Trade cart binding propose command. Requires current organisation.trade-binding.propose grant and assurance; never legal or provider authority. Assigned to no client."

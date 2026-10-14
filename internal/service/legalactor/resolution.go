@@ -49,6 +49,8 @@ type Candidate struct {
 	ApprovedBy                      string
 	ApprovedAt                      *time.Time
 	ActorVerified                   bool
+	// SupersedesMandateID is the immutable predecessor, empty for a root.
+	SupersedesMandateID string
 }
 
 type Resolution struct {
@@ -59,6 +61,12 @@ type Resolution struct {
 	ResponsibleLegalEntityID string
 	EvidenceReferences       []string
 	ValidUntil               *time.Time
+	// Mandate lineage for historical attribution (ADR-BCP-027 §10.2), set
+	// only when AUTHORIZED. Mandates are immutable, so MandateID pins the
+	// exact version; SupersedesMandateID links its predecessor.
+	SupersedesMandateID  string
+	MandateEffectiveFrom *time.Time
+	MandateEffectiveTo   *time.Time
 }
 
 // Resolve evaluates trusted candidates at the server's present evaluation
@@ -142,6 +150,13 @@ func Resolve(request Request, candidates []Candidate, evaluatedAt time.Time) Res
 	result.MandateID = m.MandateID
 	result.ResponsibleLegalEntityID = m.ResponsibleLegalEntityID
 	result.EvidenceReferences = append([]string(nil), m.EvidenceReferences...)
+	result.SupersedesMandateID = m.SupersedesMandateID
+	from := m.EffectiveFrom.UTC()
+	result.MandateEffectiveFrom = &from
+	if m.EffectiveTo != nil {
+		to := m.EffectiveTo.UTC()
+		result.MandateEffectiveTo = &to
+	}
 	// Shared requires valid_until even for open-ended mandates.
 	// An explicit end never extends a bounded decision. Revocation can
 	// happen before this timestamp, so consumers must re-resolve per action.

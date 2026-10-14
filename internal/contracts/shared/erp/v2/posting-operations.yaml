@@ -1,0 +1,40 @@
+# contracts/erp/v2/posting-operations.yaml
+#
+# Closed catalogue of governed ERP accounting operations (ADR-SHARED-034).
+# Each operation class names exactly ONE legal-actor role and ONE activity that
+# an ACTIVE Control Plane OperatingLegalActorMandate must scope for the posting
+# to be authorised (ADR-BCP-027 §6.1, §8.3). Control Plane derives role and
+# activity from this catalogue; the caller never supplies them.
+#
+# Which native ERP documents belong to a class is ERP's execution policy
+# (ADR-ERP-021); no vendor table or identifier appears in Shared. ERP must DENY
+# a native document that maps to no class or to more than one.
+#
+# capability_key stays null until ADR-SHARED-033 registers the finance keys;
+# a null key matches only mandates whose capability scope is empty.
+version: 1
+operations:
+  - operation_class: erp.gl-journal.post
+    legal_actor_role: ACCOUNTING_ENTITY
+    activity: GENERAL_LEDGER_POSTING
+    capability_key: null
+  - operation_class: erp.customer-invoice.issue
+    legal_actor_role: INVOICE_ISSUER
+    activity: CUSTOMER_INVOICE_ISSUANCE
+    capability_key: null
+  - operation_class: erp.payment.record
+    legal_actor_role: ACCOUNTING_ENTITY
+    activity: PAYMENT_RECORDING
+    capability_key: null
+  - operation_class: erp.allocation.record
+    legal_actor_role: ACCOUNTING_ENTITY
+    activity: PAYMENT_ALLOCATION
+    capability_key: null
+  - operation_class: erp.shipment.complete
+    legal_actor_role: CONTRACTING_PARTY
+    activity: GOODS_DELIVERY
+    capability_key: null
+  - operation_class: erp.sales-order.complete
+    legal_actor_role: CONTRACTING_PARTY
+    activity: SALES_ORDER_COMMITMENT
+    capability_key: null
