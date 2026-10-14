@@ -51,3 +51,8 @@ This increment implements the CP authority source and its decision history only.
 - production enablement
 
 These all remain open. Passing CP tests is not ERP acceptance. No Nabhold, ZuriBeans, Equator & Estate or Thamani authority record is created.
+
+**Update (14 October 2026):** ERP enforcement merged in baobab-erp#96, and Gate D passed for GL journals in
+baobab-erp#98 (CI run 38560332080, against a synthetic CP). The receipt is in
+`docs/reconciliation/adr026-027-completion-plan-2026-10-12.md` §14. IAM workload activation, real mandates and
+placements, and production enablement remain open.
