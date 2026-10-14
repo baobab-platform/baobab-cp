@@ -452,7 +452,7 @@ before either owning PR is merged.
 
 | Set | Owning boundary and evidence still required |
 | --- | --- |
-| Trade protected execution | Real native completeCart/replay/revocation/bypass proof, current CP actor/documentary standing, qualified merchant readiness and separately admitted workloads |
+| Trade protected execution | Binding intake/activation and the native cart consumption fence have source/native seam coverage (§12–13); full protected order/payment paths, current external standing, qualified merchant readiness and separately admitted workloads remain open |
 | ERP | Native trusted context/readiness providers and atomic posting/historical actor acceptance |
 | Payments | Protected authenticated transport, qualified merchant/provider and full native money lifecycle |
 | Subscriptions | Actual invoice responsibility, protected billing and provider handoff |
@@ -499,9 +499,9 @@ legacy history, concurrent/replayed transitions, context rewrites, append-only p
 withdrawal and pre-COMMIT admission expiry rollback. This is runtime/contract seam
 proof, not actual IAM grant, mandate, workload admission or merchant certification.
 
-**P0-04B remains open.** The next bounded Trade set is protected native checkout
-acceptance with commit-point revocation/lease/replay fencing and independent qualified
-merchant readiness. Real P0-03 corporate/control/mandate records, authorised human
+**P0-04B remains open.** Section 13 records the next bounded Trade native cart
+consumption/lease/replay fence. Full protected order/payment paths and independent
+qualified merchant readiness remain separate outstanding execution gates. Real P0-03 corporate/control/mandate records, authorised human
 client/grant decisions and workload/provider acceptance remain outstanding. ERP,
 Payments, Subscriptions and Trade Docs execution-point boundaries in section 11
 remain separate outstanding sets.
@@ -524,3 +524,53 @@ current human authority while retaining null snapshots and original historical
 fields. It does not disable triggers or manufacture old audit receipts; the schema
 and new receipt remain until disposal of the explicitly marked CI database. Full
 final-head native/core checks and review are required before follow-up merge.
+
+
+## 13. P0-04B-03 — native cart consumption and COMMIT lease fence
+
+Trade [#149](https://github.com/baobab-platform/baobab-trade/pull/149) follows the
+merged binding intake/activation and legacy withdrawal work. The actual Medusa
+completion saga records a durable authorization after the installed validate hook
+checks current server-owned binding, CP legal actor, negative-only documentary
+standing and independent Payments readiness. Ever-activated carts consume one
+receipt at their `completed_at` transition under the same per-cart advisory fence
+as revocation. Current ACTIVE revision, native coordinates, binding/context
+expiry and the legal/documentary/merchant leases are checked with the database
+clock; a deferred constraint repeats these checks immediately before COMMIT.
+Expiry between UPDATE and COMMIT rolls back completion and consumption together.
+Compensation releases the consumed receipt and voids outstanding ones; retry
+requires fresh authorization. Guarded replay rechecks current standing; revoked
+replay denies while preserving the historical order. A replay shortcut requires
+the live native order/link; a bare completion timestamp cannot bypass fresh
+authorization or be replaced on an activated cart.
+
+The native PG17 acceptance uses real carts, the actual `completeCartWorkflow`,
+applied migrations and durable receipt storage. External CP/Payments ports are
+explicitly synthetic. Database-only cases exercise revocation, missing receipt,
+lease expiry, direct cart-completion bypass, append-only history, multiple
+outstanding receipts, compensation, concurrent completion and deferred COMMIT
+expiry. Guard-enabled cases exercise the actual installed validate hook for
+completion/replay and documentary, merchant, missing-binding and revoked-replay
+denials. These seams do not qualify any real IAM principal/grant, legal mandate,
+workload, merchant or provider. Generated Redis state is excluded from source.
+
+**Boundary:** Medusa creates orders and commits cart completion, native links,
+events and payment steps separately. This local cart fence is not a serializable
+cross-engine transaction or a fence on direct order/payment execution. External
+revocation after assessment is bounded by the shortest recorded lease, including
+the at-most-two-second documentary lease. Never-activated/unbound SQL completion
+also remains outside the trigger. Production remains hard-denied. Wider P0-04B,
+qualified provider/workload acceptance, genuine P0-03 and P0-02C stay open.
+
+Continuation source validation: 501 tests in 91 source files, 89 Shared conformance
+checks at unchanged pin `5dcff30`, typecheck/lint/format/build and authority assets,
+plus contract/ports/isolation/conformance/ZB-04 checks passed locally. Published
+Trade head is `c6790e2c973bb3611424d25bf337f7fd38a4260d`; the final-head PG17
+receipt is [CI run 38512966743](https://github.com/baobab-platform/baobab-trade/actions/runs/38512966743),
+core job `115685410256`. Both the Trade implementation and this programme receipt
+require all applicable final-head checks and clear review before merge. No native
+CI pass is inferred from local source checks.
+
+Next bounded owning-engine set: ERP native trusted context/readiness, atomic
+posting and historical actor acceptance. Trade full order/payment execution and
+real operational qualification remain separately open.

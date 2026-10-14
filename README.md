@@ -107,8 +107,12 @@ P0-04B-01 is implemented in merged Trade [PR #146](https://github.com/baobab-pla
 applied native binding lifecycle, immutable proposals, database-time expiry,
 independent inactive approval/revocation and atomic decision/local-audit receipts.
 This first slice admits no human command API, workload scope, CP-owned activation
-or qualified merchant. Authenticated Trade binding intake/issuance is next; ERP,
-Payments, Subscriptions, Trade Docs and protected execution acceptance remain open.
+or qualified merchant. P0-04B-02 subsequently added authenticated human intake
+and independent CP-owned activation (Trade #147/#148, Shared #300, IAM #112,
+CP #389/#390). The P0-04B-03 native cart consumption/COMMIT lease fence is
+recorded in the [completion plan](docs/reconciliation/adr026-027-completion-plan-2026-10-12.md).
+Qualified workloads/merchants, full protected order/payment execution and ERP,
+Payments, Subscriptions and Trade Docs execution-point acceptance remain open.
 
 The scanner pipeline now binds canonical case/claim/evidence admission before
 custody, holds row locks through proof/audit registration and rechecks expiry
