@@ -573,9 +573,13 @@ checks at unchanged pin `5dcff30`, typecheck/lint/format/build and authority ass
 plus contract/ports/isolation/conformance/ZB-04 checks passed locally. Published
 Trade head is `c6790e2c973bb3611424d25bf337f7fd38a4260d`; the final-head PG17
 receipt is [CI run 38512966743](https://github.com/baobab-platform/baobab-trade/actions/runs/38512966743),
-core job `115685410256`. Both the Trade implementation and this programme receipt
-require all applicable final-head checks and clear review before merge. No native
-CI pass is inferred from local source checks.
+core job `115685410256`. That final-head run passed the full native commerce
+suite and explicitly logged guarded checkout/COMMIT-expiry acceptance. All 33
+checks were clear (25 success, 8 legitimate skips), all five applicable workflows
+passed and the path-scoped temporary formatter was skipped. Review was clear
+before #149 merged at `5e1cc718354e02c92658cf8779fa00068dbe6af1`. This programme
+receipt independently requires its own final-head checks and clear review before
+merge; the native proof remains synthetic-port acceptance, not certification.
 
 Next bounded owning-engine set: ERP native trusted context/readiness, atomic
 posting and historical actor acceptance. Trade full order/payment execution and
