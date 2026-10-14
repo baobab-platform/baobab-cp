@@ -93,6 +93,9 @@ type Config struct {
 	// P0-04B ERP posting-authority resolution (ADR-SHARED-034), default off.
 	ErpPostingAuthorityEnabled   bool
 	ErpPostingAuthorityClientIDs []string
+	// P0-04B Payments money-movement authority (ADR-SHARED-035), default off.
+	PaymentsMoneyMovementAuthorityEnabled   bool
+	PaymentsMoneyMovementAuthorityClientIDs []string
 	// OrganisationFirstV2Enabled mounts the LA-03 Organisation-first tenant
 	// onboarding routes (/v2/tenant-onboarding/.../primary-organisation and
 	// /v2/tenants). Default false (ORGANISATION_FIRST_V2_ENABLED). Even when
@@ -155,6 +158,8 @@ func Load() (Config, error) {
 	c.LegalActorAssessmentEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("LEGAL_ACTOR_ASSESSMENT_ENABLED")), "true")
 	c.ErpPostingAuthorityEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("ERP_POSTING_AUTHORITY_ENABLED")), "true")
 	c.ErpPostingAuthorityClientIDs = strings.Split(os.Getenv("ERP_POSTING_AUTHORITY_CLIENT_IDS"), ",")
+	c.PaymentsMoneyMovementAuthorityEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("PAYMENTS_MONEY_MOVEMENT_AUTHORITY_ENABLED")), "true")
+	c.PaymentsMoneyMovementAuthorityClientIDs = strings.Split(os.Getenv("PAYMENTS_MONEY_MOVEMENT_AUTHORITY_CLIENT_IDS"), ",")
 	c.OrganisationFirstV2Enabled = strings.EqualFold(strings.TrimSpace(os.Getenv("ORGANISATION_FIRST_V2_ENABLED")), "true")
 	c.FederationSourceEngineInstanceID = os.Getenv("FEDERATION_SOURCE_ENGINE_INSTANCE_ID")
 	c.WorkloadRegistryFile = strings.TrimSpace(os.Getenv("WORKLOAD_REGISTRY_FILE"))

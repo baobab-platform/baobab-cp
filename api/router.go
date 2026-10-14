@@ -135,6 +135,11 @@ type Dependencies struct {
 	ErpPostingAuthorityEnabled   bool
 	ErpPostingAuthority          erpPostingAuthorityStore
 	ErpPostingAuthorityClientIDs []string
+	// P0-04B Payments (ADR-SHARED-035): per-movement money-movement
+	// authority. Default off, nonproduction only, explicit client allowlist.
+	PaymentsMoneyMovementAuthorityEnabled   bool
+	PaymentsMoneyMovementAuthority          paymentsMoneyMovementStore
+	PaymentsMoneyMovementAuthorityClientIDs []string
 	// P0-02B is a separate default-off private scanner boundary. Its verifier
 	// MUST compose current token introspection and fresh registry authority.
 	ScannerIntakeEnabled bool
@@ -850,6 +855,25 @@ func New(dependencies Dependencies) http.Handler {
 				identities: dependencies.Identities, store: dependencies.ErpPostingAuthority, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", erpPostingAuthorityScope)).
 				Post("/internal/erp/v1/posting-authority/resolve", h.resolve)
+		}
+	}
+	// P0-04B Payments grants a CP legal-actor FACT for one money movement,
+	// never provider, financial-approval or readiness permission. No
+	// production route.
+	if dependencies.PaymentsMoneyMovementAuthorityEnabled && dependencies.PaymentsMoneyMovementAuthority != nil &&
+		dependencies.Contexts != nil && dependencies.Identities != nil &&
+		dependencies.WorkloadRegistry != nil && peoRoutesPermittedIn(dependencies.Environment) {
+		allow := make(map[string]bool)
+		for _, id := range dependencies.PaymentsMoneyMovementAuthorityClientIDs {
+			if id = strings.TrimSpace(id); id != "" {
+				allow[id] = true
+			}
+		}
+		if len(allow) > 0 {
+			h := paymentsMoneyMovementHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
+				identities: dependencies.Identities, store: dependencies.PaymentsMoneyMovementAuthority, clientIDs: allow}
+			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", paymentsMoneyMovementScope)).
+				Post("/internal/payments/v1/money-movement-authority/resolve", h.resolve)
 		}
 	}
 	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&

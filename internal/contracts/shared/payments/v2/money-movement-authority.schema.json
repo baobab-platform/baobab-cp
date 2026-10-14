@@ -1,0 +1,634 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/payments/v2/money-movement-authority.schema.json",
+  "title": "Payments money-movement authority resolution (P0-04B Payments, ADR-SHARED-035)",
+  "description": "Control Plane legal authority for exactly one consequential Payments money movement. CP owns the tenant, operating Organisation, market, verified legal entity, mandate, role, activity and engine-instance binding; Payments owns the financial instruction, its financial validity, provider readiness and execution. The request names a previously resolved principal-owned RUNTIME context, the Payments engine instance, a catalogued operation class, the exact operation reference and attempt, and the canonical instruction with its fingerprint. The instruction's tenant, Organisation and market are echoes CP checks against the context, never selections. An AUTHORIZED decision is a short-lived fact for exactly one operation reference, attempt and instruction fingerprint; it never grants provider permission, financial approval, PSP readiness or accounting authority, and its absence of restrictions never implies permission to move funds.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "operationClass": {
+      "type": "string",
+      "enum": [
+        "payments.authorization.create",
+        "payments.capture.execute",
+        "payments.refund.execute",
+        "payments.authorization.void",
+        "payments.payout.execute"
+      ],
+      "description": "Closed vocabulary; money-movement-operations.yaml maps each class to its role, activity and capability. A class marked activatable: false is always OPERATION_NOT_ACTIVATED. Extensions require a versioned contract revision."
+    },
+    "reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[\\x21-\\x7E]+$",
+      "description": "Opaque printable-ASCII reference owned by Payments."
+    },
+    "operationReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[\\x21-\\x7E]+$",
+      "description": "Exact Payments operation the decision is bound to. A decision for one reference is never valid for another."
+    },
+    "instructionFingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hex SHA-256 of the canonical instruction encoding defined in README.md: the UTF-8 JSON object of exactly the fields amount_minor, currency, destination_reference, market, merchant_profile_reference, operating_organisation_id, operation_class, operation_reference, parent_reference, payment_reference, tenant_id, keys sorted, no insignificant whitespace, absent values as null."
+    },
+    "Instruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "operating_organisation_id",
+        "market",
+        "currency",
+        "amount_minor",
+        "payment_reference",
+        "parent_reference",
+        "merchant_profile_reference",
+        "destination_reference"
+      ],
+      "description": "Canonical, server-verified values of one financial instruction. Payments computes them from its own records and the CP context, never from client-supplied fields. Changing any of them, or the operation class or reference, changes the fingerprint and invalidates any decision.",
+      "properties": {
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+        },
+        "market": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "amount_minor": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "payment_reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "parent_reference": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/reference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "merchant_profile_reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "destination_reference": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/reference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "MoneyMovementAuthorityRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context_id",
+        "engine_instance_id",
+        "operation_class",
+        "operation_reference",
+        "attempt",
+        "instruction",
+        "instruction_fingerprint"
+      ],
+      "properties": {
+        "context_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "engine_instance_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId"
+        },
+        "operation_class": {
+          "$ref": "#/$defs/operationClass"
+        },
+        "operation_reference": {
+          "$ref": "#/$defs/operationReference"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Authority checkpoint for this operation: 1 at reservation, 2 at the execution point, higher on a governed retry. Each attempt needs its own decision."
+        },
+        "instruction": {
+          "$ref": "#/$defs/Instruction"
+        },
+        "instruction_fingerprint": {
+          "$ref": "#/$defs/instructionFingerprint"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.authorization.create"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "instruction": {
+                "properties": {
+                  "parent_reference": {
+                    "type": "null"
+                  },
+                  "destination_reference": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.capture.execute"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "instruction": {
+                "properties": {
+                  "parent_reference": {
+                    "$ref": "#/$defs/reference"
+                  },
+                  "destination_reference": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.refund.execute"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "instruction": {
+                "properties": {
+                  "parent_reference": {
+                    "$ref": "#/$defs/reference"
+                  },
+                  "destination_reference": {
+                    "const": "ORIGINAL_PAYMENT_METHOD"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.authorization.void"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "instruction": {
+                "properties": {
+                  "parent_reference": {
+                    "$ref": "#/$defs/reference"
+                  },
+                  "destination_reference": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.payout.execute"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "instruction": {
+                "properties": {
+                  "parent_reference": {
+                    "type": "null"
+                  },
+                  "destination_reference": {
+                    "$ref": "#/$defs/reference"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "MoneyMovementAuthorityDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Semantic rules consumers must also apply: evaluated_at < expires_at <= evaluated_at + 30 seconds; an exact echo of context_id, engine_instance_id, operation_class, operation_reference, attempt and instruction_fingerprint; and Payments must refuse to dispatch once min(expires_at, its own receipt time + 30 s) has passed.",
+      "required": [
+        "decision_id",
+        "context_id",
+        "engine_instance_id",
+        "operation_class",
+        "operation_reference",
+        "attempt",
+        "instruction_fingerprint",
+        "outcome",
+        "activity",
+        "evaluated_at",
+        "policy_reference",
+        "provider_permissions_granted"
+      ],
+      "properties": {
+        "decision_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier of the immutable decision record CP retains, so a money movement can later answer which legal actor applied at its time (ADR-BCP-027 \u00a710.2)."
+        },
+        "context_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "engine_instance_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId"
+        },
+        "operation_class": {
+          "$ref": "#/$defs/operationClass"
+        },
+        "operation_reference": {
+          "$ref": "#/$defs/operationReference"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "instruction_fingerprint": {
+          "$ref": "#/$defs/instructionFingerprint"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "AUTHORIZED",
+            "NO_APPLICABLE_MANDATE",
+            "AMBIGUOUS",
+            "REVOKED_OR_EXPIRED",
+            "ACTOR_NOT_VERIFIED",
+            "ENGINE_INSTANCE_NOT_BOUND",
+            "CONTEXT_NOT_USABLE",
+            "INSTRUCTION_MISMATCH",
+            "OPERATION_NOT_ACTIVATED"
+          ]
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+        },
+        "market": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "legal_actor_role": {
+          "$ref": "../../organisation/v2/legal-actor-mandate.schema.json#/$defs/legalActorRole"
+        },
+        "activity": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "capability_key": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "mandate_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "CP mandates are immutable; a change is a new mandate, so this identifier pins the exact mandate version that applied."
+        },
+        "supersedes_mandate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "responsible_legal_entity_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId"
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "mandate_effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "mandate_effective_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "At most 30 seconds after evaluated_at and never after the RUNTIME context or mandate end."
+        },
+        "policy_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "provider_permissions_granted": {
+          "const": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "AUTHORIZED"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "tenant_id",
+              "operating_organisation_id",
+              "market",
+              "legal_actor_role",
+              "activity",
+              "capability_key",
+              "mandate_id",
+              "responsible_legal_entity_id",
+              "evidence_references",
+              "mandate_effective_from",
+              "expires_at"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "mandate_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "supersedes_mandate_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "responsible_legal_entity_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "evidence_references"
+                  ]
+                },
+                {
+                  "required": [
+                    "mandate_effective_from"
+                  ]
+                },
+                {
+                  "required": [
+                    "mandate_effective_to"
+                  ]
+                },
+                {
+                  "required": [
+                    "expires_at"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.authorization.create"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "legal_actor_role": {
+                "const": "PAYMENT_BENEFICIARY"
+              },
+              "activity": {
+                "const": "PAYMENT_COLLECTION"
+              },
+              "capability_key": {
+                "const": "payment.payment.authorize"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.capture.execute"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "legal_actor_role": {
+                "const": "PAYMENT_BENEFICIARY"
+              },
+              "activity": {
+                "const": "PAYMENT_COLLECTION"
+              },
+              "capability_key": {
+                "const": "payment.payment.capture"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.refund.execute"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "legal_actor_role": {
+                "const": "PAYMENT_BENEFICIARY"
+              },
+              "activity": {
+                "const": "PAYMENT_REFUND"
+              },
+              "capability_key": {
+                "const": "payment.refund.create"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.authorization.void"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "legal_actor_role": {
+                "const": "PAYMENT_BENEFICIARY"
+              },
+              "activity": {
+                "const": "PAYMENT_VOID"
+              },
+              "capability_key": {
+                "const": "payment.intent.cancel"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation_class": {
+                "const": "payments.payout.execute"
+              }
+            },
+            "required": [
+              "operation_class"
+            ]
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "const": "OPERATION_NOT_ACTIVATED"
+              },
+              "activity": {
+                "const": "BENEFICIARY_DISBURSEMENT"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "legal_actor_role"
+                  ]
+                },
+                {
+                  "required": [
+                    "capability_key"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "OPERATION_NOT_ACTIVATED"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "properties": {
+              "operation_class": {
+                "enum": [
+                  "payments.payout.execute"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

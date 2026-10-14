@@ -1,0 +1,50 @@
+# contracts/payments/v2/money-movement-operations.yaml
+#
+# Closed catalogue of governed Payments money movements (ADR-SHARED-035).
+# Each activatable class names exactly ONE legal-actor role and ONE activity
+# that an ACTIVE Control Plane OperatingLegalActorMandate must scope before CP
+# may authorise that movement (ADR-BCP-027 §6.1, §8.3). Control Plane derives
+# role, activity and capability from this catalogue; the caller never supplies
+# them.
+#
+# Collection authority is not disbursement authority (ADR-PAY-0016). A class
+# with activatable: false is catalogued only so that every route to it is
+# denied by name: CP returns OPERATION_NOT_ACTIVATED before any mandate lookup
+# and Payments refuses it before any provider call. Its payer role is decided
+# by the later revision that activates it.
+#
+# Accounting authority (erp/v2 erp.payment.record, PAYMENT_RECORDING) is never
+# money-movement authority, and money-movement authority is never accounting
+# authority.
+version: 1
+operations:
+  - operation_class: payments.authorization.create
+    legal_actor_role: PAYMENT_BENEFICIARY
+    activity: PAYMENT_COLLECTION
+    capability_key: payment.payment.authorize
+    provider_operation: AUTHORIZE
+    activatable: true
+  - operation_class: payments.capture.execute
+    legal_actor_role: PAYMENT_BENEFICIARY
+    activity: PAYMENT_COLLECTION
+    capability_key: payment.payment.capture
+    provider_operation: CAPTURE
+    activatable: true
+  - operation_class: payments.refund.execute
+    legal_actor_role: PAYMENT_BENEFICIARY
+    activity: PAYMENT_REFUND
+    capability_key: payment.refund.create
+    provider_operation: REFUND
+    activatable: true
+  - operation_class: payments.authorization.void
+    legal_actor_role: PAYMENT_BENEFICIARY
+    activity: PAYMENT_VOID
+    capability_key: payment.intent.cancel
+    provider_operation: VOID
+    activatable: true
+  - operation_class: payments.payout.execute
+    legal_actor_role: null
+    activity: BENEFICIARY_DISBURSEMENT
+    capability_key: null
+    provider_operation: PAYOUT
+    activatable: false
