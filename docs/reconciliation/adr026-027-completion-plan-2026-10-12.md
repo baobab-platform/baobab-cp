@@ -584,3 +584,57 @@ merge; the native proof remains synthetic-port acceptance, not certification.
 Next bounded owning-engine set: ERP native trusted context/readiness, atomic
 posting and historical actor acceptance. Trade full order/payment execution and
 real operational qualification remain separately open.
+
+## 14. P0-04B-04 ERP posting authority — 14 October 2026
+
+Owner decision (14 October 2026): CP owns canonical authority (tenant, operating
+Organisation, verified legal entity, mandate, role/activity/market, capability,
+engine instance); ERP owns native placement (`AD_Client`/`AD_Org`) and accounting
+execution. Provisioning (`ErpAssignment`) is not posting authority, and an ERP
+placement never creates authority: a holding company's placement cannot post for
+Thamani or ZuriBeans without their own current mandate. Proof standard: Gates A
+(unit/contract), B (PostgreSQL), C (JVM bundle) on every PR; Gate D (a real
+iDempiere/PostgreSQL posting run) before "atomic posting verified"; Gate E
+(operational) before production.
+
+| Set | PR | Merge | Content |
+|---|---|---|---|
+| Contract | Shared [#304](https://github.com/baobab-platform/shared/pull/304), [#306](https://github.com/baobab-platform/shared/pull/306) | `8733be2`, `92541c9` | ADR-SHARED-034; `erp/v2` posting-authority request/decision (opaque placement reference, no vendor ids, ≤30 s lease, role/activity bound per class), closed operation catalogue, scope `erp-posting-authority:resolve` granted only to the PROVISIONED ERP staging assessor; #306 uncaps decision evidence to match mandates |
+| CP resolver | CP [#393](https://github.com/baobab-platform/baobab-cp/pull/393) | `366fe6e` | `/internal/erp/v1/posting-authority/resolve` (flag, nonproduction, allowlist); live engine-instance binding; LA-04 resolution with mandate lineage; immutable `registry.erp_posting_authority_decision` (000125) recorded before disclosure |
+| ERP enforcement | ERP [#96](https://github.com/baobab-platform/baobab-erp/pull/96) | `c3ed799` | ADR-ERP-022: maker/checker native placement, document provenance, attribution lineage, deferred COMMIT fences on `Fact_Acct` and completion; placement/readiness providers; CP decision consumption. Final-head [CI run 38551670539](https://github.com/baobab-platform/baobab-erp/actions/runs/38551670539) (Gate B `native-finance-postgres`, 10 tests) |
+| Gate D | ERP [#98](https://github.com/baobab-platform/baobab-erp/pull/98) | `d17ac3a` | CI job `idempiere-posting-integration`: shipped image + CI-only driver posts GardenWorld GL journals on a fresh database against a synthetic CP over TLS; asserts persisted state |
+
+**Gate D receipt:** final-head [CI run 38560332080](https://github.com/baobab-platform/baobab-erp/actions/runs/38560332080),
+job `115839541014`, evidence artifact `11890764990`: 19/19 checks, `Gate D failures: 0`,
+on the real deployable image. Covered: valid authority (CO, posted, balanced
+`Fact_Acct`, attribution with CP `decision_id`); authority lost between draft and
+completion as no mandate, revoked, other legal entity, other tenant, wrong market,
+wrong activity/role, expired lease and documentary hold (each refused, no CO, no
+ledger); unplaced native org (creation refused); failure injected after `Fact_Acct`
+writes and before commit (nothing survives); three concurrent postings; retry
+after commit (no duplicate); background forced repost under authority (rebuilt,
+newly attributed) and after revocation (refused, committed ledger intact); direct
+SQL `Fact_Acct` insert and completion (refused at COMMIT).
+
+**Defects Gate D found that A–C could not** (fixed in #98): the JVM finance veto,
+registered through `ModelValidationEngine.addModelChange` with client 0, never
+fired for a real `AD_Client` (iDempiere keys such listeners per client) — now a
+synchronous OSGi `EventHandler` on the BEFORE topics; the native triggers failed
+on iDempiere's `NUMERIC(10)` ids (forward migration N0004; the Gate B fixture now
+uses real types); and Automatic Period Control writes `C_AcctSchema` from
+`MPeriod.isOpen`, so governed clients must use standard period control
+(ADR-ERP-022 §6).
+
+**Gate status:** A–C passed on every PR; **D passed for GL journals** (atomic
+posting verified for `erp.gl-journal.post` on synthetic placement, mandate and
+CP). **E open.**
+
+**Boundary:** Gate D is synthetic-port acceptance, not legal or operational
+certification; synthetic placements and mandates are never evidence of legal
+standing. Customer invoice, payment, allocation, shipment and sales-order classes
+still need their own Gate D scenarios; purchase-side and configuration classes
+remain denied pending a Shared catalogue revision; costing writes are
+unclassified. The posting-activity strings need owner review. Real placements
+(named maker/checker), real mandates, IAM workload admission, the Python
+order-to-cash wiring and production enablement stay open; the CP route remains
+nonproduction-only.
