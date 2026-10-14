@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -256,6 +257,20 @@ func TestErpPostingAuthorityAuthorizesFromCatalogueAndContextOnly(t *testing.T) 
 	if len(store.recorded) != 1 || store.recorded[0].MandateID != d.MandateID ||
 		store.recorded[0].PlacementVersion != 2 || store.recorded[0].ClientID != erpPostingClient {
 		t.Fatalf("decision not recorded before disclosure: %+v", store.recorded)
+	}
+}
+
+// A mandate's evidence list is uncapped; the decision projects it whole.
+func TestErpPostingAuthorityProjectsTheWholeEvidenceList(t *testing.T) {
+	resolution := authorizedResolution(time.Now().UTC())
+	resolution.EvidenceReferences = nil
+	for i := 0; i < 25; i++ {
+		resolution.EvidenceReferences = append(resolution.EvidenceReferences, fmt.Sprintf("synthetic:evidence/%d", i))
+	}
+	store := &erpPostingStoreFixture{bound: true, resolution: resolution}
+	d := decodeErpDecision(t, newErpPostingFixture(t, store, defaultErpPostingOptions()).post(t, nil))
+	if d.Outcome != "AUTHORIZED" || len(d.EvidenceReferences) != 25 || len(store.recorded[0].EvidenceReferences) != 25 {
+		t.Fatalf("evidence was not carried whole: %+v", d)
 	}
 }
 
