@@ -33,6 +33,7 @@ func (s *Store) ResolveOperatingLegalActor(ctx context.Context, request legalact
 		       COALESCE(m.legal_actor_verification_reference, ''),
 		       m.effective_from, m.effective_to, m.created_by::text,
 		       COALESCE(m.approved_by::text, ''), m.approved_at,
+		       COALESCE(m.supersedes_mandate_id::text, ''),
 		       (
 		          lp.verification_state = 'VERIFIED'
 		          AND lp.source_authority NOT IN ('shared-governance', 'control-plane-registration')
@@ -85,7 +86,7 @@ func (s *Store) ResolveOperatingLegalActor(ctx context.Context, request legalact
 			&c.AuthorityBasisReference, &c.EvidenceReferences,
 			&c.LegalActorVerificationReference, &c.EffectiveFrom,
 			&c.EffectiveTo, &c.CreatedBy, &c.ApprovedBy,
-			&c.ApprovedAt, &c.ActorVerified,
+			&c.ApprovedAt, &c.SupersedesMandateID, &c.ActorVerified,
 		); err != nil {
 			return denied, fmt.Errorf("decode governed legal-actor mandate: %w", err)
 		}

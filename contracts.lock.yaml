@@ -16,6 +16,8 @@ source:
 # SHARED_CONTRACTS_DIR - see .github/workflows/ci.yml) exists for it yet.
 contracts:
   - contracts/commerce/v1/seller-binding.schema.json
+  - contracts/erp/v2/posting-authority.schema.json
+  - contracts/erp/v2/posting-operations.yaml
   - contracts/organisation/v2/domain.schema.json
   - contracts/organisation/v2/pre-tenant-admission.schema.json
   - contracts/organisation/v2/legal-actor-mandate.schema.json

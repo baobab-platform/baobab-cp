@@ -150,6 +150,15 @@ func TestLegalActorLifecycleGuardedActivationAndRevocation(t *testing.T) {
 	if err != nil || newActive.Status != "ACTIVE" {
 		t.Fatalf("successor after revoke %+v %v", newActive, err)
 	}
+	// P0-04B ERP: the resolution carries the immutable lineage that ERP
+	// stores with each posting (ADR-BCP-027 §10.2).
+	successor, err := db.ResolveOperatingLegalActor(ctx, legalactor.Request{
+		TenantID: tenant, OperatingOrganisationID: org, Role: "SELLER_OF_RECORD",
+		Activity: "B2B_COFFEE_SALE", Market: "ZA", EffectiveAt: time.Now().UTC()})
+	if err != nil || successor.Outcome != legalactor.Authorized || successor.MandateID != second ||
+		successor.SupersedesMandateID != first || successor.MandateEffectiveFrom == nil {
+		t.Fatalf("successor resolution lost mandate lineage %+v %v", successor, err)
+	}
 	// An ACTIVE row is not authorising if its checker-approved verification
 	// reference disappears from the independently verified legal profile.
 	_, err = db.pool.Exec(ctx, `UPDATE registry.legal_entity_profile

@@ -10,8 +10,8 @@ func TestLoadMigrationsReturnsCanonicalOrderedForwardMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load migrations failed: %v", err)
 	}
-	if len(migrations) != 124 {
-		t.Fatalf("expected 124 canonical migrations, got %d", len(migrations))
+	if len(migrations) != 125 {
+		t.Fatalf("expected 125 canonical migrations, got %d", len(migrations))
 	}
 	for index, migration := range migrations {
 		expectedVersion := index + 1
