@@ -638,3 +638,68 @@ unclassified. The posting-activity strings need owner review. Real placements
 (named maker/checker), real mandates, IAM workload admission, the Python
 order-to-cash wiring and production enablement stay open; the CP route remains
 nonproduction-only.
+
+## 15. P0-04B-05 ERP remaining operation classes — 14 October 2026
+
+ERP [#99](https://github.com/baobab-platform/baobab-erp/pull/99) (merge `67bdced`) extends §14 from GL journals to
+every other catalogued class: `erp.sales-order.complete`, `erp.shipment.complete`, `erp.customer-invoice.issue`,
+`erp.payment.record` and `erp.allocation.record`. It also closes two defects that exploration of ERP `main` found.
+
+Owner decisions (14 October 2026):
+- **Receipts only.** Permission to record money received is not permission to disburse it. A payment is
+  governed only when `IsReceipt='Y'`, on every route. An allocation is governed only between sales invoices and
+  receipts. Bank statements and the cash journal have no class and are refused. Before #99, an outbound vendor
+  payment classified as `erp.payment.record`: a P0 authorisation-correctness defect.
+- **Derived costing.** A native costing write may inherit authority from a catalogued root ERP operation only
+  when ERP proves it is a deterministic consequence of that operation, in the same transaction and under the
+  same placement, provenance and legal-actor attribution. Without that proof it is denied. Independent costing
+  or revaluation operations need their own catalogued authority (ADR-ERP-022 §4.2).
+  - Before #99, `M_Cost`/`M_CostDetail` were hard-denied, so no sales shipment could post.
+  - Now a shipment's cost detail inherits the shipment's own CP decision. It never gets a costing decision of
+    its own.
+  - `M_Cost` is covered only for the exact bucket derived in the transaction: cost type, cost element and
+    attribute-set instance.
+
+Database (N0005):
+- completion and `Fact_Acct` COMMIT fences require an attribution of the source table's own class, with the
+  governed direction holding;
+- a governed document's direction cannot change;
+- the append-only `derived_write_attribution` table;
+- COMMIT fences on `m_costdetail` and `m_cost` (insert, update and delete) and on `c_allocationline`.
+
+Codex review found three P1 gaps (cost deletes, allocation re-pointing, bucket granularity). All three were fixed
+before merge.
+
+**Evidence.**
+- **Gate B:** 20 PostgreSQL tests; the new ones fail without N0005.
+- **Gate D:** final-head [CI run 38603012390](https://github.com/baobab-platform/baobab-erp/actions/runs/38603012390),
+  job `115986718366`, artifact `11914013564`. **60/60 checks, `Gate D failures: 0`**, on the real deployable
+  iDempiere 13 image against a synthetic CP.
+  - **Valid chain:** order → shipment, posted with 2 derived cost details → invoice → receipt with automatic
+    allocation → manual allocation. Each document reaches CO, is posted and balanced, and is attributed to its
+    own class.
+  - **Lost authority:** revoked, wrong activity, other legal entity, expired and documentary hold, each at
+    completion of order, shipment, invoice and payment. All refused, with no ledger and no costing.
+  - **Shipment failure and retry:** an injected failure after ledger and cost rows leaves nothing behind. A retry
+    or a forced repost under authority duplicates nothing. A forced repost after revocation is refused.
+  - **Money out and purchases:** outbound payment creation and posting, an allocation against a vendor invoice,
+    and posting a purchase receipt are all refused. So is a direction flip.
+  - **Direct SQL:** an outbound completed payment, a payment `Fact_Acct` row, an `M_CostDetail` insert, an
+    `M_Cost` update or delete, and re-pointing an allocation are all refused at COMMIT.
+  - The 19 GL-journal checks from §14 still pass.
+
+**Gate status.**
+
+| Gate | Status |
+|---|---|
+| A–C | Pass |
+| D | **Pass for all six catalogued classes**, on synthetic placement, mandate and CP |
+| E | Open |
+
+**Boundary.** This is synthetic-port acceptance, not certification.
+- **Refused for a placed client until Shared catalogues them:** vendor disbursement (for example
+  `erp.vendor-payment.disburse`), other purchase-side flows, bank statements, the cash journal, and inventory,
+  production, landed-cost and cost-adjustment operations. This is intended.
+- **Owner review needed:** the activity strings.
+- **Still open:** real placements and mandates, IAM workload admission, the Python order-to-cash wiring, Gate E
+  and production. The CP route stays nonproduction-only.
