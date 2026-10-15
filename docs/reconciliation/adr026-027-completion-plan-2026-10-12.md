@@ -703,3 +703,112 @@ before merge.
 - **Owner review needed:** the activity strings.
 - **Still open:** real placements and mandates, IAM workload admission, the Python order-to-cash wiring, Gate E
   and production. The CP route stays nonproduction-only.
+
+## 16. P0-04B-06 Payments money-movement authority — 15 October 2026
+
+Owner decisions (14–15 October 2026):
+- **Two layers, both must permit.** CP decides legal authority: the responsible legal entity, organisation,
+  principal and mandates. Payments decides financial validity, approval, readiness and safety for the specific
+  movement. Neither overrides a denial by the other (ADR-SHARED-035).
+- **Governing rule:** every independently initiated, consequential money movement must have current,
+  operation-specific legal authority from CP and independent financial execution approval from Payments.
+  Accounting authorization, group ownership, historical approvals and absence of restrictions never imply
+  permission to move funds.
+- **Operation classes.** `payments.authorization.create`, `payments.capture.execute`, `payments.refund.execute`
+  and `payments.authorization.void` are functional at P0. `payments.payout.execute` is catalogued and
+  fail-closed. Treasury transfers are excluded; chargebacks are P1.
+- **The proof is a protocol, not distributed atomicity.** Gate D1 (CI) runs the real Payments service, the real
+  CP, real signed workload tokens, PostgreSQL 17 and a deployed HyperSwitch with a controlled test provider.
+  Gate D2 (protected staging with a PSP sandbox) and Gate E (production) follow.
+- **The D1 provider.** HyperSwitch's own, unmodified Stripe connector points at a Baobab deterministic test
+  processor that never contacts live rails. It is confined to integration by an allowlist and a build check.
+- **Protected environments stay closed.** Staging and production return 503 on every financial route.
+  Activating them is a separate, approved change, never a flag.
+
+| Set | PR | Merge | Content |
+|---|---|---|---|
+| Contract | Shared [#309](https://github.com/baobab-platform/shared/pull/309) | `2dc9a32` | ADR-SHARED-035; `payments/v2` request and decision with a Payments-computed instruction fingerprint over 11 canonical fields, a lease of 30 s or less, `provider_permissions_granted` always false; the closed catalogue with payout non-activatable; golden fingerprint vectors |
+| CP resolver | CP [#400](https://github.com/baobab-platform/baobab-cp/pull/400) | `8c129a1` | `/internal/payments/v1/money-movement-authority/resolve` (flag, nonproduction, allowlist); payout refused before any context, binding or mandate read (the denial is still recorded before it is returned); the fingerprint recomputed and a mismatch denied; `baobab-payments` engine-instance binding; LA-04 resolution; immutable `registry.payments_money_movement_decision` (000126) recorded before disclosure |
+| Payments PEP | Payments [#37](https://github.com/baobab-platform/baobab-payments/pull/37) | `5031659` | One enforcement point: CP decision and documentary veto, a reservation, a fresh decision at the execution point, one provider send, an immutable observation; unknown outcomes reconciled, never re-sent. Migration 0003 fences decisions, provider activation, financial limits, payout and the COMMIT lease, even against direct SQL as the runtime role |
+| Gate D1 | Payments [#38](https://github.com/baobab-platform/baobab-payments/pull/38) | `0eb75ba` | Public routes through the PEP in development and integration only (activation policy; staging and production still 503); native intent journal (0004); harness and CI job `payments-gate-d1` |
+
+**Gate D1 receipt:** final-head [CI run 38688158345](https://github.com/baobab-platform/baobab-payments/actions/runs/38688158345),
+job `116267690853`, evidence artifact `11951105614`: **16/16 scenarios, `Gate D1 failures: 0`**. The run used the
+release Payments image, the CP release binary at `8c129a1`, RS256 tokens from a test OIDC issuer, TLS on every hop,
+PostgreSQL 17, and `hyperswitch-router` v1.127.0 (commit `25b7a9b`) driving its Stripe connector against the test
+processor.
+- **Lifecycle:**
+  - manual authorisation, full capture and full refund, with one provider call and two CP decisions per movement;
+  - one partial capture, with the remainder released and partial refunds up to the captured amount;
+  - void, and a declined card.
+- **Refusals, none reaching the provider:**
+  - overcapture, double capture, capture after void, void after capture;
+  - an over-limit refund;
+  - a replay or a changed request under the same key;
+  - a forged legal entity, platform account or tenant, a missing scope, an invalid token or the wrong audience.
+- **Authority:**
+  - CP revokes the mandate between the reservation's decision and the execution-point decision: denied, reserved
+    but never dispatched, and the denial recorded by CP;
+  - CP unavailable: 503 and retryable;
+  - provider activation withdrawn: Payments refuses although CP authorised.
+- **Recovery:**
+  - **crash window:** Payments killed after the processor captured and before the outcome was recorded; after a
+    restart the retry reconciles and captures once;
+  - **lost response:** the capture stays unknown, is never re-sent and keeps holding the balance;
+  - **dropped request:** proven absent, then re-sent once on a fresh CP decision.
+- **Bypass:**
+  - payout has no route;
+  - as the runtime role, a payout reservation, a dispatch without a decision, a history rewrite and provider
+    self-activation are all refused, and even the owner cannot rewrite history;
+  - staging and production refuse to start with the native backend.
+
+**Defects and findings Gate D1 surfaced:**
+1. **Lost response in HyperSwitch.** After a lost capture response, HyperSwitch's Stripe connector retries
+   without an idempotency key. The processor refuses the retry, and HyperSwitch records the payment as `failed`
+   although it was captured. Payments had journalled such a refusal as `REJECTED`, which would release the
+   balance. Fixed in #38: a refusal is journalled only when the provider's record proves no effect; otherwise the
+   movement stays unknown and holds the balance. Gate D2 must show whether a real PSP sandbox heals this.
+2. **Context lifetime.** CP's runtime context lives 15 minutes by default; Payments accepts at most 10. The
+   harness sets `PLATFORM_CONTEXT_TTL=5m`. A deployment must set it, or the two bounds must be aligned.
+3. **Card numbers in logs.** HyperSwitch's sample configuration logs at DEBUG, which writes card numbers to its
+   console. The harness runs it at INFO, as a deployment must.
+4. **Stale provider record.** After a connector timeout, HyperSwitch's record reads `processing` until it syncs.
+   Reconciliation now reads with `force_sync`.
+
+**Gate status.**
+
+| Gate | Status |
+|---|---|
+| A–C | Pass |
+| D1 | **Pass for authorisation, capture (full and one partial), void and refund**, on a synthetic tenant, mandate, IAM and provider |
+| D2 | Open (protected staging, PSP sandbox, real IAM) |
+| E | Open |
+| Payout | Fail-closed by design |
+
+**EA v2.2 classification.** Shared's [EA Implementation Plan v2.2](https://github.com/baobab-platform/shared/blob/main/docs/architecture/EA-implementation-plan-v2.2-ADR-SHARED-036-integration-reconciliation.md)
+(accepted 15 October 2026 under ADR-SHARED-036, Shared [#310](https://github.com/baobab-platform/shared/pull/310)
+and [#311](https://github.com/baobab-platform/shared/pull/311)) supersedes v2.1 for active execution. Under it:
+- "D1" and "D2" are Payments-local gate names. D1 is engine-owned, real-component integration evidence with
+  synthetic data for native HTTP money-movement enforcement. It is **not EA Gate D**: v2.2 states that no
+  Gate D/E is satisfied by a real-component test or a deterministic PSP fixture. EA Gate D for Payments needs
+  the relevant L4 profile and then protected staging acceptance.
+- D1 is **not L4**. It ran in Payments' own CI, not on the Infrastructure-owned INT-01 runner. The Payments
+  scenarios it proves (legal and financial veto, no bypass at COMMIT or dispatch, idempotency, crash and
+  provider reconciliation) are inputs to FIN-04 and INT-08 once INT-01 exists. The receipt already names what
+  an L4 receipt requires: candidate and dependency SHAs, Shared pins, the router image, the profile, the
+  simulated provider, the scenario IDs and the evidence artifact.
+- No score changes. EA-R03 remains PART: Payments D2, Subscriptions, Trade Docs and the unmapped ERP and Trade
+  classes are open.
+
+**Boundary.** Gate D1 is integration acceptance, not certification and not EA Gate D.
+- **Synthetic seeds:** where CP has no admin API, rows were inserted directly and recorded as synthetic in the
+  evidence: the human identities, the legal-entity verification, the tenant's market assignment and the
+  `baobab-payments` engine binding. Tenant, market and mandate went through CP's admin API, with four-eyes
+  approval and three distinct humans for the mandate.
+- **Registry:** the workload registry used is a CI-only snapshot; the Shared registry keeps the Payments assessor
+  PROVISIONED.
+- **Not covered by D1:** signed webhook replay (no native public route; it stays covered by
+  `verified-webhook-settlement`).
+- **Still open:** Gate D2, Gate E, real IAM, real mandates, merchant certification, payout activation,
+  chargebacks (P1) and production. The CP route remains nonproduction-only, and protected Payments routes still
+  return 503.
