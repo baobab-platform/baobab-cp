@@ -812,3 +812,74 @@ and [#311](https://github.com/baobab-platform/shared/pull/311)) supersedes v2.1 
 - **Still open:** Gate D2, Gate E, real IAM, real mandates, merchant certification, payout activation,
   chargebacks (P1) and production. The CP route remains nonproduction-only, and protected Payments routes still
   return 503.
+
+## 17. EA-R03 ERP-A purchase side and vendor-payment recording — 15 October 2026
+
+Increment ERP-A under EA Implementation Plan v2.2 (EA-R03, D-03, LA-05). The owner's order is ERP-A, ERP-B, Trade,
+then the rest. Payments D2 stays out of scope (BL-04). Recording a vendor payment is never authority to disburse:
+- payment selections, online outbound payments, vendor returns and AP credit memos stay denied by name;
+- AP/AR netting is never authorisable.
+
+| Set | PR | Merge | Content |
+|---|---|---|---|
+| Contract | Shared [#314](https://github.com/baobab-platform/shared/pull/314) | `756edb4` | ADR-SHARED-037. Catalogue version 2 adds five `erp/v2` classes: `erp.purchase-order.complete`, `erp.material-receipt.complete`, `erp.vendor-invoice.record`, `erp.vendor-payment.record`, `erp.payables-allocation.record`. Role and activity are bound per class. There are 220 golden vectors, with roles taken from the full enum |
+| CP resolver | CP [#402](https://github.com/baobab-platform/baobab-cp/pull/402) | `0337632` | Embedded catalogue version 2. `context:resolve` must still be live in the registry for the posting-authority caller (an open item from P0-04B-04). Golden-vector test |
+| ERP enforcement | ERP [#100](https://github.com/baobab-platform/baobab-erp/pull/100) | `eea712e` | N0006 classifies by stored row (`governed_class_of`). Matching is fenced through its single root. Allocations are bound to the client and never net. Payment selection and online changes are refused. Gate B on PostgreSQL 17 |
+| Engine-local harness | ERP [#101](https://github.com/baobab-platform/baobab-erp/pull/101) | `6775294` | N0007 makes purchase costing a derived write. The real iDempiere 13 run uses the real CP binary at `0337632`, real RS256 workload tokens and PostgreSQL 17. The workload secret is now read from a file |
+
+**Harness receipt** ([CI run 38764952997](https://github.com/baobab-platform/baobab-erp/actions/runs/38764952997), job
+`116525620391`, evidence artifact `erp-a-real-cp-evidence` / `11989645446`):
+- **Result:** 28 checks, S01–S26, `ERP-A failures: 0`.
+- **Candidate:** ERP `abf7094` (merged as `6775294`).
+- **Dependency:** CP `0337632756dea1bd99db098d02e71d8a170027f2`.
+- **Shared pin:** `756edb4`.
+- **Profile:** engine-local integration (`BAOBAB_ENVIRONMENT=integration`, iDempiere acceptance runtime).
+- **Real components:** iDempiere 13 with the shipped veto, the native migrations and fences, the CP release binary and
+  its migrations, PostgreSQL 17 for ERP and CP, and a TLS edge.
+- **Simulated components:** the IAM test issuer (real JWTs, but not Keycloak); the recorded synthetic CP rows (legal-entity
+  verification, market assignment, engine-instance binding, human identities); GardenWorld data.
+- **Provider:** none. There is no money movement.
+- The receipt JSON (`erp-a-receipt.json`) carries all of these fields.
+
+What the run covered, with every ERP attribution cross-checked against CP's immutable
+`registry.erp_posting_authority_decision` for that class and exact source record:
+- **Recording flow:** the purchase order, receipt, vendor invoice, vendor-payment record (with its own-class allocation)
+  and manual payables allocation are completed, posted, balanced and attributed.
+- **Costing:** the receipt's order-line cost detail derives from the authorised receipt. The invoice-match cost detail
+  derives from the matched vendor invoice. A retry or forced repost duplicates nothing.
+- **Native refusals:** vendor return, AP credit memo, payment selection, online payment and a mixed allocation are refused.
+- **Bypass refusals:** direct SQL as the runtime role is refused at COMMIT (completion, match, ledger, cost detail,
+  payment selection, turning a payment online).
+- **Crash window:** a SIGKILL between authority and COMMIT leaves nothing behind, while CP keeps its decision. After a
+  restart, the same completion is decided again and commits once.
+- **Lease and authority changes:**
+  - a lease outlived before COMMIT is refused;
+  - a revoked mandate is refused, and the refusal is recorded in CP;
+  - a contracting-only mandate refuses the vendor invoice and authorises the order;
+  - CP being unavailable fails closed, and the write succeeds once CP is back.
+- **Whole-run check:** no ERP attribution exists without a CP-recorded AUTHORIZED decision.
+
+**Defects the harness found** (fixed in #101):
+- Invoice-match costing had no root, so `M_MatchInv` posted with `E`. That was fail-closed, but it left the
+  not-invoiced-receipts clearing open.
+- iDempiere's start script echoed an inline `-D…client.secret` to the container log. The secret is now read from
+  `<property>.file`.
+
+**Register fields (EA v2.2 §10).**
+- **Migrations:** ERP native `N0006_purchase_side_recording` and `N0007_purchase_costing`. CP adds no migration; it reuses 000125.
+- **Approver:** merged under the owner's standing authorisation to merge when CI passes and the implementation is satisfactory, after the Codex and bot review threads were resolved. There was no separate per-PR human approval.
+- **Rollback:**
+  - Immediate fail-closed stop: unset `ERP_POSTING_AUTHORITY_ENABLED`. The ERP PEP refuses any non-200 CP answer, so every governed native write is then refused.
+  - Code: revert ERP #101/#100 and add a forward native migration that restores the N0005 `cost_detail_commit_fence`, `derived_write_insert_guard` and `root_table` CHECK. N0006 and N0007 are forward-only.
+  - Contract: re-pin CP to catalogue version 1 (`92541c9`); the version-2 classes are then uncatalogued and denied.
+
+**EA v2.2 classification.** This is engine-local real-component evidence on synthetic data. It is **not EA Gate D
+and not L4**: L4 runs only on the Infrastructure INT-01 runner, which the owner has deferred. No score changes.
+EA-R03 remains PART, because ERP-B (bank/cash, inventory, cost adjustment), Trade, Subscriptions, Trade Docs and
+Payments D2 are open.
+
+**Boundary.**
+- The CP route remains nonproduction-only. Protected routes stay fail-closed, and nothing activates staging or production.
+- The workload registry used is a CI-only snapshot; the Shared registry keeps the ERP assessor PROVISIONED.
+- Still open: real placements (named maker and checker), real mandates, real IAM, landed cost, inventory, movement and
+  revaluation costing (ERP-B), and Gate E.
