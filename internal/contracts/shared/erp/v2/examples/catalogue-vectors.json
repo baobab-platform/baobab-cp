@@ -1,0 +1,1547 @@
+{
+  "description": "Golden vectors for erp/v2 posting catalogue version 2 (ADR-SHARED-034, ADR-SHARED-037). Each vector overlays operation_class, legal_actor_role and activity onto posting-authority-decision-authorized.json; VALID must validate as a PostingAuthorityDecision and INVALID must not. Role mismatches cover every organisation/v2 legalActorRole, not only roles the catalogue uses. Consumers (CP resolver, ERP PEP) use them to prove the class-to-role/activity binding. Synthetic contract fixtures only; never evidence of a mandate or posting support.",
+  "catalogue_version": 2,
+  "base_example": "posting-authority-decision-authorized.json",
+  "vectors": [
+    {
+      "vector_id": "erp.gl-journal.post/binding",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/role/CONTRACTING_PARTY",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/role/SELLER_OF_RECORD",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/role/INVOICE_ISSUER",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/role/EMPLOYER",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/role/PROPERTY_OWNER",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/GOODS_DELIVERY",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/GOODS_RECEIPT",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.gl-journal.post/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.gl-journal.post",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/binding",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/role/CONTRACTING_PARTY",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/role/SELLER_OF_RECORD",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/role/EMPLOYER",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/role/ACCOUNTING_ENTITY",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/role/PROPERTY_OWNER",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/GOODS_DELIVERY",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/GOODS_RECEIPT",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.customer-invoice.issue/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.customer-invoice.issue",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/binding",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.payment.record/role/CONTRACTING_PARTY",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/role/SELLER_OF_RECORD",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/role/INVOICE_ISSUER",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/role/EMPLOYER",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/role/PROPERTY_OWNER",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/GOODS_DELIVERY",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/GOODS_RECEIPT",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payment.record/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/binding",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/role/CONTRACTING_PARTY",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/role/SELLER_OF_RECORD",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/role/INVOICE_ISSUER",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/role/EMPLOYER",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/role/PROPERTY_OWNER",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/GOODS_DELIVERY",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/GOODS_RECEIPT",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.allocation.record/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/binding",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/role/SELLER_OF_RECORD",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/role/INVOICE_ISSUER",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/role/EMPLOYER",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/role/ACCOUNTING_ENTITY",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/role/PROPERTY_OWNER",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/GOODS_RECEIPT",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.shipment.complete/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.shipment.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/binding",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/role/SELLER_OF_RECORD",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/role/INVOICE_ISSUER",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/role/EMPLOYER",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/role/ACCOUNTING_ENTITY",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/role/PROPERTY_OWNER",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/GOODS_DELIVERY",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/GOODS_RECEIPT",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.sales-order.complete/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.sales-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/binding",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/role/SELLER_OF_RECORD",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/role/INVOICE_ISSUER",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/role/EMPLOYER",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/role/ACCOUNTING_ENTITY",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/role/PROPERTY_OWNER",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/GOODS_DELIVERY",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/GOODS_RECEIPT",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.purchase-order.complete/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.purchase-order.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/binding",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/role/SELLER_OF_RECORD",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/role/INVOICE_ISSUER",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/role/EMPLOYER",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/role/ACCOUNTING_ENTITY",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/role/PROPERTY_OWNER",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/GOODS_DELIVERY",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.material-receipt.complete/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.material-receipt.complete",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/binding",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/role/CONTRACTING_PARTY",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/role/SELLER_OF_RECORD",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/role/INVOICE_ISSUER",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/role/EMPLOYER",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/role/PROPERTY_OWNER",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/GOODS_DELIVERY",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/GOODS_RECEIPT",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-invoice.record/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.vendor-invoice.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/binding",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/role/CONTRACTING_PARTY",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/role/SELLER_OF_RECORD",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/role/INVOICE_ISSUER",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/role/EMPLOYER",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/role/PROPERTY_OWNER",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/GOODS_DELIVERY",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/GOODS_RECEIPT",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.vendor-payment.record/activity/PAYABLES_ALLOCATION",
+      "operation_class": "erp.vendor-payment.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/binding",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "VALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/role/CONTRACTING_PARTY",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "CONTRACTING_PARTY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/role/SELLER_OF_RECORD",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "SELLER_OF_RECORD",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/role/INVOICE_ISSUER",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "INVOICE_ISSUER",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/role/IMPORTER_OF_RECORD",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "IMPORTER_OF_RECORD",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/role/EXPORTER_OF_RECORD",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "EXPORTER_OF_RECORD",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/role/EMPLOYER",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "EMPLOYER",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/role/PAYMENT_BENEFICIARY",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "PAYMENT_BENEFICIARY",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/role/PROPERTY_OWNER",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "PROPERTY_OWNER",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/role/SERVICE_PROVIDER_OF_RECORD",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "SERVICE_PROVIDER_OF_RECORD",
+      "activity": "PAYABLES_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/GENERAL_LEDGER_POSTING",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GENERAL_LEDGER_POSTING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/CUSTOMER_INVOICE_ISSUANCE",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "CUSTOMER_INVOICE_ISSUANCE",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/PAYMENT_RECORDING",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/PAYMENT_ALLOCATION",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PAYMENT_ALLOCATION",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/GOODS_DELIVERY",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_DELIVERY",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/SALES_ORDER_COMMITMENT",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "SALES_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/PURCHASE_ORDER_COMMITMENT",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "PURCHASE_ORDER_COMMITMENT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/GOODS_RECEIPT",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "GOODS_RECEIPT",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/VENDOR_INVOICE_RECORDING",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_INVOICE_RECORDING",
+      "expected": "INVALID"
+    },
+    {
+      "vector_id": "erp.payables-allocation.record/activity/VENDOR_PAYMENT_RECORDING",
+      "operation_class": "erp.payables-allocation.record",
+      "legal_actor_role": "ACCOUNTING_ENTITY",
+      "activity": "VENDOR_PAYMENT_RECORDING",
+      "expected": "INVALID"
+    }
+  ]
+}
