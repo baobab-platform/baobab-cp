@@ -21,11 +21,15 @@ import (
 
 const paymentsMoneyMovementClient = "baobab-payments-legal-actor-assessor-staging"
 
-type paymentsMoneyMovementRegistry struct{ allowed bool }
+type paymentsMoneyMovementRegistry struct {
+	allowed        bool
+	withoutContext bool
+}
 
 func (r paymentsMoneyMovementRegistry) IsActive(string) bool { return r.allowed }
 func (r paymentsMoneyMovementRegistry) AllowsScope(clientID, scope string) bool {
-	return r.allowed && clientID == paymentsMoneyMovementClient && scope == paymentsMoneyMovementScope
+	return r.allowed && clientID == paymentsMoneyMovementClient &&
+		(scope == paymentsMoneyMovementScope || (scope == "context:resolve" && !r.withoutContext))
 }
 
 type paymentsMoneyMovementStoreFixture struct {
@@ -70,6 +74,8 @@ type paymentsMoneyMovementOptions struct {
 	owned         bool
 	environment   string
 	enabled       bool
+	// The registry no longer allows context:resolve, though the token still carries it.
+	contextRevoked bool
 }
 
 func defaultPaymentsMoneyMovementOptions() paymentsMoneyMovementOptions {
@@ -107,7 +113,7 @@ func newPaymentsMoneyMovementFixture(t *testing.T, store *paymentsMoneyMovementS
 			Issuer: issuer, Subject: subject, ActorType: "workload", ClientID: paymentsMoneyMovementClient,
 			TenantID: ctx.TenantID, TokenID: "token-payments-money-movement",
 			Scopes: map[string]struct{}{"context:resolve": {}, paymentsMoneyMovementScope: {}}}},
-		WorkloadRegistry: paymentsMoneyMovementRegistry{allowed: o.registered},
+		WorkloadRegistry: paymentsMoneyMovementRegistry{allowed: o.registered, withoutContext: o.contextRevoked},
 		Contexts:         repo, Identities: repo,
 	})
 	return paymentsMoneyMovementFixture{handler: handler, store: store, context: ctx}
@@ -234,7 +240,8 @@ func TestPaymentsMoneyMovementRejectsUntrustedCallers(t *testing.T) {
 		"not-allowlisted": func(o *paymentsMoneyMovementOptions) {
 			o.allowlist = []string{"baobab-erp-legal-actor-assessor-staging"}
 		},
-		"not-registered": func(o *paymentsMoneyMovementOptions) { o.registered = false },
+		"not-registered":                    func(o *paymentsMoneyMovementOptions) { o.registered = false },
+		"context-scope-revoked-in-registry": func(o *paymentsMoneyMovementOptions) { o.contextRevoked = true },
 	} {
 		t.Run(name, func(t *testing.T) {
 			o := defaultPaymentsMoneyMovementOptions()
