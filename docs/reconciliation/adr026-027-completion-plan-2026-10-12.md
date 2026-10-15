@@ -865,6 +865,14 @@ What the run covered, with every ERP attribution cross-checked against CP's immu
 - iDempiere's start script echoed an inline `-D…client.secret` to the container log. The secret is now read from
   `<property>.file`.
 
+**Register fields (EA v2.2 §10).**
+- **Migrations:** ERP native `N0006_purchase_side_recording` and `N0007_purchase_costing`. CP adds no migration; it reuses 000125.
+- **Approver:** merged under the owner's standing authorisation to merge when CI passes and the implementation is satisfactory, after the Codex and bot review threads were resolved. There was no separate per-PR human approval.
+- **Rollback:**
+  - Immediate fail-closed stop: unset `ERP_POSTING_AUTHORITY_ENABLED`. The ERP PEP refuses any non-200 CP answer, so every governed native write is then refused.
+  - Code: revert ERP #101/#100 and add a forward native migration that restores the N0005 `cost_detail_commit_fence`, `derived_write_insert_guard` and `root_table` CHECK. N0006 and N0007 are forward-only.
+  - Contract: re-pin CP to catalogue version 1 (`92541c9`); the version-2 classes are then uncatalogued and denied.
+
 **EA v2.2 classification.** This is engine-local real-component evidence on synthetic data. It is **not EA Gate D
 and not L4**: L4 runs only on the Infrastructure INT-01 runner, which the owner has deferred. No score changes.
 EA-R03 remains PART, because ERP-B (bank/cash, inventory, cost adjustment), Trade, Subscriptions, Trade Docs and
