@@ -160,6 +160,7 @@ var canonicalMigrationNames = []string{
 	"000123_cx05j_encrypted_console_artifacts.sql",
 	"000124_p002c_durable_document_custody.sql",
 	"000125_erp_posting_authority_decision.sql",
+	"000126_payments_money_movement_decision.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

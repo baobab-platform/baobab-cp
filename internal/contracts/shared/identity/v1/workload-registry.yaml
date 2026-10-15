@@ -396,7 +396,7 @@ workloads:
     runtime: "payments beneficiary/contracting-party PEP sandbox staging proof; no fund-moving authority"
     environment: staging
     allowed_audiences: ["baobab-control-plane"]
-    allowed_scopes: ["context:resolve", "legal-actor:assess", "documentary:restriction-assess"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess", "documentary:restriction-assess", "payments-money-movement-authority:resolve"]
     context_purposes: ["RUNTIME"]
     credential_type: federated_workload_token
     rotation_owner: baobab-platform/baobab-payments

@@ -763,6 +763,23 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
+  # P0-04B Payments (ADR-SHARED-035): CP legal authority for ONE catalogued
+  # money movement, bound to its instruction fingerprint and attempt.
+  # AUTHORIZED is a 30-second fact, never a grant, provider permission or
+  # financial approval.
+  - name: "payments-money-movement-authority:resolve"
+    description: >-
+      Private workload-only Control Plane resolution of whether a bounded,
+      previously resolved RUNTIME context may perform one catalogued Payments
+      money movement, for one instruction fingerprint and attempt, through an
+      engine instance bound to its tenant. Requires dedicated IAM admission,
+      ACTIVE workload registry and an explicitly allowlisted caller. Cannot
+      select a legal actor, mandate or market and grants no provider,
+      financial-approval, readiness or accounting authority.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
   # P0-04B-02: CP human command admission; registered, never assigned.
   - name: "trade-binding:propose"
     description: "Human CP admission check for an exact Trade cart binding propose command. Requires current organisation.trade-binding.propose grant and assurance; never legal or provider authority. Assigned to no client."
