@@ -150,8 +150,12 @@ func (h erpPostingAuthorityHandler) resolve(w http.ResponseWriter, r *http.Reque
 			"active, registered and allowlisted ERP posting PEP required", false)
 		return
 	}
+	// Both scopes must be live in the registry, not merely present in a token
+	// that outlived a registry revocation: the context this request redeems
+	// is itself a context:resolve grant (as for Payments, CP #400).
 	scopes, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
-	if !ok || !scopes.AllowsScope(p.ClientID, erpPostingAuthorityScope) {
+	if !ok || !scopes.AllowsScope(p.ClientID, erpPostingAuthorityScope) ||
+		!scopes.AllowsScope(p.ClientID, "context:resolve") {
 		problem(w, r, http.StatusForbidden, "ERP_POSTING_AUTHORITY_CALLER_DENIED",
 			"workload registration does not allow ERP posting-authority resolution", false)
 		return

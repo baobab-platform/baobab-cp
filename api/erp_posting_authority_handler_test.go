@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/service/legalactor"
@@ -20,11 +21,15 @@ import (
 
 const erpPostingClient = "baobab-erp-legal-actor-assessor-staging"
 
-type erpPostingRegistry struct{ allowed bool }
+type erpPostingRegistry struct {
+	allowed        bool
+	withoutContext bool
+}
 
 func (r erpPostingRegistry) IsActive(string) bool { return r.allowed }
 func (r erpPostingRegistry) AllowsScope(clientID, scope string) bool {
-	return r.allowed && clientID == erpPostingClient && scope == erpPostingAuthorityScope
+	return r.allowed && clientID == erpPostingClient &&
+		(scope == erpPostingAuthorityScope || (scope == "context:resolve" && !r.withoutContext))
 }
 
 type erpPostingStoreFixture struct {
@@ -69,6 +74,8 @@ type erpPostingOptions struct {
 	owned         bool
 	environment   string
 	enabled       bool
+	// The registry no longer allows context:resolve, though the token still carries it.
+	contextRevoked bool
 }
 
 func defaultErpPostingOptions() erpPostingOptions {
@@ -106,7 +113,7 @@ func newErpPostingFixture(t *testing.T, store *erpPostingStoreFixture, o erpPost
 			Issuer: issuer, Subject: subject, ActorType: "workload", ClientID: erpPostingClient,
 			TenantID: ctx.TenantID, TokenID: "token-erp-posting",
 			Scopes: map[string]struct{}{"context:resolve": {}, erpPostingAuthorityScope: {}}}},
-		WorkloadRegistry: erpPostingRegistry{allowed: o.registered},
+		WorkloadRegistry: erpPostingRegistry{allowed: o.registered, withoutContext: o.contextRevoked},
 		Contexts:         repo, Identities: repo,
 	})
 	return erpPostingFixture{handler: handler, store: store, context: ctx}
@@ -180,8 +187,9 @@ func TestErpPostingAuthorityRouteIsOptInNonproductionAndAllowlisted(t *testing.T
 
 func TestErpPostingAuthorityRejectsUntrustedCallers(t *testing.T) {
 	for name, mutate := range map[string]func(*erpPostingOptions){
-		"not-allowlisted": func(o *erpPostingOptions) { o.allowlist = []string{"someone-else"} },
-		"not-registered":  func(o *erpPostingOptions) { o.registered = false },
+		"not-allowlisted":                   func(o *erpPostingOptions) { o.allowlist = []string{"someone-else"} },
+		"not-registered":                    func(o *erpPostingOptions) { o.registered = false },
+		"context-scope-revoked-in-registry": func(o *erpPostingOptions) { o.contextRevoked = true },
 	} {
 		t.Run(name, func(t *testing.T) {
 			o := defaultErpPostingOptions()
@@ -354,8 +362,10 @@ func TestErpPostingCatalogueMatchesSchemaEnum(t *testing.T) {
 			t.Fatalf("%s: unknown role %s", class, op.Role)
 		}
 	}
-	if len(catalogue) != 6 {
-		t.Fatalf("expected six catalogued operations, got %d", len(catalogue))
+	// erp/v2 catalogue version 2 (ADR-SHARED-037): six version 1 classes plus
+	// five purchase-side and vendor-payment recording classes.
+	if len(catalogue) != 11 {
+		t.Fatalf("expected eleven catalogued operations, got %d", len(catalogue))
 	}
 }
 
@@ -365,4 +375,87 @@ func legalactorKnownRole(role string) bool {
 		return true
 	}
 	return false
+}
+
+// The Shared golden vectors (erp/v2 catalogue-vectors.json, ADR-SHARED-037)
+// pin every class to exactly one role and activity. CP must derive exactly
+// the VALID binding for each class, resolve the mandate with it and disclose
+// it; its own decision schema must refuse every INVALID binding, so a decision
+// for one class can never carry another class's, or a foreign role's, authority.
+func TestErpPostingAuthorityGoldenCatalogueVectors(t *testing.T) {
+	raw, err := contracts.ReadEmbedded("erp/v2/examples/catalogue-vectors.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plain struct {
+		CatalogueVersion int                 `json:"catalogue_version"`
+		Vectors          []map[string]string `json:"vectors"`
+	}
+	if err := json.Unmarshal(raw, &plain); err != nil {
+		t.Fatal(err)
+	}
+	if plain.CatalogueVersion != 2 || len(plain.Vectors) == 0 {
+		t.Fatalf("unexpected golden vector set: version=%d vectors=%d", plain.CatalogueVersion, len(plain.Vectors))
+	}
+	catalogue, err := erpPostingCatalogue()
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := map[string]map[string]string{}
+	invalid := 0
+	for _, v := range plain.Vectors {
+		op, ok := catalogue[v["operation_class"]]
+		if !ok {
+			t.Fatalf("%s: vector class is not in CP's embedded catalogue", v["vector_id"])
+		}
+		switch v["expected"] {
+		case "VALID":
+			if op.Role != v["legal_actor_role"] || op.Activity != v["activity"] {
+				t.Fatalf("%s: CP derives %s/%s", v["vector_id"], op.Role, op.Activity)
+			}
+			if valid[v["operation_class"]] != nil {
+				t.Fatalf("%s: two VALID bindings", v["operation_class"])
+			}
+			valid[v["operation_class"]] = v
+		case "INVALID":
+			invalid++
+		default:
+			t.Fatalf("%s: unknown expectation %q", v["vector_id"], v["expected"])
+		}
+	}
+	if len(valid) != len(catalogue) || invalid == 0 {
+		t.Fatalf("vectors cover %d of %d classes (%d invalid)", len(valid), len(catalogue), invalid)
+	}
+
+	now := time.Now().UTC()
+	disclosed := map[string]map[string]any{}
+	for class, v := range valid {
+		store := &erpPostingStoreFixture{bound: true, resolution: authorizedResolution(now)}
+		out := newErpPostingFixture(t, store, defaultErpPostingOptions()).post(t, map[string]any{"operation_class": class})
+		d := decodeErpDecision(t, out)
+		if len(store.requests) != 1 || store.requests[0].Role != v["legal_actor_role"] ||
+			store.requests[0].Activity != v["activity"] {
+			t.Fatalf("%s: mandate resolved with %+v", class, store.requests)
+		}
+		if d.Outcome != "AUTHORIZED" || d.OperationClass != class || d.LegalActorRole != v["legal_actor_role"] ||
+			d.Activity != v["activity"] {
+			t.Fatalf("%s: disclosed %+v", class, d)
+		}
+		var asMap map[string]any
+		if err := json.Unmarshal(out.Body.Bytes(), &asMap); err != nil {
+			t.Fatal(err)
+		}
+		disclosed[class] = asMap
+	}
+	for _, v := range plain.Vectors {
+		candidate := map[string]any{}
+		for k, val := range disclosed[v["operation_class"]] {
+			candidate[k] = val
+		}
+		candidate["legal_actor_role"], candidate["activity"] = v["legal_actor_role"], v["activity"]
+		err := contracts.ValidateValue(erpPostingAuthorityDecisionSchema, candidate)
+		if (err == nil) != (v["expected"] == "VALID") {
+			t.Fatalf("%s: decision schema accepted=%v", v["vector_id"], err == nil)
+		}
+	}
 }

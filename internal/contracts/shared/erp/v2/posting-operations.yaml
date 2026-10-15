@@ -12,7 +12,12 @@
 #
 # capability_key stays null until ADR-SHARED-033 registers the finance keys;
 # a null key matches only mandates whose capability scope is empty.
-version: 1
+#
+# Version 2 (ADR-SHARED-037) adds purchase-side and vendor-payment RECORDING
+# classes. erp.vendor-payment.record records a disbursement made elsewhere; it
+# is never money-movement authority (ADR-SHARED-035) and never covers a native
+# path that creates a disbursement instruction. Version 1 classes are unchanged.
+version: 2
 operations:
   - operation_class: erp.gl-journal.post
     legal_actor_role: ACCOUNTING_ENTITY
@@ -37,4 +42,24 @@ operations:
   - operation_class: erp.sales-order.complete
     legal_actor_role: CONTRACTING_PARTY
     activity: SALES_ORDER_COMMITMENT
+    capability_key: null
+  - operation_class: erp.purchase-order.complete
+    legal_actor_role: CONTRACTING_PARTY
+    activity: PURCHASE_ORDER_COMMITMENT
+    capability_key: null
+  - operation_class: erp.material-receipt.complete
+    legal_actor_role: CONTRACTING_PARTY
+    activity: GOODS_RECEIPT
+    capability_key: null
+  - operation_class: erp.vendor-invoice.record
+    legal_actor_role: ACCOUNTING_ENTITY
+    activity: VENDOR_INVOICE_RECORDING
+    capability_key: null
+  - operation_class: erp.vendor-payment.record
+    legal_actor_role: ACCOUNTING_ENTITY
+    activity: VENDOR_PAYMENT_RECORDING
+    capability_key: null
+  - operation_class: erp.payables-allocation.record
+    legal_actor_role: ACCOUNTING_ENTITY
+    activity: PAYABLES_ALLOCATION
     capability_key: null
