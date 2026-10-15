@@ -785,7 +785,22 @@ processor.
 | E | Open |
 | Payout | Fail-closed by design |
 
-**Boundary.** Gate D1 is integration acceptance, not certification.
+**EA v2.2 classification.** Shared's [EA Implementation Plan v2.2](https://github.com/baobab-platform/shared/blob/main/docs/architecture/EA-implementation-plan-v2.2-ADR-SHARED-036-integration-reconciliation.md)
+(accepted 15 October 2026 under ADR-SHARED-036, Shared [#310](https://github.com/baobab-platform/shared/pull/310)
+and [#311](https://github.com/baobab-platform/shared/pull/311)) supersedes v2.1 for active execution. Under it:
+- "D1" and "D2" are Payments-local gate names. D1 is engine-owned, real-component integration evidence with
+  synthetic data for native HTTP money-movement enforcement. It is **not EA Gate D**: v2.2 states that no
+  Gate D/E is satisfied by a real-component test or a deterministic PSP fixture. EA Gate D for Payments needs
+  the relevant L4 profile and then protected staging acceptance.
+- D1 is **not L4**. It ran in Payments' own CI, not on the Infrastructure-owned INT-01 runner. The Payments
+  scenarios it proves (legal and financial veto, no bypass at COMMIT or dispatch, idempotency, crash and
+  provider reconciliation) are inputs to FIN-04 and INT-08 once INT-01 exists. The receipt already names what
+  an L4 receipt requires: candidate and dependency SHAs, Shared pins, the router image, the profile, the
+  simulated provider, the scenario IDs and the evidence artifact.
+- No score changes. EA-R03 remains PART: Payments D2, Subscriptions, Trade Docs and the unmapped ERP and Trade
+  classes are open.
+
+**Boundary.** Gate D1 is integration acceptance, not certification and not EA Gate D.
 - **Synthetic seeds:** where CP has no admin API, rows were inserted directly and recorded as synthetic in the
   evidence: the human identities, the legal-entity verification, the tenant's market assignment and the
   `baobab-payments` engine binding. Tenant, market and mandate went through CP's admin API, with four-eyes
