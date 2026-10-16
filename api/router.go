@@ -140,6 +140,13 @@ type Dependencies struct {
 	PaymentsMoneyMovementAuthorityEnabled   bool
 	PaymentsMoneyMovementAuthority          paymentsMoneyMovementStore
 	PaymentsMoneyMovementAuthorityClientIDs []string
+	// P0-04B Trade-0 (ADR-SHARED-039): the CP-owned Seller Operating Binding
+	// registry and per-operation Trade order authority. Default off,
+	// nonproduction only, explicit Trade workload client allowlist.
+	TradeOrderAuthorityEnabled   bool
+	TradeOrderAuthority          tradeOrderAuthorityStore
+	SellerOperatingBindings      sellerOperatingBindingStore
+	TradeOrderAuthorityClientIDs []string
 	// P0-02B is a separate default-off private scanner boundary. Its verifier
 	// MUST compose current token introspection and fresh registry authority.
 	ScannerIntakeEnabled bool
@@ -874,6 +881,36 @@ func New(dependencies Dependencies) http.Handler {
 				identities: dependencies.Identities, store: dependencies.PaymentsMoneyMovementAuthority, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", paymentsMoneyMovementScope)).
 				Post("/internal/payments/v1/money-movement-authority/resolve", h.resolve)
+		}
+	}
+	// P0-04B Trade-0 grants a CP legal-actor FACT for one Trade operation under
+	// one ACTIVE CP Seller Operating Binding, never provider, money-movement or
+	// ERP authority. The binding lifecycle is human-governed with exact
+	// organisation grants. No production route.
+	if dependencies.TradeOrderAuthorityEnabled && dependencies.TradeOrderAuthority != nil &&
+		dependencies.SellerOperatingBindings != nil && dependencies.Contexts != nil && dependencies.Identities != nil &&
+		dependencies.WorkloadRegistry != nil && peoRoutesPermittedIn(dependencies.Environment) {
+		allow := make(map[string]bool)
+		for _, id := range dependencies.TradeOrderAuthorityClientIDs {
+			if id = strings.TrimSpace(id); id != "" {
+				allow[id] = true
+			}
+		}
+		if len(allow) > 0 {
+			resolver := tradeOrderAuthorityHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
+				identities: dependencies.Identities, store: dependencies.TradeOrderAuthority, clientIDs: allow}
+			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeOrderAuthorityScope)).
+				Post("/internal/trade/v1/order-authority/resolve", resolver.resolve)
+			bindings := sellerOperatingBindingHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
+				identities: dependencies.Identities, store: dependencies.SellerOperatingBindings, clientIDs: allow}
+			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeSellerBindingAttestScope)).
+				Post("/internal/trade/v1/seller-operating-bindings/attestations", bindings.attest)
+			r.With(documentaryRestrictionNoStore, a.authorize(a.adminVerifier, "human", "seller-operating-binding:propose")).
+				Post("/v2/seller-operating-bindings", bindings.propose)
+			for action, spec := range sellerBindingActions {
+				r.With(documentaryRestrictionNoStore, a.authorize(a.adminVerifier, "human", "seller-operating-binding:"+spec.operation)).
+					Post("/v2/seller-operating-bindings/{bindingID}/versions/{version}/"+action, bindings.transition(action))
+			}
 		}
 	}
 	if dependencies.ProgressiveApplicationsEnabled && dependencies.ProgressiveApplications != nil &&

@@ -1,0 +1,600 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/trade/v2/seller-operating-binding.schema.json",
+  "title": "CP-owned Seller Operating Binding (P0-04B Trade-0, ADR-SHARED-039)",
+  "description": "A reusable, versioned platform operating-authority assignment that lets one seller (tenant, operating Organisation, responsible legal entity) trade in one market through one Trade engine instance under one attested native configuration. The Control Plane is the system of record for its identity, scope, approval, activation, suspension, revocation and effective-dated lifecycle; Trade is authoritative for the native configuration it attests and for cart/order attribution. A binding is never cart-scoped. ACTIVE is necessary but never sufficient: every consequential operation still needs a current operation-specific order-authority decision. Native Medusa identifiers never cross this boundary; Trade's configuration is carried only as an opaque reference and its SHA-256 digest.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {},
+  "$defs": {
+    "bindingReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_id",
+        "binding_version"
+      ],
+      "description": "Exact governed binding and version. A decision for one version is never valid for another.",
+      "properties": {
+        "binding_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "binding_version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "configurationDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hex SHA-256 of Trade's canonical native seller configuration (sales channels, regions and the other native scope it attests)."
+    },
+    "configurationReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+      "description": "Opaque Trade-issued reference to its native configuration; never a Medusa table or row identifier."
+    },
+    "bindingStatus": {
+      "type": "string",
+      "enum": [
+        "PENDING_APPROVAL",
+        "APPROVED",
+        "ACTIVE",
+        "SUSPENDED",
+        "REVOKED",
+        "REJECTED",
+        "SUPERSEDED",
+        "EXPIRED"
+      ],
+      "description": "Only ACTIVE permits new consequential commitments. REVOKED, REJECTED, SUPERSEDED and EXPIRED are terminal."
+    },
+    "currencyScope": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{3}$"
+      }
+    },
+    "NativeConfigurationAttestationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Trade workload to CP (scope trade-seller-binding:attest) under its RUNTIME context, which fixes tenant, Organisation and market. An attestation authorises nothing.",
+      "required": [
+        "context_id",
+        "engine_instance_id",
+        "native_configuration_reference",
+        "native_configuration_digest",
+        "currency_scope",
+        "attested_at"
+      ],
+      "properties": {
+        "context_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "engine_instance_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId"
+        },
+        "native_configuration_reference": {
+          "$ref": "#/$defs/configurationReference"
+        },
+        "native_configuration_digest": {
+          "$ref": "#/$defs/configurationDigest"
+        },
+        "currency_scope": {
+          "$ref": "#/$defs/currencyScope"
+        },
+        "attested_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "NativeConfigurationAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attestation_id",
+        "tenant_id",
+        "operating_organisation_id",
+        "market",
+        "engine_instance_id",
+        "native_configuration_reference",
+        "native_configuration_digest",
+        "currency_scope",
+        "attested_at",
+        "recorded_at"
+      ],
+      "properties": {
+        "attestation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+        },
+        "market": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "engine_instance_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId"
+        },
+        "native_configuration_reference": {
+          "$ref": "#/$defs/configurationReference"
+        },
+        "native_configuration_digest": {
+          "$ref": "#/$defs/configurationDigest"
+        },
+        "currency_scope": {
+          "$ref": "#/$defs/currencyScope"
+        },
+        "attested_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "ProposeBindingCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Human maker (scope seller-operating-binding:propose). Creates a PENDING_APPROVAL version from one attestation. supersedes names the ACTIVE or SUSPENDED version it will replace on activation, if any.",
+      "required": [
+        "attestation_id",
+        "responsible_legal_entity_id",
+        "effective_from",
+        "evidence_references"
+      ],
+      "properties": {
+        "attestation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "responsible_legal_entity_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "supersedes": {
+          "$ref": "#/$defs/bindingReference"
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "BindingTransitionCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Human checker or operator command on one exact version: approve and reject (checker, scope seller-operating-binding:approve), activate (operator, seller-operating-binding:activate; also reinstates a SUSPENDED version), suspend and revoke (operator, seller-operating-binding:suspend / :revoke). CP enforces that proposer, approver and activator are three distinct canonical principals.",
+      "required": [
+        "binding_reference",
+        "transition",
+        "expected_status",
+        "reason"
+      ],
+      "properties": {
+        "binding_reference": {
+          "$ref": "#/$defs/bindingReference"
+        },
+        "transition": {
+          "enum": [
+            "APPROVE",
+            "REJECT",
+            "ACTIVATE",
+            "SUSPEND",
+            "REVOKE"
+          ]
+        },
+        "expected_status": {
+          "$ref": "#/$defs/bindingStatus"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 1000
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "transition": {
+                "const": "APPROVE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expected_status": {
+                "const": "PENDING_APPROVAL"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "transition": {
+                "const": "REJECT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expected_status": {
+                "const": "PENDING_APPROVAL"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "transition": {
+                "const": "ACTIVATE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expected_status": {
+                "enum": [
+                  "APPROVED",
+                  "SUSPENDED"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "transition": {
+                "const": "SUSPEND"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expected_status": {
+                "const": "ACTIVE"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "transition": {
+                "const": "REVOKE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expected_status": {
+                "enum": [
+                  "APPROVED",
+                  "ACTIVE",
+                  "SUSPENDED"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "SellerOperatingBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_id",
+        "binding_version",
+        "status",
+        "tenant_id",
+        "operating_organisation_id",
+        "responsible_legal_entity_id",
+        "market",
+        "currency_scope",
+        "trade_engine_instance_id",
+        "native_configuration_reference",
+        "native_configuration_digest",
+        "attestation_id",
+        "effective_from",
+        "proposed_by",
+        "proposal_id",
+        "evidence_references",
+        "revision",
+        "updated_at"
+      ],
+      "properties": {
+        "binding_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "binding_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "$ref": "#/$defs/bindingStatus"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+        },
+        "responsible_legal_entity_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/canonicalLegalEntityId"
+        },
+        "market": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "currency_scope": {
+          "$ref": "#/$defs/currencyScope"
+        },
+        "trade_engine_instance_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId"
+        },
+        "native_configuration_reference": {
+          "$ref": "#/$defs/configurationReference"
+        },
+        "native_configuration_digest": {
+          "$ref": "#/$defs/configurationDigest"
+        },
+        "attestation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "supersedes": {
+          "$ref": "#/$defs/bindingReference"
+        },
+        "proposed_by": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Canonical CP principal identifier (never a token subject or display name)."
+        },
+        "proposal_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "approved_by": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Canonical CP principal identifier (never a token subject or display name)."
+        },
+        "approval_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "activated_by": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Canonical CP principal identifier (never a token subject or display name)."
+        },
+        "activation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "APPROVED",
+                  "ACTIVE",
+                  "SUSPENDED"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "approved_by",
+              "approval_id"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "ACTIVE",
+                  "SUSPENDED"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "activated_by",
+              "activation_id"
+            ]
+          }
+        }
+      ],
+      "description": "Semantic rules: proposed_by, approved_by and activated_by are three distinct principals; effective_from < effective_to when set; a version's scope (everything but status, approval/activation provenance, revision and updated_at) is immutable."
+    },
+    "BindingTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One immutable history row; CP keeps the full lifecycle.",
+      "required": [
+        "transition_id",
+        "binding_reference",
+        "from_status",
+        "to_status",
+        "principal_id",
+        "occurred_at",
+        "reason"
+      ],
+      "properties": {
+        "transition_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "binding_reference": {
+          "$ref": "#/$defs/bindingReference"
+        },
+        "from_status": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/bindingStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to_status": {
+          "$ref": "#/$defs/bindingStatus"
+        },
+        "principal_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Canonical CP principal identifier (never a token subject or display name)."
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 1000
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "SellerOperatingBindingChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Payload of the versioned trade.seller-operating-binding.changed event CP publishes through its transactional outbox after the transition commits. Information for Trade's projection, never authority: consequential operations still resolve a current decision.",
+      "required": [
+        "event_version",
+        "transition_id",
+        "binding_reference",
+        "status",
+        "tenant_id",
+        "operating_organisation_id",
+        "trade_engine_instance_id",
+        "native_configuration_digest",
+        "occurred_at"
+      ],
+      "properties": {
+        "event_version": {
+          "const": 1
+        },
+        "transition_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "binding_reference": {
+          "$ref": "#/$defs/bindingReference"
+        },
+        "status": {
+          "$ref": "#/$defs/bindingStatus"
+        },
+        "tenant_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+        },
+        "operating_organisation_id": {
+          "$ref": "../../organisation/v2/domain.schema.json#/$defs/organisationId"
+        },
+        "trade_engine_instance_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId"
+        },
+        "native_configuration_digest": {
+          "$ref": "#/$defs/configurationDigest"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

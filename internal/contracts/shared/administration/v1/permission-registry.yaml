@@ -532,3 +532,38 @@ permissions:
     delegable: false
     read_only: false
     description: "Admit an exact native Trade cart binding revoke command for this Organisation. Independent maker, checker and activating operator; no mandate, context or provider authority is conferred. Registered without profile assignment."
+  - key: organisation.seller-operating-binding.propose
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Propose a CP Seller Operating Binding version for this Organisation from one Trade native-configuration attestation (maker). No mandate, context or provider authority is conferred (ADR-SHARED-039). Registered without profile assignment."
+  - key: organisation.seller-operating-binding.approve
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Approve or reject one exact pending CP Seller Operating Binding version for this Organisation (checker; never its proposer). No mandate, context or provider authority is conferred (ADR-SHARED-039). Registered without profile assignment."
+  - key: organisation.seller-operating-binding.activate
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Activate or reinstate one exact approved or suspended CP Seller Operating Binding version for this Organisation after CP revalidation (operator; never its proposer or approver). No mandate, context or provider authority is conferred (ADR-SHARED-039). Registered without profile assignment."
+  - key: organisation.seller-operating-binding.suspend
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Suspend one exact ACTIVE CP Seller Operating Binding version for this Organisation. No mandate, context or provider authority is conferred (ADR-SHARED-039). Registered without profile assignment."
+  - key: organisation.seller-operating-binding.revoke
+    domain: ORGANISATION
+    risk_class: HIGH
+    scope_levels: [ORGANISATION]
+    delegable: false
+    read_only: false
+    description: "Revoke one exact CP Seller Operating Binding version for this Organisation (terminal). No mandate, context or provider authority is conferred (ADR-SHARED-039). Registered without profile assignment."
