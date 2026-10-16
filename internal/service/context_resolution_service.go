@@ -214,6 +214,26 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 	// degenerates to "the tenant's own legal entity," always populated,
 	// never caller-selectable.
 	trustedContext.LegalEntityID = tenant.LegalEntityID
+	// ADR-BCP-027 LA-T02: optional caller attestation is independent of the
+	// tenant's authoritative PRIMARY identity. New/governed tenants must
+	// retain exactly one current ACTIVE PRIMARY even when the caller sends no
+	// organisation_id (or names another attested counterparty). The flag is
+	// stored by migration 000102 and cannot be weakened on an enforced tenant.
+	// Explicit legacy BOOTSTRAP migration exceptions keep immutable v1
+	// semantics; they are not silently promoted into Organisation-first tenants.
+	if tenant.PrimaryOrganisationEnforced {
+		primary, err := s.runtimePrimaryOrganisation(ctx, tenantID, now)
+		if err != nil {
+			return nil, domain.Context{}, recordOrganisationFailure(err)
+		}
+		if organisationID == "" {
+			organisationID = primary.ID
+			organisationSource = &domain.ContextSource{
+				Source: "baobab-cp:primary-organisation-mapping", TrustLevel: domain.TrustSystem,
+				Evidence: primary.ID,
+			}
+		}
+	}
 	// ADR-BCP-016: a caller-asserted organisationID is never trusted merely
 	// because it is well-formed -- it must name a real, ACTIVE,
 	// organisation-kind CanonicalEntity the resolved tenant is attested for
@@ -240,6 +260,43 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 		return nil, domain.Context{}, err
 	}
 	return auth.WithOperationContext(opCtx, trustedContext), trustedContext, nil
+}
+
+// runtimePrimaryOrganisation deliberately re-reads mappings at the request's
+// evaluation time. GetTenant's projected ID (and a DEFAULT LegalEntity) is
+// insufficient: mapping expiry, suspension and the canonical entity lifecycle
+// must fail closed now, not only when a provisioning transaction was committed.
+func (s ContextResolutionService) runtimePrimaryOrganisation(ctx context.Context, tenantID string, now time.Time) (domain.CanonicalEntity, error) {
+	fail := func(err error) (domain.CanonicalEntity, error) {
+		return domain.CanonicalEntity{}, organisationFailure(metrics.OutcomeNotMapped, err)
+	}
+	if s.Mappings == nil || s.Canonical == nil {
+		return fail(errors.New("PRIMARY Organisation authority is unavailable"))
+	}
+	mappings, err := s.Mappings.ListTenantOrganisationMappings(ctx, tenantID, now)
+	if err != nil {
+		return fail(fmt.Errorf("read PRIMARY Organisation mappings: %w", err))
+	}
+	primary := ""
+	for _, mapping := range mappings {
+		if mapping.TenantID == tenantID && mapping.MappingRole == "PRIMARY_ORGANISATION" && mapping.InEffect(now) {
+			if primary != "" {
+				return fail(errors.New("PRIMARY Organisation mapping is ambiguous"))
+			}
+			primary = mapping.OrganisationID
+		}
+	}
+	if primary == "" {
+		return fail(errors.New("no current PRIMARY Organisation mapping"))
+	}
+	entity, err := s.Canonical.GetCanonicalEntity(ctx, primary)
+	if err != nil {
+		return fail(fmt.Errorf("read PRIMARY Organisation: %w", err))
+	}
+	if err := domain.AttestOrganisation(entity, tenantID, mappings, now); err != nil {
+		return fail(err)
+	}
+	return entity, nil
 }
 
 // attestKind enforces ADR-BCP-024's exact kind. A legacy ADR-BCP-016 kind

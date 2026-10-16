@@ -259,3 +259,52 @@ type noOrganisationMappings struct{}
 func (noOrganisationMappings) ListTenantOrganisationMappings(context.Context, string, time.Time) ([]domain.TenantOrganisationMapping, error) {
 	return nil, nil
 }
+
+// This exercises the public v1 route with an omitted hint: governed tenant
+// identity is authoritative state, not a newly required request property.
+func TestPlatformContextGovernedPrimaryWhenHintOmitted(t *testing.T) {
+	for _, valid := range []bool{true, false} {
+		t.Run(map[bool]string{true: "derived", false: "missing_denied"}[valid], func(t *testing.T) {
+			repo := repository.NewInMemoryRepository()
+			canonical := repository.NewCanonicalRepository()
+			org := "019343b9-f6a0-7000-8000-000000000001"
+			canonical.Entities[org] = domain.CanonicalEntity{ID: org, EntityType: domain.EntityTypeOrganisation, Status: "ACTIVE"}
+			mappings := primaryContextMappings{}
+			if valid {
+				mappings = append(mappings, domain.TenantOrganisationMapping{TenantID: "tenant-123", OrganisationID: org, MappingRole: "PRIMARY_ORGANISATION", Status: "ACTIVE", EffectiveFrom: time.Now().Add(-time.Hour)})
+			}
+			h := PlatformContextHandler{ContextResolution: service.ContextResolutionService{
+				Identity:  service.IdentityService{Repository: repo, Provision: service.WorkloadOnlyProvisioningPolicy},
+				Tenants:   &fakeStore{tenant: domain.Tenant{TenantID: "tenant-123", ObservedState: "active", PrimaryOrganisationEnforced: true}},
+				Canonical: canonical, Mappings: mappings,
+			}, Contexts: repo, TTL: time.Minute}
+			request := httptest.NewRequest(http.MethodPost, "/v1/platform-context/resolve", nil)
+			request = request.WithContext(auth.WithPrincipal(context.WithValue(context.Background(), correlationKey{}, "00000000-0000-4000-8000-000000000009"), auth.Principal{Subject: "workload-primary", Issuer: "https://iam.example.test", ActorType: "workload", TenantID: "tenant-123", ClientID: "test", TokenID: "test", Scopes: map[string]struct{}{"context:resolve": {}}}))
+			w := httptest.NewRecorder()
+			h.Resolve(w, request)
+			if !valid {
+				if w.Code != http.StatusForbidden || bytes.Contains(w.Body.Bytes(), []byte("context_id")) {
+					t.Fatalf("missing PRIMARY created authority: %d %s", w.Code, w.Body.String())
+				}
+				return
+			}
+			if w.Code != http.StatusOK {
+				t.Fatalf("resolve: %d %s", w.Code, w.Body.String())
+			}
+			var result platformContextResolveResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			stored, err := repo.GetContext(context.Background(), result.ContextID)
+			if err != nil || result.OrganisationID != org || stored.OrganisationID != org {
+				t.Fatalf("PRIMARY was not persisted: %+v %+v %v", result, stored, err)
+			}
+		})
+	}
+}
+
+type primaryContextMappings []domain.TenantOrganisationMapping
+
+func (m primaryContextMappings) ListTenantOrganisationMappings(context.Context, string, time.Time) ([]domain.TenantOrganisationMapping, error) {
+	return m, nil
+}

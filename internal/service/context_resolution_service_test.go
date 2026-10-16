@@ -386,3 +386,68 @@ func TestContextResolutionServiceCountsOrganisationFailures(t *testing.T) {
 		t.Fatalf("wrong_kind %d -> %d", wrongKind, got)
 	}
 }
+
+// Governed tenants cannot use the optional caller assertion to bypass their
+// own PRIMARY identity. Legacy v1 compatibility remains explicitly separate.
+func TestRuntimePrimaryOrganisationAuthority(t *testing.T) {
+	at := time.Now().UTC()
+	end := at.Add(-time.Second)
+	start := at.Add(time.Hour)
+	base := domain.TenantOrganisationMapping{TenantID: "tenant-123", OrganisationID: "primary", MappingRole: "PRIMARY_ORGANISATION", Status: "ACTIVE", EffectiveFrom: at.Add(-time.Hour)}
+	tests := []struct {
+		name                  string
+		mappings              []domain.TenantOrganisationMapping
+		status, kind, request string
+		allow                 bool
+	}{
+		{"derived when omitted", []domain.TenantOrganisationMapping{base}, "ACTIVE", domain.EntityTypeOrganisation, "", true},
+		{"explicit assertion", []domain.TenantOrganisationMapping{base}, "ACTIVE", domain.EntityTypeOrganisation, "primary", true},
+		{"missing", nil, "ACTIVE", domain.EntityTypeOrganisation, "", false},
+		{"missing with caller assertion", nil, "ACTIVE", domain.EntityTypeOrganisation, "primary", false},
+		{"expired", []domain.TenantOrganisationMapping{func() domain.TenantOrganisationMapping { v := base; v.EffectiveTo = &end; return v }()}, "ACTIVE", domain.EntityTypeOrganisation, "", false},
+		{"future", []domain.TenantOrganisationMapping{func() domain.TenantOrganisationMapping { v := base; v.EffectiveFrom = start; return v }()}, "ACTIVE", domain.EntityTypeOrganisation, "", false},
+		{"suspended mapping", []domain.TenantOrganisationMapping{func() domain.TenantOrganisationMapping { v := base; v.Status = "SUSPENDED"; return v }()}, "ACTIVE", domain.EntityTypeOrganisation, "", false},
+		{"wrong tenant", []domain.TenantOrganisationMapping{func() domain.TenantOrganisationMapping { v := base; v.TenantID = "other"; return v }()}, "ACTIVE", domain.EntityTypeOrganisation, "", false},
+		{"additional is not PRIMARY", []domain.TenantOrganisationMapping{func() domain.TenantOrganisationMapping {
+			v := base
+			v.MappingRole = "ADDITIONAL_ORGANISATION"
+			return v
+		}()}, "ACTIVE", domain.EntityTypeOrganisation, "", false},
+		{"ambiguous", []domain.TenantOrganisationMapping{base, base}, "ACTIVE", domain.EntityTypeOrganisation, "", false},
+		{"inactive entity", []domain.TenantOrganisationMapping{base}, "SUSPENDED", domain.EntityTypeOrganisation, "", false},
+		{"wrong kind", []domain.TenantOrganisationMapping{base}, "ACTIVE", domain.EntityTypeProduct, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tenant := activeTenant()
+			tenant.PrimaryOrganisationEnforced = true
+			// This stale projection must never override the current mappings.
+			tenant.PrimaryOrganisationID = "stale-projection"
+			canonical := repository.NewCanonicalRepository()
+			canonical.Entities["primary"] = canonicalOrganisation("primary", tt.kind, tt.status, "tenant-123")
+			svc := ContextResolutionService{Identity: identityServiceFor(repository.NewInMemoryRepository()), Tenants: &fakeTenantStore{tenant: tenant}, Canonical: canonical, Mappings: tenantMappings(tt.mappings)}
+			_, resolved, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), tenant.TenantID, tt.request, "correlation-primary", at)
+			if !tt.allow {
+				if err == nil {
+					t.Fatal("invalid PRIMARY authority produced runtime context")
+				}
+				return
+			}
+			if err != nil || resolved.OrganisationID != "primary" {
+				t.Fatalf("PRIMARY resolution: %+v %v", resolved, err)
+			}
+			if tt.request == "" && resolved.Provenance["organisation_id"].Source != "baobab-cp:primary-organisation-mapping" {
+				t.Fatal("missing authoritative derivation provenance")
+			}
+		})
+	}
+}
+
+func TestRuntimePrimaryAuthorityUnavailable(t *testing.T) {
+	tenant := activeTenant()
+	tenant.PrimaryOrganisationEnforced = true
+	svc := ContextResolutionService{Identity: identityServiceFor(repository.NewInMemoryRepository()), Tenants: &fakeTenantStore{tenant: tenant}}
+	if _, _, err := svc.Resolve(context.Background(), workloadPrincipalForContext(), tenant.TenantID, "", "correlation-primary", time.Now()); err == nil {
+		t.Fatal("missing authority must deny")
+	}
+}
