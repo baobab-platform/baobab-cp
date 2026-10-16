@@ -883,3 +883,59 @@ Payments D2 are open.
 - The workload registry used is a CI-only snapshot; the Shared registry keeps the ERP assessor PROVISIONED.
 - Still open: real placements (named maker and checker), real mandates, real IAM, landed cost, inventory, movement and
   revaluation costing (ERP-B), and Gate E.
+
+## 18. EA-R03 ERP-B payables recording provenance and deny-by-name — 16 October 2026
+
+The platform owner decided increment ERP-B on 16 October 2026 (ADR-SHARED-038).
+- ERP-B covers only the five ERP-A purchase-side and payables classes. The `erp/v2` catalogue is frozen at version 2.
+- Vendor-payment recording needs independently verified payment-execution provenance. It never initiates, instructs, approves or executes a money movement.
+- Bank statements, cash journals (in either direction), inventory, movement, production (deferred to ERP-C), landed cost and independent costing stay denied by name.
+- Payments D2 stays out of scope (BL-04).
+
+| Set | PR | Merge | Content |
+|---|---|---|---|
+| Contract | Shared [#316](https://github.com/baobab-platform/shared/pull/316) | `e1da44e` | ADR-SHARED-038. New `erp/v2` `payment-execution-evidence.schema.json`. Its only execution authority is `SYNTHETIC_ENGINE_LOCAL`, and the conformance validator enforces that verification never precedes execution. The catalogue stays at version 2 |
+| CP resolver | none | n/a | **No CP change is needed.** CP already resolves `VENDOR_PAYMENT_RECORDING` (§17). Provenance is ERP's native check, alongside finance readiness, and is never a CP field (ADR-SHARED-038 §9). CP stays pinned at `756edb4`, because it consumes nothing that changed |
+| ERP enforcement and harness | ERP [#102](https://github.com/baobab-platform/baobab-erp/pull/102) | `0bcf6d1` | N0008. An outbound payment is `erp.vendor-payment.record` only while it is bound to exactly one evidence record that matches its client, org, payee, currency, amount and vendor-invoice obligation, and the binding is re-checked at COMMIT. Evidence is written only by a non-superuser member of `baobab_payment_evidence_ingest` and is append-only. A vendor payment is allocated only to its evidence obligation. Thirteen uncatalogued tables are refused in the JVM veto and in PostgreSQL. ERP pins Shared `e1da44e` |
+
+**Harness receipt** ([CI run 38871808398](https://github.com/baobab-platform/baobab-erp/actions/runs/38871808398), job
+`116877406470`, evidence artifact `erp-a-real-cp-evidence` / `12033549406`):
+- **Result:** 38 checks, S01–S26 plus B01–B11, `ERP-A failures: 0`.
+- **Candidate:** ERP `04a2f4a` (merged as `0bcf6d1`).
+- **Dependency:** CP `0337632756dea1bd99db098d02e71d8a170027f2`.
+- **Shared pin:** ERP `e1da44e`.
+- **Profile:** engine-local integration (`BAOBAB_ENVIRONMENT=integration`, iDempiere acceptance runtime).
+- **Real components:** the same as §17.
+- **Simulated components:** those in §17, plus payment-execution evidence. That evidence is `SYNTHETIC_ENGINE_LOCAL`, written by a synthetic ingest login, so it proves the mechanism only and never that a real disbursement happened.
+- **Provider:** none. There is no money movement.
+- **Other CI on the merged head:** Gate B 37/37 on PostgreSQL 17, the synthetic Gate D, and Shared conformance.
+
+What ERP-B added to the run:
+- **Evidence gating:**
+  - a vendor payment without evidence is refused at creation (B01);
+  - evidence for another amount is refused (B02);
+  - matching evidence lets the payment be recorded, bound, posted, CP-backed and the invoice paid (B03);
+  - evidence already bound to a payment cannot serve a second one (B04).
+- **Allocation:** allocating to another invoice than the evidence obligation is refused (B05). Allocating to the obligation is CO and CP-backed (B06).
+- **Ingest:** iDempiere's runtime role writing evidence by direct SQL is refused (B07).
+- **Deny-by-name:** bank statement, cash journal and physical inventory are refused through the native models (B08–B10), and direct SQL into all 13 denied-by-name families is refused by PostgreSQL (B11).
+
+**Defect found in CI:** B10 first failed on iDempiere's own mandatory Document Type check, before the veto ran. That was a harness defect, fixed in #102 at `04a2f4a`, and it was not counted as a pass.
+
+**Register fields (EA v2.2 §10).**
+- **Migrations:** ERP native `N0008_payables_provenance_and_deny_by_name`, which creates NOLOGIN role `baobab_payment_evidence_ingest` when the migrator may. CP adds no migration.
+- **Approver:** merged under the owner's standing authorisation to merge when CI passes and the implementation is satisfactory. One Codex finding on Shared #316 was fixed and resolved. ERP #102 had no findings. There was no separate per-PR human approval.
+- **Rollback:**
+  - Immediate fail-closed stop: unset `ERP_POSTING_AUTHORITY_ENABLED`, as in §17.
+  - Code: revert ERP #102, then add a forward native migration that restores the N0006 `governed_class_of` and `allocation_line_side` and drops the N0008 triggers. N0008 is forward-only.
+  - Evidence and binding rows are append-only history and are never deleted.
+  - Contract: ERP re-pins Shared `756edb4`. The schema addition is additive.
+
+**EA v2.2 classification.** This is engine-local real-component evidence on synthetic data. It is **not EA Gate D
+and not L4**: L4 runs only on the Infrastructure INT-01 runner, which the owner has deferred. No score changes.
+EA-R03 remains PART, because Trade, Subscriptions, Trade Docs and Payments D2 are open.
+
+**Boundary.**
+- Vendor-payment recording is non-activatable for protected and production placements until a Shared revision admits a real execution authority (for example a Payments payout under ADR-SHARED-035). Activation is never a flag.
+- Production must run iDempiere as a non-superuser that is not a member of the ingest role (ADR-ERP-022 §6).
+- Still open: real placements, mandates and IAM; bank reconciliation, cash management, inventory and costing increments; manufacturing (ERP-C); and Gate E.
