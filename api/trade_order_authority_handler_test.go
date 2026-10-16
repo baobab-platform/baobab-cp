@@ -653,10 +653,10 @@ func TestSellerBindingProposalNeedsTheExactOrganisationGrant(t *testing.T) {
 		want int
 	}{
 		"allowed":     {sellerBindingHumanOptions{scope: "seller-operating-binding:propose", permission: "organisation.seller-operating-binding.propose"}, http.StatusAccepted},
-		"sibling-org": {sellerBindingHumanOptions{scope: "seller-operating-binding:propose", permission: "organisation.seller-operating-binding.propose", org: domain.NewUUIDv7()}, http.StatusForbidden},
-		"delegated":   {sellerBindingHumanOptions{scope: "seller-operating-binding:propose", permission: "organisation.seller-operating-binding.propose", source: administration.SourceDelegation}, http.StatusForbidden},
-		"wrong-perm":  {sellerBindingHumanOptions{scope: "seller-operating-binding:propose", permission: "organisation.seller-operating-binding.approve"}, http.StatusForbidden},
-		"weak-acr":    {sellerBindingHumanOptions{scope: "seller-operating-binding:propose", permission: "organisation.seller-operating-binding.propose", acr: "1"}, http.StatusForbidden},
+		"sibling-org": {sellerBindingHumanOptions{scope: "seller-operating-binding:propose", permission: "organisation.seller-operating-binding.propose", org: domain.NewUUIDv7()}, http.StatusNotFound},
+		"delegated":   {sellerBindingHumanOptions{scope: "seller-operating-binding:propose", permission: "organisation.seller-operating-binding.propose", source: administration.SourceDelegation}, http.StatusNotFound},
+		"wrong-perm":  {sellerBindingHumanOptions{scope: "seller-operating-binding:propose", permission: "organisation.seller-operating-binding.approve"}, http.StatusNotFound},
+		"weak-acr":    {sellerBindingHumanOptions{scope: "seller-operating-binding:propose", permission: "organisation.seller-operating-binding.propose", acr: "1"}, http.StatusNotFound},
 		"wrong-scope": {sellerBindingHumanOptions{scope: "seller-operating-binding:approve", permission: "organisation.seller-operating-binding.propose"}, http.StatusForbidden},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -702,7 +702,7 @@ func TestSellerBindingTransitionPathMustMatchCommand(t *testing.T) {
 		"other-version":   {body(tradeBindingID, 2, "APPROVE"), http.StatusBadRequest},
 		"other-binding":   {body("9f1c2b3a-9d8e-4a7b-b6c5-0d1e2f3a4b5c", 3, "APPROVE"), http.StatusBadRequest},
 		"other-action":    {body(tradeBindingID, 3, "ACTIVATE"), http.StatusBadRequest},
-		"activate-scoped": {body(tradeBindingID, 3, "APPROVE"), http.StatusForbidden},
+		"activate-scoped": {body(tradeBindingID, 3, "APPROVE"), http.StatusNotFound},
 	} {
 		t.Run(name, func(t *testing.T) {
 			b := *binding
@@ -721,6 +721,20 @@ func TestSellerBindingTransitionPathMustMatchCommand(t *testing.T) {
 				t.Fatalf("transition reached registry: %d", len(store.transitions))
 			}
 		})
+	}
+	// Without the grant, an existing binding answers exactly like an unknown one.
+	for _, b := range []*postgres.SellerOperatingBinding{binding, nil} {
+		store := &tradeOrderStoreFixture{binding: b}
+		if b == nil {
+			store.bindingErr = postgres.ErrSellerBindingNotFound
+		}
+		h, _ := newSellerBindingHumanFixture(t, store, org, sellerBindingHumanOptions{scope: "seller-operating-binding:approve",
+			permission: "organisation.seller-operating-binding.approve", org: domain.NewUUIDv7()})
+		out := httptest.NewRecorder()
+		h.ServeHTTP(out, sellerBindingRequest(path, body(tradeBindingID, 3, "APPROVE")))
+		if out.Code != http.StatusNotFound || !strings.Contains(out.Body.String(), "SELLER_BINDING_NOT_FOUND") {
+			t.Fatalf("existence disclosed: %d %s", out.Code, out.Body.String())
+		}
 	}
 	// The SQL guard's separation-of-duties refusal surfaces as 409.
 	b := *binding

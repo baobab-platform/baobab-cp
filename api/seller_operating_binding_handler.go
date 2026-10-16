@@ -139,7 +139,8 @@ func (h sellerOperatingBindingHandler) attest(w http.ResponseWriter, r *http.Req
 // exactOrganisationGrant resolves the caller to an ACTIVE canonical human and
 // evaluates exactly one direct, HIGH-risk, ORGANISATION-scoped permission for
 // that Organisation, with no role fallback, profile, delegation or platform
-// grant (as the P0-04B-02 binding admission does).
+// grant (as the P0-04B-02 binding admission does). A missing grant answers
+// as not found.
 func (h sellerOperatingBindingHandler) exactOrganisationGrant(w http.ResponseWriter, r *http.Request,
 	permission, organisationID string) (string, bool) {
 	p, ok := auth.PrincipalFromContext(r.Context())
@@ -174,7 +175,10 @@ func (h sellerOperatingBindingHandler) exactOrganisationGrant(w http.ResponseWri
 		Grants: exact, Sources: sources, Now: time.Now().UTC(),
 		Session: administration.Session{ACR: p.Assurance.ACR, AMR: p.Assurance.AMR, AuthenticatedAt: p.Assurance.AuthenticatedAt}})
 	if !decision.Allowed() {
-		problem(w, r, http.StatusForbidden, "SELLER_BINDING_DENIED", "current exact grant and assurance required", false)
+		// The record was already read, so a denial must look exactly like an
+		// unknown record: a caller without the grant cannot probe whether
+		// another Organisation's attestation or binding exists.
+		h.fail(w, r, postgres.ErrSellerBindingNotFound)
 		return "", false
 	}
 	return caller.ID, true
