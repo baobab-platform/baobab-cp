@@ -267,4 +267,100 @@ func TestSellerOperatingBindingLifecycleAndDecisionHistory(t *testing.T) {
 		WHERE decision_id=$1::uuid`, id); err == nil {
 		t.Fatal("a historical decision was rewritten")
 	}
+
+	// --- Trade-A TA-02 discovery: candidates, no overlapping in-force scopes, recorded resolutions.
+	reference := "trade:seller-config/" + suffix
+	governed := func(digest string) (SellerOperatingBinding, func(actor, transition, expected string) (SellerOperatingBinding, error)) {
+		t.Helper()
+		a := attest(digest)
+		b, err := db.ProposeOperatingBinding(ctx, "propose-"+domain.NewUUIDv7(), meta(maker), maker, ProposeSellerOperatingBinding{
+			AttestationID: a.AttestationID, ResponsibleLegalEntityID: entity, EffectiveFrom: time.Now().UTC().Add(-time.Minute),
+			EvidenceReferences: []string{"test/discovery-evidence"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b, func(actor, transition, expected string) (SellerOperatingBinding, error) {
+			return db.TransitionOperatingBinding(ctx, transition+"-"+domain.NewUUIDv7(), meta(actor), actor,
+				TransitionSellerOperatingBinding{BindingID: b.BindingID, BindingVersion: 1, Transition: transition,
+					ExpectedStatus: expected, Reason: "synthetic " + transition})
+		}
+	}
+	live, stepLive := governed(strings.Repeat("c", 64))
+	if _, err := stepLive(checker, "APPROVE", "PENDING_APPROVAL"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stepLive(operator, "ACTIVATE", "APPROVED"); err != nil {
+		t.Fatalf("first in-force binding for the reference must activate: %v", err)
+	}
+	rival, stepRival := governed(strings.Repeat("d", 64))
+	if _, err := stepRival(checker, "APPROVE", "PENDING_APPROVAL"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stepRival(operator, "ACTIVATE", "APPROVED"); !errors.Is(err, ErrSellerBindingConflict) {
+		t.Fatalf("an overlapping in-force binding was activated: %v", err)
+	}
+	// A suspended binding still holds its scope.
+	if _, err := stepLive(operator, "SUSPEND", "ACTIVE"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stepRival(operator, "ACTIVATE", "APPROVED"); !errors.Is(err, ErrSellerBindingConflict) {
+		t.Fatalf("a binding overlapping a SUSPENDED one was activated: %v", err)
+	}
+	if _, err := stepLive(operator, "ACTIVATE", "SUSPENDED"); err != nil {
+		t.Fatal(err)
+	}
+	candidates, err := db.SellerBindingCandidates(ctx, tenant, org, "UG", instanceKey, reference, "UGX")
+	if err != nil || len(candidates) != 4 {
+		t.Fatalf("candidates must include every version citing the reference: %d %v", len(candidates), err)
+	}
+	statuses := map[string]int{}
+	for _, c := range candidates {
+		statuses[c.Status]++
+	}
+	if statuses["ACTIVE"] != 1 || statuses["SUPERSEDED"] != 1 || statuses["REVOKED"] != 1 || statuses["APPROVED"] != 1 {
+		t.Fatalf("unexpected candidate statuses: %v", statuses)
+	}
+	for name, args := range map[string][]string{
+		"other-currency": {tenant, org, "UG", instanceKey, reference, "USD"},
+		"other-market":   {tenant, org, "KE", instanceKey, reference, "UGX"},
+		"other-engine":   {tenant, org, "UG", "ei_otherengine01", reference, "UGX"},
+		"other-org":      {tenant, domain.NewUUIDv7(), "UG", instanceKey, reference, "UGX"},
+		"other-tenant":   {domain.NewTenantID(), org, "UG", instanceKey, reference, "UGX"},
+	} {
+		if got, err := db.SellerBindingCandidates(ctx, args[0], args[1], args[2], args[3], args[4], args[5]); err != nil || len(got) != 0 {
+			t.Fatalf("%s: candidates leaked across scope: %d %v", name, len(got), err)
+		}
+	}
+	resolution := SellerBindingResolution{ClientID: "baobab-trade-legal-actor-assessor-staging", ContextID: domain.NewUUIDv7(),
+		EngineInstanceID: instanceKey, NativeConfigurationReference: reference, NativeConfigurationDigest: live.NativeConfigurationDigest,
+		Currency: "UGX", Outcome: "RESOLVED", TenantID: tenant, OperatingOrganisationID: org, Market: "UG",
+		BindingID: live.BindingID, BindingVersion: 1, CandidateCount: len(candidates), ResolvedAt: time.Now().UTC()}
+	resolutionID, err := db.RecordSellerBindingResolution(ctx, resolution)
+	if err != nil || !domain.IsUUID(resolutionID) {
+		t.Fatalf("record resolution: %q %v", resolutionID, err)
+	}
+	for name, mutate := range map[string]func(*SellerBindingResolution){
+		"denial-names-binding":    func(r *SellerBindingResolution) { r.Outcome = "AMBIGUOUS_BINDING" },
+		"resolved-without-name":   func(r *SellerBindingResolution) { r.BindingID, r.BindingVersion = "", 0 },
+		"resolved-without-scope":  func(r *SellerBindingResolution) { r.TenantID = "" },
+		"unknown-binding-version": func(r *SellerBindingResolution) { r.BindingVersion = 9 },
+		"unknown-outcome":         func(r *SellerBindingResolution) { r.Outcome = "PARTIAL_MATCH" },
+	} {
+		bad := resolution
+		mutate(&bad)
+		if _, err := db.RecordSellerBindingResolution(ctx, bad); err == nil {
+			t.Errorf("%s: invalid resolution was recorded", name)
+		}
+	}
+	if _, err := db.RecordSellerBindingResolution(ctx, SellerBindingResolution{ClientID: resolution.ClientID,
+		ContextID: resolution.ContextID, EngineInstanceID: instanceKey, NativeConfigurationReference: reference,
+		NativeConfigurationDigest: live.NativeConfigurationDigest, Currency: "UGX", Outcome: "CONTEXT_NOT_USABLE",
+		ResolvedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("record unscoped denial: %v", err)
+	}
+	if _, err := db.pool.Exec(ctx, `UPDATE registry.trade_seller_binding_resolution SET currency='USD'
+		WHERE resolution_id=$1::uuid`, resolutionID); err == nil {
+		t.Fatal("a historical resolution was rewritten")
+	}
+	_ = rival
 }

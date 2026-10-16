@@ -372,7 +372,7 @@ workloads:
     runtime: "trade seller-of-record PEP staging proof; no live checkout authority"
     environment: staging
     allowed_audiences: ["baobab-control-plane"]
-    allowed_scopes: ["context:resolve", "legal-actor:assess", "trade-seller-binding:attest", "trade-order-authority:resolve"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess", "trade-seller-binding:attest", "trade-seller-binding:resolve", "trade-order-authority:resolve"]
     context_purposes: ["RUNTIME"]
     credential_type: federated_workload_token
     rotation_owner: baobab-platform/baobab-trade

@@ -1,0 +1,43 @@
+schema:
+  name: baobab-capability-definitions
+  version: '1.0'
+capabilities:
+- capability_key: finance.journal.manage
+  name: Manage governed journal lifecycle
+  description: Corporate finance F1 manage governed journal lifecycle scoped by current CP authority and ERP FinanceBaseline; provider support is not implied.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: journal-manage-request.schema.json
+    response_schema: journal-manage-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.ledger.read
+  name: Read legal-entity ledger
+  description: Corporate finance F1 read legal-entity ledger scoped by current CP authority and ERP FinanceBaseline; provider support is not implied.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: ledger-read-request.schema.json
+    response_schema: ledger-read-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.statement.read
+  name: Read reconciled financial statements
+  description: Corporate finance F1 read reconciled financial statements scoped by current CP authority and ERP FinanceBaseline; provider support is not implied.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: statement-read-request.schema.json
+    response_schema: statement-read-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED

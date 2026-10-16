@@ -146,6 +146,7 @@ type Dependencies struct {
 	TradeOrderAuthorityEnabled   bool
 	TradeOrderAuthority          tradeOrderAuthorityStore
 	SellerOperatingBindings      sellerOperatingBindingStore
+	SellerBindingDiscovery       tradeSellerBindingResolveStore
 	TradeOrderAuthorityClientIDs []string
 	// P0-02B is a separate default-off private scanner boundary. Its verifier
 	// MUST compose current token introspection and fresh registry authority.
@@ -905,6 +906,14 @@ func New(dependencies Dependencies) http.Handler {
 				identities: dependencies.Identities, store: dependencies.SellerOperatingBindings, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeSellerBindingAttestScope)).
 				Post("/internal/trade/v1/seller-operating-bindings/attestations", bindings.attest)
+			// Trade-A TA-02: discovery of the single ACTIVE binding version for
+			// an attested native configuration. Never authority.
+			if dependencies.SellerBindingDiscovery != nil {
+				discovery := tradeSellerBindingResolveHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
+					identities: dependencies.Identities, store: dependencies.SellerBindingDiscovery, clientIDs: allow}
+				r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeSellerBindingResolveScope)).
+					Post("/internal/trade/v1/seller-operating-bindings/resolve", discovery.resolve)
+			}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.adminVerifier, "human", "seller-operating-binding:propose")).
 				Post("/v2/seller-operating-bindings", bindings.propose)
 			for action, spec := range sellerBindingActions {
