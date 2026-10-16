@@ -103,7 +103,7 @@ func TestLA02UpgradePreservesLegacyAndEnforcesPrimary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.PrimaryOrganisationID != newOrg || got.LegalEntityID != "" || got.TenantID != newTenant {
+	if !got.PrimaryOrganisationEnforced || got.PrimaryOrganisationID != newOrg || got.LegalEntityID != "" || got.TenantID != newTenant {
 		t.Fatalf("nullable legal projection / primary Organisation drift: %+v", got)
 	}
 

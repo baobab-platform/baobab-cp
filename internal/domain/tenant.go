@@ -99,6 +99,10 @@ type Tenant struct {
 	// PrimaryOrganisationID is derived from the authoritative PRIMARY mapping,
 	// never the DEFAULT legal actor. Excluded from v1 JSON until LA-03 versioning.
 	PrimaryOrganisationID string `json:"-"`
+	// PrimaryOrganisationEnforced is CP's durable migration boundary, not a
+	// request option. Legacy BOOTSTRAP tenants under migration 000102 retain
+	// v1 compatibility; ordinary/governed tenants cannot downgrade this flag.
+	PrimaryOrganisationEnforced bool `json:"-"`
 }
 
 type EntitlementQuery struct {

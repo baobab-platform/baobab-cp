@@ -68,7 +68,7 @@ func (s *Store) GetTenant(ctx context.Context, tenantID string) (domain.Tenant, 
 	// v1 registered tenants still carry a DEFAULT as before.
 	if err := s.pool.QueryRow(ctx, `
 		SELECT t.tenant_id, COALESCE(t.legal_entity_id, ''), COALESCE(om.organisation_id::text, ''),
-		       t.display_name, t.isolation_strategy, t.residency_region,
+		       t.primary_organisation_enforced, t.display_name, t.isolation_strategy, t.residency_region,
 		       t.metadata, t.desired_state, t.observed_state, t.revision
 		FROM tenants t
 		LEFT JOIN LATERAL (
@@ -83,6 +83,7 @@ func (s *Store) GetTenant(ctx context.Context, tenantID string) (domain.Tenant, 
 		) om ON true
 		WHERE t.tenant_id = $1`, tenantID).Scan(
 		&tenant.TenantID, &tenant.LegalEntityID, &tenant.PrimaryOrganisationID,
+		&tenant.PrimaryOrganisationEnforced,
 		&tenant.DisplayName, &tenant.IsolationStrategy, &tenant.ResidencyRegion,
 		&metadata, &tenant.DesiredState, &tenant.ObservedState, &tenant.Revision,
 	); err != nil {
