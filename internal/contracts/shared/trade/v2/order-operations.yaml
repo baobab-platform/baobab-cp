@@ -1,0 +1,102 @@
+# contracts/trade/v2/order-operations.yaml
+#
+# Closed catalogue of governed consequential Trade operations (ADR-SHARED-039).
+# Each class names exactly ONE legal-actor role and ONE activity that an ACTIVE
+# Control Plane OperatingLegalActorMandate of the Seller Operating Binding's
+# responsible legal entity must scope before CP may authorise it. CP derives
+# role, activity and capability from this catalogue; the caller never supplies
+# them. There is no generic class: a class never covers another's operation.
+#
+# activatable: false reserves a class for a later increment (Trade-B, Trade-C)
+# so that every route to it is denied by name: CP answers
+# OPERATION_NOT_ACTIVATED before any mandate lookup and Trade refuses it.
+# Activation is a versioned catalogue revision, never a flag.
+#
+# A Trade decision is never money-movement authority (payments/v2) and never
+# ERP posting authority (erp/v2); no activity here coincides with theirs.
+version: 1
+operations:
+  - operation_class: trade.order.commit
+    legal_actor_role: SELLER_OF_RECORD
+    activity: CHECKOUT_ORDER_COMMITMENT
+    capability_key: null
+    increment: TRADE_A
+    activatable: true
+  - operation_class: trade.order.create
+    legal_actor_role: SELLER_OF_RECORD
+    activity: DIRECT_ORDER_COMMITMENT
+    capability_key: null
+    increment: TRADE_A
+    activatable: true
+  - operation_class: trade.draft-order.finalize
+    legal_actor_role: SELLER_OF_RECORD
+    activity: DRAFT_ORDER_FINALISATION
+    capability_key: null
+    increment: TRADE_A
+    activatable: true
+  - operation_class: trade.order.edit
+    legal_actor_role: SELLER_OF_RECORD
+    activity: ORDER_AMENDMENT
+    capability_key: null
+    increment: TRADE_B
+    activatable: false
+  - operation_class: trade.order.cancel
+    legal_actor_role: SELLER_OF_RECORD
+    activity: ORDER_CANCELLATION
+    capability_key: null
+    increment: TRADE_B
+    activatable: false
+  - operation_class: trade.return.accept
+    legal_actor_role: SELLER_OF_RECORD
+    activity: RETURN_ACCEPTANCE
+    capability_key: null
+    increment: TRADE_B
+    activatable: false
+  - operation_class: trade.exchange.accept
+    legal_actor_role: SELLER_OF_RECORD
+    activity: EXCHANGE_ACCEPTANCE
+    capability_key: null
+    increment: TRADE_B
+    activatable: false
+  - operation_class: trade.claim.accept
+    legal_actor_role: SELLER_OF_RECORD
+    activity: CLAIM_ACCEPTANCE
+    capability_key: null
+    increment: TRADE_B
+    activatable: false
+  - operation_class: trade.payment-authorization.request
+    legal_actor_role: SELLER_OF_RECORD
+    activity: PAYMENT_AUTHORIZATION_INSTRUCTION
+    capability_key: null
+    increment: TRADE_C
+    activatable: false
+  - operation_class: trade.payment-capture.request
+    legal_actor_role: SELLER_OF_RECORD
+    activity: PAYMENT_CAPTURE_INSTRUCTION
+    capability_key: null
+    increment: TRADE_C
+    activatable: false
+  - operation_class: trade.payment-void.request
+    legal_actor_role: SELLER_OF_RECORD
+    activity: PAYMENT_VOID_INSTRUCTION
+    capability_key: null
+    increment: TRADE_C
+    activatable: false
+  - operation_class: trade.payment-refund.request
+    legal_actor_role: SELLER_OF_RECORD
+    activity: PAYMENT_REFUND_INSTRUCTION
+    capability_key: null
+    increment: TRADE_C
+    activatable: false
+  - operation_class: trade.fulfilment.create
+    legal_actor_role: SELLER_OF_RECORD
+    activity: FULFILMENT_INSTRUCTION
+    capability_key: null
+    increment: TRADE_C
+    activatable: false
+  - operation_class: trade.shipment.create
+    legal_actor_role: SELLER_OF_RECORD
+    activity: SHIPMENT_INSTRUCTION
+    capability_key: null
+    increment: TRADE_C
+    activatable: false

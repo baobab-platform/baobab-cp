@@ -780,6 +780,71 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
+  # P0-04B Trade-0 (ADR-SHARED-039): CP legal authority for ONE catalogued
+  # consequential Trade operation against ONE CP-owned Seller Operating
+  # Binding version. AUTHORIZED is a 30-second fact, never a grant, provider
+  # permission, money-movement or ERP posting authority.
+  - name: "trade-order-authority:resolve"
+    description: >-
+      Private workload-only Control Plane resolution of whether a bounded,
+      previously resolved RUNTIME context may perform one catalogued Trade
+      operation under one ACTIVE CP Seller Operating Binding version, through
+      an engine instance bound to its tenant, with the attested native
+      configuration digest. Requires dedicated IAM admission, ACTIVE workload
+      registry and an explicitly allowlisted caller. Cannot select a legal
+      actor, mandate, binding status or market and grants no provider,
+      money-movement or accounting authority.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  # Trade-0: Trade attests its native seller configuration to CP. An
+  # attestation is evidence for a later human proposal; it authorises nothing.
+  - name: "trade-seller-binding:attest"
+    description: >-
+      Private workload-only submission of a Trade native seller-configuration
+      attestation (opaque reference, SHA-256 digest, currency scope) under the
+      workload's RUNTIME context. Creates no binding, approval or activation
+      and grants no authority.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "seller-operating-binding:propose"
+    description: "Human CP command to propose a Seller Operating Binding version from one Trade attestation (maker). Requires the current organisation.seller-operating-binding.propose grant and assurance; never legal or provider authority. Assigned to no client or workload."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
+  - name: "seller-operating-binding:approve"
+    description: "Human CP command to approve or reject one exact pending Seller Operating Binding version (checker; never its proposer). Requires the current organisation.seller-operating-binding.approve grant and assurance; never legal or provider authority. Assigned to no client or workload."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
+  - name: "seller-operating-binding:activate"
+    description: "Human CP command to activate or reinstate one exact approved or suspended Seller Operating Binding version after CP revalidation (operator; never its proposer or approver). Requires the current organisation.seller-operating-binding.activate grant and assurance; never legal or provider authority. Assigned to no client or workload."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
+  - name: "seller-operating-binding:suspend"
+    description: "Human CP command to suspend one exact ACTIVE Seller Operating Binding version. Requires the current organisation.seller-operating-binding.suspend grant and assurance; never legal or provider authority. Assigned to no client or workload."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
+  - name: "seller-operating-binding:revoke"
+    description: "Human CP command to revoke one exact Seller Operating Binding version (terminal). Requires the current organisation.seller-operating-binding.revoke grant and assurance; never legal or provider authority. Assigned to no client or workload."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+    grants_authority: false
+
   # P0-04B-02: CP human command admission; registered, never assigned.
   - name: "trade-binding:propose"
     description: "Human CP admission check for an exact Trade cart binding propose command. Requires current organisation.trade-binding.propose grant and assurance; never legal or provider authority. Assigned to no client."
