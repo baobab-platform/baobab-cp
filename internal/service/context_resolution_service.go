@@ -267,34 +267,47 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 // insufficient: mapping expiry, suspension and the canonical entity lifecycle
 // must fail closed now, not only when a provisioning transaction was committed.
 func (s ContextResolutionService) runtimePrimaryOrganisation(ctx context.Context, tenantID string, now time.Time) (domain.CanonicalEntity, error) {
-	fail := func(err error) (domain.CanonicalEntity, error) {
-		return domain.CanonicalEntity{}, organisationFailure(metrics.OutcomeNotMapped, err)
+	fail := func(outcome string, err error) (domain.CanonicalEntity, error) {
+		return domain.CanonicalEntity{}, organisationFailure(outcome, err)
 	}
 	if s.Mappings == nil || s.Canonical == nil {
-		return fail(errors.New("PRIMARY Organisation authority is unavailable"))
+		return fail(metrics.OutcomeLookupFailed, errors.New("PRIMARY Organisation authority is unavailable"))
 	}
 	mappings, err := s.Mappings.ListTenantOrganisationMappings(ctx, tenantID, now)
 	if err != nil {
-		return fail(fmt.Errorf("read PRIMARY Organisation mappings: %w", err))
+		return fail(metrics.OutcomeLookupFailed, fmt.Errorf("read PRIMARY Organisation mappings: %w", err))
 	}
 	primary := ""
 	for _, mapping := range mappings {
 		if mapping.TenantID == tenantID && mapping.MappingRole == "PRIMARY_ORGANISATION" && mapping.InEffect(now) {
 			if primary != "" {
-				return fail(errors.New("PRIMARY Organisation mapping is ambiguous"))
+				return fail(metrics.OutcomeLookupFailed, errors.New("PRIMARY Organisation mapping is ambiguous"))
 			}
 			primary = mapping.OrganisationID
 		}
 	}
 	if primary == "" {
-		return fail(errors.New("no current PRIMARY Organisation mapping"))
+		return fail(metrics.OutcomeNotFound, errors.New("no current PRIMARY Organisation mapping"))
 	}
 	entity, err := s.Canonical.GetCanonicalEntity(ctx, primary)
 	if err != nil {
-		return fail(fmt.Errorf("read PRIMARY Organisation: %w", err))
+		outcome := metrics.OutcomeLookupFailed
+		if errors.Is(err, repository.ErrCanonicalEntityNotFound) {
+			outcome = metrics.OutcomeNotFound
+		}
+		return fail(outcome, fmt.Errorf("read PRIMARY Organisation: %w", err))
 	}
 	if err := domain.AttestOrganisation(entity, tenantID, mappings, now); err != nil {
-		return fail(err)
+		// This is CP's selected PRIMARY, not a caller naming a neighbour.
+		// Infrastructure/integrity failures must not increment the security
+		// counter reserved for cross-tenant caller assertions.
+		outcome := metrics.OutcomeLookupFailed
+		if errors.Is(err, domain.ErrOrganisationNotActive) {
+			outcome = metrics.OutcomeInactive
+		} else if errors.Is(err, domain.ErrOrganisationNotOrganisationKind) {
+			outcome = metrics.OutcomeNotOrganisation
+		}
+		return fail(outcome, err)
 	}
 	return entity, nil
 }
