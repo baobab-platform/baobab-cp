@@ -451,3 +451,49 @@ func TestRuntimePrimaryAuthorityUnavailable(t *testing.T) {
 		t.Fatal("missing authority must deny")
 	}
 }
+
+// Infrastructure outages are not neighbour access attempts. Preserve the
+// error category used by operational metrics, including canonical not-found.
+func TestRuntimePrimaryFailureClassification(t *testing.T) {
+	at := time.Now()
+	mappings := tenantMappings{{TenantID: "tenant-123", OrganisationID: "primary", MappingRole: "PRIMARY_ORGANISATION", Status: "ACTIVE", EffectiveFrom: at.Add(-time.Hour)}}
+	for _, tt := range []struct {
+		name                      string
+		mappingError, entityError error
+		outcome                   string
+	}{
+		{"mapping outage", errors.New("database timeout"), nil, metrics.OutcomeLookupFailed},
+		{"entity outage", nil, errors.New("database timeout"), metrics.OutcomeLookupFailed},
+		{"entity missing", nil, repository.ErrCanonicalEntityNotFound, metrics.OutcomeNotFound},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := ContextResolutionService{Canonical: failingPrimaryCanonical{err: tt.entityError}, Mappings: mappings}
+			if tt.mappingError != nil {
+				svc.Mappings = failingPrimaryMappings{err: tt.mappingError}
+			}
+			_, err := svc.runtimePrimaryOrganisation(context.Background(), "tenant-123", at)
+			var classified outcomeError
+			if !errors.As(err, &classified) || classified.outcome != tt.outcome {
+				t.Fatalf("wrong failure class: %+v %v", classified, err)
+			}
+			if classified.outcome == metrics.OutcomeNotMapped {
+				t.Fatal("outage classified as cross-tenant access")
+			}
+		})
+	}
+}
+
+type failingPrimaryMappings struct{ err error }
+
+func (f failingPrimaryMappings) ListTenantOrganisationMappings(context.Context, string, time.Time) ([]domain.TenantOrganisationMapping, error) {
+	return nil, f.err
+}
+
+type failingPrimaryCanonical struct {
+	repository.CanonicalEntityRepository
+	err error
+}
+
+func (f failingPrimaryCanonical) GetCanonicalEntity(context.Context, string) (domain.CanonicalEntity, error) {
+	return domain.CanonicalEntity{}, f.err
+}
