@@ -595,6 +595,161 @@
           "format": "date-time"
         }
       }
+    },
+    "bindingResolutionOutcome": {
+      "type": "string",
+      "enum": [
+        "RESOLVED",
+        "NO_APPLICABLE_BINDING",
+        "AMBIGUOUS_BINDING",
+        "BINDING_NOT_ACTIVE",
+        "NATIVE_CONFIGURATION_MISMATCH",
+        "ENGINE_INSTANCE_NOT_BOUND",
+        "CONTEXT_NOT_USABLE"
+      ],
+      "description": "Discovery outcome (ADR-SHARED-039 \u00a75). RESOLVED: exactly one ACTIVE, in-effect binding matches the whole scope. NO_APPLICABLE_BINDING: none matches the reference, engine and currency. AMBIGUOUS_BINDING: more than one does. BINDING_NOT_ACTIVE: matching bindings exist but none is ACTIVE and in effect. NATIVE_CONFIGURATION_MISMATCH: an ACTIVE binding for the reference was attested under a different digest (Trade's configuration drifted; re-attest and govern a new version). Every outcome other than RESOLVED denies. No outcome is authority."
+    },
+    "BindingResolveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Trade workload to CP at POST /internal/trade/v1/seller-operating-bindings/resolve (scope trade-seller-binding:resolve). Tenant, operating Organisation and market come from the workload-owned RUNTIME context, never from Trade. Trade sends only its opaque configuration reference and current, independently recomputed digest; no native cart, order, channel or region identifier crosses the boundary.",
+      "required": [
+        "context_id",
+        "engine_instance_id",
+        "native_configuration_reference",
+        "native_configuration_digest",
+        "currency"
+      ],
+      "properties": {
+        "context_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "engine_instance_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId"
+        },
+        "native_configuration_reference": {
+          "$ref": "#/$defs/configurationReference"
+        },
+        "native_configuration_digest": {
+          "$ref": "#/$defs/configurationDigest"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO 4217 currency of the cart, draft or order, from Trade's verified record; must be in the binding's currency_scope."
+        }
+      }
+    },
+    "BindingResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "CP's recorded answer. It echoes context_id, engine_instance_id, native_configuration_reference, native_configuration_digest and currency exactly as requested. A consumer MUST correlate every echoed field with its own originating request and MUST treat any difference (including a resolution that answers another, delayed or replayed request) as a failed resolution: it neither stores the binding nor denies on its outcome. RESOLVED identifies ONE eligible binding version; it is not authorisation. Every consequential operation still needs its own OrderAuthorityDecision for that exact version, and Trade must re-resolve rather than substitute another binding when it changes.",
+      "required": [
+        "resolution_id",
+        "context_id",
+        "engine_instance_id",
+        "native_configuration_reference",
+        "native_configuration_digest",
+        "currency",
+        "outcome",
+        "resolved_at",
+        "provider_permissions_granted"
+      ],
+      "properties": {
+        "resolution_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "context_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "engine_instance_id": {
+          "$ref": "../../control-plane/v1/domain.schema.json#/$defs/engineInstanceId"
+        },
+        "native_configuration_reference": {
+          "$ref": "#/$defs/configurationReference"
+        },
+        "native_configuration_digest": {
+          "$ref": "#/$defs/configurationDigest"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "outcome": {
+          "$ref": "#/$defs/bindingResolutionOutcome"
+        },
+        "binding_reference": {
+          "$ref": "#/$defs/bindingReference"
+        },
+        "status": {
+          "const": "ACTIVE"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "resolved_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "provider_permissions_granted": {
+          "const": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "RESOLVED"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "binding_reference",
+              "status",
+              "effective_from"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "binding_reference"
+                  ]
+                },
+                {
+                  "required": [
+                    "status"
+                  ]
+                },
+                {
+                  "required": [
+                    "effective_from"
+                  ]
+                },
+                {
+                  "required": [
+                    "effective_to"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
     }
   }
 }

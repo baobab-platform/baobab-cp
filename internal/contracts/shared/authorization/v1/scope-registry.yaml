@@ -810,6 +810,20 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
+  # Trade-A TA-01: Trade discovers which ACTIVE binding version applies to its
+  # attested native configuration. Discovery identifies a candidate; it is
+  # never order authority.
+  - name: "trade-seller-binding:resolve"
+    description: >-
+      Private workload-only discovery of the single ACTIVE, in-effect Seller
+      Operating Binding version for Trade's opaque native configuration
+      reference, current digest and currency, under the workload's RUNTIME
+      context. Zero or several matches deny. Grants no authority: every
+      consequential operation still resolves its own order-authority decision.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
   - name: "seller-operating-binding:propose"
     description: "Human CP command to propose a Seller Operating Binding version from one Trade attestation (maker). Requires the current organisation.seller-operating-binding.propose grant and assurance; never legal or provider authority. Assigned to no client or workload."
     audience: ["baobab-control-plane"]
