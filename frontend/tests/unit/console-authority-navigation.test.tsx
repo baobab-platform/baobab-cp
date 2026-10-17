@@ -91,9 +91,9 @@ describe("CPFE-04 caller-bound, accessible Console navigation", () => {
     await expectAccessible(container);
   });
 
-  it("searches only visible routes through a keyboard-accessible native modal", async () => {
+  it("searches only visible routes through a keyboard-accessible Base UI modal", async () => {
     const user = userEvent.setup();
-    const { container } = render(
+    render(
       <CommandPalette authority={{ state: "available", permissions: ["application.review"] }} />,
     );
     await user.keyboard("{Control>}k{/Control}");
@@ -101,12 +101,13 @@ describe("CPFE-04 caller-bound, accessible Console navigation", () => {
     const search = screen.getByRole("searchbox", { name: "Search available Console pages" });
     await user.type(search, "readiness");
     expect(screen.getByRole("status").textContent).toContain("No matching");
-    expect(container.querySelector('button[data-command]')).toBeNull();
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
     await user.clear(search);
     await user.type(search, "review");
-    expect(container.querySelectorAll('button[data-command]')).toHaveLength(1);
-    await user.click(screen.getByRole("button", { name: /independent review/i }));
-    expect(push).toHaveBeenCalledWith("/workspace/review");
-    expect(container.querySelector("dialog")?.hasAttribute("open")).toBe(false);
+    const link = screen.getByRole("link", { name: /independent review/i });
+    expect(link.getAttribute("href")).toBe("/workspace/review");
+    // Link semantics preserve modified-click/new-tab behaviour. Escape only dismisses UI.
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

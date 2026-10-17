@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
-
+import type { ReactNode } from "react";
+import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import styles from "./Dialog.module.css";
 
 export interface DialogProps {
   open: boolean;
-  /** Called on Escape, the close button or a cancel action. */
+  /** Closing changes presentation only; the caller retains command authority. */
   onClose: () => void;
   title: string;
   description?: string;
@@ -15,58 +15,21 @@ export interface DialogProps {
 }
 
 /**
- * A modal dialog on the native <dialog> element. showModal() makes the rest
- * of the page inert and traps focus; closing returns focus to the element
- * that opened it (WCAG 2.4.3).
+ * Controlled Base UI modal. Portal isolation, Escape, focus trapping and
+ * restoration share the primitive's lifecycle, including external openers.
+ * Existing confirmation/reason checks and backend authorisation remain owned
+ * by their callers; dismissal never invokes a privileged command.
  */
 export function Dialog({ open, onClose, title, description, children, footer }: DialogProps) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const opener = useRef<Element | null>(null);
-  const titleId = useId();
-  const descriptionId = useId();
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
-      opener.current = document.activeElement;
-      dialog.showModal();
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    const onDialogClose = () => {
-      if (opener.current instanceof HTMLElement) opener.current.focus();
-    };
-    dialog.addEventListener("close", onDialogClose);
-    return () => dialog.removeEventListener("close", onDialogClose);
-  }, []);
-
-  return (
-    <dialog
-      ref={ref}
-      className={styles.dialog}
-      aria-labelledby={titleId}
-      aria-describedby={description ? descriptionId : undefined}
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-    >
-      <h2 id={titleId} className={styles.title}>
-        {title}
-      </h2>
-      {description ? (
-        <p id={descriptionId} className={styles.description}>
-          {description}
-        </p>
-      ) : null}
-      {children}
-      {footer ? <div className={styles.footer}>{footer}</div> : null}
-    </dialog>
-  );
+  return <BaseDialog.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+    <BaseDialog.Portal>
+      <BaseDialog.Backdrop className={styles.backdrop} />
+      <BaseDialog.Popup className={styles.dialog} finalFocus>
+        <BaseDialog.Title className={styles.title}>{title}</BaseDialog.Title>
+        {description ? <BaseDialog.Description className={styles.description}>{description}</BaseDialog.Description> : null}
+        {children}
+        {footer ? <div className={styles.footer}>{footer}</div> : null}
+      </BaseDialog.Popup>
+    </BaseDialog.Portal>
+  </BaseDialog.Root>;
 }

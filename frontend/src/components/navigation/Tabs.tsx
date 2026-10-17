@@ -1,91 +1,24 @@
 "use client";
 
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-
+import type { ReactNode } from "react";
+import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import styles from "./Tabs.module.css";
 
-export interface Tab {
-  id: string;
-  label: string;
-  content: ReactNode;
-}
+export interface Tab { id: string; label: string; content: ReactNode }
+export interface TabsProps { label: string; tabs: Tab[]; initialTab?: string }
 
-export interface TabsProps {
-  label: string;
-  tabs: Tab[];
-  initialTab?: string;
-}
-
-/**
- * ARIA tabs (WAI-ARIA Authoring Practices): one tab stop, arrow keys move
- * between tabs, Home and End jump to the ends, and selection follows focus.
- */
+/** Base UI owns direction-aware roving focus; tabs select authorised views only. */
 export function Tabs({ label, tabs, initialTab }: TabsProps) {
-  const [selected, setSelected] = useState(initialTab ?? tabs[0]?.id);
-  const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  const base = useId();
-
-  const select = (index: number) => {
-    const tab = tabs[index];
-    if (!tab) return;
-    setSelected(tab.id);
-    refs.current[index]?.focus();
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const last = tabs.length - 1;
-    const next: Record<string, number> = {
-      ArrowRight: index === last ? 0 : index + 1,
-      ArrowLeft: index === 0 ? last : index - 1,
-      Home: 0,
-      End: last,
-    };
-    const target = next[event.key];
-    if (target !== undefined) {
-      event.preventDefault();
-      select(target);
-    }
-  };
-
-  return (
-    <div>
-      <div role="tablist" aria-label={label} className={styles.list}>
-        {tabs.map((tab, index) => {
-          const active = tab.id === selected;
-          return (
-            <button
-              key={tab.id}
-              ref={(element) => {
-                refs.current[index] = element;
-              }}
-              type="button"
-              role="tab"
-              id={`${base}-tab-${tab.id}`}
-              aria-selected={active}
-              aria-controls={`${base}-panel-${tab.id}`}
-              tabIndex={active ? 0 : -1}
-              className={styles.tab}
-              onClick={() => select(index)}
-              onKeyDown={(event) => onKeyDown(event, index)}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-      {tabs.map((tab) => (
-        <div
-          key={tab.id}
-          role="tabpanel"
-          id={`${base}-panel-${tab.id}`}
-          aria-labelledby={`${base}-tab-${tab.id}`}
-          hidden={tab.id !== selected}
-          tabIndex={0}
-          className={styles.panel}
-        >
-          {tab.content}
-        </div>
-      ))}
-    </div>
-  );
+  const ids = new Set<string>();
+  for (const tab of tabs) {
+    if (!tab.id.trim() || ids.has(tab.id) || !tab.label.trim()) throw new TypeError("Tabs require unique IDs and readable labels");
+    ids.add(tab.id);
+  }
+  if (initialTab !== undefined && !ids.has(initialTab)) throw new TypeError("Unknown initial tab");
+  return <BaseTabs.Root defaultValue={initialTab ?? tabs[0]?.id}>
+    <BaseTabs.List activateOnFocus aria-label={label} className={styles.list}>
+      {tabs.map(tab => <BaseTabs.Tab key={tab.id} value={tab.id} className={styles.tab}>{tab.label}</BaseTabs.Tab>)}
+    </BaseTabs.List>
+    {tabs.map(tab => <BaseTabs.Panel key={tab.id} value={tab.id} className={styles.panel}>{tab.content}</BaseTabs.Panel>)}
+  </BaseTabs.Root>;
 }

@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes } from "react";
+import { Button as BaseButton } from "@base-ui/react/button";
 
 import { cx } from "../classes";
 import styles from "./Button.module.css";
@@ -14,7 +15,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 /** An owned button. It defaults to type="button" so it never submits a form by accident. */
 export function Button({ variant = "secondary", busy = false, type = "button", disabled, className, ...rest }: ButtonProps) {
   return (
-    <button
+    <BaseButton
       {...rest}
       type={type}
       className={cx(styles.button, styles[variant], className)}
