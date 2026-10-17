@@ -17,11 +17,11 @@ importers:
   frontend:
     dependencies:
       '@baobab-platform/experience-tokens':
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.3.1
+        version: 0.3.1
       '@baobab-platform/experience-ui':
-        specifier: 0.2.0
-        version: 0.2.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: 0.3.1
+        version: 0.3.1(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@base-ui/react':
         specifier: 1.9.0
         version: 1.9.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -190,12 +190,16 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
-  '@baobab-platform/experience-tokens@0.2.0':
-    resolution: {integrity: sha512-CrW+yZPYkx033CRCO6IefdKOjeHYn0FrVady050dvIjKnMDlPhd/4p10CPyJVqkdEE/Wp5dhcw/anE4YvuY+YA==, tarball: https://npm.pkg.github.com/download/@baobab-platform/experience-tokens/0.2.0/ac382fceef0ff3344afd8ca0fe5ba61e348887a2}
+  '@baobab-platform/experience-geo-core@0.3.1':
+    resolution: {integrity: sha512-d4Yi791fQDQAM7QjZpzMLpfnDksoZBW6A9kODXAliF3NcOuXgFxr19voTX325/Ksi1IFtsxXVwCTfWgl5IYj8Q==, tarball: https://npm.pkg.github.com/download/@baobab-platform/experience-geo-core/0.3.1/5ae28de0cf7758663e7cdee0644567b52f236dad}
     engines: {node: '>=24 <25'}
 
-  '@baobab-platform/experience-ui@0.2.0':
-    resolution: {integrity: sha512-4pmjJDLzWcGEIWJqbz2Tvsj87Bu0AiXxghFIQVu8gUO6+ZS/Qdo3rjWCYZnZpcyQjsMmE1GE5nrNjhdNLLYoMQ==, tarball: https://npm.pkg.github.com/download/@baobab-platform/experience-ui/0.2.0/c6a3513100ba365b5f276cc33b97ddc4d6f88cba}
+  '@baobab-platform/experience-tokens@0.3.1':
+    resolution: {integrity: sha512-lUHUINcCglprrMjYVjD05L/gqifmuSgfBT7nBK9LR4GWlDE9lNLEMM1z1EinHB/bF5NyX3OGto16wrNB8jW0Lw==, tarball: https://npm.pkg.github.com/download/@baobab-platform/experience-tokens/0.3.1/8b1926774cf4b7b4de3ca5c755383571b5c31201}
+    engines: {node: '>=24 <25'}
+
+  '@baobab-platform/experience-ui@0.3.1':
+    resolution: {integrity: sha512-r5Lw24EH+eMW/XWDxVIe8RPT8/iLxdXNFXBJx4pwVXegL5Mz1fOHTRZtdOy9W+LKzJ4JRIDWAjz5aumVS6AaJA==, tarball: https://npm.pkg.github.com/download/@baobab-platform/experience-ui/0.3.1/88c5cc8ee7b3f221997ac9eaec9acb639031c97b}
     engines: {node: '>=24 <25'}
     peerDependencies:
       react: ^19.3.0
@@ -2843,10 +2847,13 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@baobab-platform/experience-tokens@0.2.0': {}
+  '@baobab-platform/experience-geo-core@0.3.1': {}
 
-  '@baobab-platform/experience-ui@0.2.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@baobab-platform/experience-tokens@0.3.1': {}
+
+  '@baobab-platform/experience-ui@0.3.1(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
+      '@baobab-platform/experience-geo-core': 0.3.1
       '@base-ui/react': 1.9.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react: 19.3.0
     transitivePeerDependencies:
