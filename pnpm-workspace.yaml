@@ -19,6 +19,9 @@ allowBuilds:
   unrs-resolver: false
 
 # Freshly published BXS packages have verified SHA512 registry receipts.
+# Fixed-version exceptions are allowed only after independently verified
+# GitHub Packages SHA512/export run 39073362603 (2026-10-17).
 minimumReleaseAgeExclude:
-  - "@baobab-platform/experience-tokens@0.2.0"
-  - "@baobab-platform/experience-ui@0.2.0"
+  - "@baobab-platform/experience-geo-core@0.3.1"
+  - "@baobab-platform/experience-tokens@0.3.1"
+  - "@baobab-platform/experience-ui@0.3.1"
