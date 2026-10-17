@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -33,17 +33,17 @@ function Harness({ onConfirm, typed, reason }: { onConfirm: (reason: string | un
 describe("ConfirmDialog", () => {
   it("opens as a labelled modal dialog and returns focus to its opener", async () => {
     const user = userEvent.setup();
-    const { container } = render(<Harness onConfirm={() => {}} />);
+    render(<Harness onConfirm={() => {}} />);
     const opener = screen.getByRole("button", { name: "Suspend tenant" });
     await user.click(opener);
     const dialog = screen.getByRole("dialog", { name: "Suspend Example A?" });
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
     expect(screen.getByText("Its workloads stop resolving context.").id).toBe(dialog.getAttribute("aria-describedby"));
-    await expectAccessible(container);
+    await expectAccessible(dialog);
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.activeElement).toBe(opener);
+    await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 
   it("confirms only after the typed phrase matches and a reason is given", async () => {
