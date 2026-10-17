@@ -1,7 +1,7 @@
 # CP Console image (ADR-BCP-019 sections 89-90). Build from the repository
 # root, which holds the pnpm workspace and its lockfile:
 #   docker build --file frontend/Dockerfile .
-FROM node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS build
+FROM node:26.11.1-trixie-slim@sha256:193fe51b64e77981119c98c2002c9e32a70e2f006fb4d25068ce0558998917f0 AS build
 WORKDIR /workspace
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN corepack enable
