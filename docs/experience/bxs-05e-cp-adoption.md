@@ -1,13 +1,13 @@
 # BXS-05E — Control Plane Console Shared Experience adoption
 
 Accepted ADR-SHARED-040 governs presentation, not Control Plane authority.
-The approved Shared 0.2.0 publication and SHA512 registry verification
+The approved Shared 0.3.1 publication ([workflow](https://github.com/baobab-platform/shared/actions/runs/39073176845)) and independent SHA512/export verification ([receipt](https://github.com/baobab-platform/shared/actions/runs/39073362603))
 precede this immutable-version consumer increment.
 
 ## Scope
 
-- The root workspace installs `experience-tokens@0.2.0` and `experience-ui@0.2.0`
-  from private GitHub Packages, with registry-generated integrity pins.
+- The root workspace installs `experience-tokens@0.3.1` and `experience-ui@0.3.1`
+  from private GitHub Packages, transitively using `experience-geo-core@0.3.1`, with exact registry-verified SHA512 integrity pins.
 - The existing CP design-system showcase alone exercises the Shared
   `StatusLabel` and keyboard-native `Disclosure` in a scoped
   `data-bx-theme=baobab-platform` subtree.
