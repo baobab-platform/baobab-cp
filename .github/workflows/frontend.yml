@@ -28,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   verify:
@@ -39,9 +40,14 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: frontend/.node-version
+          registry-url: https://npm.pkg.github.com
+          scope: '@baobab-platform'
       - name: Enable the pinned pnpm
         run: corepack enable
-      - run: pnpm install --frozen-lockfile
+      - name: Install published BXS packages from trusted GitHub registry
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm install --frozen-lockfile
       - name: Generated Control Plane client matches the pinned OpenAPI
         run: pnpm --filter @baobab-platform/cp-console check:cp-client
       - run: pnpm --filter @baobab-platform/cp-console typecheck
@@ -51,4 +57,6 @@ jobs:
       - name: Audit dependencies
         run: pnpm audit --audit-level high
       - name: Build the container image
-        run: docker build --file frontend/Dockerfile --tag baobab-cp-console:ci .
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: docker build --secret id=npm_token,env=NODE_AUTH_TOKEN --file frontend/Dockerfile --tag baobab-cp-console:ci .

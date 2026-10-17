@@ -5,9 +5,12 @@ FROM node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584
 WORKDIR /workspace
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN corepack enable
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY frontend/package.json frontend/
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=secret,id=npm_token,required=true \
+    --mount=type=tmpfs,target=/tmp/bxs-npm-auth \
+    sh -eu -c 'printf "//npm.pkg.github.com/:_authToken=%s\n" "$(cat /run/secrets/npm_token)" > /tmp/bxs-npm-auth/.npmrc; \
+      NPM_CONFIG_USERCONFIG=/tmp/bxs-npm-auth/.npmrc pnpm install --frozen-lockfile'
 COPY frontend frontend
 RUN pnpm --filter @baobab-platform/cp-console build
 

@@ -17,3 +17,8 @@ allowBuilds:
   # Its native resolver ships as prebuilt optional packages; the install
   # script is not needed.
   unrs-resolver: false
+
+# Freshly published BXS packages have verified SHA512 registry receipts.
+minimumReleaseAgeExclude:
+  - "@baobab-platform/experience-tokens@0.2.0"
+  - "@baobab-platform/experience-ui@0.2.0"
