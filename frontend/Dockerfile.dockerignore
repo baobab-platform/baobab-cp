@@ -4,6 +4,8 @@
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
+# Registry endpoint only (no credentials). Required by the verified BXS install.
+!.npmrc
 !frontend/
 frontend/node_modules
 frontend/.next
