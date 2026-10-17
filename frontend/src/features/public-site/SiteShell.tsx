@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, ChevronDown, LogIn, Menu, Network, UserRoundPlus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import type { ReactNode } from "react";
 
 import { navigation } from "./content";
@@ -42,7 +42,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
             <Link className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-brand-forest underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-brand-forest" href="/login" aria-label="Open Control Plane Console sign in">
               Console <ArrowUpRight aria-hidden="true" className="size-4" />
             </Link>
-            <Button asChild variant="gold"><Link href="/signup"><UserRoundPlus aria-hidden="true" className="size-4" /> Sign up</Link></Button>
+            <Link href="/signup" className={buttonVariants({ variant: "gold" })}><UserRoundPlus aria-hidden="true" className="size-4" /> Sign up</Link>
           </div>
           <details className="relative ml-auto lg:hidden">
             <summary aria-label="Open navigation" className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-semibold [&::-webkit-details-marker]:hidden">Menu <Menu aria-hidden="true" className="size-5" /></summary>

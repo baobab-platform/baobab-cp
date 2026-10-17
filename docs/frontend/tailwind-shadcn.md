@@ -17,9 +17,9 @@ and shadcn components are checked-in source under `frontend/src/components/ui`.
   Primary, border, muted, focus, danger and status semantics resolve from
   existing Console tokens; public brand tokens are added alongside them.
 - shadcn/ui is configured in `frontend/components.json`, with `new-york`
-  styling, CSS variables, Lucide iconography and the mature **Radix** base.
+  styling, CSS variables, Lucide iconography and the shared **Base UI** interactive primitive standard (ADR-SHARED-040 refinement).
   Components are owned code, not a black-box `shadcn-ui` runtime dependency.
-- Installed source primitives: Button (including Radix Slot asChild),
+- Installed source primitives: Button (Base UI; navigation retains true link semantics),
   Card with title/description, and labelled Badge with explicit CP status.
 - `frontend/src/lib/utils.ts` provides the expected `cn` helper.
 - Lucide icons are static imports with accessible names supplied by adjacent
@@ -58,7 +58,7 @@ pnpm --filter @baobab-platform/cp-console build
 Dependencies and the lockfile must be committed together; the pnpm
 workspace enforces release-age restrictions and frozen-lockfile CI.
 
-For future shadcn components, use the pinned Radix base and review
+For future shadcn components, use the pinned Base UI base and review
 `shadcn add` changes (tokens, imports, a11y, bundle impact) rather than
 running a wholesale template migration. Maintain existing Console
 component interfaces until an explicitly scoped replacement PR with tests.
@@ -75,3 +75,7 @@ component interfaces until an explicitly scoped replacement PR with tests.
 ## Security baseline and UI roll-out
 
 PostCSS is pinned at **8.5.28** in the package manifest and workspace overrides to remove the reported high-severity source-map path traversal vulnerabilities affecting <=8.5.17. New shadcn primitives are used as presentation only; no admin authority changes. The new Console frame provides responsive, visually refined work surfaces using real, existing routes. Role-specific privileges remain with CP/IAM. Do not show fabricated metrics, contexts or green-status indicators.
+
+## BXS Base UI component migration receipt (2026-10-17)
+
+The checked-in shadcn-style Button is migrated to Base UI. Previously Slot-based navigation actions now render real Next Link anchors styled with buttonVariants, not pretend buttons. No IAM, CP or authorisation was moved to the frontend. The native ConfirmDialog family is tracked for a later independent component migration requiring controlled-portal and focus acceptance; this PR does not imply all console components use Base UI.

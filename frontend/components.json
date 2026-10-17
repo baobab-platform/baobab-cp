@@ -18,5 +18,5 @@
     "lib": "@/lib",
     "hooks": "@/hooks"
   },
-  "base": "radix"
+  "base": "base-ui"
 }
