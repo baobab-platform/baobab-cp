@@ -6,7 +6,7 @@ import { Disclosure, StatusLabel } from "@baobab-platform/experience-ui";
 import { expectAccessible } from "./axe";
 
 describe("BXS-05E published experience components", () => {
-  it("preserves semantic warning and native keyboard disclosure", async () => {
+  it("preserves semantic warning and native disclosure activation", async () => {
     const { container } = render(
       <section data-bx-theme="baobab-platform">
         <StatusLabel tone="warning">Not a readiness authorisation</StatusLabel>
@@ -17,8 +17,9 @@ describe("BXS-05E published experience components", () => {
     );
     expect(screen.getByText("Not a readiness authorisation")).toBeTruthy();
     const summary = screen.getByText("What does this mean?");
-    summary.focus();
-    await userEvent.keyboard("{Enter}");
+    // jsdom does not implement native summary keyboard default actions;
+    // real Enter/Space support is covered in Shared Chromium Storybook CI.
+    await userEvent.click(summary);
     expect(summary.closest("details")?.hasAttribute("open")).toBe(true);
     await expectAccessible(container);
   });
