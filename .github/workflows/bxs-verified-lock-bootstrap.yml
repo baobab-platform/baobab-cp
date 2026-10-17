@@ -35,7 +35,14 @@ jobs:
           set -euo pipefail
           test "$(node -p 'require("./package.json").packageManager')" = 'pnpm@11.24.0'
           test "$(node -p 'process.versions.node.split(".")[0]')" = '24'
+          # Existing lockfile still contains old 0.2.0 BXS packages. Those
+          # exact versions were independently verified in Shared run
+          # 39029098417. Allow them ONLY during the migration resolver pass.
+          # Restore permanent 0.3.1-only policy before frozen validation.
+          cp pnpm-workspace.yaml "$RUNNER_TEMP/pnpm-workspace.original.yaml"
+          sed -i '/^minimumReleaseAgeExclude:$/a\\  - "@baobab-platform/experience-tokens@0.2.0"\\n  - "@baobab-platform/experience-ui@0.2.0"\\n  - "@baobab-platform/experience-geo-core@0.2.0"' pnpm-workspace.yaml
           pnpm install --lockfile-only --no-frozen-lockfile
+          cp "$RUNNER_TEMP/pnpm-workspace.original.yaml" pnpm-workspace.yaml
           pnpm install --lockfile-only --frozen-lockfile
           # Compare every resolved archive to the independent, read-only
           # Shared registry verification: run 39073362603.
