@@ -61,7 +61,7 @@ export function DesignSystemShowcase() {
         {/* Published BXS primitives are scoped to sample view models only.
             This non-production page does not grant Console authority. */}
         <section data-bx-theme="baobab-platform" aria-labelledby="shared-experience-heading">
-          <h2 id="shared-experience-heading">Shared Experience System · v0.2.0</h2>
+          <h2 id="shared-experience-heading">Shared Experience System · v0.3.1</h2>
           <p><StatusLabel tone="warning">Illustrative data — no platform authority</StatusLabel></p>
           <Disclosure summary="What does this readiness status mean?">
             This is a component preview, not an IAM grant, Control Plane approval,
