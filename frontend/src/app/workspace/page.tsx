@@ -5,7 +5,7 @@ import { visibleConsoleRoutes } from "@/features/console/navigation-model";
 import { Activity, ArrowRight, CheckCircle2, FilePenLine, Info, ShieldCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
 const workspaces = [
@@ -41,7 +41,7 @@ export default function WorkspaceIndex() {
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-emerald-50">
           Manage your business application and follow the governed decisions that connect intent to accountable operation.
         </p>
-        <div className="mt-7"><Button asChild variant="gold"><Link href="/workspace/apply">Continue to my application <ArrowRight aria-hidden="true" /></Link></Button></div>
+        <div className="mt-7"><Link href="/workspace/apply" className={buttonVariants({ variant: "gold" })}>Continue to my application <ArrowRight aria-hidden="true" /></Link></div>
       </div>
 
       <div className="space-y-2">
@@ -72,9 +72,7 @@ export default function WorkspaceIndex() {
             </CardHeader>
             <CardContent className="sr-only">Access is controlled by IAM and Control Plane governance.</CardContent>
             <CardFooter>
-              <Button asChild variant="outline" className="w-full justify-between">
-                <Link href={href}>{action} <ArrowRight aria-hidden="true" /></Link>
-              </Button>
+              <Link href={href} className={buttonVariants({ variant: "outline", className: "w-full justify-between" })}>{action} <ArrowRight aria-hidden="true" /></Link>
             </CardFooter>
           </Card>
         ))}

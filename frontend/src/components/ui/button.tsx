@@ -1,4 +1,4 @@
-import { Slot } from "@radix-ui/react-slot";
+import { Button as BaseButton } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 
@@ -25,13 +25,13 @@ export const buttonVariants = cva(
   }, defaultVariants: { variant: "default", size: "default" } }
 );
 
-export type ButtonProps = ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & { asChild?: boolean };
+export type ButtonProps = ComponentProps<typeof BaseButton> &
+  VariantProps<typeof buttonVariants>;
 
 /** Presentation primitive: never substitutes CP authorisation. Safe type=button default. */
-export function Button({ className, variant, size, asChild = false, type = "button", ...props }: ButtonProps) {
-  const Comp = asChild ? Slot : "button";
-  return (
-    <Comp data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...(!asChild ? { type } : {})} {...props} />
-  );
+export function Button({ className, variant, size, type = "button", ...props }: ButtonProps) {
+  // Base UI ensures native button focus/disabled semantics; use actual links
+  // rather than applying button keyboard behavior to navigation anchors.
+  return <BaseButton data-slot="button" type={type}
+    className={cn(buttonVariants({ variant, size, className }))} {...props} />;
 }
