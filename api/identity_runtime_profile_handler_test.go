@@ -329,6 +329,7 @@ func TestIdentityRuntimeBindingRouteEnforcesIndependentAuthority(t *testing.T) {
 		wantStatus           int
 		wantReadCalls        int
 	}{
+		{name: "valid OAuth companion", readerScope: true, runtimeCapability: "OAUTH_AUTHORIZATION_SERVER", wantStatus: http.StatusOK, wantReadCalls: 1},
 		{name: "valid workload", readerScope: true, runtimeCapability: "WORKLOAD_TOKEN_ISSUANCE", wantStatus: http.StatusOK, wantReadCalls: 1},
 		{name: "valid", readerScope: true, runtimeCapability: "HUMAN_AUTHENTICATION", wantStatus: http.StatusOK, wantReadCalls: 1},
 		{name: "reader scope absent from registry", runtimeCapability: "HUMAN_AUTHENTICATION", wantStatus: http.StatusForbidden},

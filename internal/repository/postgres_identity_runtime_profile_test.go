@@ -21,7 +21,7 @@ import (
 // profile is append-only, environment/region scoped, monotonic by revision and
 // idempotent only for the exact same revision content.
 func TestIdentityRuntimeProfilePersistence(t *testing.T) {
-	for _, facet := range []string{"OIDC_FEDERATION", "HUMAN_AUTHENTICATION", "WORKLOAD_TOKEN_ISSUANCE"} {
+	for _, facet := range []string{"OIDC_FEDERATION", "HUMAN_AUTHENTICATION", "WORKLOAD_TOKEN_ISSUANCE", "OAUTH_AUTHORIZATION_SERVER"} {
 		t.Run(facet, func(t *testing.T) { testIdentityRuntimeProfilePersistence(t, facet) })
 	}
 }
