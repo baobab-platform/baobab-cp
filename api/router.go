@@ -473,6 +473,10 @@ func New(dependencies Dependencies) http.Handler {
 		if dependencies.IdentityRuntimeProfiles != nil {
 			r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/binding", source.binding)
 		}
+		if runtime, ok := dependencies.IdentityRuntimeProfiles.(repository.IdentityRuntimeAuthorityReader); ok {
+			source := identityRuntimeAuthorityHandler{federationAuthorityHandler: source, runtime: runtime}
+			r.With(a.authorize(a.workloadVerifier, "workload", "identity-runtime:read")).Post("/internal/identity-runtime/v1/binding", source.binding)
+		}
 		if dependencies.FederationGovernanceTargets != nil {
 			r.With(a.authorize(a.workloadVerifier, "workload", "federation-authority:read")).Post("/internal/federation/v1/target-registration", source.targetRegistration)
 		}

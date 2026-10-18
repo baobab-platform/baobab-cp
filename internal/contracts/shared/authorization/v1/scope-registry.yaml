@@ -887,3 +887,10 @@ scopes:
     allowed_actors: ["human"]
     privileged: true
     grants_authority: false
+
+
+  - name: "identity-runtime:read"
+    description: "Read secret-free current native/workload runtime evidence at an explicitly authorised organisation and estate. CP additionally requires security.identity-runtime.view and current canonical caller authority. Distinct from federation-authority:read and identity-runtime:observe; grants no activation, issuance, membership or configuration authority. Allocated to no workload."
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false

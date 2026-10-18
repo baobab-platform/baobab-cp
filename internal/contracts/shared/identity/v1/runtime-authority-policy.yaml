@@ -1,0 +1,31 @@
+# ADR-IAM-0020/0021/0033 C4-01. Read-only authority vocabulary; no allocation.
+version: 1
+transport:
+  scope: identity-runtime:read
+  actors: [workload]
+  audiences: [baobab-control-plane]
+permission: security.identity-runtime.view
+facets:
+  HUMAN_AUTHENTICATION: identity.authentication.perform
+  WORKLOAD_TOKEN_ISSUANCE: identity.workload-token.issue
+references:
+  configuration: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: identity_runtime_configuration}
+  security_domain: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: identity_security_domain}
+  evidence: {system_namespace: baobab_cp, engine_id: baobab-cp, native_entity_type: identity_runtime_support}
+requirements:
+  current_active_canonical_caller: true
+  current_active_registered_workload: true
+  exact_organisation_estate_scope: true
+  exact_composition_configuration_and_security_domain: true
+  current_provider_instance_support_primary_binding: true
+  approved_release_declares_capability_major_1: true
+  fresh_exact_artifact_runtime_and_deployment_evidence: true
+  current_authorised_observer_and_deployment_reporter: true
+  reject_ambiguous_binding: true
+  reference_existence_is_approval: false
+  creates_authority: false
+  allocation_to_existing_workloads: false
+# CP remains the platform authority. IAM supplies reviewed composition references
+# and independently consumes caller-owned capability resolution per operation.
+# Federation continues to require federation_configuration and trust material.
+# This policy neither approves configuration nor waives conformance/registration.

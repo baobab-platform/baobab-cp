@@ -101,6 +101,46 @@ type IdentityRuntimeProfileRepository interface {
 	) (FederationPlatformSnapshot, error)
 }
 
+// IdentityRuntimeAuthorityReader is the separate native/workload read boundary.
+// Configuration and security-domain references are exact reviewed composition
+// inputs, never FederationTrust substitutes or caller-inferred defaults.
+type IdentityRuntimeAuthorityReader interface {
+	ReadIdentityRuntimeSnapshot(context.Context, string, string, string, string,
+		string, string, string, string, time.Time) (FederationPlatformSnapshot, error)
+}
+
+// IdentityRuntimePlatformCapability is a closed mapping, not provider selection.
+func IdentityRuntimePlatformCapability(facet string) string {
+	switch facet {
+	case "HUMAN_AUTHENTICATION":
+		return "identity.authentication.perform"
+	case "WORKLOAD_TOKEN_ISSUANCE":
+		return "identity.workload-token.issue"
+	}
+	return ""
+}
+
+// ConfigurationReferenceType preserves federation ownership while admitting
+// separately reviewed native/workload configuration. Mixed ownership is denied.
+func (p IdentityRuntimeProfile) ConfigurationReferenceType() string {
+	federation, runtime := false, false
+	for _, o := range p.CapabilityObservations {
+		switch o.Capability {
+		case "OIDC_FEDERATION", "SAML_FEDERATION", "ENTERPRISE_SSO", "IDENTITY_BROKERING":
+			federation = true
+		case "HUMAN_AUTHENTICATION", "WORKLOAD_TOKEN_ISSUANCE", "OAUTH_AUTHORIZATION_SERVER", "OIDC_PROVIDER":
+			runtime = true
+		}
+	}
+	if federation && runtime {
+		return ""
+	}
+	if federation {
+		return "federation_configuration"
+	}
+	return "identity_runtime_configuration"
+}
+
 func (p IdentityRuntimeProfile) Validate() error {
 	if !domain.ValidProviderID(p.ProviderID) ||
 		!domain.ValidEngineInstanceID(p.EngineInstanceID) ||

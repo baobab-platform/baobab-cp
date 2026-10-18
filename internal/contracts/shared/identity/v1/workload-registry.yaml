@@ -146,17 +146,35 @@
 # lifecycle to a non-active state before provider-side authority can continue,
 # so no live credential survives a canonical suspension/revocation/retirement.
 #
-# One deliberate exception to "ACTIVE only after the proof": baobab-cp-provisioning-evidence-workload
+# Named deliberate exceptions to "ACTIVE only after the proof": baobab-cp-provisioning-evidence-workload
 # (FB-05, owner ruling 2026-10-07) is the identity that PRODUCES the proof, in the staging
 # evidence environment only. It is ACTIVE so the proof can run, the production identity it
 # mirrors stays PROVISIONED, and scripts/validate-erp-contracts.rb pins it exactly so the
 # exception cannot spread to another workload, scope or environment.
+# baobab-int02-pulse-consumer is separately accepted by the owner on 2026-10-18:
+# docs/architecture/int02-pulse-proof-bootstrap-decision.md. It may produce
+# synthetic proof only during a disposable development INT-02 run; ACTIVE is
+# not qualification. validate-authorization-contracts.rb pins its entire row.
 
 schema:
   name: baobab-platform-workload-registry
   version: "1.0"
 
 workloads:
+  # Owner-approved named evidence producer; fixture-only issuance with a fresh
+  # per-run secret, verified ephemeral issuer and synthetic explicit grants.
+  # No production/staging credential or context-validation/admin authority.
+  baobab-int02-pulse-consumer:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: "INT-02 disposable real-component Pulse qualification consumer"
+    environment: development
+    allowed_audiences: ["baobab-control-plane", "baobab-pulse"]
+    allowed_scopes: ["context:resolve", "intelligence:evidence:search"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+
   baobab-cms-workload:
     repository: baobab-platform/baobab-cms
     owner: baobab-platform/baobab-cms

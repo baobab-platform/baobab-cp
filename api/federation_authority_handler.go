@@ -237,7 +237,14 @@ func (h federationAuthorityHandler) binding(w http.ResponseWriter, r *http.Reque
 }
 
 func (h federationAuthorityHandler) authorizeRequest(r *http.Request, p auth.Principal, resource administration.Resource) (string, bool) {
-	if !h.callerActive(p) || h.caller == nil || h.api == nil || h.api.grants == nil {
+	return h.authorizeActionRequest(r, p, resource, "security.federation.view", h.callerActive)
+}
+
+// Both boundaries preserve canonical identity/grant evaluation; their transport
+// scopes and permissions remain independent rather than granting one by alias.
+func (h federationAuthorityHandler) authorizeActionRequest(r *http.Request, p auth.Principal,
+	resource administration.Resource, action string, active func(auth.Principal) bool) (string, bool) {
+	if !active(p) || h.caller == nil || h.api == nil || h.api.grants == nil {
 		return "", false
 	}
 	identity, err := h.caller.ReadFederationIdentity(r.Context(), p.Issuer, p.Subject)
@@ -259,7 +266,7 @@ func (h federationAuthorityHandler) authorizeRequest(r *http.Request, p auth.Pri
 	decision := administration.Evaluate(administration.Request{
 		PrincipalID:     identity.Principal.ID,
 		PrincipalActive: true,
-		Action:          "security.federation.view",
+		Action:          action,
 		Resource:        resource,
 		Now:             time.Now().UTC(),
 		Session: administration.Session{
