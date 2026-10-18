@@ -21,6 +21,12 @@ import (
 // profile is append-only, environment/region scoped, monotonic by revision and
 // idempotent only for the exact same revision content.
 func TestIdentityRuntimeProfilePersistence(t *testing.T) {
+	for _, facet := range []string{"OIDC_FEDERATION", "HUMAN_AUTHENTICATION", "WORKLOAD_TOKEN_ISSUANCE"} {
+		t.Run(facet, func(t *testing.T) { testIdentityRuntimeProfilePersistence(t, facet) })
+	}
+}
+
+func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping PostgreSQL integration test")
@@ -110,7 +116,11 @@ func TestIdentityRuntimeProfilePersistence(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	insertRef(refs["configuration"], "baobab_iam", "baobab-iam", iamInstance, "federation_configuration")
+	configurationType := "identity_runtime_configuration"
+	if facet == "OIDC_FEDERATION" {
+		configurationType = "federation_configuration"
+	}
+	insertRef(refs["configuration"], "baobab_iam", "baobab-iam", iamInstance, configurationType)
 	insertRef(refs["security"], "baobab_iam", "baobab-iam", iamInstance, "identity_security_domain")
 	insertRef(refs["support"], "baobab_cp", "baobab-cp", cpInstance, "identity_runtime_support")
 
@@ -148,7 +158,7 @@ func TestIdentityRuntimeProfilePersistence(t *testing.T) {
 		Revision:                1,
 		PublishedAt:             now,
 		CapabilityObservations: []IdentityRuntimeCapabilityObservation{{
-			Capability:         "OIDC_FEDERATION",
+			Capability:         facet,
 			VerificationStatus: "VERIFIED",
 			Evidence: &IdentityRuntimeEvidence{
 				EvidenceReference: refs["support"],

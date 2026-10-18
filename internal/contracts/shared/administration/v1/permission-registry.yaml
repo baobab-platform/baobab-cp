@@ -567,3 +567,11 @@ permissions:
     delegable: false
     read_only: false
     description: "Revoke one exact CP Seller Operating Binding version for this Organisation (terminal). No mandate, context or provider authority is conferred (ADR-SHARED-039). Registered without profile assignment."
+
+  - key: security.identity-runtime.view
+    domain: SECURITY
+    risk_class: LOW
+    scope_levels: [PLATFORM, ORGANISATION, DIGITAL_ESTATE]
+    delegable: false
+    read_only: true
+    description: "Read secret-free current native/workload identity runtime evidence at the exact canonical organisation and estate scope. No federation, configuration, issuance or activation authority. Assigned to no profile."

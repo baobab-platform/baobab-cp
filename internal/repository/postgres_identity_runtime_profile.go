@@ -163,7 +163,7 @@ func validateRuntimeProfileReferences(ctx context.Context, q rowsQuerier, profil
 		entityType string
 	}
 	expected := []expectedReference{
-		{profile.ConfigurationReference, "baobab_iam", "baobab-iam", "federation_configuration"},
+		{profile.ConfigurationReference, "baobab_iam", "baobab-iam", profile.ConfigurationReferenceType()},
 		{profile.SecurityDomainReference, "baobab_iam", "baobab-iam", "identity_security_domain"},
 	}
 	for _, observation := range profile.CapabilityObservations {
@@ -222,11 +222,38 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 	environment string,
 	now time.Time,
 ) (FederationPlatformSnapshot, error) {
+	if runtimeCapability != "OIDC_FEDERATION" && runtimeCapability != "SAML_FEDERATION" || trustMaterialReference == "" {
+		return FederationPlatformSnapshot{}, ErrFederationPlatformEvidenceNotFound
+	}
+	return r.readIdentityRuntimeSnapshot(ctx, providerID, engineInstanceID, organisationID, estateID,
+		runtimeCapability, configurationReference, trustMaterialReference, environment, now,
+		"identity.authentication.perform", "federation_configuration", "")
+}
+
+// ReadIdentityRuntimeSnapshot shares the exact release/support/deployment
+// fences with federation without accepting a fabricated trust-material target.
+func (r *PostgresRepository) ReadIdentityRuntimeSnapshot(ctx context.Context,
+	providerID, engineInstanceID, organisationID, estateID, runtimeCapability,
+	configurationReference, securityDomainReference, environment string, now time.Time,
+) (FederationPlatformSnapshot, error) {
+	capability := IdentityRuntimePlatformCapability(runtimeCapability)
+	if capability == "" || securityDomainReference == "" {
+		return FederationPlatformSnapshot{}, ErrFederationPlatformEvidenceNotFound
+	}
+	return r.readIdentityRuntimeSnapshot(ctx, providerID, engineInstanceID, organisationID, estateID,
+		runtimeCapability, configurationReference, "", environment, now,
+		capability, "identity_runtime_configuration", securityDomainReference)
+}
+
+func (r *PostgresRepository) readIdentityRuntimeSnapshot(ctx context.Context,
+	providerID, engineInstanceID, organisationID, estateID, runtimeCapability,
+	configurationReference, trustMaterialReference, environment string, now time.Time,
+	capability, configurationType, securityDomainReference string,
+) (FederationPlatformSnapshot, error) {
 	var out FederationPlatformSnapshot
 	if r == nil || r.pool == nil || ctx == nil || ctx.Err() != nil ||
 		providerID == "" || engineInstanceID == "" || organisationID == "" || estateID == "" ||
-		configurationReference == "" || trustMaterialReference == "" || environment == "" ||
-		(runtimeCapability != "OIDC_FEDERATION" && runtimeCapability != "SAML_FEDERATION") {
+		configurationReference == "" || environment == "" || now.IsZero() {
 		return out, ErrFederationPlatformEvidenceNotFound
 	}
 	now = now.UTC()
@@ -268,7 +295,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 			p.artifact_digest,
 			p.artifact_digest,
 			p.revision,
-			LEAST(ro.evidence_expires_at, dep.expires_at),
+			LEAST(ro.evidence_expires_at, dep.expires_at, pcs.effective_to, cb.effective_to),
 			p.source,
 			dep.source,
 			ei.environment,
@@ -281,7 +308,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		  ON ei.engine_instance_id = p.engine_instance_id
 		 AND ei.engine_id = cp.engine_id
 		JOIN capability.capability cap
-		  ON cap.code = 'identity.authentication.perform'
+		  ON cap.code = $10
 		JOIN capability.provider_capability_support pcs
 		  ON pcs.provider_id = cp.provider_id
 		 AND pcs.capability_id = cap.capability_id
@@ -309,7 +336,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		  ON config_ref.external_reference_id = p.configuration_reference
 		 AND config_ref.system_namespace = 'baobab_iam'
 		 AND config_ref.engine_id = 'baobab-iam'
-		 AND config_ref.native_entity_type = 'federation_configuration'
+		 AND config_ref.native_entity_type = $11
 		 AND config_ref.environment = $8
 		 AND config_ref.engine_instance_id IS NOT NULL
 		 AND config_ref.status = 'active'
@@ -350,7 +377,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		JOIN topology.engine evidence_engine
 		  ON evidence_engine.engine_id = evidence_instance.engine_id
 		 AND evidence_engine.code = 'baobab-cp'
-		JOIN mapping.external_reference trust_ref
+		LEFT JOIN mapping.external_reference trust_ref
 		  ON trust_ref.external_reference_id = $7
 		 AND trust_ref.system_namespace = 'baobab_iam'
 		 AND trust_ref.engine_id = 'baobab-iam'
@@ -358,11 +385,11 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		 AND trust_ref.environment = $8
 		 AND trust_ref.engine_instance_id IS NOT NULL
 		 AND trust_ref.status = 'active'
-		JOIN topology.engine_instance trust_instance
+		LEFT JOIN topology.engine_instance trust_instance
 		  ON trust_instance.engine_instance_key = trust_ref.engine_instance_id
 		 AND trust_instance.environment = $8
 		 AND UPPER(trust_instance.status) = 'ACTIVE'
-		JOIN topology.engine trust_engine
+		LEFT JOIN topology.engine trust_engine
 		  ON trust_engine.engine_id = trust_instance.engine_id
 		 AND trust_engine.code = 'baobab-iam'
 		JOIN topology.engine_release desired
@@ -387,6 +414,8 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		  AND scope.organisation_id = $3
 		  AND scope.digital_estate_id = $4
 		  AND p.configuration_reference = $6
+          AND ($12::text = '' OR p.security_domain_reference = $12)
+          AND ($7::text = '' OR trust_engine.engine_id IS NOT NULL)
 		  AND p.published_at <= $9
 		  AND (scope.environment IS NULL OR scope.environment = $8)
 		  AND ei.environment = $8
@@ -410,7 +439,7 @@ func (r *PostgresRepository) ReadFederationPlatformSnapshot(
 		configurationReference,
 		trustMaterialReference,
 		environment,
-		now,
+		now, capability, configurationType, securityDomainReference,
 	).Scan(
 		&out.ProviderID,
 		&out.EngineInstanceID,

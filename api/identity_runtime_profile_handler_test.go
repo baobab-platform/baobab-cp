@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -182,6 +183,12 @@ func TestIdentityRuntimeProfileRouteRequiresTokenAndRegistryScope(t *testing.T) 
 	}
 }
 
+func (s *runtimeProfileRepoStub) ReadIdentityRuntimeSnapshot(ctx context.Context,
+	provider, instance, organisation, estate, facet, config, security, environment string, now time.Time,
+) (repository.FederationPlatformSnapshot, error) {
+	return s.ReadFederationPlatformSnapshot(ctx, provider, instance, organisation, estate, facet, config, security, environment, now)
+}
+
 func TestFederationBindingRouteUsesExactFacetAndCurrentEvidenceSources(t *testing.T) {
 	now := time.Date(2026, 10, 4, 18, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
@@ -299,6 +306,156 @@ func TestFederationBindingRouteUsesExactFacetAndCurrentEvidenceSources(t *testin
 			if tc.wantStatus == http.StatusOK {
 				if platform.readFacet != "OIDC_FEDERATION" || platform.readConfig != "ref_config" || platform.readTrustMaterial != "ref_trustmaterial" {
 					t.Fatalf("platform read was not facet/config/trust-material bound: %q %q %q", platform.readFacet, platform.readConfig, platform.readTrustMaterial)
+				}
+				if strings.Contains(w.Body.String(), "baobab-deployment-controller-staging") {
+					t.Fatal("private evidence source leaked onto the IAM wire")
+				}
+			}
+		})
+	}
+}
+
+func TestIdentityRuntimeBindingRouteEnforcesIndependentAuthority(t *testing.T) {
+	now := time.Date(2026, 10, 4, 18, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name                 string
+		readerScope          bool
+		runtimeCapability    string
+		revokeReporter       bool
+		revokeCaller         bool
+		revokeGrant          bool
+		federationPermission bool
+		readErr              error
+		wantStatus           int
+		wantReadCalls        int
+	}{
+		{name: "valid workload", readerScope: true, runtimeCapability: "WORKLOAD_TOKEN_ISSUANCE", wantStatus: http.StatusOK, wantReadCalls: 1},
+		{name: "valid", readerScope: true, runtimeCapability: "HUMAN_AUTHENTICATION", wantStatus: http.StatusOK, wantReadCalls: 1},
+		{name: "reader scope absent from registry", runtimeCapability: "HUMAN_AUTHENTICATION", wantStatus: http.StatusForbidden},
+		{name: "runtime reporter revoked during read", readerScope: true, runtimeCapability: "HUMAN_AUTHENTICATION", revokeReporter: true, wantStatus: http.StatusConflict, wantReadCalls: 1},
+		{name: "caller revoked", readerScope: true, runtimeCapability: "HUMAN_AUTHENTICATION", revokeCaller: true, wantStatus: http.StatusForbidden, wantReadCalls: 1},
+		{name: "grant revoked", readerScope: true, runtimeCapability: "HUMAN_AUTHENTICATION", revokeGrant: true, wantStatus: http.StatusForbidden, wantReadCalls: 1},
+		{name: "federation permission is insufficient", readerScope: true, runtimeCapability: "HUMAN_AUTHENTICATION", federationPermission: true, wantStatus: http.StatusForbidden},
+		{name: "evidence absent", readerScope: true, runtimeCapability: "HUMAN_AUTHENTICATION", readErr: repository.ErrFederationPlatformEvidenceNotFound, wantStatus: http.StatusConflict, wantReadCalls: 1},
+		{name: "storage unavailable", readerScope: true, runtimeCapability: "HUMAN_AUTHENTICATION", readErr: errors.New("private database details"), wantStatus: http.StatusServiceUnavailable, wantReadCalls: 1},
+		{name: "federation facet", readerScope: true, runtimeCapability: "OIDC_FEDERATION", wantStatus: http.StatusBadRequest},
+		{name: "unsupported facet", readerScope: true, runtimeCapability: "PASSKEY", wantStatus: http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			identities := repository.NewInMemoryRepository()
+			caller := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "workload", Status: "ACTIVE"}
+			mustNoError(t, identities.CreateIdentity(ctx, caller))
+			mustNoError(t, identities.LinkExternalIdentity(ctx, domain.ExternalIdentity{
+				ID: domain.NewExternalIdentityID(), PrincipalID: caller.ID,
+				Issuer: testRealm, Subject: "iam-staging-reader", Status: "ACTIVE",
+			}))
+
+			grant := administration.Grant{
+				GrantID: "agr_mp2cbinding", PrincipalID: caller.ID,
+				Permission: "security.identity-runtime.view",
+				Scope:      administration.Scope{Level: administration.LevelPlatform},
+				GrantType:  administration.TypeStanding, Source: administration.SourceDirect,
+				RiskClass: administration.RiskLow, ValidFrom: now.Add(-time.Minute),
+				Status: administration.StatusActive, Version: 1,
+			}
+			if tc.federationPermission {
+				grant.Permission = "security.federation.view"
+			}
+			grants := grantsFake{caller.ID: {grant}}
+
+			readerScopes := map[string]bool{}
+			if tc.readerScope {
+				readerScopes["identity-runtime:read"] = true
+			}
+			registry := &mp2cWorkloadRegistry{
+				active: map[string]bool{
+					"baobab-iam-staging":                   true,
+					"baobab-deployment-controller-staging": true,
+				},
+				scopes: map[string]map[string]bool{
+					"baobab-iam-staging": readerScopes,
+					"baobab-deployment-controller-staging": {
+						auth.IdentityRuntimeObserveScope: true,
+						auth.ObserveScope:                true,
+					},
+				},
+				observer: map[string]auth.ReporterScope{
+					"baobab-deployment-controller-staging": {Environment: "staging", Regions: []string{"af-south-1"}},
+				},
+				reporter: map[string]auth.ReporterScope{
+					"baobab-deployment-controller-staging": {Environment: "staging", Regions: []string{"af-south-1"}},
+				},
+			}
+
+			digest := "sha256:" + strings.Repeat("a", 64)
+			platform := &runtimeProfileRepoStub{
+				snapshot: repository.FederationPlatformSnapshot{
+					ProviderID:               "provider_aaaaaaaa",
+					EngineInstanceID:         "ei_aaaaaaaa",
+					Scope:                    repository.FederationPlatformScope{OrganisationID: caller.ID, EstateID: "estate_zuribeans"},
+					ProviderStatus:           "ACTIVE",
+					InstanceStatus:           "ACTIVE",
+					BindingStatus:            "ACTIVE",
+					RuntimeCapability:        tc.runtimeCapability,
+					SupportStatus:            "VERIFIED",
+					ArtifactDigest:           digest,
+					DeployedArtifactDigest:   digest,
+					ProfileRevision:          1,
+					EvidenceExpiresAt:        now.Add(10 * time.Minute),
+					RuntimeEvidenceSource:    "workload:baobab-deployment-controller-staging",
+					DeploymentEvidenceSource: "workload:baobab-deployment-controller-staging",
+					EvidenceEnvironment:      "staging",
+					EvidenceRegion:           "af-south-1",
+				},
+			}
+			platform.readErr = tc.readErr
+			if tc.revokeCaller || tc.revokeGrant {
+				platform.onRead = func() {
+					if tc.revokeCaller {
+						registry.active["baobab-iam-staging"] = false
+					}
+					if tc.revokeGrant {
+						grants[caller.ID] = nil
+					}
+				}
+			}
+			if tc.revokeReporter {
+				platform.onRead = func() {
+					registry.active["baobab-deployment-controller-staging"] = false
+				}
+			}
+
+			principal := auth.Principal{
+				Issuer: testRealm, Subject: "iam-staging-reader",
+				ActorType: "workload", ClientID: "baobab-iam-staging",
+				Scopes: map[string]struct{}{"identity-runtime:read": {}},
+			}
+			handler := New(Dependencies{
+				Store:                   &fakeStore{},
+				WorkloadVerifier:        tokenVerifier{"caller": principal},
+				WorkloadRegistry:        registry,
+				Identities:              identities,
+				AdministrativeGrants:    grants,
+				IdentityRuntimeProfiles: platform,
+				Environment:             "staging",
+			})
+			body := `{"provider_id":"provider_aaaaaaaa","engine_instance_id":"ei_aaaaaaaa","configuration_reference":"ref_config","security_domain_reference":"ref_security","organisation_id":"` + caller.ID + `","estate_id":"estate_zuribeans","runtime_capability":"` + tc.runtimeCapability + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/internal/identity-runtime/v1/binding", strings.NewReader(body))
+			req.Header.Set("Authorization", "Bearer caller")
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status=%d body=%s, want %d", w.Code, w.Body.String(), tc.wantStatus)
+			}
+			if platform.readCalls != tc.wantReadCalls {
+				t.Fatalf("platform reads=%d, want %d", platform.readCalls, tc.wantReadCalls)
+			}
+			if tc.wantStatus == http.StatusOK {
+				if platform.readFacet != tc.runtimeCapability || platform.readConfig != "ref_config" || platform.readTrustMaterial != "ref_security" {
+					t.Fatalf("platform read was not facet/config/security-domain bound: %q %q %q", platform.readFacet, platform.readConfig, platform.readTrustMaterial)
 				}
 				if strings.Contains(w.Body.String(), "baobab-deployment-controller-staging") {
 					t.Fatal("private evidence source leaked onto the IAM wire")
