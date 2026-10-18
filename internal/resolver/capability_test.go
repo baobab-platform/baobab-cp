@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -204,5 +205,41 @@ func TestCapabilityResolverRejectsUnknownCapability(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected missing capability error")
+	}
+}
+
+// A real INT-02 provider run demonstrated that a missing Context profile
+// inherited a binding's isolation restriction. Shared's eligibility gate
+// requires this technical boundary to be proven before specificity scoring.
+func TestCapabilityResolverRequiresEvidenceForIsolationRestrictedBinding(t *testing.T) {
+	query := CapabilityResolutionQuery{
+		CapabilityKey: "intelligence.evidence.search",
+		Context:       Context{TenantID: "tn_int02", IsolationProfileID: "iso_expected"},
+		Bindings: []CapabilityBinding{{ID: "restricted", ScopeID: "scope", CapabilityKey: "intelligence.evidence.search",
+			EngineID: "baobab-pulse", EngineInstanceID: "instance", BindingMode: "PRIMARY", Status: "ACTIVE", ContractVersion: "1"}},
+		Scopes: map[string]capabilitydomain.CapabilityScope{"scope": {TenantID: "tn_int02", IsolationProfileID: "iso_expected"}},
+	}
+	for _, profile := range []string{"iso_expected", "iso_other", ""} {
+		t.Run("context_"+profile, func(t *testing.T) {
+			q := query
+			q.Context.IsolationProfileID = profile
+			_, err := (CapabilityResolverImpl{}).Resolve(context.Background(), q)
+			if profile == "iso_expected" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if !errors.Is(err, ErrBindingNotFound) {
+				t.Fatalf("unproven isolation remained eligible: %v", err)
+			}
+		})
+	}
+	query.Context.IsolationProfileID = ""
+	query.Bindings = append(query.Bindings, CapabilityBinding{ID: "unrestricted-fallback", ScopeID: "fallback-scope",
+		CapabilityKey: query.CapabilityKey, EngineID: "baobab-pulse", EngineInstanceID: "other-instance",
+		BindingMode: "FALLBACK", Status: "ACTIVE", ContractVersion: "1"})
+	query.Scopes["fallback-scope"] = capabilitydomain.CapabilityScope{TenantID: "tn_int02"}
+	selected, err := (CapabilityResolverImpl{}).Resolve(context.Background(), query)
+	if err != nil || selected.BindingID != "unrestricted-fallback" {
+		t.Fatalf("eligible unrestricted fallback was lost: %+v, %v", selected, err)
 	}
 }
