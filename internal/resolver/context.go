@@ -185,8 +185,8 @@ type CapabilityScopeMatcher struct{}
 // field for yet (CustomerSegmentID, CatalogueID, OperatingRegionID,
 // GeographicRegionID) are treated the same as any other value Context
 // cannot currently supply: "inherited", not rejected -- consistent with
-// every other unset-context-value case below, not a special case invented
-// for this matcher.
+// ordinary unset-context-value cases below. Isolation is a hard eligibility
+// constraint: a populated scope profile requires positive context evidence.
 func (CapabilityScopeMatcher) Match(ctx Context, scope capabilitydomain.CapabilityScope) ScopeMatch {
 	matched := []string{}
 	inherited := []string{}
@@ -227,6 +227,15 @@ func (CapabilityScopeMatcher) Match(ctx Context, scope capabilitydomain.Capabili
 			continue
 		}
 		if check.value != "" && check.value != check.want {
+			rejectedBy = append(rejectedBy, check.name)
+			continue
+		}
+		// Shared capability/v1 scope-specificity.yaml step 1 requires
+		// isolation compatibility before scoring. An isolation-restricted
+		// binding cannot inherit a missing profile: there is no trusted
+		// evidence that this context belongs to that isolation boundary.
+		// Ordinary unset dimensions retain their existing inheritance rules.
+		if check.name == "isolation_profile" {
 			rejectedBy = append(rejectedBy, check.name)
 			continue
 		}
