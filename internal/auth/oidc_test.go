@@ -179,6 +179,45 @@ func TestOIDCVerifierRejectsMalformedScope(t *testing.T) {
 	}
 }
 
+// The actual INT-02 Pulse token exposed a one-colon parser restriction:
+// signature/audience verification succeeded, but this registered nested scope
+// was rejected before caller-owned context validation could run. Exercise the
+// real OIDC verifier with signed tokens, not just the regular expression.
+func TestOIDCVerifierAcceptsNestedCanonicalResourceScopes(t *testing.T) {
+	issuer := newTestIssuer(t)
+	verifier, err := NewOIDCVerifier(context.Background(), issuer.server.URL, "baobab-pulse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []string{"intelligence:evidence:search", "intelligence:research-mission:manage"} {
+		t.Run(scope, func(t *testing.T) {
+			principal, err := verifier.Verify(context.Background(), issuer.token(t, map[string]any{
+				"aud": "baobab-pulse", "actor_type": "workload", "azp": "baobab-int02-pulse-consumer", "scope": scope,
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(principal.Scopes) != 1 || !principal.HasScope(scope) || principal.HasScope("intelligence:evidence") {
+				t.Fatalf("nested scope did not retain its exact authority: %#v", principal.Scopes)
+			}
+		})
+	}
+	for _, scope := range []string{"intelligence::search", ":evidence:search", "intelligence:evidence:", "intelligence:evidence:*", "intelligence:Evidence:search", "intelligence:evidence:search/other"} {
+		t.Run(scope, func(t *testing.T) {
+			if _, err := verifier.Verify(context.Background(), issuer.token(t, map[string]any{
+				"aud": "baobab-pulse", "scope": scope,
+			})); err == nil {
+				t.Fatal("malformed nested scope was accepted")
+			}
+		})
+	}
+	if _, err := verifier.Verify(context.Background(), issuer.token(t, map[string]any{
+		"aud": "baobab-control-plane", "scope": "intelligence:evidence:search",
+	})); err == nil {
+		t.Fatal("nested scope bypassed audience verification")
+	}
+}
+
 // TestOIDCVerifierIgnoresProtocolScopes: a Keycloak workforce login token
 // carries "openid profile email" beside its authority. Those grant nothing,
 // so they are ignored; a non-canonical scope outside that set is still

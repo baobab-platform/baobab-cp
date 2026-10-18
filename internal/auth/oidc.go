@@ -19,7 +19,12 @@ const (
 
 var ErrInvalidToken = errors.New("invalid access token")
 var canonicalTenantID = regexp.MustCompile(`^tn_[a-z0-9]+$`)
-var canonicalScope = regexp.MustCompile(`^[a-z][a-z0-9.-]*:[a-z][a-z0-9.-]*$`)
+
+// Canonical authority scopes may contain several namespace segments, e.g.
+// Shared's intelligence:evidence:search. Require at least one separator and
+// a nonempty lowercase segment on each side; never infer wildcard authority.
+// This syntax check is independent of each resource's registered scope gate.
+var canonicalScope = regexp.MustCompile(`^[a-z][a-z0-9.-]*(?::[a-z][a-z0-9.-]*)+$`)
 
 // protocolScopes are the OpenID Connect and Keycloak built-in scope names a
 // workforce login token carries alongside its authority ("openid profile
