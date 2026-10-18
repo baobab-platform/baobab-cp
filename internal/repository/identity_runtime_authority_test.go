@@ -24,6 +24,9 @@ func TestRuntimeConfigurationAndCapabilityBoundaries(t *testing.T) {
 			t.Fatalf("%v: %q != %q", tc.facets, got, tc.want)
 		}
 	}
+	if got := IdentityRuntimePlatformCapability("OAUTH_AUTHORIZATION_SERVER"); got != "identity.workload-token.issue" {
+		t.Fatal("OAuth companion capability changed", got)
+	}
 	for _, f := range []string{"OIDC_FEDERATION", "SAML_FEDERATION", "PASSKEY", "unknown", ""} {
 		if IdentityRuntimePlatformCapability(f) != "" {
 			t.Fatalf("unapproved runtime read: %q", f)

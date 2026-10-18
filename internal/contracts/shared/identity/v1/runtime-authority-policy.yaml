@@ -8,6 +8,9 @@ permission: security.identity-runtime.view
 facets:
   HUMAN_AUTHENTICATION: identity.authentication.perform
   WORKLOAD_TOKEN_ISSUANCE: identity.workload-token.issue
+  # Companion observation of the SAME registered Hydra issuer. This does not
+  # turn the workload capability into a human-login or resource-access grant.
+  OAUTH_AUTHORIZATION_SERVER: identity.workload-token.issue
 references:
   configuration: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: identity_runtime_configuration}
   security_domain: {system_namespace: baobab_iam, engine_id: baobab-iam, native_entity_type: identity_security_domain}
@@ -29,3 +32,17 @@ requirements:
 # and independently consumes caller-owned capability resolution per operation.
 # Federation continues to require federation_configuration and trust material.
 # This policy neither approves configuration nor waives conformance/registration.
+
+composition_requirements:
+  native_handoff:
+    human_capability: identity.authentication.perform
+    human_facet: HUMAN_AUTHENTICATION
+    issuer_capability: identity.workload-token.issue
+    issuer_facets: [WORKLOAD_TOKEN_ISSUANCE, OAUTH_AUTHORIZATION_SERVER]
+    exact_same_issuer_provider_instance_artifact_and_profile_revision: true
+    exact_same_organisation_estate_security_domain_and_caller: true
+    repeat_checks_before_provider_acceptance: true
+    grants_human_resource_audience: false
+# The IAM service caller needs both existing canonical capabilities for this
+# deliberately narrow composition. End users acquire neither workload scopes
+# nor membership. OAuth observations remain read-only conformance evidence.

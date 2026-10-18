@@ -114,7 +114,9 @@ func IdentityRuntimePlatformCapability(facet string) string {
 	switch facet {
 	case "HUMAN_AUTHENTICATION":
 		return "identity.authentication.perform"
-	case "WORKLOAD_TOKEN_ISSUANCE":
+	// OAuth is a companion proof of the SAME governed issuer, not a new
+	// platform capability or permission to grant human resource audiences.
+	case "WORKLOAD_TOKEN_ISSUANCE", "OAUTH_AUTHORIZATION_SERVER":
 		return "identity.workload-token.issue"
 	}
 	return ""
