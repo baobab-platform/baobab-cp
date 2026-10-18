@@ -28,6 +28,41 @@ type identityRuntimeBindingRequest struct {
 	SecurityDomainReference string `json:"security_domain_reference"`
 }
 
+// identityRuntimeSnapshotWire is the versioned private runtime response.
+// Keep explicit tags: internal Go model names are not an HTTP wire contract.
+type identityRuntimeSnapshotWire struct {
+	ProviderID       string `json:"provider_id"`
+	EngineInstanceID string `json:"engine_instance_id"`
+	Scope            struct {
+		OrganisationID string `json:"organisation_id"`
+		EstateID       string `json:"estate_id"`
+	} `json:"scope"`
+	ProviderStatus          string    `json:"provider_status"`
+	InstanceStatus          string    `json:"instance_status"`
+	BindingStatus           string    `json:"binding_status"`
+	RuntimeCapability       string    `json:"runtime_capability"`
+	SupportStatus           string    `json:"support_status"`
+	ArtifactDigest          string    `json:"artifact_digest"`
+	DeployedArtifactDigest  string    `json:"deployed_artifact_digest"`
+	ProfileRevision         uint64    `json:"profile_revision"`
+	EvidenceExpiresAt       time.Time `json:"evidence_expires_at"`
+	ConfigurationReference  string    `json:"configuration_reference"`
+	SecurityDomainReference string    `json:"security_domain_reference"`
+}
+
+func runtimeSnapshotWire(out repository.FederationPlatformSnapshot, req identityRuntimeBindingRequest) identityRuntimeSnapshotWire {
+	wire := identityRuntimeSnapshotWire{
+		ProviderID: out.ProviderID, EngineInstanceID: out.EngineInstanceID,
+		ProviderStatus: out.ProviderStatus, InstanceStatus: out.InstanceStatus, BindingStatus: out.BindingStatus,
+		RuntimeCapability: out.RuntimeCapability, SupportStatus: out.SupportStatus,
+		ArtifactDigest: out.ArtifactDigest, DeployedArtifactDigest: out.DeployedArtifactDigest,
+		ProfileRevision: out.ProfileRevision, EvidenceExpiresAt: out.EvidenceExpiresAt,
+		ConfigurationReference: req.ConfigurationReference, SecurityDomainReference: req.SecurityDomainReference,
+	}
+	wire.Scope.OrganisationID, wire.Scope.EstateID = out.Scope.OrganisationID, out.Scope.EstateID
+	return wire
+}
+
 func (h identityRuntimeAuthorityHandler) active(p auth.Principal) bool {
 	if h.api == nil || h.api.workloadRegistry == nil || p.ActorType != "workload" ||
 		p.ClientID == "" || !p.HasScope("identity-runtime:read") || !h.api.workloadRegistry.IsActive(p.ClientID) {
@@ -86,5 +121,5 @@ func (h identityRuntimeAuthorityHandler) binding(w http.ResponseWriter, r *http.
 		h.deny(w, http.StatusForbidden)
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, runtimeSnapshotWire(out, req))
 }

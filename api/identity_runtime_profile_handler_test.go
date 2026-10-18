@@ -454,6 +454,22 @@ func TestIdentityRuntimeBindingRouteEnforcesIndependentAuthority(t *testing.T) {
 				t.Fatalf("platform reads=%d, want %d", platform.readCalls, tc.wantReadCalls)
 			}
 			if tc.wantStatus == http.StatusOK {
+				var wire map[string]json.RawMessage
+				if err := json.Unmarshal(w.Body.Bytes(), &wire); err != nil {
+					t.Fatal(err)
+				}
+				if string(wire["provider_id"]) != `"provider_aaaaaaaa"` ||
+					string(wire["configuration_reference"]) != `"ref_config"` ||
+					string(wire["security_domain_reference"]) != `"ref_security"` ||
+					wire["ProviderID"] != nil {
+					t.Fatal("runtime response wire mismatch", w.Body.String())
+				}
+				var scope map[string]string
+				if json.Unmarshal(wire["scope"], &scope) != nil || scope["organisation_id"] != caller.ID ||
+					scope["estate_id"] != "estate_zuribeans" {
+					t.Fatal("runtime scope wire mismatch")
+				}
+
 				if platform.readFacet != tc.runtimeCapability || platform.readConfig != "ref_config" || platform.readTrustMaterial != "ref_security" {
 					t.Fatalf("platform read was not facet/config/security-domain bound: %q %q %q", platform.readFacet, platform.readConfig, platform.readTrustMaterial)
 				}

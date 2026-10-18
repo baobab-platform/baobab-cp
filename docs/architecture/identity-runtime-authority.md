@@ -29,7 +29,9 @@ environment. Both reviewed references must match the profile. Reference existenc
 does not approve configuration, confer membership or activate support.
 
 Current runtime-observer and deployment-reporter admission is checked before
-returning the existing secret-free PlatformSnapshot wire shape. Reporter IDs
+returning an explicitly tagged snake_case runtime snapshot, including exact
+configuration_reference and security_domain_reference. The internal snapshot
+model is converted at this boundary; federation retains its old wire. Reporter IDs
 remain private. EvidenceExpiresAt is bounded by conformance, deployment, support
 and binding validity. Malformed input is 400, insufficient authority 403,
 missing/stale/conflicting evidence 409 and storage failure 503. Errors disclose
