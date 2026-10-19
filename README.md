@@ -218,3 +218,13 @@ records the governed-tenant runtime mapping guard and legacy migration boundary.
 A missing optional v1 request hint does not exempt an Organisation-first tenant
 from its authoritative PRIMARY identity. This increment is source qualification;
 Infrastructure #35's complete live acceptance remains independently required.
+
+## GitHub Codespaces
+
+This repository now uses the exact digest-pinned Baobab v1.4.4 development
+image and an offline-first lifecycle. See
+[Codespaces access and verification](docs/development/codespaces-registry-access.md)
+for the GHCR **Codespaces** ACL, independently managed **Actions** ACL,
+read-only package/repository permissions, token handling and onboarding.
+Creating a **new** Codespace is necessary to approve changed repository
+permissions; pulling `main` into an old Codespace does not grant them.
