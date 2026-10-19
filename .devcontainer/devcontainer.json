@@ -1,1 +1,78 @@
-{"name":"Baobab Platform Control Plane","image":"ghcr.io/baobab-platform/baobab-dev:1.4.4","features":{"ghcr.io/devcontainers/features/go:1":{"version":"1.27"},"ghcr.io/devcontainers/features/docker-outside-of-docker:1":{},"ghcr.io/devcontainers/features/node:1":{"version":"24","pnpmVersion":"none"}},"remoteUser":"vscode","forwardPorts":[8080,3000],"postCreateCommand":"baobab-verify --contract && go mod download && corepack enable && pnpm install --frozen-lockfile","customizations":{"vscode":{"extensions":["golang.go","ms-azuretools.vscode-docker","github.vscode-github-actions","dbaeumer.vscode-eslint"]}}}
+{
+  "name": "Baobab Control Plane — governed development",
+  "image": "ghcr.io/baobab-platform/baobab-dev:1.4.4@sha256:9603f0e7402aa85771e904db1c20f2ecc02f705131b266cb4ec3d1c24ea58ae4",
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "containerEnv": {
+    "TZ": "Africa/Johannesburg",
+    "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0",
+    "NEXT_TELEMETRY_DISABLED": "1"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.27"
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false
+    }
+  },
+  "forwardPorts": [
+    8080,
+    3000
+  ],
+  "portsAttributes": {
+    "3000": {
+      "label": "Control Plane Console",
+      "onAutoForward": "openPreview",
+      "visibility": "private"
+    },
+    "8080": {
+      "label": "Control Plane Go API",
+      "onAutoForward": "silent",
+      "visibility": "private"
+    }
+  },
+  "otherPortsAttributes": {
+    "visibility": "private",
+    "onAutoForward": "silent"
+  },
+  "updateContentCommand": "node --test scripts/codespaces/*.node.mjs",
+  "postCreateCommand": "node scripts/codespaces/bootstrap.mjs && baobab-verify --contract && go version && go mod download",
+  "postStartCommand": "node scripts/codespaces/private-npm.mjs",
+  "waitFor": "updateContentCommand",
+  "customizations": {
+    "codespaces": {
+      "repositories": {
+        "baobab-platform/baobab-dev": {
+          "permissions": {
+            "contents": "read",
+            "packages": "read"
+          }
+        },
+        "baobab-platform/shared": {
+          "permissions": {
+            "contents": "read",
+            "packages": "read"
+          }
+        }
+      },
+      "openFiles": [
+        "README.md"
+      ]
+    },
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-azuretools.vscode-docker",
+        "github.vscode-github-actions",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  }
+}
