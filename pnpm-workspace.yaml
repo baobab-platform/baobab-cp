@@ -9,6 +9,9 @@ overrides:
   postcss: 8.5.28
   sharp: 0.35.5
   source-map-js: 1.2.2
+  # vitest's vite: patched against GHSA-587h-7wmj-h5pm (launch-editor
+  # existence-check bypass, vite >=8.3.0 <=8.3.2).
+  vite: 8.3.4
   # Next 16.3.6 uses only globSync(pattern, { onlyDirectories: true })
   # in get-root-dirs. tinyglobby supports that API without the vulnerable
   # braces dependency (GHSA-vfj7-8cjw-p6xm). lint runs its integration fixture.
