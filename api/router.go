@@ -151,19 +151,21 @@ type Dependencies struct {
 	// ZB-G03 step 3 (ADR-BCP-028): delegated human Principal resolution.
 	// Default off, nonproduction only. BuyerSubjects verify buyer tokens
 	// against the buyer issuer alone and BuyerSubjectIntrospector confirms
-	// their current status with that issuer. Callers and the BFF clients
-	// whose buyer tokens are accepted are explicit allowlists.
-	BuyerPrincipalResolutionEnabled   bool
-	BuyerPrincipalResolutionClientIDs []string
-	BuyerSubjects                     auth.SubjectVerifiers
-	BuyerSubjectIntrospector          auth.Introspector
-	BuyerAuthorisedParties            []string
+	// their current status with that issuer. Callers come from the workload
+	// registry (scope + subject_principal_audiences); the BFF clients whose
+	// buyer tokens are accepted are an explicit allowlist.
+	BuyerPrincipalResolutionEnabled bool
+	BuyerSubjects                   auth.SubjectVerifiers
+	BuyerSubjectIntrospector        auth.Introspector
+	BuyerAuthorisedParties          []string
 	// ADR-BCP-028 increment 2: governed JIT buyer registration. Default off
 	// even when resolution is on. Its callers and eligible BFF clients are
 	// separate allowlists; an eligible client must also be authorised above.
 	BuyerRegistrationEnabled           bool
-	BuyerRegistrationClientIDs         []string
 	BuyerRegistrationAuthorisedParties []string
+	// BuyerRegistrationPerMinute bounds creation attempts per caller, BFF
+	// client and issuer in each process; zero or less disables the limit.
+	BuyerRegistrationPerMinute int
 	// P0-02B is a separate default-off private scanner boundary. Its verifier
 	// MUST compose current token introspection and fresh registry authority.
 	ScannerIntakeEnabled bool
@@ -907,22 +909,24 @@ func New(dependencies Dependencies) http.Handler {
 	if dependencies.BuyerPrincipalResolutionEnabled && peoRoutesPermittedIn(dependencies.Environment) &&
 		dependencies.WorkloadRegistry != nil && dependencies.BuyerSubjects != nil && dependencies.BuyerSubjectIntrospector != nil {
 		identities, _ := dependencies.Identities.(repository.DelegatedIdentityReader)
-		callers, parties := allowlist(dependencies.BuyerPrincipalResolutionClientIDs), allowlist(dependencies.BuyerAuthorisedParties)
-		if identities != nil && len(callers) > 0 && len(parties) > 0 {
+		parties := allowlist(dependencies.BuyerAuthorisedParties)
+		if identities != nil && len(parties) > 0 {
 			h := principalResolutionHandler{api: a, identities: identities, subjects: dependencies.BuyerSubjects,
-				introspector: dependencies.BuyerSubjectIntrospector, clientIDs: callers, authorisedParties: parties, now: time.Now}
-			r.With(a.authorize(a.workloadVerifier, "workload", principalResolveScope)).
-				Post("/internal/identity/v1/principals/resolve", h.resolve)
-			registrations, _ := dependencies.Identities.(repository.BuyerRegistrationRepository)
+				introspector: dependencies.BuyerSubjectIntrospector, authorisedParties: parties, now: time.Now}
+			registrations, _ := dependencies.Identities.(repository.LinkedIdentityCreator)
 			eligible := map[string]bool{}
 			for party := range allowlist(dependencies.BuyerRegistrationAuthorisedParties) {
 				if parties[party] {
 					eligible[party] = true
 				}
 			}
-			registrars := allowlist(dependencies.BuyerRegistrationClientIDs)
-			if dependencies.BuyerRegistrationEnabled && registrations != nil && len(registrars) > 0 && len(eligible) > 0 {
-				h.registrations, h.registrationClientIDs, h.registrationParties = registrations, registrars, eligible
+			if dependencies.BuyerRegistrationEnabled && registrations != nil && len(eligible) > 0 {
+				h.registrations, h.registrationParties = registrations, eligible
+				h.limiter = newRegistrationLimiter(dependencies.BuyerRegistrationPerMinute)
+			}
+			r.With(a.authorize(a.workloadVerifier, "workload", principalResolveScope)).
+				Post("/internal/identity/v1/principals/resolve", h.resolve)
+			if h.registrations != nil {
 				r.With(a.authorize(a.workloadVerifier, "workload", buyerRegistrationScope)).
 					Post("/internal/identity/v1/principals/register-buyer", h.register)
 			}

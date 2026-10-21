@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -107,8 +108,8 @@ type Config struct {
 	BuyerIntrospectionClientID         string
 	BuyerIntrospectionClientSecret     string
 	BuyerRegistrationEnabled           bool
-	BuyerRegistrationClientIDs         []string
 	BuyerRegistrationAuthorisedParties []string
+	BuyerRegistrationPerMinute         int
 	// OrganisationFirstV2Enabled mounts the LA-03 Organisation-first tenant
 	// onboarding routes (/v2/tenant-onboarding/.../primary-organisation and
 	// /v2/tenants). Default false (ORGANISATION_FIRST_V2_ENABLED). Even when
@@ -176,14 +177,18 @@ func Load() (Config, error) {
 	c.TradeOrderAuthorityEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("TRADE_ORDER_AUTHORITY_ENABLED")), "true")
 	c.TradeOrderAuthorityClientIDs = strings.Split(os.Getenv("TRADE_ORDER_AUTHORITY_CLIENT_IDS"), ",")
 	c.BuyerPrincipalResolutionEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("BUYER_PRINCIPAL_RESOLUTION_ENABLED")), "true")
-	c.BuyerPrincipalResolutionClientIDs = strings.Split(os.Getenv("BUYER_PRINCIPAL_RESOLUTION_CLIENT_IDS"), ",")
 	c.BuyerSubjectIssuer = strings.TrimSpace(os.Getenv("BUYER_SUBJECT_ISSUER"))
 	c.BuyerAuthorisedParties = strings.Split(os.Getenv("BUYER_SUBJECT_AUTHORISED_PARTIES"), ",")
 	c.BuyerIntrospectionEndpoint = strings.TrimSpace(os.Getenv("BUYER_SUBJECT_INTROSPECTION_ENDPOINT"))
 	c.BuyerIntrospectionClientID = strings.TrimSpace(os.Getenv("BUYER_SUBJECT_INTROSPECTION_CLIENT_ID"))
 	c.BuyerIntrospectionClientSecret = os.Getenv("BUYER_SUBJECT_INTROSPECTION_CLIENT_SECRET")
 	c.BuyerRegistrationEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("BUYER_REGISTRATION_ENABLED")), "true")
-	c.BuyerRegistrationClientIDs = strings.Split(os.Getenv("BUYER_REGISTRATION_CLIENT_IDS"), ",")
+	c.BuyerRegistrationPerMinute = 30
+	if raw := strings.TrimSpace(os.Getenv("BUYER_REGISTRATION_PER_MINUTE")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			c.BuyerRegistrationPerMinute = n
+		}
+	}
 	c.BuyerRegistrationAuthorisedParties = strings.Split(os.Getenv("BUYER_REGISTRATION_AUTHORISED_PARTIES"), ",")
 	c.OrganisationFirstV2Enabled = strings.EqualFold(strings.TrimSpace(os.Getenv("ORGANISATION_FIRST_V2_ENABLED")), "true")
 	c.FederationSourceEngineInstanceID = os.Getenv("FEDERATION_SOURCE_ENGINE_INSTANCE_ID")

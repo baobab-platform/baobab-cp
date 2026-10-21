@@ -27,9 +27,15 @@ const (
 	resolveCorrelation = "0b6f2c1e-6d0a-4f43-9c1a-2f1d6b1e9a40"
 )
 
-type resolveRegistry struct{ allowed, noRegister bool }
+type resolveRegistry struct{ allowed, noRegister, noSubjectAudience bool }
 
 func (r resolveRegistry) IsActive(string) bool { return r.allowed }
+func (r resolveRegistry) SubjectPrincipalAudiences(clientID string) []string {
+	if !r.allowed || r.noSubjectAudience || clientID != resolveCaller {
+		return nil
+	}
+	return []string{buyerSubjectAudience}
+}
 func (r resolveRegistry) AllowsScope(clientID, scope string) bool {
 	return r.allowed && clientID == resolveCaller && (scope == principalResolveScope || (scope == buyerRegistrationScope && !r.noRegister))
 }
@@ -104,8 +110,8 @@ func (f *resolveFixture) post(t *testing.T, body map[string]any, header string) 
 	t.Helper()
 	handler := New(Dependencies{Store: &fakeStore{}, Environment: f.environment, Identities: f.repo,
 		WorkloadVerifier: fakeVerifier{principal: f.caller}, WorkloadRegistry: f.registry,
-		BuyerPrincipalResolutionEnabled: f.enabled, BuyerPrincipalResolutionClientIDs: []string{resolveCaller},
-		BuyerSubjects: f.subjects, BuyerSubjectIntrospector: f.introspector, BuyerAuthorisedParties: []string{resolveBFF}})
+		BuyerPrincipalResolutionEnabled: f.enabled,
+		BuyerSubjects:                   f.subjects, BuyerSubjectIntrospector: f.introspector, BuyerAuthorisedParties: []string{resolveBFF}})
 	if body == nil {
 		body = map[string]any{"subject_token": resolveToken, "subject_token_type": accessTokenType, "correlation_id": resolveCorrelation}
 	}
@@ -166,10 +172,11 @@ func TestPrincipalResolutionEvidenceNeverOutlivesTheToken(t *testing.T) {
 
 func TestPrincipalResolutionDeniesTheCaller(t *testing.T) {
 	cases := map[string]func(*resolveFixture){
-		"not allowlisted":        func(f *resolveFixture) { f.caller.ClientID = "zuribeans-backend" },
-		"scope revoked":          func(f *resolveFixture) { f.registry.allowed = false },
-		"human caller":           func(f *resolveFixture) { f.caller.ActorType = "human" },
-		"missing scope in token": func(f *resolveFixture) { f.caller.Scopes = map[string]struct{}{"context:resolve": {}} },
+		"not the registered caller": func(f *resolveFixture) { f.caller.ClientID = "zuribeans-backend" },
+		"no subject audience":       func(f *resolveFixture) { f.registry.noSubjectAudience = true },
+		"scope revoked":             func(f *resolveFixture) { f.registry.allowed = false },
+		"human caller":              func(f *resolveFixture) { f.caller.ActorType = "human" },
+		"missing scope in token":    func(f *resolveFixture) { f.caller.Scopes = map[string]struct{}{"context:resolve": {}} },
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {

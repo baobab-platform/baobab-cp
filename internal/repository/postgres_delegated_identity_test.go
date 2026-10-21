@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
@@ -76,12 +77,12 @@ func TestPostgresLookupExternalIdentityReturnsStatus(t *testing.T) {
 	}
 }
 
-// TestPostgresRegisterBuyerIdentityIsAtomicUnderConcurrency proves ADR-BCP-028
+// TestPostgresCreateLinkedIdentityIsAtomicUnderConcurrency proves ADR-BCP-028
 // section 2.3 against PostgreSQL: concurrent first registrations of one
 // (issuer, subject) create exactly one Principal, leave no orphan Principal
 // behind, all return the same Principal, write one audit record, and never
 // revive a stopped identity.
-func TestPostgresRegisterBuyerIdentityIsAtomicUnderConcurrency(t *testing.T) {
+func TestPostgresCreateLinkedIdentityIsAtomicUnderConcurrency(t *testing.T) {
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping PostgreSQL integration test")
@@ -113,7 +114,8 @@ func TestPostgresRegisterBuyerIdentityIsAtomicUnderConcurrency(t *testing.T) {
 		ids[i] = domain.NewPrincipalID()
 	}
 	cleanup := func() {
-		admin.Exec(ctx, `DELETE FROM audit_events WHERE action='identity.principal.buyer_registered' AND target = ANY($1)`, targets(ids))
+		admin.Exec(ctx, `DELETE FROM audit_events WHERE action='identity.principal.created' AND target = ANY($1)`, targets(ids))
+		admin.Exec(ctx, `DELETE FROM messaging.outbox WHERE aggregate_type='identity.principal' AND aggregate_id = ANY($1)`, ids)
 		admin.Exec(ctx, `DELETE FROM identity.external_identity WHERE issuer=$1 AND subject=$2`, issuer, subject)
 		admin.Exec(ctx, `DELETE FROM identity.principal WHERE principal_id = ANY($1::uuid[])`, ids)
 	}
@@ -130,7 +132,7 @@ func TestPostgresRegisterBuyerIdentityIsAtomicUnderConcurrency(t *testing.T) {
 	for i := 0; i < attempts; i++ {
 		go func(id string) {
 			<-start
-			p, _, created, err := repo.RegisterBuyerIdentity(ctx,
+			p, _, created, err := repo.CreateLinkedIdentity(ctx,
 				domain.Principal{ID: id, ActorType: "human", Status: "ACTIVE"},
 				domain.ExternalIdentity{ID: domain.NewExternalIdentityID(), PrincipalID: id, Issuer: issuer, Subject: subject, Status: "ACTIVE"},
 				AuditActor{ActorID: "baobab-trade-workload", ActorType: "workload", ClientID: "baobab-trade-workload", CorrelationID: domain.NewUUIDv7()})
@@ -156,9 +158,18 @@ func TestPostgresRegisterBuyerIdentityIsAtomicUnderConcurrency(t *testing.T) {
 	mustScan(t, admin.QueryRow(ctx, `SELECT count(*) FROM identity.external_identity WHERE issuer=$1 AND subject=$2`, issuer, subject), &rows)
 	mustScan(t, admin.QueryRow(ctx, `SELECT count(*) FROM identity.principal p WHERE p.principal_id = ANY($1::uuid[])
 		AND NOT EXISTS (SELECT 1 FROM identity.external_identity e WHERE e.principal_id = p.principal_id)`, ids), &orphans)
-	mustScan(t, admin.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE action='identity.principal.buyer_registered' AND target = ANY($1)`, targets(ids)), &audits)
-	if rows != 1 || orphans != 0 || audits != 1 {
-		t.Fatalf("external identities = %d, orphan principals = %d, audit records = %d; want 1, 0, 1", rows, orphans, audits)
+	mustScan(t, admin.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE action='identity.principal.created' AND target = ANY($1)`, targets(ids)), &audits)
+	var outbox int
+	var eventType, payload string
+	mustScan(t, admin.QueryRow(ctx, `SELECT count(*) FROM messaging.outbox WHERE aggregate_type='identity.principal' AND aggregate_id = ANY($1)`, ids), &outbox)
+	if err := admin.QueryRow(ctx, `SELECT event_type, payload::text FROM messaging.outbox WHERE aggregate_type='identity.principal' AND aggregate_id = ANY($1)`, ids).Scan(&eventType, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 || orphans != 0 || audits != 1 || outbox != 1 {
+		t.Fatalf("external identities = %d, orphan principals = %d, audit records = %d, outbox events = %d; want 1, 0, 1, 1", rows, orphans, audits, outbox)
+	}
+	if eventType != "com.baobab-platform.identity.created.v1" || strings.Contains(payload, subject) || !strings.Contains(payload, issuer) {
+		t.Fatalf("outbox event %s carries %s; want identity.created.v1 with the issuer and never the subject", eventType, payload)
 	}
 
 	// A stopped identity is returned as is, never re-created or revived.
@@ -167,7 +178,7 @@ func TestPostgresRegisterBuyerIdentityIsAtomicUnderConcurrency(t *testing.T) {
 	}
 	retry := domain.NewPrincipalID()
 	ids = append(ids, retry)
-	_, external, created, err := repo.RegisterBuyerIdentity(ctx,
+	_, external, created, err := repo.CreateLinkedIdentity(ctx,
 		domain.Principal{ID: retry, ActorType: "human", Status: "ACTIVE"},
 		domain.ExternalIdentity{ID: domain.NewExternalIdentityID(), PrincipalID: retry, Issuer: issuer, Subject: subject, Status: "ACTIVE"},
 		AuditActor{ActorID: "baobab-trade-workload", ActorType: "workload"})

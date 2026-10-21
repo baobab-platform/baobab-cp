@@ -391,15 +391,30 @@ type DelegatedIdentityReader interface {
 	LookupExternalIdentity(ctx context.Context, issuer, subject string) (domain.Principal, domain.ExternalIdentity, error)
 }
 
-// BuyerRegistrationRepository is governed just-in-time buyer registration's
-// write (ADR-BCP-028 section 2.3). RegisterBuyerIdentity creates the human
-// Principal, its ACTIVE ExternalIdentity and an audit record in ONE
-// transaction. When (issuer, subject) already exists, including by a
+// LinkedIdentityCreator creates a canonical Principal and its ACTIVE
+// ExternalIdentity atomically (ADR-SHARED-042 section 4; ADR-0004 section
+// 56). The Principal, the ExternalIdentity, an audit record and a
+// com.baobab-platform.identity.created.v1 outbox event are written in ONE
+// transaction. When (issuer, subject) already exists, including through a
 // concurrent request that won the UNIQUE constraint, it creates nothing,
-// leaves no orphan Principal, and returns the existing rows with created
-// false. It never changes an existing row's status.
-type BuyerRegistrationRepository interface {
-	RegisterBuyerIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, actor AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error)
+// leaves no orphan Principal and no duplicate event, and returns the
+// existing rows with created false. It never changes an existing row.
+// Which actors may be created is the caller's policy.
+type LinkedIdentityCreator interface {
+	CreateLinkedIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, actor AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error)
+}
+
+func validLinkedIdentity(principal domain.Principal, external domain.ExternalIdentity) error {
+	if err := principal.Validate(); err != nil {
+		return fmt.Errorf("validate principal: %w", err)
+	}
+	if err := external.Validate(); err != nil {
+		return fmt.Errorf("validate external identity: %w", err)
+	}
+	if principal.ID == "" || external.ID == "" || principal.Status != "ACTIVE" || external.Status != "ACTIVE" || external.PrincipalID != principal.ID {
+		return errors.New("a linked identity requires an ACTIVE principal and an ACTIVE external identity bound to it")
+	}
+	return nil
 }
 
 // ErrWorkforceMembershipNotFound is returned by GetWorkforceMembership when
@@ -1322,8 +1337,8 @@ func (r *Repository) ResolveIdentity(_ context.Context, issuer, subject string) 
 	return principal, nil
 }
 
-// RegisterBuyerIdentity implements BuyerRegistrationRepository.
-func (r *Repository) RegisterBuyerIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, _ AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error) {
+// CreateLinkedIdentity implements LinkedIdentityCreator.
+func (r *Repository) CreateLinkedIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, _ AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error) {
 	if r == nil {
 		return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("repository is nil")
 	}
@@ -1332,8 +1347,8 @@ func (r *Repository) RegisterBuyerIdentity(ctx context.Context, principal domain
 	} else if !errors.Is(err, ErrIdentityNotFound) {
 		return domain.Principal{}, domain.ExternalIdentity{}, false, err
 	}
-	if principal.ActorType != "human" || principal.Status != "ACTIVE" || external.Status != "ACTIVE" || external.PrincipalID != principal.ID {
-		return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("buyer registration requires an ACTIVE human principal and identity")
+	if err := validLinkedIdentity(principal, external); err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, err
 	}
 	if err := r.CreateIdentity(ctx, principal); err != nil {
 		return domain.Principal{}, domain.ExternalIdentity{}, false, err

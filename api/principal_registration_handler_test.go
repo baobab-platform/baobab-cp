@@ -19,7 +19,7 @@ import (
 
 type failingRegistrations struct{ *repository.Repository }
 
-func (failingRegistrations) RegisterBuyerIdentity(context.Context, domain.Principal, domain.ExternalIdentity, repository.AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error) {
+func (failingRegistrations) CreateLinkedIdentity(context.Context, domain.Principal, domain.ExternalIdentity, repository.AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error) {
 	return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("database unavailable")
 }
 
@@ -28,10 +28,16 @@ type registerOptions struct {
 	parties    []string
 	authorised []string
 	identites  repository.IdentityRepository
+	perMinute  int
+	noPurpose  bool
 }
 
 func (f *resolveFixture) register(t *testing.T, o registerOptions) *httptest.ResponseRecorder {
 	t.Helper()
+	return f.registerWith(t, f.registrationHandler(o), o)
+}
+
+func (f *resolveFixture) registrationHandler(o registerOptions) http.Handler {
 	identities := o.identites
 	if identities == nil {
 		identities = f.repo
@@ -44,11 +50,19 @@ func (f *resolveFixture) register(t *testing.T, o registerOptions) *httptest.Res
 	}
 	handler := New(Dependencies{Store: &fakeStore{}, Environment: f.environment, Identities: identities,
 		WorkloadVerifier: fakeVerifier{principal: f.caller}, WorkloadRegistry: f.registry,
-		BuyerPrincipalResolutionEnabled: f.enabled, BuyerPrincipalResolutionClientIDs: []string{resolveCaller},
-		BuyerSubjects: f.subjects, BuyerSubjectIntrospector: f.introspector, BuyerAuthorisedParties: o.authorised,
-		BuyerRegistrationEnabled: o.enabled, BuyerRegistrationClientIDs: []string{resolveCaller},
-		BuyerRegistrationAuthorisedParties: o.parties})
-	raw, _ := json.Marshal(map[string]any{"subject_token": resolveToken, "subject_token_type": accessTokenType, "correlation_id": resolveCorrelation})
+		BuyerPrincipalResolutionEnabled: f.enabled,
+		BuyerSubjects:                   f.subjects, BuyerSubjectIntrospector: f.introspector, BuyerAuthorisedParties: o.authorised,
+		BuyerRegistrationEnabled: o.enabled, BuyerRegistrationAuthorisedParties: o.parties, BuyerRegistrationPerMinute: o.perMinute})
+	return handler
+}
+
+func (f *resolveFixture) registerWith(t *testing.T, handler http.Handler, o registerOptions) *httptest.ResponseRecorder {
+	t.Helper()
+	body := map[string]any{"subject_token": resolveToken, "subject_token_type": accessTokenType, "purpose": "BUYER_ONBOARDING", "correlation_id": resolveCorrelation}
+	if o.noPurpose {
+		delete(body, "purpose")
+	}
+	raw, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/internal/identity/v1/principals/register-buyer", bytes.NewReader(raw))
 	req.Header.Set("Authorization", "Bearer workload-token")
 	req.Header.Set("Content-Type", "application/json")
@@ -132,6 +146,15 @@ func TestBuyerRegistrationDenials(t *testing.T) {
 			f.subject(func(p *auth.Principal) { p.ClientID = "unauthorised-bff" })
 			f.introspector.result.ClientID = "unauthorised-bff"
 		}, http.StatusForbidden, "SUBJECT_TOKEN_NOT_FOR_CALLER"},
+		{"no declared purpose", func(_ *resolveFixture, o *registerOptions) { o.noPurpose = true }, http.StatusBadRequest, "VALIDATION_FAILED"},
+		{"no registered subject audience", func(f *resolveFixture, _ *registerOptions) { f.registry.noSubjectAudience = true },
+			http.StatusForbidden, "CALLER_NOT_PERMITTED"},
+		{"subject linked to a non-human Principal", func(f *resolveFixture, _ *registerOptions) {
+			p := domain.Principal{ID: domain.NewPrincipalID(), ActorType: "workload", Status: "ACTIVE"}
+			mustNoError(t, f.repo.CreateIdentity(context.Background(), p))
+			mustNoError(t, f.repo.LinkExternalIdentity(context.Background(), domain.ExternalIdentity{ID: domain.NewExternalIdentityID(),
+				PrincipalID: p.ID, Issuer: resolveIssuer, Subject: "kratos-identity-new", Status: "ACTIVE"}))
+		}, http.StatusConflict, "IDENTITY_LINK_CONFLICT"},
 		{"resolve scope alone", func(f *resolveFixture, _ *registerOptions) { delete(f.caller.Scopes, buyerRegistrationScope) },
 			http.StatusForbidden, ""},
 		{"registry does not allow registration", func(f *resolveFixture, _ *registerOptions) { f.registry.noRegister = true },
@@ -158,5 +181,24 @@ func TestBuyerRegistrationDenials(t *testing.T) {
 				t.Fatalf("a denied registration created a Principal")
 			}
 		})
+	}
+}
+
+func TestBuyerRegistrationIsRateLimitedBeforeAnythingIsCreated(t *testing.T) {
+	f := registrationFixture(t)
+	subjects := []string{"kratos-a", "kratos-b", "kratos-c"}
+	codes := []int{}
+	o := registerOptions{enabled: true, perMinute: 2}
+	handler := f.registrationHandler(o) // one process, one limiter
+	for _, subject := range subjects {
+		f.subject(func(p *auth.Principal) { p.Subject = subject })
+		f.introspector.result.Subject = subject
+		codes = append(codes, f.registerWith(t, handler, o).Code)
+	}
+	if codes[0] != http.StatusCreated || codes[1] != http.StatusCreated || codes[2] != http.StatusTooManyRequests {
+		t.Fatalf("codes = %v, want 201 201 429", codes)
+	}
+	if _, _, err := f.repo.LookupExternalIdentity(context.Background(), resolveIssuer, "kratos-c"); !errors.Is(err, repository.ErrIdentityNotFound) {
+		t.Fatalf("a rate-limited registration created an identity: %v", err)
 	}
 }

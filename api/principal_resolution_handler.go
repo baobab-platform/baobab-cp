@@ -1,4 +1,4 @@
-// ZB-G03 step 3 (ADR-BCP-028; Shared identity/v1
+// ADR-SHARED-042 CAA-02 (CP ADR-BCP-028; Shared identity/v1
 // principal-resolution.openapi.yaml): delegated human Principal resolution.
 // A registered workload acting for an authenticated human presents its own
 // Control Plane workload token as the caller credential and the human's IAM
@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
@@ -24,8 +25,8 @@ import (
 )
 
 const (
-	principalResolveScope  = "identity:principal:resolve"
-	buyerRegistrationScope = "identity:principal:register-buyer"
+	principalResolveScope  = auth.PrincipalResolveScope
+	buyerRegistrationScope = auth.PrincipalRegisterBuyerScope
 	// The only subject evidence this increment accepts: a Trade buyer token
 	// (identity/v1 buyer-identity-handoff.schema.json). Another audience
 	// needs its own reviewed caller-to-audience registration.
@@ -62,35 +63,40 @@ type principalResolutionHandler struct {
 	// only; introspector asks that same issuer whether a token is current.
 	subjects     auth.SubjectVerifiers
 	introspector auth.Introspector
-	// clientIDs are the workloads allowed to call; authorisedParties are the
-	// confidential BFF clients whose buyer tokens are accepted.
-	clientIDs         map[string]bool
+	// authorisedParties are the confidential BFF clients whose buyer tokens
+	// are accepted. Which workloads may call is the workload registry alone:
+	// the scope plus subject_principal_audiences (ADR-SHARED-042 section 3).
 	authorisedParties map[string]bool
 	now               func() time.Time
-	// Registration (increment 2) is optional and separately allowlisted:
-	// registrationParties must be a subset of authorisedParties.
-	registrations         repository.BuyerRegistrationRepository
-	registrationClientIDs map[string]bool
-	registrationParties   map[string]bool
+	// Registration is optional and separately enabled. registrationParties
+	// are the BFF clients approved for the BUYER_ONBOARDING purpose, a
+	// subset of authorisedParties.
+	registrations       repository.LinkedIdentityCreator
+	registrationParties map[string]bool
+	limiter             *registrationLimiter
 }
 
 func (h principalResolutionHandler) deny(w http.ResponseWriter, r *http.Request, status int, code, detail string) {
 	problem(w, r, status, code, detail, status == http.StatusServiceUnavailable)
 }
 
-// caller requires an ACTIVE, allowlisted workload whose registry entry
-// currently allows the scope, not merely a token that carries it.
-func (h principalResolutionHandler) caller(p auth.Principal) bool {
+// admitted requires an ACTIVE workload whose registry entry currently allows
+// scope, not merely a token that carries it, and that registers the buyer
+// audience as subject_principal_audiences: the registered validator
+// relationship ADR-SHARED-042 section 3 requires.
+func (h principalResolutionHandler) admitted(p auth.Principal, scope string) bool {
 	if h.api == nil || h.api.workloadRegistry == nil || p.ActorType != "workload" || p.ClientID == "" ||
-		!h.clientIDs[p.ClientID] || !p.HasScope(principalResolveScope) || !h.api.workloadRegistry.IsActive(p.ClientID) {
+		!p.HasScope(scope) || !h.api.workloadRegistry.IsActive(p.ClientID) {
 		return false
 	}
 	scopes, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
-	return ok && scopes.AllowsScope(p.ClientID, principalResolveScope)
+	subjects, related := h.api.workloadRegistry.(auth.SubjectPrincipalRegistry)
+	return ok && related && scopes.AllowsScope(p.ClientID, scope) &&
+		slices.Contains(subjects.SubjectPrincipalAudiences(p.ClientID), buyerSubjectAudience)
 }
 
-// evidence runs the checks resolution and registration share (ADR-BCP-028
-// section 2.2 steps 2-4): the closed request body, local verification of the
+// evidence runs the checks resolution and registration share (ADR-SHARED-042
+// section 3): the closed request body, local verification of the
 // subject token against the buyer issuer, and current status by
 // introspection. It writes the denial itself and reports false on any
 // failure. The caller has already been admitted.
@@ -184,7 +190,7 @@ func (h principalResolutionHandler) resolve(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Pragma", "no-cache")
 	p, ok := auth.PrincipalFromContext(r.Context())
-	if !ok || !h.caller(p) {
+	if !ok || !h.admitted(p, principalResolveScope) {
 		h.deny(w, r, http.StatusForbidden, "CALLER_NOT_PERMITTED", "the authenticated workload may not resolve delegated human Principals")
 		return
 	}
@@ -212,27 +218,15 @@ func (h principalResolutionHandler) resolve(w http.ResponseWriter, r *http.Reque
 	h.respond(w, r, http.StatusOK, "RESOLVED", principal.ID, external.ID, expires)
 }
 
-// registrar requires an ACTIVE workload allowlisted for registration whose
-// registry entry currently allows identity:principal:register-buyer. It is
-// a separate decision from resolution: holding one scope never implies the
-// other.
-func (h principalResolutionHandler) registrar(p auth.Principal) bool {
-	if h.api == nil || h.api.workloadRegistry == nil || h.registrations == nil || p.ActorType != "workload" || p.ClientID == "" ||
-		!h.registrationClientIDs[p.ClientID] || !p.HasScope(buyerRegistrationScope) || !h.api.workloadRegistry.IsActive(p.ClientID) {
-		return false
-	}
-	scopes, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
-	return ok && scopes.AllowsScope(p.ClientID, buyerRegistrationScope)
-}
-
-// register is identity.principal.register.buyer@1 (ADR-BCP-028 section
-// 2.3): the same evidence as resolve, then BuyerPrincipalProvisioningPolicy,
-// then an atomic, idempotent create. It creates identity only.
+// register is registerBuyerPrincipal (ADR-SHARED-042 section 4): the same
+// evidence as resolve and the declared BUYER_ONBOARDING purpose (enforced by
+// the request schema), then BuyerPrincipalProvisioningPolicy, then one atomic,
+// idempotent create. It creates identity only.
 func (h principalResolutionHandler) register(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Pragma", "no-cache")
 	p, ok := auth.PrincipalFromContext(r.Context())
-	if !ok || !h.registrar(p) {
+	if !ok || h.registrations == nil || !h.admitted(p, buyerRegistrationScope) {
 		h.deny(w, r, http.StatusForbidden, "CALLER_NOT_PERMITTED", "the authenticated workload may not register buyer Principals")
 		return
 	}
@@ -241,16 +235,45 @@ func (h principalResolutionHandler) register(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	// BuyerPrincipalProvisioningPolicy: only BFF clients separately
-	// registered for buyer registration may originate a new Principal. The
-	// issuer is already bound to the single configured buyer issuer.
+	// BuyerPrincipalProvisioningPolicy: only BFF clients approved for the
+	// BUYER_ONBOARDING purpose may originate a new Principal. The issuer is
+	// already bound to the single configured buyer issuer.
 	if !h.registrationParties[subject.ClientID] {
 		audit("DENIED", "registration_not_eligible", "")
 		h.deny(w, r, http.StatusForbidden, "REGISTRATION_NOT_ELIGIBLE", "this identity is not eligible for buyer registration")
 		return
 	}
+	existing, link, err := h.identities.LookupExternalIdentity(r.Context(), subject.Issuer, subject.Subject)
+	switch {
+	case err == nil && existing.ActorType != "human":
+		// The subject is linked to a non-human Principal: CP cannot prove it
+		// is this person, so it never re-links here (verified link evidence
+		// only, never email).
+		audit("DENIED", "identity_link_conflict", "")
+		h.deny(w, r, http.StatusConflict, "IDENTITY_LINK_CONFLICT", "this identity conflicts with an existing link")
+		return
+	case err == nil && activeHuman(existing, link):
+		audit("RESOLVED", "already_registered", existing.ID)
+		h.respond(w, r, http.StatusOK, "RESOLVED", existing.ID, link.ID, expires)
+		return
+	case err == nil:
+		audit("DENIED", "principal_not_active", existing.ID)
+		h.deny(w, r, http.StatusForbidden, "PRINCIPAL_NOT_ACTIVE", "the canonical Principal is not active")
+		return
+	case !errors.Is(err, repository.ErrIdentityNotFound):
+		h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "the identity store is unavailable")
+		return
+	}
+	// Abuse limits count only creation attempts that passed every evidence
+	// check, per caller workload, BFF client and issuer.
+	if h.limiter != nil && !h.limiter.allow(h.now(), "caller:"+p.ClientID, "bff:"+subject.ClientID, "issuer:"+subject.Issuer) {
+		audit("DENIED", "registration_rate_limited", "")
+		w.Header().Set("Retry-After", "60")
+		problem(w, r, http.StatusTooManyRequests, "REGISTRATION_RATE_LIMITED", "buyer registration is temporarily limited; nothing was created", true)
+		return
+	}
 	newPrincipalID := domain.NewPrincipalID()
-	principal, external, created, err := h.registrations.RegisterBuyerIdentity(r.Context(),
+	principal, external, created, err := h.registrations.CreateLinkedIdentity(r.Context(),
 		domain.Principal{ID: newPrincipalID, ActorType: "human", Status: "ACTIVE"},
 		domain.ExternalIdentity{ID: domain.NewExternalIdentityID(), PrincipalID: newPrincipalID,
 			Issuer: subject.Issuer, Subject: subject.Subject, Status: "ACTIVE"},
@@ -259,8 +282,8 @@ func (h principalResolutionHandler) register(w http.ResponseWriter, r *http.Requ
 		h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "buyer registration is unavailable; nothing was created")
 		return
 	}
-	// An existing identity, including one a concurrent request just
-	// created, is returned as is; a stopped one is never revived.
+	// A concurrent request may have won: its identity is returned as is,
+	// and a stopped one is never revived.
 	if !activeHuman(principal, external) {
 		audit("DENIED", "principal_not_active", principal.ID)
 		h.deny(w, r, http.StatusForbidden, "PRINCIPAL_NOT_ACTIVE", "the canonical Principal is not active")
@@ -273,6 +296,43 @@ func (h principalResolutionHandler) register(w http.ResponseWriter, r *http.Requ
 	}
 	audit("RESOLVED", "already_registered", principal.ID)
 	h.respond(w, r, http.StatusOK, "RESOLVED", principal.ID, external.ID, expires)
+}
+
+// registrationLimiter is a fixed-window limit per key. It is process-local:
+// a multi-replica deployment's aggregate limit is replicas x limit, which the
+// operator sizes; it is defence in depth, not the only abuse control.
+type registrationLimiter struct {
+	mu      sync.Mutex
+	limit   int
+	window  time.Duration
+	started time.Time
+	counts  map[string]int
+}
+
+func newRegistrationLimiter(perMinute int) *registrationLimiter {
+	if perMinute <= 0 {
+		return nil
+	}
+	return &registrationLimiter{limit: perMinute, window: time.Minute, counts: map[string]int{}}
+}
+
+// allow admits a request only if every key is under its limit, and then
+// counts it against all of them.
+func (l *registrationLimiter) allow(now time.Time, keys ...string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if now.Sub(l.started) >= l.window {
+		l.started, l.counts = now, map[string]int{}
+	}
+	for _, key := range keys {
+		if l.counts[key] >= l.limit {
+			return false
+		}
+	}
+	for _, key := range keys {
+		l.counts[key]++
+	}
+	return true
 }
 
 func hasScopeEntry(scopes map[string]struct{}, scope string) bool { _, ok := scopes[scope]; return ok }

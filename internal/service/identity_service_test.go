@@ -305,3 +305,30 @@ func TestIdentityServiceProvisionDoesNotRequireProviderType(t *testing.T) {
 		t.Fatalf("provision path must not require or invent provider_type; got %q", linked.ProviderType)
 	}
 }
+
+// TestIdentityServiceResolveCreatesAtomicallyWithoutOrphans pins ADR-SHARED-042
+// section 4's correction: a repository that can create a linked identity
+// atomically is used, so a first authentication leaves exactly one Principal
+// and an existing stopped identity is never re-created beside it.
+func TestIdentityServiceResolveCreatesAtomicallyWithoutOrphans(t *testing.T) {
+	repo := repository.NewInMemoryRepository()
+	service := IdentityService{Repository: repo, Provision: allow}
+	first, err := service.Resolve(context.Background(), testIssuer, testSubject, "workload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := service.Resolve(context.Background(), testIssuer, testSubject, "workload")
+	if err != nil || again.ID != first.ID || len(repo.Principals) != 1 {
+		t.Fatalf("second resolve = %v %v, principals = %d", again.ID, err, len(repo.Principals))
+	}
+	key := testIssuer + "\x00" + testSubject
+	stopped := repo.ExternalIdentities[key]
+	stopped.Status = "REVOKED"
+	repo.ExternalIdentities[key] = stopped
+	if _, err := service.Resolve(context.Background(), testIssuer, testSubject, "workload"); !errors.Is(err, repository.ErrIdentityNotFound) {
+		t.Fatalf("a revoked identity resolved or was re-created: %v", err)
+	}
+	if len(repo.Principals) != 1 {
+		t.Fatalf("principals = %d, want 1 (no orphan)", len(repo.Principals))
+	}
+}

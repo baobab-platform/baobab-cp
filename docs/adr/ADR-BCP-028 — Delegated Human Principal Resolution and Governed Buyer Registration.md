@@ -1,105 +1,79 @@
 # ADR-BCP-028 — Delegated Human Principal Resolution and Governed Buyer Registration
 
-**Status:** Accepted — Normative Platform Architecture (2026-10-21)  
-**Decision approval:** Accepted at the platform decision owner's direction on 2026-10-21 (ZuriBeans ZB-G03 step 3). Issuer trust, scope allocation, connected acceptance and production activation each remain separately required.  
+**Status:** Proposed — the Control Plane's implementation record for ADR-SHARED-042 work package CAA-02  
+**Governing decision:** Shared ADR-SHARED-042 — Canonical Commercial Actor Authority and Buyer Execution Context (Accepted 2026-10-21). Where this record and ADR-SHARED-042 differ, ADR-SHARED-042 governs.  
 **Date:** 2026-10-21  
-**Decision owners:** Baobab Platform Architecture / Control Plane / Identity / Commerce / Security  
 **Primary repository:** `baobab-platform/baobab-cp`  
-**Canonical contract authority:** `baobab-platform/shared` — `identity/v1/principal-resolution.openapi.yaml`, `principal-resolution.schema.json`, `buyer-identity-handoff.schema.json`  
-**Identity authority:** `baobab-platform/baobab-iam` (Ory Kratos authenticates, Ory Hydra issues tokens; ADR-IAM-0033)  
-**Purchasing authority:** `baobab-platform/baobab-trade`  
-**Refines:** ADR-0004 §11–13 (resolution and provisioning policy), ADR-BCP-004, IAM ADR-0010 §0  
-**Retains:** ADR-0004 §7/§54 (one Principal per issuer and subject), ADR-BCP-009, ADR-BCP-020, ADR-IAM-0023 §43–45  
-**Implementation status:** Increment 1 (read-only resolution) and increment 2 (governed buyer registration) are implemented behind default-off, nonproduction-only switches. Neither has connected acceptance.
+**Canonical contracts:** `baobab-platform/shared`:
+- `identity/v1/principal-resolution.openapi.yaml` (v1.1) and `principal-resolution.schema.json`;
+- `identity/v1/workload-registry.yaml` field `subject_principal_audiences`;
+- `identity-events/v1` `identity.created.v1`.
+
+**Refines:** ADR-0004 §11–13 and §56  
+**Implementation state:** Source only, behind default-off, nonproduction-only switches. No workload holds the scopes or a subject audience, and there is no connected acceptance. Per ADR-SHARED-042 §12, this is not `REAL_COMPONENT_SYNTHETIC_DATA`, `PROTECTED_STAGING` or production acceptance.
 
 ---
 
-## 1. Context
+## 1. Scope
 
-A ZuriBeans buyer signs in through the confidential BFF (ZuriBeans ADR 0015). Trade receives an IAM access token for audience `baobab-trade` with scope `trade:buy`, and must then know which canonical Principal that person is before it can check a buyer membership.
+ADR-SHARED-042 §3–4 require CP to:
+- resolve a verified human `(issuer, subject)` to an ACTIVE Principal and ExternalIdentity for a registered Trade workload, read-only;
+- separately, register an eligible first-time buyer atomically, creating identity only.
 
-Until now Trade had no sanctioned way to learn this:
+This record describes how CP does that.
 
-- `/v1/platform-context/resolve` is workload-only. It resolves the caller's own Principal, not a person the caller acts for.
-- `/v1/platform-context/validate` checks a subject token, but only to confirm ownership of a stored workload context.
-- Trade's onboarding read a Principal identifier from Medusa auth metadata. That makes the commerce engine an identity source, which IAM ADR-0010 §0 rules out.
+## 2. Resolution — `POST /internal/identity/v1/principals/resolve`
 
-## 2. Decision
+CP checks, in order:
 
-### 2.1 Two credentials, never merged
-
-Trade calls the Control Plane with **its own** `baobab-control-plane` workload token. That token authenticates the caller and nothing else.
-
-The buyer's IAM access token is carried in the request body as **subject evidence**. It is never accepted as the Control Plane caller credential. A buyer remains a human Principal and Trade remains a workload Principal. Trade acts for the buyer, but CP verifies each identity independently.
-
-### 2.2 `identity.principal.resolve@1` — read-only resolution
-
-`POST /internal/identity/v1/principals/resolve` with scope `identity:principal:resolve`. CP runs these checks in this order, and any failure denies:
-
-1. **Caller.** The caller is an ACTIVE registered workload whose registry entry currently allows the scope, and it is on the operator's explicit caller allowlist.
-2. **Request shape.** The body is the closed `PrincipalResolveRequest`. It carries the subject token, the RFC 8693 access-token type and a correlation ID that must equal `X-Correlation-ID`. No issuer, subject, Principal, email or commerce-customer identifier can be asserted.
-3. **Local verification.** CP verifies the subject token against the configured buyer issuer's own discovery and keys, never a caller-supplied URL or key. The token's audience must be `baobab-trade`. CP then requires:
-   - `actor_type` `human`;
-   - scope `trade:buy`;
-   - an authorised party (`azp`) on the allowlist of confidential BFF clients;
-   - an unexpired token.
-4. **Current status.** CP introspects the token (RFC 7662) at the issuer's own origin, before reading any identity. Inactive, or any disagreement with the verified token (subject, client, issuer, audience, scope, expiry), denies. An introspection outage is `RESOLUTION_UNAVAILABLE` and never a rejection or an allowance.
-5. **Lookup.** CP resolves the exact verified (issuer, subject):
-   - unknown is `IDENTITY_NOT_RESOLVED`, and nothing is created;
+1. **Caller.** The caller is an ACTIVE workload whose registry entry allows `identity:principal:resolve` and lists `baobab-trade` in `subject_principal_audiences`. That entry is the registered validator relationship. There is no separate operator allowlist; the registry is the source.
+2. **Request shape.** The body is the closed request schema. Its `correlation_id` must equal `X-Correlation-ID`, and validation errors never quote the token.
+3. **Local verification.** The subject token is verified against the configured buyer issuer's own discovery and keys, for audience `baobab-trade`. It must be human, carry `trade:buy`, and carry an `azp` on `BUYER_SUBJECT_AUTHORISED_PARTIES`. It must also have a token ID and be unexpired.
+4. **Current status.** CP introspects the token (RFC 7662) at the issuer's origin before any identity read. Any disagreement denies, and an outage is `RESOLUTION_UNAVAILABLE`.
+5. **Lookup.** An exact `(issuer, subject)` lookup that returns the row whatever its status:
+   - unknown is `IDENTITY_NOT_RESOLVED` and creates nothing;
    - a non-human or non-ACTIVE Principal, or a non-ACTIVE ExternalIdentity, is `PRINCIPAL_NOT_ACTIVE`.
-6. **Response.** `PrincipalResolution` carries the `principal_id`, the `external_identity_id` and `evidence_expires_at`. The expiry is no later than the token's own exp or the introspected exp.
+6. **Response.** `evidence_expires_at` never outlives the token.
 
-Resolution grants **no** tenant, Organisation membership, role, market or purchasing authority. Trade must still bind the canonical buyer Organisation and check an active buyer membership on every operation, and it should re-resolve for each protected operation rather than cache past `evidence_expires_at`.
+The resolution carries no tenant, Organisation, membership, role or market. Trade binds those (ADR-SHARED-042 §5–7).
 
-### 2.3 `identity.principal.register.buyer@1` — governed just-in-time registration
+## 3. Registration — `POST /internal/identity/v1/principals/register-buyer`
 
-`POST /internal/identity/v1/principals/register-buyer` uses the separate scope `identity:principal:register-buyer`. A first-time buyer can therefore be recognised without opening universal human auto-provisioning (ADR-0004 §13).
+Enabled only with `BUYER_REGISTRATION_ENABLED=true`, on top of resolution.
 
-- **Same evidence.** The checks in §2.2 steps 1–4 apply unchanged.
-- **Eligibility.** A `BuyerPrincipalProvisioningPolicy` additionally requires the issuer and the authorised-party client to be registered for buyer registration. Otherwise the request is `REGISTRATION_NOT_ELIGIBLE`.
-- **Atomic creation.** CP creates the human Principal and its ACTIVE ExternalIdentity in **one transaction**, keyed by the UNIQUE (issuer, subject) constraint.
-- **Idempotent.** A repeat or concurrent request returns the same Principal (`RESOLVED`). No orphan Principal is left behind. This tightens ADR-0004 §56, which tolerated an unlinked Principal.
-- **No revival.** An existing SUSPENDED, DISABLED or ARCHIVED Principal, or an UNLINKED, DISABLED or REVOKED ExternalIdentity, is `PRINCIPAL_NOT_ACTIVE` and is never re-created.
-- **Identity only.** Registration creates no Organisation, membership, tenant, market, role, purchasing authority or commerce-customer mapping.
+1. **Caller and evidence.** The same checks as §2 steps 1–4, with scope `identity:principal:register-buyer`. Holding the resolve scope never implies registration.
+2. **Declared purpose.** The request declares `purpose: BUYER_ONBOARDING`, enforced by the schema. The token's BFF client must be approved for that purpose (`BUYER_REGISTRATION_AUTHORISED_PARTIES`, intersected with the resolution allowlist). Otherwise the request is `REGISTRATION_NOT_ELIGIBLE`.
+3. **Existing identity.** An existing human identity returns `RESOLVED`. An identity linked to a non-human Principal is `IDENTITY_LINK_CONFLICT`. A stopped identity is `PRINCIPAL_NOT_ACTIVE` and is never revived. A link is never resolved by email.
+4. **Abuse limits.** A per-process fixed window, `BUYER_REGISTRATION_PER_MINUTE` (default 30), applies per caller workload, BFF client and issuer. Only attempts that passed every evidence check count. A breach is `REGISTRATION_RATE_LIMITED` (429), and nothing is created. An aggregate or distributed limit is a deployment control on top of this.
+5. **Atomic create.** `LinkedIdentityCreator.CreateLinkedIdentity` writes the Principal, its ACTIVE ExternalIdentity, an `identity.principal.created` audit record and a `com.baobab-platform.identity.created.v1` outbox event in one transaction. The event carries the issuer and never the subject.
+   - A concurrent loser waits on `UNIQUE(issuer, subject)`, inserts nothing and rolls back its Principal, audit record and event. It then re-reads the winner. The result is one winner, no orphan Principal and no duplicate event; the Postgres test proves this.
 
-The existing `ApplicantProvisioningPolicy` (ADR-BCP-017) is not reused. Applicant registration does not authorise buyer registration.
+## 4. Correction of `IdentityService.Resolve` (ADR-SHARED-042 §4)
 
-Increment 2 is configured separately from resolution:
+The existing workload and applicant provisioning path created a Principal and then linked it in a separate step, which could leave an orphan under concurrency (old ADR-0004 §56).
 
-- `BUYER_REGISTRATION_ENABLED=true` turns it on, and only takes effect when resolution is also enabled.
-- `BUYER_REGISTRATION_CLIENT_IDS` lists the callers allowed to register. Each also needs `identity:principal:register-buyer` in its registry entry.
-- `BUYER_REGISTRATION_AUTHORISED_PARTIES` lists the eligible BFF clients. Only clients that are also in `BUYER_SUBJECT_AUTHORISED_PARTIES` take effect.
+`IdentityService.Resolve` now uses `CreateLinkedIdentity` whenever the repository provides it, as both the in-memory and Postgres repositories do. Two consequences:
+- first authentication is atomic and audited, and emits its event;
+- an existing stopped identity resolves to `ErrIdentityNotFound` instead of being re-created.
 
-Each registration writes an `identity.principal.buyer_registered` audit record in the same transaction.
+## 5. Configuration
 
-### 2.4 Buyer outcomes
-
-| Outcome | Next step |
+| Variable | Meaning |
 | --- | --- |
-| Resolved, with an active Trade buyer membership | Trade evaluates the requested operation under its own current authority checks. |
-| Resolved or registered, with no membership | The estate offers company registration, invitation acceptance or an access request. Purchasing stays disabled. |
-| Denied or unavailable | A controlled access-denied or unavailable response. Trade never falls back to a Medusa customer or any other identity. |
+| `BUYER_PRINCIPAL_RESOLUTION_ENABLED` | Mounts resolution in nonproduction environments only |
+| `BUYER_SUBJECT_ISSUER` | The only issuer whose buyer tokens are verified |
+| `BUYER_SUBJECT_INTROSPECTION_ENDPOINT`, `_CLIENT_ID`, `_CLIENT_SECRET` | CP's introspection client, on the issuer's origin |
+| `BUYER_SUBJECT_AUTHORISED_PARTIES` | The BFF clients whose buyer tokens are accepted |
+| `BUYER_REGISTRATION_ENABLED` | Mounts registration |
+| `BUYER_REGISTRATION_AUTHORISED_PARTIES` | The BFF clients approved for `BUYER_ONBOARDING` |
+| `BUYER_REGISTRATION_PER_MINUTE` | The per-process abuse limit |
 
-### 2.5 Deployment boundary
+An incomplete configuration refuses to start.
 
-- **Default off.** The route is mounted only when `BUYER_PRINCIPAL_RESOLUTION_ENABLED=true` in a nonproduction environment.
-- **Complete configuration required.** It also needs the buyer issuer (`BUYER_SUBJECT_ISSUER`), its same-origin introspection client (`BUYER_SUBJECT_INTROSPECTION_*`), the caller allowlist (`BUYER_PRINCIPAL_RESOLUTION_CLIENT_IDS`) and the BFF client allowlist (`BUYER_SUBJECT_AUTHORISED_PARTIES`). An incomplete configuration refuses to start.
-- **No live allocation.** The Shared scopes are allocated to no workload. Allocation is a reviewed Shared registry change made together with connected acceptance.
-- **No production profile** exists until protected acceptance passes.
+## 6. Outstanding before activation
 
-### 2.6 Handling of the subject token
-
-The subject token is a bearer credential. It is read from the body only, never persisted, logged, traced or echoed, and is sent only to the configured issuer's introspection endpoint. Validation errors never quote the request body. Audit records carry the caller, the resolved Principal, the decision, the reason and the correlation ID.
-
-## 3. Consequences
-
-- **Trade.** Trade stops reading `app_metadata.baobab_principal_id` and keys buyer membership on the CP-resolved Principal and the CP-verified canonical Organisation.
-- **Live use is blocked on IAM.** It needs an introspection client for the Control Plane and the confidential ZuriBeans BFF client, both registered in IAM. It also needs a deployed Hydra login/consent provider; none exists yet.
-- **Not acceptance evidence.** Synthetic tests prove the boundary only. They are not connected IAM, CP or Trade qualification, and not EA Gate D, L4 or go-live readiness.
-
-## 4. Alternatives considered
-
-- **The caller asserts (issuer, subject).** Rejected. A workload's word would become enough to name a person.
-- **CP accepts the Trade-audience token as its own caller credential.** Rejected. It violates audience binding (ADR-IAM-0023 §43).
-- **RFC 8693 token exchange to a CP-audience token.** Deferred, not rejected. It needs separate IAM adoption (IAM ADR-0010 §0.2). The contract's `subject_token_type` leaves room for it.
-- **Universal human JIT provisioning on resolve.** Rejected in favour of the separately scoped, policy-governed registration in §2.3.
+- **Registry allocation:** granting the Trade workload the scopes and `subject_principal_audiences` through the reviewed Shared registry process.
+- **IAM clients:** CP's introspection client and the ZuriBeans confidential BFF client.
+- **Hydra:** a deployed login/consent provider.
+- **Provider-migration conflicts:** account-recovery and provider-migration link evidence, which would extend `IDENTITY_LINK_CONFLICT` beyond the non-human case.
+- **Real-component acceptance:** the ADR-SHARED-042 §12 scenarios under CAA-08.

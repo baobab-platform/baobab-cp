@@ -430,22 +430,28 @@ func (r *PostgresRepository) ResolveIdentity(ctx context.Context, issuer, subjec
 	return principal, nil
 }
 
-// RegisterBuyerIdentity implements BuyerRegistrationRepository. A losing
-// concurrent insert waits on the UNIQUE(issuer, subject) index, inserts
-// nothing, and the whole transaction (its Principal included) rolls back
-// before the winner is re-read.
-func (r *PostgresRepository) RegisterBuyerIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, actor AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error) {
+// CreateLinkedIdentity implements LinkedIdentityCreator. A losing concurrent
+// insert waits on the UNIQUE(issuer, subject) index, inserts nothing, and the
+// whole transaction (its Principal, audit record and event included) rolls
+// back before the winner is re-read.
+func (r *PostgresRepository) CreateLinkedIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, actor AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error) {
 	if r == nil || r.pool == nil {
 		return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("repository is not initialized")
 	}
-	if principal.ActorType != "human" || principal.Status != "ACTIVE" || external.Status != "ACTIVE" || external.PrincipalID != principal.ID {
-		return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("buyer registration requires an ACTIVE human principal and identity")
+	if err := validLinkedIdentity(principal, external); err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, err
 	}
-	if err := principal.Validate(); err != nil {
-		return domain.Principal{}, domain.ExternalIdentity{}, false, fmt.Errorf("validate principal: %w", err)
+	correlation := actor.CorrelationID
+	if correlation == "" {
+		correlation = domain.NewUUIDv7()
 	}
-	if err := external.Validate(); err != nil {
-		return domain.Principal{}, domain.ExternalIdentity{}, false, fmt.Errorf("validate external identity: %w", err)
+	// The event carries the issuer but never the subject (data minimisation,
+	// Shared identity/v1 principal-resolution.openapi.yaml).
+	env, err := events.New(events.Params{Type: eventTypeIdentityCreated, Source: r.eventSource(), Subject: principal.ID,
+		DataSchema: schemaIdentityCreated, CorrelationID: correlation,
+		Data: map[string]any{"principal_id": principal.ID, "actor_type": principal.ActorType, "external_issuer": external.Issuer}})
+	if err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, fmt.Errorf("build identity event: %w", err)
 	}
 	created, err := func() (bool, error) {
 		tx, err := r.pool.Begin(ctx)
@@ -454,8 +460,8 @@ func (r *PostgresRepository) RegisterBuyerIdentity(ctx context.Context, principa
 		}
 		defer tx.Rollback(ctx)
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO identity.principal(principal_id, actor_type, status) VALUES ($1::uuid, 'human', 'ACTIVE')`,
-			principal.ID); err != nil {
+			INSERT INTO identity.principal(principal_id, actor_type, status) VALUES ($1::uuid, $2, 'ACTIVE')`,
+			principal.ID, principal.ActorType); err != nil {
 			return false, fmt.Errorf("create principal: %w", err)
 		}
 		tag, err := tx.Exec(ctx, `
@@ -467,7 +473,7 @@ func (r *PostgresRepository) RegisterBuyerIdentity(ctx context.Context, principa
 			return false, fmt.Errorf("link external identity: %w", err)
 		}
 		if tag.RowsAffected() == 0 {
-			return false, nil // rolled back: no orphan Principal
+			return false, nil // rolled back: no orphan Principal, no event
 		}
 		payload, err := json.Marshal(map[string]string{"external_identity_id": external.ID, "issuer": external.Issuer})
 		if err != nil {
@@ -476,9 +482,12 @@ func (r *PostgresRepository) RegisterBuyerIdentity(ctx context.Context, principa
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO audit_events(actor_id, actor_type, client_id, token_id, correlation_id, action, target, result, policy_decision, payload)
 			VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, '')::uuid, $6, $7, $8, $9, $10)`,
-			actor.ActorID, actor.ActorType, actor.ClientID, actor.TokenID, actor.CorrelationID,
-			"identity.principal.buyer_registered", "principal:"+principal.ID, "success", "ADR-BCP-028/buyer-registration:v1", payload); err != nil {
-			return false, fmt.Errorf("write registration audit record: %w", err)
+			actor.ActorID, actor.ActorType, actor.ClientID, actor.TokenID, correlation,
+			"identity.principal.created", "principal:"+principal.ID, "success", "ADR-SHARED-042/linked-identity:v1", payload); err != nil {
+			return false, fmt.Errorf("write identity audit record: %w", err)
+		}
+		if err := r.insertOutboxEvent(ctx, tx, "identity.principal", principal.ID, 1, env); err != nil {
+			return false, err
 		}
 		return true, tx.Commit(ctx)
 	}()
@@ -486,7 +495,6 @@ func (r *PostgresRepository) RegisterBuyerIdentity(ctx context.Context, principa
 		return domain.Principal{}, domain.ExternalIdentity{}, false, err
 	}
 	if created {
-		external.PrincipalID, external.Status = principal.ID, "ACTIVE"
 		return principal, external, true, nil
 	}
 	existingPrincipal, existing, err := r.LookupExternalIdentity(ctx, external.Issuer, external.Subject)

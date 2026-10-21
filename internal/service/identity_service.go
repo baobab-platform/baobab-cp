@@ -88,10 +88,6 @@ func (s IdentityService) Resolve(ctx context.Context, issuer, subject, actorType
 	}
 
 	principal = domain.Principal{ID: domain.NewPrincipalID(), ActorType: actorType, Status: "ACTIVE"}
-	if err := s.Repository.CreateIdentity(ctx, principal); err != nil {
-		return domain.Principal{}, fmt.Errorf("create identity: %w", err)
-	}
-
 	external := domain.ExternalIdentity{
 		ID:          domain.NewExternalIdentityID(),
 		PrincipalID: principal.ID,
@@ -99,14 +95,28 @@ func (s IdentityService) Resolve(ctx context.Context, issuer, subject, actorType
 		Subject:     subject,
 		Status:      "ACTIVE",
 	}
+	// ADR-SHARED-042 section 4: creation is atomic where the repository can
+	// do it, so a concurrent first authentication never leaves an orphan
+	// Principal, and an existing stopped identity is never re-created.
+	if creator, ok := s.Repository.(repository.LinkedIdentityCreator); ok {
+		created, link, _, err := creator.CreateLinkedIdentity(ctx, principal, external,
+			repository.AuditActor{ActorID: principal.ID, ActorType: actorType})
+		if err != nil {
+			return domain.Principal{}, fmt.Errorf("create linked identity: %w", err)
+		}
+		if created.Status != "ACTIVE" || link.Status != "ACTIVE" || created.ActorType != actorType {
+			return domain.Principal{}, repository.ErrIdentityNotFound
+		}
+		return created, nil
+	}
+	if err := s.Repository.CreateIdentity(ctx, principal); err != nil {
+		return domain.Principal{}, fmt.Errorf("create identity: %w", err)
+	}
 	if err := s.Repository.LinkExternalIdentity(ctx, external); err != nil {
 		if errors.Is(err, repository.ErrExternalIdentityAlreadyLinked) {
-			// ADR-0004 §56: someone else provisioned this (issuer, subject)
-			// concurrently -- re-read and return the winner's Principal
-			// instead of failing. The Principal created above is left
-			// unlinked; that is a cosmetic loss, not a correctness one --
-			// no two Principals ever resolve for the same (issuer,
-			// subject) pair.
+			// ADR-0004 §56, for repositories without atomic creation only:
+			// re-read and return the winner's Principal. The Principal
+			// created above is left unlinked.
 			return s.Repository.ResolveIdentity(ctx, issuer, subject)
 		}
 		return domain.Principal{}, fmt.Errorf("link external identity: %w", err)

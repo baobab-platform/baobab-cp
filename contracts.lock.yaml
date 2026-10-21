@@ -170,6 +170,7 @@ contracts:
   - contracts/identity/v1/external-identity.schema.json
   - contracts/identity/v1/principal-resolution.schema.json
   - contracts/identity/v1/external-reference.schema.json
+  - contracts/identity-events/v1/identity-created.schema.json
   - contracts/events/v1/envelope.schema.json
   - contracts/control-plane/v1/asyncapi.yaml
   - contracts/control-plane/v1/provisioning-started.schema.json
