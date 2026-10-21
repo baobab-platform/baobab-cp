@@ -10,7 +10,7 @@
 **Purchasing authority:** `baobab-platform/baobab-trade`  
 **Refines:** ADR-0004 §11–13 (resolution and provisioning policy), ADR-BCP-004, IAM ADR-0010 §0  
 **Retains:** ADR-0004 §7/§54 (one Principal per issuer and subject), ADR-BCP-009, ADR-BCP-020, ADR-IAM-0023 §43–45  
-**Implementation status:** Increment 1 (read-only resolution) is implemented behind a default-off, nonproduction-only switch. Increment 2 (governed buyer registration) is pending.
+**Implementation status:** Increment 1 (read-only resolution) and increment 2 (governed buyer registration) are implemented behind default-off, nonproduction-only switches. Neither has connected acceptance.
 
 ---
 
@@ -64,6 +64,14 @@ Resolution grants **no** tenant, Organisation membership, role, market or purcha
 
 The existing `ApplicantProvisioningPolicy` (ADR-BCP-017) is not reused. Applicant registration does not authorise buyer registration.
 
+Increment 2 is configured separately from resolution:
+
+- `BUYER_REGISTRATION_ENABLED=true` turns it on, and only takes effect when resolution is also enabled.
+- `BUYER_REGISTRATION_CLIENT_IDS` lists the callers allowed to register. Each also needs `identity:principal:register-buyer` in its registry entry.
+- `BUYER_REGISTRATION_AUTHORISED_PARTIES` lists the eligible BFF clients. Only clients that are also in `BUYER_SUBJECT_AUTHORISED_PARTIES` take effect.
+
+Each registration writes an `identity.principal.buyer_registered` audit record in the same transaction.
+
 ### 2.4 Buyer outcomes
 
 | Outcome | Next step |
@@ -86,7 +94,6 @@ The subject token is a bearer credential. It is read from the body only, never p
 ## 3. Consequences
 
 - **Trade.** Trade stops reading `app_metadata.baobab_principal_id` and keys buyer membership on the CP-resolved Principal and the CP-verified canonical Organisation.
-- **Increment 2.** It adds the atomic registration repository operation and the eligibility registry.
 - **Live use is blocked on IAM.** It needs an introspection client for the Control Plane and the confidential ZuriBeans BFF client, both registered in IAM. It also needs a deployed Hydra login/consent provider; none exists yet.
 - **Not acceptance evidence.** Synthetic tests prove the boundary only. They are not connected IAM, CP or Trade qualification, and not EA Gate D, L4 or go-live readiness.
 

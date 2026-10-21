@@ -430,6 +430,69 @@ func (r *PostgresRepository) ResolveIdentity(ctx context.Context, issuer, subjec
 	return principal, nil
 }
 
+// RegisterBuyerIdentity implements BuyerRegistrationRepository. A losing
+// concurrent insert waits on the UNIQUE(issuer, subject) index, inserts
+// nothing, and the whole transaction (its Principal included) rolls back
+// before the winner is re-read.
+func (r *PostgresRepository) RegisterBuyerIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, actor AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error) {
+	if r == nil || r.pool == nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("repository is not initialized")
+	}
+	if principal.ActorType != "human" || principal.Status != "ACTIVE" || external.Status != "ACTIVE" || external.PrincipalID != principal.ID {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("buyer registration requires an ACTIVE human principal and identity")
+	}
+	if err := principal.Validate(); err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, fmt.Errorf("validate principal: %w", err)
+	}
+	if err := external.Validate(); err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, fmt.Errorf("validate external identity: %w", err)
+	}
+	created, err := func() (bool, error) {
+		tx, err := r.pool.Begin(ctx)
+		if err != nil {
+			return false, err
+		}
+		defer tx.Rollback(ctx)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO identity.principal(principal_id, actor_type, status) VALUES ($1::uuid, 'human', 'ACTIVE')`,
+			principal.ID); err != nil {
+			return false, fmt.Errorf("create principal: %w", err)
+		}
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO identity.external_identity(external_identity_id, principal_id, issuer, subject, provider_type, status)
+			VALUES ($1::uuid, $2::uuid, $3, $4, NULLIF($5, ''), 'ACTIVE')
+			ON CONFLICT (issuer, subject) DO NOTHING`,
+			external.ID, principal.ID, external.Issuer, external.Subject, external.ProviderType)
+		if err != nil {
+			return false, fmt.Errorf("link external identity: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return false, nil // rolled back: no orphan Principal
+		}
+		payload, err := json.Marshal(map[string]string{"external_identity_id": external.ID, "issuer": external.Issuer})
+		if err != nil {
+			return false, err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO audit_events(actor_id, actor_type, client_id, token_id, correlation_id, action, target, result, policy_decision, payload)
+			VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, '')::uuid, $6, $7, $8, $9, $10)`,
+			actor.ActorID, actor.ActorType, actor.ClientID, actor.TokenID, actor.CorrelationID,
+			"identity.principal.buyer_registered", "principal:"+principal.ID, "success", "ADR-BCP-028/buyer-registration:v1", payload); err != nil {
+			return false, fmt.Errorf("write registration audit record: %w", err)
+		}
+		return true, tx.Commit(ctx)
+	}()
+	if err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, err
+	}
+	if created {
+		external.PrincipalID, external.Status = principal.ID, "ACTIVE"
+		return principal, external, true, nil
+	}
+	existingPrincipal, existing, err := r.LookupExternalIdentity(ctx, external.Issuer, external.Subject)
+	return existingPrincipal, existing, false, err
+}
+
 // LookupExternalIdentity implements DelegatedIdentityReader: one row per
 // (issuer, subject) by the UNIQUE constraint, returned whatever its status.
 func (r *PostgresRepository) LookupExternalIdentity(ctx context.Context, issuer, subject string) (domain.Principal, domain.ExternalIdentity, error) {

@@ -27,11 +27,11 @@ const (
 	resolveCorrelation = "0b6f2c1e-6d0a-4f43-9c1a-2f1d6b1e9a40"
 )
 
-type resolveRegistry struct{ allowed bool }
+type resolveRegistry struct{ allowed, noRegister bool }
 
 func (r resolveRegistry) IsActive(string) bool { return r.allowed }
 func (r resolveRegistry) AllowsScope(clientID, scope string) bool {
-	return r.allowed && clientID == resolveCaller && scope == principalResolveScope
+	return r.allowed && clientID == resolveCaller && (scope == principalResolveScope || (scope == buyerRegistrationScope && !r.noRegister))
 }
 
 type resolveSubjects struct {

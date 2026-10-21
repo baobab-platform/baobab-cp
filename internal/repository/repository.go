@@ -391,6 +391,17 @@ type DelegatedIdentityReader interface {
 	LookupExternalIdentity(ctx context.Context, issuer, subject string) (domain.Principal, domain.ExternalIdentity, error)
 }
 
+// BuyerRegistrationRepository is governed just-in-time buyer registration's
+// write (ADR-BCP-028 section 2.3). RegisterBuyerIdentity creates the human
+// Principal, its ACTIVE ExternalIdentity and an audit record in ONE
+// transaction. When (issuer, subject) already exists, including by a
+// concurrent request that won the UNIQUE constraint, it creates nothing,
+// leaves no orphan Principal, and returns the existing rows with created
+// false. It never changes an existing row's status.
+type BuyerRegistrationRepository interface {
+	RegisterBuyerIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, actor AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error)
+}
+
 // ErrWorkforceMembershipNotFound is returned by GetWorkforceMembership when
 // no membership row exists for the given (principalID, tenantID) pair --
 // distinct from a repository failure so role-aware authorization (Gate
@@ -1309,6 +1320,29 @@ func (r *Repository) ResolveIdentity(_ context.Context, issuer, subject string) 
 		return domain.Principal{}, fmt.Errorf("external identity %s references missing principal %s", external.ID, external.PrincipalID)
 	}
 	return principal, nil
+}
+
+// RegisterBuyerIdentity implements BuyerRegistrationRepository.
+func (r *Repository) RegisterBuyerIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, _ AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error) {
+	if r == nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("repository is nil")
+	}
+	if existingPrincipal, existing, err := r.LookupExternalIdentity(ctx, external.Issuer, external.Subject); err == nil {
+		return existingPrincipal, existing, false, nil
+	} else if !errors.Is(err, ErrIdentityNotFound) {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, err
+	}
+	if principal.ActorType != "human" || principal.Status != "ACTIVE" || external.Status != "ACTIVE" || external.PrincipalID != principal.ID {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("buyer registration requires an ACTIVE human principal and identity")
+	}
+	if err := r.CreateIdentity(ctx, principal); err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, err
+	}
+	if err := r.LinkExternalIdentity(ctx, external); err != nil {
+		delete(r.Principals, principal.ID)
+		return domain.Principal{}, domain.ExternalIdentity{}, false, err
+	}
+	return principal, external, true, nil
 }
 
 // LookupExternalIdentity implements DelegatedIdentityReader.

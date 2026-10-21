@@ -158,6 +158,12 @@ type Dependencies struct {
 	BuyerSubjects                     auth.SubjectVerifiers
 	BuyerSubjectIntrospector          auth.Introspector
 	BuyerAuthorisedParties            []string
+	// ADR-BCP-028 increment 2: governed JIT buyer registration. Default off
+	// even when resolution is on. Its callers and eligible BFF clients are
+	// separate allowlists; an eligible client must also be authorised above.
+	BuyerRegistrationEnabled           bool
+	BuyerRegistrationClientIDs         []string
+	BuyerRegistrationAuthorisedParties []string
 	// P0-02B is a separate default-off private scanner boundary. Its verifier
 	// MUST compose current token introspection and fresh registry authority.
 	ScannerIntakeEnabled bool
@@ -907,6 +913,19 @@ func New(dependencies Dependencies) http.Handler {
 				introspector: dependencies.BuyerSubjectIntrospector, clientIDs: callers, authorisedParties: parties, now: time.Now}
 			r.With(a.authorize(a.workloadVerifier, "workload", principalResolveScope)).
 				Post("/internal/identity/v1/principals/resolve", h.resolve)
+			registrations, _ := dependencies.Identities.(repository.BuyerRegistrationRepository)
+			eligible := map[string]bool{}
+			for party := range allowlist(dependencies.BuyerRegistrationAuthorisedParties) {
+				if parties[party] {
+					eligible[party] = true
+				}
+			}
+			registrars := allowlist(dependencies.BuyerRegistrationClientIDs)
+			if dependencies.BuyerRegistrationEnabled && registrations != nil && len(registrars) > 0 && len(eligible) > 0 {
+				h.registrations, h.registrationClientIDs, h.registrationParties = registrations, registrars, eligible
+				r.With(a.authorize(a.workloadVerifier, "workload", buyerRegistrationScope)).
+					Post("/internal/identity/v1/principals/register-buyer", h.register)
+			}
 		}
 	}
 	// P0-04B Trade-0 grants a CP legal-actor FACT for one Trade operation under
