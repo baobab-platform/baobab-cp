@@ -75,7 +75,9 @@ func TestHTTPIntrospectorSeparatesInactiveFromUnavailable(t *testing.T) {
 	}
 	for name, handler := range map[string]http.HandlerFunc{
 		"server error": func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
-		"redirect":     func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "https://attacker.example.test/", http.StatusFound) },
+		"redirect": func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "https://attacker.example.test/", http.StatusFound)
+		},
 		"not json": func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/html")
 			_, _ = w.Write([]byte(`{"active":true}`))
