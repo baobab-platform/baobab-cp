@@ -148,6 +148,16 @@ type Dependencies struct {
 	SellerOperatingBindings      sellerOperatingBindingStore
 	SellerBindingDiscovery       tradeSellerBindingResolveStore
 	TradeOrderAuthorityClientIDs []string
+	// ZB-G03 step 3 (ADR-BCP-028): delegated human Principal resolution.
+	// Default off, nonproduction only. BuyerSubjects verify buyer tokens
+	// against the buyer issuer alone and BuyerSubjectIntrospector confirms
+	// their current status with that issuer. Callers and the BFF clients
+	// whose buyer tokens are accepted are explicit allowlists.
+	BuyerPrincipalResolutionEnabled   bool
+	BuyerPrincipalResolutionClientIDs []string
+	BuyerSubjects                     auth.SubjectVerifiers
+	BuyerSubjectIntrospector          auth.Introspector
+	BuyerAuthorisedParties            []string
 	// P0-02B is a separate default-off private scanner boundary. Its verifier
 	// MUST compose current token introspection and fresh registry authority.
 	ScannerIntakeEnabled bool
@@ -886,6 +896,17 @@ func New(dependencies Dependencies) http.Handler {
 				identities: dependencies.Identities, store: dependencies.PaymentsMoneyMovementAuthority, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", paymentsMoneyMovementScope)).
 				Post("/internal/payments/v1/money-movement-authority/resolve", h.resolve)
+		}
+	}
+	if dependencies.BuyerPrincipalResolutionEnabled && peoRoutesPermittedIn(dependencies.Environment) &&
+		dependencies.WorkloadRegistry != nil && dependencies.BuyerSubjects != nil && dependencies.BuyerSubjectIntrospector != nil {
+		identities, _ := dependencies.Identities.(repository.DelegatedIdentityReader)
+		callers, parties := allowlist(dependencies.BuyerPrincipalResolutionClientIDs), allowlist(dependencies.BuyerAuthorisedParties)
+		if identities != nil && len(callers) > 0 && len(parties) > 0 {
+			h := principalResolutionHandler{api: a, identities: identities, subjects: dependencies.BuyerSubjects,
+				introspector: dependencies.BuyerSubjectIntrospector, clientIDs: callers, authorisedParties: parties, now: time.Now}
+			r.With(a.authorize(a.workloadVerifier, "workload", principalResolveScope)).
+				Post("/internal/identity/v1/principals/resolve", h.resolve)
 		}
 	}
 	// P0-04B Trade-0 grants a CP legal-actor FACT for one Trade operation under

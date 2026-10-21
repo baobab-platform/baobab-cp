@@ -380,6 +380,17 @@ type IdentityRepository interface {
 	LinkExternalIdentity(ctx context.Context, external domain.ExternalIdentity) error
 }
 
+// DelegatedIdentityReader is delegated human Principal resolution's read
+// (Shared identity/v1 principal-resolution.openapi.yaml). Unlike
+// ResolveIdentity it returns the ExternalIdentity row whatever its status,
+// so an UNLINKED, DISABLED or REVOKED identity, or a non-ACTIVE Principal,
+// is answered as not active rather than as unknown. That distinction keeps
+// buyer registration from ever re-creating an identity that was stopped.
+// Returns ErrIdentityNotFound only when no row exists for (issuer, subject).
+type DelegatedIdentityReader interface {
+	LookupExternalIdentity(ctx context.Context, issuer, subject string) (domain.Principal, domain.ExternalIdentity, error)
+}
+
 // ErrWorkforceMembershipNotFound is returned by GetWorkforceMembership when
 // no membership row exists for the given (principalID, tenantID) pair --
 // distinct from a repository failure so role-aware authorization (Gate
@@ -1298,6 +1309,22 @@ func (r *Repository) ResolveIdentity(_ context.Context, issuer, subject string) 
 		return domain.Principal{}, fmt.Errorf("external identity %s references missing principal %s", external.ID, external.PrincipalID)
 	}
 	return principal, nil
+}
+
+// LookupExternalIdentity implements DelegatedIdentityReader.
+func (r *Repository) LookupExternalIdentity(_ context.Context, issuer, subject string) (domain.Principal, domain.ExternalIdentity, error) {
+	if r == nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, errors.New("repository is nil")
+	}
+	external, ok := r.ExternalIdentities[externalIdentityKey(issuer, subject)]
+	if !ok {
+		return domain.Principal{}, domain.ExternalIdentity{}, ErrIdentityNotFound
+	}
+	principal, ok := r.Principals[external.PrincipalID]
+	if !ok {
+		return domain.Principal{}, domain.ExternalIdentity{}, fmt.Errorf("external identity %s references missing principal %s", external.ID, external.PrincipalID)
+	}
+	return principal, external, nil
 }
 
 func (r *Repository) GetPrincipal(_ context.Context, principalID string) (domain.Principal, error) {

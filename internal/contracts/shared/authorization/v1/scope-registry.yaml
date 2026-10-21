@@ -780,6 +780,19 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
+  - name: "trade:buy"
+    description: >-
+      Requests B2B buying operations from Trade on behalf of the authenticated
+      human, through a confidential Digital Estate BFF (identity/v1
+      buyer-identity-handoff.schema.json; IAM ADR-0010 section 0). It grants no
+      authority: Trade still resolves the canonical Principal and current
+      context through the Control Plane and requires an active buyer
+      membership with the needed role for every operation. Already named by
+      trade/v1 openapi.yaml. Defined here; granted to no client.
+    audience: ["baobab-trade"]
+    allowed_actors: ["human"]
+    grants_authority: false
+
   # P0-04B Trade-0 (ADR-SHARED-039): CP legal authority for ONE catalogued
   # consequential Trade operation against ONE CP-owned Seller Operating
   # Binding version. AUTHORIZED is a 30-second fact, never a grant, provider
@@ -888,6 +901,31 @@ scopes:
     privileged: true
     grants_authority: false
 
+
+  - name: "identity:principal:resolve"
+    description: >-
+      Read-only delegated human Principal resolution (identity/v1
+      principal-resolution.openapi.yaml; ZB-G03 step 3). The calling workload
+      presents the human's IAM access token, audience-bound to its own
+      resource, as subject evidence; the Control Plane verifies it itself and
+      resolves the exact (issuer, subject). Creates nothing and grants no
+      tenant, membership, role, market or purchasing authority. Allocated to
+      no workload.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "identity:principal:register-buyer"
+    description: >-
+      Governed just-in-time registration of an eligible first-time buyer's
+      canonical human Principal and ExternalIdentity from verified subject
+      evidence (identity/v1 principal-resolution.openapi.yaml). Establishes
+      identity only: no Organisation, membership, tenant, market, role,
+      purchasing authority or commerce-customer mapping. Distinct from
+      identity:principal:resolve. Allocated to no workload.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
 
   - name: "identity-runtime:read"
     description: "Read secret-free current native/workload runtime evidence at an explicitly authorised organisation and estate. CP additionally requires security.identity-runtime.view and current canonical caller authority. Distinct from federation-authority:read and identity-runtime:observe; grants no activation, issuance, membership or configuration authority. Allocated to no workload."

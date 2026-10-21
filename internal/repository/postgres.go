@@ -430,6 +430,32 @@ func (r *PostgresRepository) ResolveIdentity(ctx context.Context, issuer, subjec
 	return principal, nil
 }
 
+// LookupExternalIdentity implements DelegatedIdentityReader: one row per
+// (issuer, subject) by the UNIQUE constraint, returned whatever its status.
+func (r *PostgresRepository) LookupExternalIdentity(ctx context.Context, issuer, subject string) (domain.Principal, domain.ExternalIdentity, error) {
+	if r == nil || r.pool == nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, errors.New("repository is not initialized")
+	}
+	row := r.pool.QueryRow(ctx, `
+		SELECT p.principal_id::text, p.actor_type, p.status, p.created_at, p.updated_at,
+		       e.external_identity_id::text, e.issuer, e.subject, COALESCE(e.provider_type, ''), e.status, e.created_at
+		FROM identity.external_identity e
+		JOIN identity.principal p ON p.principal_id = e.principal_id
+		WHERE e.issuer = $1 AND e.subject = $2`, issuer, subject)
+	var principal domain.Principal
+	var external domain.ExternalIdentity
+	err := row.Scan(&principal.ID, &principal.ActorType, &principal.Status, &principal.CreatedAt, &principal.UpdatedAt,
+		&external.ID, &external.Issuer, &external.Subject, &external.ProviderType, &external.Status, &external.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Principal{}, domain.ExternalIdentity{}, ErrIdentityNotFound
+		}
+		return domain.Principal{}, domain.ExternalIdentity{}, fmt.Errorf("lookup external identity: %w", err)
+	}
+	external.PrincipalID = principal.ID
+	return principal, external, nil
+}
+
 func (r *PostgresRepository) GetPrincipal(ctx context.Context, principalID string) (domain.Principal, error) {
 	if r == nil || r.pool == nil {
 		return domain.Principal{}, errors.New("repository is not initialized")
