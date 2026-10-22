@@ -5,10 +5,8 @@ package api
 // IAM client revocation, or synthetic SQL fixture. Two existing, independent
 // ACTIVE CP human administrators must authorise one digest-bound operation.
 import (
- "bytes"
  "context"
  "encoding/json"
- "errors"
  "io"
  "net/http"
  "regexp"
@@ -109,7 +107,3 @@ func (h int03CPrincipalHandler) read(w http.ResponseWriter,r *http.Request) {
  writeJSON(w,http.StatusOK,map[string]string{"principal_id":target,"status":status})
 }
 
-// Closed body type must be kept strict when an operator's audit trail is
-// independently rechecked, without accepting double-decoded JSON.
-var _ = bytes.Equal
-var _ = errors.Is
