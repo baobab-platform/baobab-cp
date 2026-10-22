@@ -42,7 +42,7 @@ func (h int03CPrincipalHandler) approveProvenance(w http.ResponseWriter,r *http.
  }
  checker,_,ok:=resolveActor(w,r,h.identities,false)
  if !ok{return}
- out,err:=h.store.ApproveInt03CProvenance(r.Context(),id,checker)
+ out,err:=h.store.ApproveInt03CProvenance(r.Context(),id,checker,input.SourceEvidenceDigest)
  if err!=nil||out.SourceEvidenceDigest!=input.SourceEvidenceDigest||
   out.Status!="INDEPENDENTLY_APPROVED_UNATTESTED"{
   h.deny(w,r);return
