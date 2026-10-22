@@ -20,9 +20,9 @@ import (
 var ErrInt03CNotPermitted = errors.New("int03c principal change refused")
 
 var (
-	int03cUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	int03cHex = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	int03cSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	int03cUUID        = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	int03cHex         = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	int03cSHA         = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	int03cProofDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
@@ -52,11 +52,11 @@ func int03CDigest(principal, issuer, subject, run, sha string) string {
 // The approved request digest includes actor, idempotency and an absolute
 // expiration. A copied digest cannot authorise a different human maker or
 // extend the decision window. The approved terminal state is always DISABLED.
-func int03CPlanDigest(principal,issuer,subject,run,sha,maker,key string,expires time.Time) string {
- material:=strings.Join([]string{"INT03C-DEACTIVATE-v2","DISABLED",
-  principal,issuer,subject,run,sha,maker,key,expires.UTC().Format(time.RFC3339Nano)},"\\x00")
- sum:=sha256.Sum256([]byte(material))
- return "sha256:"+hex.EncodeToString(sum[:])
+func int03CPlanDigest(principal, issuer, subject, run, sha, maker, key string, expires time.Time) string {
+	material := strings.Join([]string{"INT03C-DEACTIVATE-v2", "DISABLED",
+		principal, issuer, subject, run, sha, maker, key, expires.UTC().Format(time.RFC3339Nano)}, "\\x00")
+	sum := sha256.Sum256([]byte(material))
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func (r *PostgresRepository) ProposeInt03C(ctx context.Context, principal, issuer, subject, run, sourceSHA, maker, key string) (Int03CDeactivation, error) {
@@ -95,7 +95,7 @@ func (r *PostgresRepository) ProposeInt03C(ctx context.Context, principal, issue
 	// A separate CP human checker must have approved this exact, still-live
 	// external identity and source revision before deactivation planning.
 	var provenance bool
-	err=tx.QueryRow(ctx,`SELECT EXISTS(
+	err = tx.QueryRow(ctx, `SELECT EXISTS(
         SELECT 1 FROM identity.int03c_principal_provenance p
         JOIN identity.int03c_provenance_approval a ON a.provenance_id=p.provenance_id
         WHERE p.principal_id=$1::uuid AND p.issuer=$2 AND p.subject=$3
@@ -105,18 +105,22 @@ func (r *PostgresRepository) ProposeInt03C(ctx context.Context, principal, issue
                      AND m.actor_type='human' AND m.status='ACTIVE')
           AND EXISTS(SELECT 1 FROM identity.principal h WHERE h.principal_id=a.checker_id
                      AND h.actor_type='human' AND h.status='ACTIVE'))`,
-          principal,issuer,subject,run,sourceSHA).Scan(&provenance)
-	if err!=nil{return Int03CDeactivation{},err}
-	if !provenance{return Int03CDeactivation{},ErrInt03CNotPermitted}
-	expires:=time.Now().UTC().Add(15*time.Minute)
-	digest := int03CPlanDigest(principal,issuer,subject,run,sourceSHA,maker,key,expires)
+		principal, issuer, subject, run, sourceSHA).Scan(&provenance)
+	if err != nil {
+		return Int03CDeactivation{}, err
+	}
+	if !provenance {
+		return Int03CDeactivation{}, ErrInt03CNotPermitted
+	}
+	expires := time.Now().UTC().Add(15 * time.Minute)
+	digest := int03CPlanDigest(principal, issuer, subject, run, sourceSHA, maker, key, expires)
 	var out Int03CDeactivation
 	err = tx.QueryRow(ctx, `INSERT INTO identity.int03c_deactivation_request
         (principal_id,issuer,subject,run_id,source_sha,plan_digest,idempotency_key,maker_id,expires_at)
       VALUES ($1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8::uuid,$9::timestamptz)
       ON CONFLICT DO NOTHING
       RETURNING request_id::text,principal_id::text,plan_digest,decision,expires_at`,
-		principal, issuer, subject, run, sourceSHA, digest, key, maker,expires).Scan(&out.RequestID, &out.PrincipalID, &out.PlanDigest, &out.Decision, &out.ExpiresAt)
+		principal, issuer, subject, run, sourceSHA, digest, key, maker, expires).Scan(&out.RequestID, &out.PrincipalID, &out.PlanDigest, &out.Decision, &out.ExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Replays may only read their own exact request, never mutate immutable
 		// evidence, re-extend approval time, or overwrite another plan digest.
@@ -128,7 +132,7 @@ func (r *PostgresRepository) ProposeInt03C(ctx context.Context, principal, issue
 	if err != nil {
 		return Int03CDeactivation{}, err
 	}
-	if out.PlanDigest != int03CPlanDigest(principal,issuer,subject,run,sourceSHA,maker,key,out.ExpiresAt) || out.PrincipalID != principal || out.Decision != "PENDING" || !out.ExpiresAt.After(time.Now().UTC()) {
+	if out.PlanDigest != int03CPlanDigest(principal, issuer, subject, run, sourceSHA, maker, key, out.ExpiresAt) || out.PrincipalID != principal || out.Decision != "PENDING" || !out.ExpiresAt.After(time.Now().UTC()) {
 		return Int03CDeactivation{}, ErrInt03CNotPermitted
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -148,10 +152,10 @@ func (r *PostgresRepository) ApproveInt03C(ctx context.Context, requestID, diges
 	}
 	defer tx.Rollback(ctx)
 	var out Int03CDeactivation
-	var maker, issuer, subject, run,sourceSHA string
+	var maker, issuer, subject, run, sourceSHA string
 	err = tx.QueryRow(ctx, `SELECT request_id::text,principal_id::text,plan_digest,decision,expires_at,maker_id::text,issuer,subject,run_id,source_sha
        FROM identity.int03c_deactivation_request WHERE request_id=$1::uuid FOR UPDATE`, requestID).
-		Scan(&out.RequestID, &out.PrincipalID, &out.PlanDigest, &out.Decision, &out.ExpiresAt, &maker, &issuer, &subject,&run,&sourceSHA)
+		Scan(&out.RequestID, &out.PrincipalID, &out.PlanDigest, &out.Decision, &out.ExpiresAt, &maker, &issuer, &subject, &run, &sourceSHA)
 	if err != nil {
 		return Int03CDeactivation{}, ErrInt03CNotPermitted
 	}
