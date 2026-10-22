@@ -31,6 +31,10 @@ import (
 type correlationKey struct{}
 
 type Dependencies struct {
+ // INT-03C proof-only Principal deactivation is explicitly off by default.
+ // It can never be served in staging or production regardless of this flag.
+ Int03CPrincipalDeactivationEnabled bool
+ Int03CPrincipalDeactivation int03CPrincipalStore
 	// ConsoleDatasets is disabled unless the runtime injects an encrypted,
 	// nonproduction-only transactional store and current grant readers.
 	ConsoleDatasets        consoleDatasetStore
@@ -533,6 +537,21 @@ func New(dependencies Dependencies) http.Handler {
 	if dependencies.AdministrativeGrants != nil {
 		authority := effectiveAuthorityHandler{identities: dependencies.Identities, grants: dependencies.AdministrativeGrants}
 		r.With(a.authorize(a.adminVerifier, "human", "authority:self")).Get("/v1/admin/effective-authority", authority.get)
+	}
+	// The proof-only Principal lifecycle is not a production administration
+	// API. Both callers must be ACTIVE canonical human platform administrators,
+	// and the transactional store independently enforces maker/checker SoD.
+	if dependencies.Int03CPrincipalDeactivationEnabled && dependencies.Int03CPrincipalDeactivation != nil &&
+		dependencies.Identities != nil &&
+		(dependencies.Environment == "development" || dependencies.Environment == "test" ||
+		 dependencies.Environment == "integration" || dependencies.Environment == "sandbox") {
+		h := int03CPrincipalHandler{store:dependencies.Int03CPrincipalDeactivation, identities:dependencies.Identities}
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:write"), a.requireAdminRole(nil,true)).
+			Post("/v1/admin/int03c/principals/{principalID}/deactivation-requests",h.propose)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:approve"), a.requireAdminRole(nil,true)).
+			Post("/v1/admin/int03c/deactivation-requests/{requestID}/approve",h.approve)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:read"), a.requireAdminRole(nil,true)).
+			Get("/v1/admin/int03c/principals/{principalID}",h.read)
 	}
 	if dependencies.ShadowEvidence != nil {
 		// Readiness of each permission to move from roles to grants: evidence
