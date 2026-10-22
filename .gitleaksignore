@@ -15,3 +15,8 @@
 # original commit's two findings are recorded here.
 14fab141f9240aacc6fabfedf620944663fd34aa:internal/workloadtoken/jwtbearer_test.go:jwt:17
 14fab141f9240aacc6fabfedf620944663fd34aa:internal/workloadtoken/jwtbearer_test.go:jwt:124
+#
+# internal/repository/postgres_int03c_principal_test.go:67 in an earlier PR commit named a deterministic
+# RFC4122-shaped synthetic idempotency UUID `key`. This is neither key material nor a credential.
+# The present source uses `idempotencyKey`; narrow historical fingerprint only, with no rule/path exclusion.
+2f14cfa33ce54d3faea6d22966c7e0b50651689a:internal/repository/postgres_int03c_principal_test.go:generic-api-key:67
