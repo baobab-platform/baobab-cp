@@ -80,3 +80,46 @@ BEFORE UPDATE OR DELETE ON identity.int03c_deactivation_request
 FOR EACH ROW EXECUTE FUNCTION identity.int03c_deactivation_request_guard();
 REVOKE ALL ON identity.int03c_deactivation_request FROM PUBLIC;
 REVOKE ALL ON identity.int03c_deactivation_audit FROM PUBLIC;
+
+-- CP-owned independent provenance of an actual, existing canonical identity.
+-- One human maker asserts a disposable run; a different ACTIVE CP human
+-- checker approves the exact immutable principal/issuer/subject/source proof.
+-- A caller's run_id, an IAM client name, or a local test UUID alone is NOT
+-- sufficient authority to deactivate a canonical Principal.
+CREATE TABLE identity.int03c_principal_provenance (
+    provenance_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    principal_id uuid NOT NULL REFERENCES identity.principal(principal_id),
+    issuer text NOT NULL CHECK (issuer = 'https://hydra.int03.test'),
+    subject text NOT NULL CHECK (subject IN (
+        'baobab-int03c-issuer-owner', 'baobab-int03c-issuer-verifier')),
+    run_id text NOT NULL CHECK (run_id ~ '^[0-9a-f]{32}$'),
+    source_sha text NOT NULL CHECK (source_sha ~ '^[0-9a-f]{40}$'),
+    source_evidence_digest text NOT NULL
+        CHECK (source_evidence_digest ~ '^sha256:[0-9a-f]{64}$'),
+    maker_id uuid NOT NULL REFERENCES identity.principal(principal_id),
+    registered_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    expires_at timestamptz NOT NULL,
+    CHECK (expires_at > registered_at),
+    UNIQUE (principal_id, run_id, subject),
+    UNIQUE (issuer, subject, run_id)
+);
+CREATE TABLE identity.int03c_provenance_approval (
+    provenance_id uuid PRIMARY KEY
+        REFERENCES identity.int03c_principal_provenance(provenance_id),
+    checker_id uuid NOT NULL REFERENCES identity.principal(principal_id),
+    approved_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE FUNCTION identity.int03c_provenance_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'INT03C provenance and approval are immutable'
+        USING ERRCODE = 'check_violation';
+END $$;
+CREATE TRIGGER int03c_provenance_no_update
+BEFORE UPDATE OR DELETE ON identity.int03c_principal_provenance
+FOR EACH ROW EXECUTE FUNCTION identity.int03c_provenance_immutable();
+CREATE TRIGGER int03c_provenance_approval_no_update
+BEFORE UPDATE OR DELETE ON identity.int03c_provenance_approval
+FOR EACH ROW EXECUTE FUNCTION identity.int03c_provenance_immutable();
+REVOKE ALL ON identity.int03c_principal_provenance FROM PUBLIC;
+REVOKE ALL ON identity.int03c_provenance_approval FROM PUBLIC;
