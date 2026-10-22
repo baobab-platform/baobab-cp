@@ -60,35 +60,37 @@ func TestInt03CRepositoryFailsClosedWithoutStore(t *testing.T) {
 }
 
 func TestInt03CApprovalDigestBindsHumanIdempotencyAndDeadline(t *testing.T) {
- principal := "019aeb57-1234-7123-8abc-102030405060"
- run := strings.Repeat("a", 32)
- sha := strings.Repeat("b", 40)
- maker := "019aeb57-1234-7123-8abc-102030405061"
- key := "019aeb57-1234-7123-8abc-102030405062"
- expires := time.Date(2026, 10, 22, 18, 0, 0, 0, time.UTC)
- original := int03CPlanDigest(principal, int03CIssuer,
-  "baobab-int03c-issuer-owner", run, sha, maker, key, expires)
- for _, changed := range []string{
-  int03CPlanDigest(principal, int03CIssuer, "baobab-int03c-issuer-owner",
-   run, sha, "019aeb57-1234-7123-8abc-102030405063", key, expires),
-  int03CPlanDigest(principal, int03CIssuer, "baobab-int03c-issuer-owner",
-   run, sha, maker, "019aeb57-1234-7123-8abc-102030405064", expires),
-  int03CPlanDigest(principal, int03CIssuer, "baobab-int03c-issuer-owner",
-   run, sha, maker, key, expires.Add(time.Minute)),
- } {
-  if original==changed { t.Fatal("maker, key or deadline absent from plan digest") }
- }
+	principal := "019aeb57-1234-7123-8abc-102030405060"
+	run := strings.Repeat("a", 32)
+	sha := strings.Repeat("b", 40)
+	maker := "019aeb57-1234-7123-8abc-102030405061"
+	idempotencyKey := "019aeb57-1234-7123-8abc-102030405062"
+	expires := time.Date(2026, 10, 22, 18, 0, 0, 0, time.UTC)
+	original := int03CPlanDigest(principal, int03CIssuer,
+		"baobab-int03c-issuer-owner", run, sha, maker, idempotencyKey, expires)
+	for _, changed := range []string{
+		int03CPlanDigest(principal, int03CIssuer, "baobab-int03c-issuer-owner",
+			run, sha, "019aeb57-1234-7123-8abc-102030405063", idempotencyKey, expires),
+		int03CPlanDigest(principal, int03CIssuer, "baobab-int03c-issuer-owner",
+			run, sha, maker, "019aeb57-1234-7123-8abc-102030405064", expires),
+		int03CPlanDigest(principal, int03CIssuer, "baobab-int03c-issuer-owner",
+			run, sha, maker, idempotencyKey, expires.Add(time.Minute)),
+	} {
+		if original == changed {
+			t.Fatal("maker, key or deadline absent from plan digest")
+		}
+	}
 }
 
 func TestInt03CProvenanceRequiresRepositoryAndExactSubject(t *testing.T) {
- var r *PostgresRepository
- if _,err:=r.ProposeInt03CProvenance(t.Context(),"invalid",int03CIssuer,
-  "baobab-int03-cms-consumer",strings.Repeat("a",32),strings.Repeat("b",40),
-  "sha256:"+strings.Repeat("c",64),"invalid");err!=ErrInt03CNotPermitted{
-  t.Fatalf("unregistered synthetic Principal accepted: %v",err)
- }
- if _,err:=r.ApproveInt03CProvenance(t.Context(),"invalid","invalid",
-  "sha256:"+strings.Repeat("c",64));err!=ErrInt03CNotPermitted {
-  t.Fatalf("approval without real CP store accepted: %v",err)
- }
+	var r *PostgresRepository
+	if _, err := r.ProposeInt03CProvenance(t.Context(), "invalid", int03CIssuer,
+		"baobab-int03-cms-consumer", strings.Repeat("a", 32), strings.Repeat("b", 40),
+		"sha256:"+strings.Repeat("c", 64), "invalid"); err != ErrInt03CNotPermitted {
+		t.Fatalf("unregistered synthetic Principal accepted: %v", err)
+	}
+	if _, err := r.ApproveInt03CProvenance(t.Context(), "invalid", "invalid",
+		"sha256:"+strings.Repeat("c", 64)); err != ErrInt03CNotPermitted {
+		t.Fatalf("approval without real CP store accepted: %v", err)
+	}
 }
