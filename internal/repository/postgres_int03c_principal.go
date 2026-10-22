@@ -112,7 +112,10 @@ func (r *PostgresRepository) ProposeInt03C(ctx context.Context, principal, issue
 	if !provenance {
 		return Int03CDeactivation{}, ErrInt03CNotPermitted
 	}
-	expires := time.Now().UTC().Add(15 * time.Minute)
+	// PostgreSQL timestamptz stores microsecond precision. Bind the exact
+	// representable deadline into the immutable digest before INSERT/RETURNING;
+	// otherwise nanosecond rounding changes the apparent approved request.
+	expires := time.Now().UTC().Add(15 * time.Minute).Truncate(time.Microsecond)
 	digest := int03CPlanDigest(principal, issuer, subject, run, sourceSHA, maker, key, expires)
 	var out Int03CDeactivation
 	err = tx.QueryRow(ctx, `INSERT INTO identity.int03c_deactivation_request
