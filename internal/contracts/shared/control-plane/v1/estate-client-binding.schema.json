@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/estate-client-binding.schema.json",
+  "title": "Estate client binding and its Control Plane attestation",
+  "description": "ADR-SHARED-042 work package CAA-04 (Platform Owner ruling of 22 October 2026): the governed, versioned relationship between a confidential estate BFF's registered OAuth client and the Digital Estate it is authorised to serve, and the Control Plane's runtime attestation of that relationship for one buyer request. The Control Plane owns this relationship. It extends CP's estate-aware context resolution; it is not a second canonical estate registry. The authorised party (azp) of a buyer token identifies the OAuth client but never, by itself, establishes the estate, tenant, environment or Trade instance a request belongs to. The estate is established only by a Control Plane attestation under this contract, made after CP has itself verified the BFF's own client evidence. A client-supplied estate identifier may narrow a selection; it never establishes one. Until a consumer holds a current attestation, an operation that needs the Digital Estate is UNAVAILABLE. No environment variable, request header, hostname or commerce-engine session substitutes for it. This contract registers no workload allocation.",
+  "$defs": {
+    "bindingStatus": {
+      "type": "string",
+      "enum": ["ACTIVE", "SUSPENDED", "REVOKED"],
+      "description": "Only ACTIVE can be attested. SUSPENDED may return to ACTIVE through a governed change with a new revision; REVOKED is terminal."
+    },
+    "bffClientId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "description": "The registered confidential OAuth client of the estate BFF, as IAM issues it."
+    },
+    "deploymentReference": {
+      "$ref": "domain.schema.json#/$defs/canonicalEntityId",
+      "description": "The approved estate deployment identity this binding is for. CP establishes it from its governed record of the authenticated BFF client, never from a request. Each separately approved deployment of an estate is a separate binding."
+    },
+    "evidenceReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Redacted, auditable provenance of the registry change and its approval (for example a change-set or approval-decision id). Never a credential or unnecessary personal data."
+    },
+    "clientEvidenceToken": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 8192,
+      "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+      "description": "The BFF's own compact-serialised JWS IAM workload access token, exactly as the consumer received it from the BFF (identity/v1 buyer-identity-handoff.schema.json#/$defs/BffCallerTokenClaims). It authenticates the BFF independently of any human token. Never logged, persisted or echoed."
+    },
+    "EstateClientBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One governed binding record held by the Control Plane. Changes are made only through the reviewed CP registry process; every change increments revision. The same client may be bound to several estates only where each binding is separately governed. CP never resolves an ambiguous binding by choosing the first match.",
+      "required": [
+        "binding_id",
+        "issuer",
+        "bff_client_id",
+        "digital_estate_id",
+        "tenant_id",
+        "engine_instance_id",
+        "environment",
+        "deployment_reference",
+        "status",
+        "revision",
+        "effective_from",
+        "evidence_reference"
+      ],
+      "properties": {
+        "binding_id": { "type": "string", "format": "uuid" },
+        "issuer": { "type": "string", "format": "uri", "description": "The trusted IAM issuer that registered the client." },
+        "bff_client_id": { "$ref": "#/$defs/bffClientId" },
+        "digital_estate_id": { "$ref": "domain.schema.json#/$defs/estateId", "description": "The canonical CP Digital Estate the client is authorised to serve." },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId", "description": "The estate's authoritative (seller-side) Tenant." },
+        "engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId", "description": "The Trade engine instance permitted to serve this estate's buyers." },
+        "environment": { "$ref": "domain.schema.json#/$defs/environment", "description": "The explicit deployment boundary. A binding never spans environments." },
+        "deployment_reference": { "$ref": "#/$defs/deploymentReference" },
+        "status": { "$ref": "#/$defs/bindingStatus" },
+        "revision": { "type": "integer", "minimum": 1, "description": "Monotonic. A consumer holding an older revision must treat its attestation as invalid." },
+        "effective_from": { "type": "string", "format": "date-time" },
+        "effective_until": { "type": "string", "format": "date-time", "description": "Absent means open-ended. When present it is later than effective_from." },
+        "evidence_reference": { "$ref": "#/$defs/evidenceReference" }
+      }
+    },
+    "EstateBindingResolveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Body of operation resolveEstateClientBinding. The caller (a registered Trade workload) states which Trade instance and environment it is, and presents the BFF's own client evidence. The caller cannot name a tenant, binding, deployment or revision.",
+      "required": [
+        "purpose",
+        "client_evidence",
+        "client_evidence_type",
+        "subject_authorised_party",
+        "engine_instance_id",
+        "environment",
+        "correlation_id"
+      ],
+      "properties": {
+        "purpose": {
+          "const": "BUYER_OPERATION",
+          "description": "The request is bound to one buyer operation Trade is evaluating. No other purpose is defined in this version."
+        },
+        "client_evidence": { "$ref": "#/$defs/clientEvidenceToken" },
+        "client_evidence_type": {
+          "const": "urn:ietf:params:oauth:token-type:access_token",
+          "description": "RFC 8693 token type URI. Only an IAM access token is accepted."
+        },
+        "subject_authorised_party": {
+          "$ref": "#/$defs/bffClientId",
+          "description": "The authorised party (azp) of the human buyer token the caller verified for this request. CP requires it to equal the client the BFF evidence authenticates, so a stolen buyer token cannot be presented by another client."
+        },
+        "engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId", "description": "The calling Trade instance. CP checks the binding permits it; it never selects a binding." },
+        "environment": { "$ref": "domain.schema.json#/$defs/environment", "description": "The calling deployment's environment. A mismatch is ENVIRONMENT_MISMATCH." },
+        "requested_digital_estate_id": {
+          "$ref": "domain.schema.json#/$defs/estateId",
+          "description": "Optional narrowing hint, used only when several bindings are otherwise valid. It never establishes a binding by itself; a value naming no valid binding is BINDING_NOT_FOUND."
+        },
+        "correlation_id": { "type": "string", "format": "uuid", "description": "Bare UUID; equal to X-Correlation-ID." }
+      }
+    },
+    "EstateBindingAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "CP's attestation that exactly one ACTIVE, currently effective binding matches the verified BFF client, its deployment, the issuer, the calling Trade instance and the environment. It is context, never a credential or a buyer, membership or purchasing grant. expires_at is at most 60 seconds after attested_at and never later than the BFF client evidence; a consumer re-resolves for every protected operation outside that window and rejects any revision older than one it has seen.",
+      "required": [
+        "outcome",
+        "binding_id",
+        "revision",
+        "issuer",
+        "bff_client_id",
+        "digital_estate_id",
+        "tenant_id",
+        "engine_instance_id",
+        "environment",
+        "deployment_reference",
+        "attested_at",
+        "expires_at",
+        "evidence_reference"
+      ],
+      "properties": {
+        "outcome": { "const": "ATTESTED" },
+        "binding_id": { "type": "string", "format": "uuid" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "issuer": { "type": "string", "format": "uri" },
+        "bff_client_id": { "$ref": "#/$defs/bffClientId" },
+        "digital_estate_id": { "$ref": "domain.schema.json#/$defs/estateId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
+        "environment": { "$ref": "domain.schema.json#/$defs/environment" },
+        "deployment_reference": { "$ref": "#/$defs/deploymentReference" },
+        "attested_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "evidence_reference": { "$ref": "#/$defs/evidenceReference" }
+      }
+    },
+    "EstateBindingDenialCode": {
+      "description": "Closed problem codes (errors/v1 problem-details code). Every denial is fail-closed and discloses no token content, other binding, estate or tenant. CLIENT_EVIDENCE_INVALID: the BFF evidence failed verification, is not a registered ACTIVE client of the trusted issuer, or is not current. CLIENT_NOT_FOR_SUBJECT: the BFF evidence authenticates a client other than subject_authorised_party. BINDING_AMBIGUOUS: more than one binding is valid and the request does not narrow it to exactly one. BINDING_NOT_ACTIVE: the only matching binding is SUSPENDED, REVOKED or outside its effective interval.",
+      "enum": [
+        "CALLER_NOT_PERMITTED",
+        "CLIENT_EVIDENCE_INVALID",
+        "CLIENT_NOT_FOR_SUBJECT",
+        "BINDING_NOT_FOUND",
+        "BINDING_AMBIGUOUS",
+        "BINDING_NOT_ACTIVE",
+        "ENVIRONMENT_MISMATCH",
+        "ENGINE_INSTANCE_NOT_PERMITTED",
+        "RESOLUTION_UNAVAILABLE"
+      ]
+    }
+  }
+}
