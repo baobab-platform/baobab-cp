@@ -174,7 +174,7 @@ func (r *PostgresRepository) ApproveInt03C(ctx context.Context, requestID, diges
 	// Revalidate exactly the same CP-issued, independently approved synthetic
 	// provenance within the commit transaction: no stale run or replaced source.
 	var currentProvenance bool
-	err=tx.QueryRow(ctx,`SELECT EXISTS(
+	err = tx.QueryRow(ctx, `SELECT EXISTS(
        SELECT 1 FROM identity.int03c_principal_provenance p
        JOIN identity.int03c_provenance_approval a ON a.provenance_id=p.provenance_id
        WHERE p.principal_id=$1::uuid AND p.issuer=$2 AND p.subject=$3
@@ -186,9 +186,13 @@ func (r *PostgresRepository) ApproveInt03C(ctx context.Context, requestID, diges
        AND EXISTS(SELECT 1 FROM identity.principal h
                   WHERE h.principal_id=a.checker_id
                     AND h.actor_type='human' AND h.status='ACTIVE'))`, out.PrincipalID, issuer, subject, run, sourceSHA).
-         Scan(&currentProvenance)
-	if err!=nil{return Int03CDeactivation{},err}
-	if !currentProvenance{return Int03CDeactivation{},ErrInt03CNotPermitted}
+		Scan(&currentProvenance)
+	if err != nil {
+		return Int03CDeactivation{}, err
+	}
+	if !currentProvenance {
+		return Int03CDeactivation{}, ErrInt03CNotPermitted
+	}
 	// Compare the current Principal and exact issuer mapping under row locks;
 	// a different linked identity or any concurrent deactivation is fatal.
 	var current string
