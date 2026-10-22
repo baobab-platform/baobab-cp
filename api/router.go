@@ -176,6 +176,11 @@ type Dependencies struct {
 	// BFF client allowlist as Principal resolution.
 	EstateClientBindingEnabled bool
 	EstateClientBindings       estateClientBindingStore
+	// ADR-SHARED-042 Decision 8 (ADR-BCP-030): estate commerce profile
+	// resolution. Default off, development and staging only. It verifies
+	// estate provenance from CP's own estate client binding resolutions.
+	EstateCommerceProfileEnabled bool
+	EstateCommerceProfiles       estateCommerceProfileStore
 	// P0-02B is a separate default-off private scanner boundary. Its verifier
 	// MUST compose current token introspection and fresh registry authority.
 	ScannerIntakeEnabled bool
@@ -979,6 +984,15 @@ func New(dependencies Dependencies) http.Handler {
 			r.With(a.authorize(a.workloadVerifier, "workload", estateClientBindingScope)).
 				Post("/internal/estate/v1/client-bindings/resolve", h.resolve)
 		}
+	}
+	// Decision 8: same nonproduction boundary as estate client bindings, whose
+	// attestations are the only estate provenance accepted.
+	if dependencies.EstateCommerceProfileEnabled && peoRoutesPermittedIn(dependencies.Environment) &&
+		(dependencies.Environment == "development" || dependencies.Environment == "staging") &&
+		dependencies.WorkloadRegistry != nil && dependencies.EstateCommerceProfiles != nil {
+		h := estateCommerceProfileHandler{api: a, store: dependencies.EstateCommerceProfiles, now: time.Now}
+		r.With(a.authorize(a.workloadVerifier, "workload", estateCommerceProfileScope)).
+			Post("/internal/estate/v1/commerce-profiles/resolve", h.resolve)
 	}
 	// P0-04B Trade-0 grants a CP legal-actor FACT for one Trade operation under
 	// one ACTIVE CP Seller Operating Binding, never provider, money-movement or

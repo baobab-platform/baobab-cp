@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/control-plane/v1/estate-commerce-profile.schema.json",
+  "title": "Digital Estate commerce profile and its attestation",
+  "description": "ADR-SHARED-042 section 14, Decision 8 (Platform Owner, 22 October 2026): the Control Plane is the sole authority for the governed commercial-experience classification of a Digital Estate. An EstateCommerceProfile says which commerce model (B2B or B2C) one Digital Estate is authorised to operate on one Trade engine instance in a Market scope. It is a governed, versioned record established during Digital Estate onboarding and independently approved before activation, never a free-form string in estate metadata. Exactly one ACTIVE profile applies to an estate within one engine instance and Market; a future hybrid estate needs separately governed, unambiguous native commitment bindings, and there is no implicit MIXED model. Nothing infers the model from a sales channel, domain, currency, engine customer type or caller-supplied flag, and the names of initial estates (ZuriBeans B2B, Thamani B2C) are requirements for their governed registration, not facts a consumer may assume. The attestation is short-lived context for one Trade workload request: it classifies the estate, it does not classify a native commitment (Trade does, trade/v2 native-commitment-classification.schema.json) and it grants no seller, buyer, market or purchasing authority. The existing estate-client binding (estate-client-binding.schema.json) says which estate a BFF serves; it does not say whether a commitment is B2B or B2C. This contract registers no workload allocation and activates nothing.",
+  "$defs": {
+    "commerceModel": {
+      "type": "string",
+      "description": "B2B: commitments are made on behalf of a buyer Organisation under ADR-SHARED-042 buyer authority. B2C: consumer commerce under its own separately governed buyer, payment and native-execution controls.",
+      "enum": ["B2B", "B2C"]
+    },
+    "profileStatus": {
+      "type": "string",
+      "enum": ["ACTIVE", "SUSPENDED", "REVOKED"],
+      "description": "Only ACTIVE inside its effective interval can be attested. SUSPENDED may return to ACTIVE through a governed change with a new revision; REVOKED is terminal."
+    },
+    "evidenceReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Redacted, auditable provenance (for example a change-set or approval-decision id). Never a credential or unnecessary personal data."
+    },
+    "EstateCommerceProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The governed record. CP owns its lifecycle: revision is CP-controlled and strictly increasing, every change is approved, and a change of commerce_model is a new profile superseding the old one, never an in-place edit.",
+      "required": [
+        "commerce_profile_id",
+        "digital_estate_id",
+        "tenant_id",
+        "trade_engine_instance_id",
+        "commerce_model",
+        "market_scope",
+        "status",
+        "revision",
+        "effective_from",
+        "approval_reference",
+        "evidence_reference"
+      ],
+      "properties": {
+        "commerce_profile_id": { "type": "string", "format": "uuid" },
+        "digital_estate_id": { "$ref": "domain.schema.json#/$defs/estateId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "trade_engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
+        "commerce_model": { "$ref": "#/$defs/commerceModel" },
+        "market_scope": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "domain.schema.json#/$defs/resourceId" },
+          "description": "The canonical CP Markets the profile applies to."
+        },
+        "status": { "$ref": "#/$defs/profileStatus" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "effective_from": { "type": "string", "format": "date-time" },
+        "effective_until": { "type": "string", "format": "date-time" },
+        "supersedes": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The profile this one replaces, for example on a governed change of commerce model."
+        },
+        "approval_reference": { "$ref": "#/$defs/evidenceReference" },
+        "evidence_reference": { "$ref": "#/$defs/evidenceReference" }
+      }
+    },
+    "EstateCommerceProfileResolveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The calling Trade workload names an estate it already holds governed provenance for (a current estate-client binding attestation for a BFF request, or a separately governed workload or native-resource assignment for an administrative, scheduled or other non-BFF operation) and the Market of the commitment. It cannot name a tenant, profile, model or revision.",
+      "required": ["digital_estate_id", "engine_instance_id", "market_id", "estate_provenance", "correlation_id"],
+      "properties": {
+        "digital_estate_id": { "$ref": "domain.schema.json#/$defs/estateId" },
+        "engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
+        "market_id": { "$ref": "domain.schema.json#/$defs/resourceId" },
+        "estate_provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reference"],
+          "description": "How the caller knows the estate. CP re-verifies it; it is never trusted as asserted.",
+          "properties": {
+            "kind": { "type": "string", "enum": ["ESTATE_CLIENT_BINDING", "GOVERNED_RESOURCE_ASSIGNMENT"] },
+            "reference": { "$ref": "#/$defs/evidenceReference" }
+          }
+        },
+        "correlation_id": { "type": "string", "format": "uuid" }
+      }
+    },
+    "EstateCommerceProfileAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "CP's attestation that exactly one ACTIVE, currently effective profile matches the estate, the calling Trade instance and the Market. expires_at is at most 60 seconds after issued_at and never later than the profile's effective_until, which the attestation carries when the profile has one, so no consumer can rely on a classification after the profile stops being effective. A consumer re-resolves outside that window and rejects any revision older than one it has seen. It classifies the estate only.",
+      "required": [
+        "outcome",
+        "attestation_id",
+        "commerce_profile_id",
+        "profile_revision",
+        "digital_estate_id",
+        "tenant_id",
+        "trade_engine_instance_id",
+        "market_id",
+        "commerce_model",
+        "issued_at",
+        "expires_at",
+        "evidence_reference"
+      ],
+      "properties": {
+        "outcome": { "const": "ATTESTED" },
+        "attestation_id": { "type": "string", "format": "uuid" },
+        "commerce_profile_id": { "type": "string", "format": "uuid" },
+        "profile_revision": { "type": "integer", "minimum": 1 },
+        "digital_estate_id": { "$ref": "domain.schema.json#/$defs/estateId" },
+        "tenant_id": { "$ref": "domain.schema.json#/$defs/tenantId" },
+        "trade_engine_instance_id": { "$ref": "domain.schema.json#/$defs/engineInstanceId" },
+        "market_id": { "$ref": "domain.schema.json#/$defs/resourceId" },
+        "commerce_model": { "$ref": "#/$defs/commerceModel" },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "profile_effective_until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The profile's effective_until, present whenever the profile has one. expires_at never exceeds it."
+        },
+        "evidence_reference": { "$ref": "#/$defs/evidenceReference" }
+      }
+    },
+    "EstateCommerceProfileDenialCode": {
+      "description": "Closed problem codes (errors/v1 problem-details code). Every denial is fail-closed and discloses no other estate, tenant or profile. PROFILE_NOT_REGISTERED: no profile exists for the estate, engine instance and Market. PROFILE_NOT_ACTIVE: the only matching profile is SUSPENDED, REVOKED or outside its effective interval. PROFILE_AMBIGUOUS: more than one profile applies; nothing is attested and no order resolves it. ESTATE_PROVENANCE_INVALID: the stated estate provenance does not verify for the caller. ENGINE_INSTANCE_NOT_PERMITTED: the caller is not the profile's Trade instance. RESOLUTION_UNAVAILABLE: the registry or its dependencies are unavailable; never a fallback model.",
+      "type": "string",
+      "enum": [
+        "PROFILE_NOT_REGISTERED",
+        "PROFILE_NOT_ACTIVE",
+        "PROFILE_AMBIGUOUS",
+        "ESTATE_PROVENANCE_INVALID",
+        "ENGINE_INSTANCE_NOT_PERMITTED",
+        "CALLER_NOT_PERMITTED",
+        "RESOLUTION_UNAVAILABLE"
+      ]
+    }
+  }
+}
