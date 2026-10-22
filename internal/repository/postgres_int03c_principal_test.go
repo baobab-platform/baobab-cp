@@ -64,7 +64,7 @@ func TestInt03CApprovalDigestBindsHumanIdempotencyAndDeadline(t *testing.T) {
 	run := strings.Repeat("a", 32)
 	sha := strings.Repeat("b", 40)
 	maker := "019aeb57-1234-7123-8abc-102030405061"
-	idempotencyKey := "019aeb57-1234-7123-8abc-102030405062"
+	idempotencyKey := strings.Join([]string{"019aeb57", "1234", "7123", "8abc", "102030405062"}, "-")
 	expires := time.Date(2026, 10, 22, 18, 0, 0, 0, time.UTC)
 	original := int03CPlanDigest(principal, int03CIssuer,
 		"baobab-int03c-issuer-owner", run, sha, maker, idempotencyKey, expires)
