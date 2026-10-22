@@ -911,8 +911,6 @@ func New(dependencies Dependencies) http.Handler {
 		identities, _ := dependencies.Identities.(repository.DelegatedIdentityReader)
 		parties := allowlist(dependencies.BuyerAuthorisedParties)
 		if identities != nil && len(parties) > 0 {
-			h := principalResolutionHandler{api: a, identities: identities, subjects: dependencies.BuyerSubjects,
-				introspector: dependencies.BuyerSubjectIntrospector, authorisedParties: parties, now: time.Now}
 			registrations, _ := dependencies.Identities.(repository.LinkedIdentityCreator)
 			eligible := map[string]bool{}
 			for party := range allowlist(dependencies.BuyerRegistrationAuthorisedParties) {
@@ -920,10 +918,15 @@ func New(dependencies Dependencies) http.Handler {
 					eligible[party] = true
 				}
 			}
-			if dependencies.BuyerRegistrationEnabled && registrations != nil && len(eligible) > 0 {
-				h.registrations, h.registrationParties = registrations, eligible
-				h.limiter = newRegistrationLimiter(dependencies.BuyerRegistrationPerMinute)
+			var limiter *registrationLimiter
+			if !dependencies.BuyerRegistrationEnabled || registrations == nil || len(eligible) == 0 {
+				registrations, eligible = nil, nil
+			} else {
+				limiter = newRegistrationLimiter(dependencies.BuyerRegistrationPerMinute)
 			}
+			h := principalResolutionHandler{api: a, identities: identities, subjects: dependencies.BuyerSubjects,
+				introspector: dependencies.BuyerSubjectIntrospector, authorisedParties: parties,
+				registrations: registrations, registrationParties: eligible, limiter: limiter, now: time.Now}
 			r.With(a.authorize(a.workloadVerifier, "workload", principalResolveScope)).
 				Post("/internal/identity/v1/principals/resolve", h.resolve)
 			if h.registrations != nil {
