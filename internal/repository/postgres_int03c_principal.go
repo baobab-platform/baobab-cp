@@ -181,7 +181,7 @@ func (r *PostgresRepository) ApproveInt03C(ctx context.Context, requestID, diges
                     AND m.actor_type='human' AND m.status='ACTIVE')
        AND EXISTS(SELECT 1 FROM identity.principal h
                   WHERE h.principal_id=a.checker_id
-                    AND h.actor_type='human' AND h.status='ACTIVE')),out.PrincipalID,issuer,subject,run,sourceSHA).
+                    AND h.actor_type='human' AND h.status='ACTIVE'))`, out.PrincipalID, issuer, subject, run, sourceSHA).
          Scan(&currentProvenance)
 	if err!=nil{return Int03CDeactivation{},err}
 	if !currentProvenance{return Int03CDeactivation{},ErrInt03CNotPermitted}
