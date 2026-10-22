@@ -11,6 +11,27 @@ Shared. All protected routes are **absent** unless
 `development`, `test`, `integration` or `sandbox`. Staging,
 production, missing configuration and unknown environments are refused.
 
+**CP-owned, two-human provenance registration precedes deactivation.**
+`POST /v1/admin/int03c/provenance` requires a currently authorised
+ACTIVE human maker and the actual existing ACTIVE canonical workload
+Principal, private Hydra issuer, exact allowed subject, 32-hex run nonce,
+40-hex source revision and SHA-256 digest of original source evidence.
+A separate ACTIVE human checker calls
+`POST /v1/admin/int03c/provenance/{provenanceID}/approve` with the
+unchanged evidence digest within 90 minutes. The database has immutable
+provenance/approval tables and checks maker/checker SoD, current exact
+external issuer linkage and both human lifecycle states.
+
+Neither of these operations creates a Principal or its external link.
+Until a real CP-approved, already linked Principal and independently
+approved provenance exist, **every deactivation request is denied**.
+The proposal and execution paths both revalidate the same exact
+provenance record, including the run nonce and source revision.
+The request digest also binds the maker, idempotency key, intended
+DISABLED state and fixed approval deadline. These are essential
+per-run authority boundaries, not a substitute for external immutable
+artifact retention or actual runtime verification.
+
 **Maker POST:**
 `/v1/admin/int03c/principals/{principalID}/deactivation-requests`
 requires a current CP platform administrator with `changeset:write`, a
