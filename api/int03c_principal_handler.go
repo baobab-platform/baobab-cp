@@ -19,6 +19,8 @@ type int03CPrincipalStore interface {
  ProposeInt03C(context.Context,string,string,string,string,string,string,string) (repository.Int03CDeactivation,error)
  ApproveInt03C(context.Context,string,string,string) (repository.Int03CDeactivation,error)
  ReadInt03CPrincipal(context.Context,string) (string,error)
+ ProposeInt03CProvenance(context.Context,string,string,string,string,string,string,string) (repository.Int03CProvenance,error)
+ ApproveInt03CProvenance(context.Context,string,string,string) (repository.Int03CProvenance,error)
 }
 
 type int03CPrincipalHandler struct {
