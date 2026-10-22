@@ -134,7 +134,7 @@ func (r *PostgresRepository) ApproveInt03C(ctx context.Context, requestID,digest
        WHERE external_identity_id=$1::uuid AND status='ACTIVE'`,externalID)
  if err!=nil || changed.RowsAffected()!=1{return Int03CDeactivation{},ErrInt03CNotPermitted}
  // No secondary identity link may retain authority after deactivation.
- changed,err=tx.Exec(ctx,`UPDATE identity.external_identity SET status='DISABLED'
+ _,err=tx.Exec(ctx,`UPDATE identity.external_identity SET status='DISABLED'
        WHERE principal_id=$1::uuid AND status='ACTIVE'`,out.PrincipalID)
  if err!=nil{return Int03CDeactivation{},err}
  _,err=tx.Exec(ctx,`INSERT INTO identity.int03c_deactivation_audit
