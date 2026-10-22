@@ -546,6 +546,12 @@ func New(dependencies Dependencies) http.Handler {
 		(dependencies.Environment == "development" || dependencies.Environment == "test" ||
 		 dependencies.Environment == "integration" || dependencies.Environment == "sandbox") {
 		h := int03CPrincipalHandler{store:dependencies.Int03CPrincipalDeactivation, identities:dependencies.Identities}
+		// Provenance is created only through CP, from an existing current
+		// Principal+issuer link and independently approved creation evidence.
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:write"), a.requireAdminRole(nil,true)).
+			Post("/v1/admin/int03c/provenance",h.proposeProvenance)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:approve"), a.requireAdminRole(nil,true)).
+			Post("/v1/admin/int03c/provenance/{provenanceID}/approve",h.approveProvenance)
 		r.With(a.authorize(a.adminVerifier, "human", "changeset:write"), a.requireAdminRole(nil,true)).
 			Post("/v1/admin/int03c/principals/{principalID}/deactivation-requests",h.propose)
 		r.With(a.authorize(a.adminVerifier, "human", "changeset:approve"), a.requireAdminRole(nil,true)).
