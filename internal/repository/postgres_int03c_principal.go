@@ -175,7 +175,13 @@ func (r *PostgresRepository) ApproveInt03C(ctx context.Context, requestID, diges
        JOIN identity.int03c_provenance_approval a ON a.provenance_id=p.provenance_id
        WHERE p.principal_id=$1::uuid AND p.issuer=$2 AND p.subject=$3
          AND p.run_id=$4 AND p.source_sha=$5 AND p.expires_at>clock_timestamp()
-         AND p.maker_id<>a.checker_id)`,out.PrincipalID,issuer,subject,run,sourceSHA).
+         AND p.maker_id<>a.checker_id
+       AND EXISTS(SELECT 1 FROM identity.principal m
+                  WHERE m.principal_id=p.maker_id
+                    AND m.actor_type='human' AND m.status='ACTIVE')
+       AND EXISTS(SELECT 1 FROM identity.principal h
+                  WHERE h.principal_id=a.checker_id
+                    AND h.actor_type='human' AND h.status='ACTIVE')),out.PrincipalID,issuer,subject,run,sourceSHA).
          Scan(&currentProvenance)
 	if err!=nil{return Int03CDeactivation{},err}
 	if !currentProvenance{return Int03CDeactivation{},ErrInt03CNotPermitted}
