@@ -136,6 +136,11 @@ BEGIN
     IF p.provenance_id IS NULL OR p.maker_id=NEW.checker_id
         OR p.expires_at <= clock_timestamp()
         OR NOT EXISTS (
+            SELECT 1 FROM identity.principal m
+            WHERE m.principal_id=p.maker_id
+              AND m.actor_type='human' AND m.status='ACTIVE'
+        )
+        OR NOT EXISTS (
             SELECT 1 FROM identity.principal h
             WHERE h.principal_id=NEW.checker_id
               AND h.actor_type='human' AND h.status='ACTIVE'
