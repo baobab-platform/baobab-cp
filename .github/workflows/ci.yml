@@ -30,6 +30,9 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://postgres@localhost:5432/baobab_cp_ci?sslmode=disable
       SHARED_CONTRACTS_DIR: ${{ github.workspace }}/.shared-contracts
+      # The PostgreSQL service is ephemeral; run the INT-03C two-human SQL integration suite.
+      # This switch never authorises real IAM issuance, CP topology creation, or acceptance.
+      BAOBAB_INT03C_DISPOSABLE_DB: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Pin integrity + contract-compatibility (§16/§10.5 of
