@@ -176,7 +176,7 @@ func (r *PostgresRepository) ProposeInt03C(ctx context.Context, principal, issue
 	if err != nil {
 		return Int03CDeactivation{}, err
 	}
-	if out.PlanDigest != digest || out.PrincipalID != principal || out.Decision != "PENDING" || !out.ExpiresAt.After(time.Now().UTC()) {
+	if out.PlanDigest != int03CPlanDigest(principal,issuer,subject,run,sourceSHA,maker,key,out.ExpiresAt) || out.PrincipalID != principal || out.Decision != "PENDING" || !out.ExpiresAt.After(time.Now().UTC()) {
 		return Int03CDeactivation{}, ErrInt03CNotPermitted
 	}
 	if err = tx.Commit(ctx); err != nil {
