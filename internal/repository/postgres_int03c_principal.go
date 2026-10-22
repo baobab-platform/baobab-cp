@@ -75,12 +75,19 @@ func (r *PostgresRepository) ProposeInt03C(ctx context.Context, principal,issuer
  err=tx.QueryRow(ctx,`INSERT INTO identity.int03c_deactivation_request
         (principal_id,issuer,subject,run_id,source_sha,plan_digest,idempotency_key,maker_id,expires_at)
       VALUES ($1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8::uuid,clock_timestamp()+interval '15 minutes')
-      ON CONFLICT (maker_id,idempotency_key) DO UPDATE SET
-        plan_digest=identity.int03c_deactivation_request.plan_digest
+      ON CONFLICT DO NOTHING
       RETURNING request_id::text,principal_id::text,plan_digest,decision,expires_at`,
    principal,issuer,subject,run,sourceSHA,digest,key,maker).Scan(&out.RequestID,&out.PrincipalID,&out.PlanDigest,&out.Decision,&out.ExpiresAt)
+ if errors.Is(err,pgx.ErrNoRows) {
+   // Replays may only read their own exact request, never mutate immutable
+   // evidence, re-extend approval time, or overwrite another plan digest.
+   err=tx.QueryRow(ctx,`SELECT request_id::text,principal_id::text,plan_digest,decision,expires_at
+     FROM identity.int03c_deactivation_request
+     WHERE maker_id=$1::uuid AND idempotency_key=$2::uuid
+     FOR UPDATE`,maker,key).Scan(&out.RequestID,&out.PrincipalID,&out.PlanDigest,&out.Decision,&out.ExpiresAt)
+ }
  if err!=nil{return Int03CDeactivation{},err}
- if out.PlanDigest!=digest || out.PrincipalID!=principal || out.Decision!="PENDING"{
+ if out.PlanDigest!=digest || out.PrincipalID!=principal || out.Decision!="PENDING" || !out.ExpiresAt.After(time.Now().UTC()) {
    return Int03CDeactivation{},ErrInt03CNotPermitted
  }
  if err=tx.Commit(ctx);err!=nil{return Int03CDeactivation{},err}
