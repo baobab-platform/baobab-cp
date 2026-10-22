@@ -91,9 +91,10 @@
 #                              CMS validates baobab-cms; each relationship is
 #                              explicit on its own entry.
 #   subject_principal_audiences -- optional; required of exactly the workloads
-#                              that may hold identity:principal:resolve or
-#                              identity:principal:register-buyer, and nobody
-#                              else (ADR-SHARED-042 section 3). The human
+#                              that may hold identity:principal:resolve,
+#                              identity:principal:register-buyer or
+#                              estate:client-binding:resolve, and nobody
+#                              else (ADR-SHARED-042 section 3; CAA-04). The human
 #                              resource audiences whose access tokens this
 #                              workload may present to the Control Plane as
 #                              subject evidence for delegated Principal
@@ -103,8 +104,12 @@
 #                              infers it from allowed_audiences and a request
 #                              cannot choose it. Each audience is one a
 #                              human-only scope is issued for, and is never
-#                              baobab-control-plane. Trade would list
-#                              baobab-trade; no workload holds it yet.
+#                              baobab-control-plane. For estate binding the
+#                              same audience bounds the BFF client evidence
+#                              CP accepts (control-plane/v1
+#                              estate-client-binding.openapi.yaml). Trade
+#                              would list baobab-trade; no workload holds it
+#                              yet.
 #   context_purposes        -- optional. The Control Plane context authority
 #                              purposes (control-plane/v1 ContextAuthorityPurpose)
 #                              a context owned by this workload may carry.

@@ -166,6 +166,12 @@ type Dependencies struct {
 	// BuyerRegistrationPerMinute bounds creation attempts per caller, BFF
 	// client and issuer in each process; zero or less disables the limit.
 	BuyerRegistrationPerMinute int
+	// ADR-SHARED-042 CAA-04 (ADR-BCP-029): estate client binding resolution.
+	// Default off, development and staging only. It verifies the BFF's own
+	// client evidence with the same buyer issuer verifier, introspector and
+	// BFF client allowlist as Principal resolution.
+	EstateClientBindingEnabled bool
+	EstateClientBindings       estateClientBindingStore
 	// P0-02B is a separate default-off private scanner boundary. Its verifier
 	// MUST compose current token introspection and fresh registry authority.
 	ScannerIntakeEnabled bool
@@ -933,6 +939,20 @@ func New(dependencies Dependencies) http.Handler {
 				r.With(a.authorize(a.workloadVerifier, "workload", buyerRegistrationScope)).
 					Post("/internal/identity/v1/principals/register-buyer", h.register)
 			}
+		}
+	}
+	// CAA-04: the contract's environments are the only boundary a binding can
+	// carry, so the route mounts only where CP's own environment is one.
+	if dependencies.EstateClientBindingEnabled && peoRoutesPermittedIn(dependencies.Environment) &&
+		(dependencies.Environment == "development" || dependencies.Environment == "staging") &&
+		dependencies.WorkloadRegistry != nil && dependencies.EstateClientBindings != nil &&
+		dependencies.BuyerSubjects != nil && dependencies.BuyerSubjectIntrospector != nil {
+		if clients := allowlist(dependencies.BuyerAuthorisedParties); len(clients) > 0 {
+			h := estateClientBindingHandler{api: a, store: dependencies.EstateClientBindings,
+				clients: dependencies.BuyerSubjects, introspector: dependencies.BuyerSubjectIntrospector,
+				bffClients: clients, environment: dependencies.Environment, now: time.Now}
+			r.With(a.authorize(a.workloadVerifier, "workload", estateClientBindingScope)).
+				Post("/internal/estate/v1/client-bindings/resolve", h.resolve)
 		}
 	}
 	// P0-04B Trade-0 grants a CP legal-actor FACT for one Trade operation under
