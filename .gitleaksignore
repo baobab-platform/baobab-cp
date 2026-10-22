@@ -20,3 +20,7 @@
 # RFC4122-shaped synthetic idempotency UUID `key`. This is neither key material nor a credential.
 # The present source uses `idempotencyKey`; narrow historical fingerprint only, with no rule/path exclusion.
 2f14cfa33ce54d3faea6d22966c7e0b50651689a:internal/repository/postgres_int03c_principal_test.go:generic-api-key:67
+#
+# Earlier formatting fix also retained the UUID as a single credential-shaped literal in commit 82d60b4.
+# Reviewed synthetic idempotency identifier; current source assembles its non-secret components.
+82d60b4d854eec244297c1ba3b737ff9309c4f07:internal/repository/postgres_int03c_principal_test.go:generic-api-key:67
