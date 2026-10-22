@@ -123,3 +123,58 @@ BEFORE UPDATE OR DELETE ON identity.int03c_provenance_approval
 FOR EACH ROW EXECUTE FUNCTION identity.int03c_provenance_immutable();
 REVOKE ALL ON identity.int03c_principal_provenance FROM PUBLIC;
 REVOKE ALL ON identity.int03c_provenance_approval FROM PUBLIC;
+
+-- The database, not only a Go handler, enforces maker/checker separation,
+-- current synthetic link and short-lived provenance at the approval point.
+CREATE FUNCTION identity.int03c_provenance_approval_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    p identity.int03c_principal_provenance%ROWTYPE;
+BEGIN
+    SELECT * INTO p FROM identity.int03c_principal_provenance
+      WHERE provenance_id=NEW.provenance_id FOR UPDATE;
+    IF p.provenance_id IS NULL OR p.maker_id=NEW.checker_id
+        OR p.expires_at <= clock_timestamp()
+        OR NOT EXISTS (
+            SELECT 1 FROM identity.principal h
+            WHERE h.principal_id=NEW.checker_id
+              AND h.actor_type='human' AND h.status='ACTIVE'
+        )
+        OR NOT EXISTS (
+            SELECT 1 FROM identity.principal w
+            JOIN identity.external_identity e ON e.principal_id=w.principal_id
+            WHERE w.principal_id=p.principal_id AND w.actor_type='workload'
+              AND w.status='ACTIVE' AND e.status='ACTIVE'
+              AND e.issuer=p.issuer AND e.subject=p.subject
+        ) THEN
+        RAISE EXCEPTION 'INT03C independent proof approval denied'
+            USING ERRCODE='check_violation';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER int03c_provenance_approval_guard
+BEFORE INSERT ON identity.int03c_provenance_approval
+FOR EACH ROW EXECUTE FUNCTION identity.int03c_provenance_approval_guard();
+
+-- Disable requests cannot exist without CP's distinct-person current
+-- provenance; this also guards against application-level bypasses.
+CREATE FUNCTION identity.int03c_disable_requires_provenance() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM identity.int03c_principal_provenance p
+        JOIN identity.int03c_provenance_approval a
+          ON a.provenance_id=p.provenance_id
+        WHERE p.principal_id=NEW.principal_id AND p.issuer=NEW.issuer
+          AND p.subject=NEW.subject AND p.run_id=NEW.run_id
+          AND p.source_sha=NEW.source_sha AND p.expires_at>clock_timestamp()
+          AND p.maker_id<>a.checker_id
+    ) THEN
+        RAISE EXCEPTION 'INT03C unapproved Principal provenance'
+            USING ERRCODE='check_violation';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER int03c_deactivation_provenance_guard
+BEFORE INSERT ON identity.int03c_deactivation_request
+FOR EACH ROW EXECUTE FUNCTION identity.int03c_disable_requires_provenance();
