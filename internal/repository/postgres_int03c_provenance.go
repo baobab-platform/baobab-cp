@@ -71,8 +71,8 @@ func (r *PostgresRepository) ProposeInt03CProvenance(ctx context.Context,princip
  return out,nil
 }
 
-func (r *PostgresRepository) ApproveInt03CProvenance(ctx context.Context,id,checker string)(Int03CProvenance,error){
- if r==nil||r.pool==nil||!int03cUUID.MatchString(id)||!int03cUUID.MatchString(checker){
+func (r *PostgresRepository) ApproveInt03CProvenance(ctx context.Context,id,checker,expectedDigest string)(Int03CProvenance,error){
+ if r==nil||r.pool==nil||!int03cUUID.MatchString(id)||!int03cUUID.MatchString(checker)||!int03cProofDigest.MatchString(expectedDigest){
   return Int03CProvenance{},ErrInt03CNotPermitted
  }
  tx,err:=r.pool.BeginTx(ctx,pgx.TxOptions{IsoLevel:pgx.Serializable})
@@ -86,7 +86,7 @@ func (r *PostgresRepository) ApproveInt03CProvenance(ctx context.Context,id,chec
    WHERE provenance_id=$1::uuid FOR UPDATE`,id).
    Scan(&out.ProvenanceID,&out.PrincipalID,&out.RunID,&out.SourceSHA,&out.SourceEvidenceDigest,&out.ExpiresAt,&maker,&issuer,&subject)
  if err!=nil{return Int03CProvenance{},ErrInt03CNotPermitted}
- if maker==checker||!out.ExpiresAt.After(time.Now().UTC())||issuer!=int03CIssuer||
+ if out.SourceEvidenceDigest!=expectedDigest||maker==checker||!out.ExpiresAt.After(time.Now().UTC())||issuer!=int03CIssuer||
   !validInt03CSubject(subject){return Int03CProvenance{},ErrInt03CNotPermitted}
  var active bool
  err=tx.QueryRow(ctx,`SELECT EXISTS(
