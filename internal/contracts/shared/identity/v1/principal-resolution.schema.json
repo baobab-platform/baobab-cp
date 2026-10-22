@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/identity/v1/principal-resolution.schema.json",
+  "title": "Delegated human Principal resolution and buyer registration",
+  "description": "How a registered workload acting for an authenticated human obtains that human's canonical Principal from the Control Plane (ADR-SHARED-042 sections 3-4, CAA-01; IAM ADR-0010 section 0). The workload authenticates itself with its own Control Plane-audience workload token. The human's IAM access token, audience-bound to the calling workload's own resource, is carried in the body as subject evidence only: it is never the Control Plane caller credential. The Control Plane verifies that evidence itself against its registered issuer trust and the token's current status, then resolves the exact (issuer, subject) pair. No issuer, subject, Principal, email or commerce-customer identifier may be asserted by the caller. A resolved Principal carries no tenant, Organisation membership, role, market or purchasing authority.",
+  "$defs": {
+    "SubjectTokenType": {
+      "const": "urn:ietf:params:oauth:token-type:access_token",
+      "description": "RFC 8693 token type URI. Only an IAM access token is accepted; an ID token, refresh token or commerce-engine token is refused."
+    },
+    "PrincipalResolveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Body of operation resolveDelegatedHumanPrincipal. Read-only: an unknown (issuer, subject) resolves to IDENTITY_NOT_RESOLVED and creates nothing.",
+      "required": [
+        "subject_token",
+        "subject_token_type",
+        "correlation_id"
+      ],
+      "properties": {
+        "subject_token": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 8192,
+          "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+          "description": "The human's compact-serialised JWS IAM access token, exactly as the caller received it. It must satisfy identity/v1 buyer-identity-handoff.schema.json#/$defs/TradeBuyerAccessTokenClaims when the caller is Trade. Never logged, persisted or echoed."
+        },
+        "subject_token_type": {
+          "$ref": "#/$defs/SubjectTokenType"
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Bare UUID, as control-plane/v1 requires."
+        }
+      }
+    },
+    "BuyerPrincipalRegistrationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Body of operation registerBuyerPrincipal: governed just-in-time registration of an eligible first-time buyer (ADR-SHARED-042 section 4). Same evidence as resolution, plus the declared onboarding purpose, which CP checks against the purposes approved for the authorised BFF client. Idempotent per (issuer, subject): a repeat or concurrent request returns the same Principal. Registration establishes identity only.",
+      "required": [
+        "subject_token",
+        "subject_token_type",
+        "purpose",
+        "correlation_id"
+      ],
+      "properties": {
+        "subject_token": {
+          "$ref": "#/$defs/PrincipalResolveRequest/properties/subject_token"
+        },
+        "subject_token_type": {
+          "$ref": "#/$defs/SubjectTokenType"
+        },
+        "purpose": {
+          "const": "BUYER_ONBOARDING",
+          "description": "The only registration purpose this version defines. A purpose not approved for the BFF client is REGISTRATION_NOT_ELIGIBLE; it never widens what the Principal may do."
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/PrincipalResolveRequest/properties/correlation_id"
+        }
+      }
+    },
+    "PrincipalResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The canonical human Principal the verified evidence resolves to. It says who the person is to the platform and nothing else: it carries no tenant, Organisation, membership, role, market or purchasing authority, and the caller must check those itself on every operation.",
+      "required": [
+        "outcome",
+        "principal_id",
+        "actor_type",
+        "status",
+        "external_identity_id",
+        "evidence_expires_at"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": [
+            "RESOLVED",
+            "REGISTERED"
+          ],
+          "description": "REGISTERED only when this request created the Principal and its ExternalIdentity; a resolve request is always RESOLVED."
+        },
+        "principal_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "actor_type": {
+          "const": "human"
+        },
+        "status": {
+          "const": "ACTIVE",
+          "description": "Only an ACTIVE Principal with an ACTIVE ExternalIdentity resolves; any other state is PRINCIPAL_NOT_ACTIVE."
+        },
+        "external_identity_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "evidence_expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "No later than the subject token's exp. The caller must not reuse the resolution after this instant, and should re-resolve for each protected operation."
+        }
+      }
+    },
+    "PrincipalResolutionDenialCode": {
+      "description": "Closed problem codes (errors/v1 problem-details code). Every denial is fail-closed and discloses no token content, provider detail or whether another identity exists. IDENTITY_LINK_CONFLICT: the subject collides with a link CP cannot prove is the same person (for example a pending provider migration or account recovery); it is resolved only through verified link evidence, never by email. REGISTRATION_RATE_LIMITED: registration abuse limits for the caller, BFF client or issuer were exceeded; retryable later, nothing created.",
+      "enum": [
+        "CALLER_NOT_PERMITTED",
+        "SUBJECT_TOKEN_INVALID",
+        "SUBJECT_TOKEN_NOT_CURRENT",
+        "SUBJECT_TOKEN_NOT_FOR_CALLER",
+        "IDENTITY_NOT_RESOLVED",
+        "PRINCIPAL_NOT_ACTIVE",
+        "REGISTRATION_NOT_ELIGIBLE",
+        "IDENTITY_LINK_CONFLICT",
+        "REGISTRATION_RATE_LIMITED",
+        "RESOLUTION_UNAVAILABLE"
+      ]
+    }
+  }
+}

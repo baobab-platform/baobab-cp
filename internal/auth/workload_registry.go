@@ -50,6 +50,35 @@ type StaticWorkloadRegistry struct {
 	runtimeObservers map[string]ReporterScope
 	validators       map[string][]string
 	purposes         map[string][]string
+	// subjects holds each ACTIVE workload's registered subject_principal_audiences
+	// (ADR-SHARED-042 section 3), present only with a principal-resolution scope.
+	subjects map[string][]string
+}
+
+// Principal-resolution scopes (Shared identity/v1 principal-resolution.openapi.yaml).
+const (
+	PrincipalResolveScope       = "identity:principal:resolve"
+	PrincipalRegisterBuyerScope = "identity:principal:register-buyer"
+)
+
+// SubjectPrincipalRegistry answers which human subject audiences a workload
+// is registered to present as subject evidence for delegated Principal
+// resolution (workload-registry.yaml subject_principal_audiences). It is the
+// registered validator relationship ADR-SHARED-042 section 3 requires: never
+// inferred from allowed_audiences and never chosen by a request.
+type SubjectPrincipalRegistry interface {
+	// SubjectPrincipalAudiences returns the audiences, or nil when clientID
+	// is unknown, not ACTIVE, holds no principal-resolution scope or
+	// registers none.
+	SubjectPrincipalAudiences(clientID string) []string
+}
+
+// SubjectPrincipalAudiences implements SubjectPrincipalRegistry.
+func (r *StaticWorkloadRegistry) SubjectPrincipalAudiences(clientID string) []string {
+	if r == nil {
+		return nil
+	}
+	return slices.Clone(r.subjects[clientID])
 }
 
 // Canonical workload scopes consumed by the Control Plane.
@@ -195,6 +224,7 @@ type workloadRegistryFile struct {
 		DeploymentRegions  []string `yaml:"deployment_regions"`
 		ValidatesAudiences []string `yaml:"validates_audiences"`
 		ContextPurposes    []string `yaml:"context_purposes"`
+		SubjectAudiences   []string `yaml:"subject_principal_audiences"`
 	} `yaml:"workloads"`
 }
 
@@ -244,6 +274,7 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 	runtimeObservers := map[string]ReporterScope{}
 	validators := map[string][]string{}
 	purposes := map[string][]string{}
+	subjects := map[string][]string{}
 	for clientID, entry := range parsed.Workloads {
 		active[clientID] = entry.Status == "ACTIVE"
 		if active[clientID] {
@@ -258,6 +289,12 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 		if active[clientID] && slices.Contains(entry.AllowedScopes, ContextValidateScope) && len(entry.ValidatesAudiences) > 0 {
 			validators[clientID] = slices.Clone(entry.ValidatesAudiences)
 		}
+		// As with validators, the scope and the registered audience are both
+		// required; either alone resolves nobody.
+		if active[clientID] && len(entry.SubjectAudiences) > 0 &&
+			(slices.Contains(entry.AllowedScopes, PrincipalResolveScope) || slices.Contains(entry.AllowedScopes, PrincipalRegisterBuyerScope)) {
+			subjects[clientID] = slices.Clone(entry.SubjectAudiences)
+		}
 		if active[clientID] && len(entry.ContextPurposes) > 0 {
 			purposes[clientID] = slices.Clone(entry.ContextPurposes)
 		}
@@ -268,5 +305,5 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 			runtimeObservers[clientID] = ReporterScope{Environment: entry.Environment, Regions: slices.Clone(entry.DeploymentRegions)}
 		}
 	}
-	return &StaticWorkloadRegistry{active: active, allowedScopes: allowedScopes, reporters: reporters, runtimeObservers: runtimeObservers, validators: validators, purposes: purposes}, nil
+	return &StaticWorkloadRegistry{active: active, allowedScopes: allowedScopes, reporters: reporters, runtimeObservers: runtimeObservers, validators: validators, purposes: purposes, subjects: subjects}, nil
 }

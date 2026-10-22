@@ -430,6 +430,103 @@ func (r *PostgresRepository) ResolveIdentity(ctx context.Context, issuer, subjec
 	return principal, nil
 }
 
+// CreateLinkedIdentity implements LinkedIdentityCreator. A losing concurrent
+// insert waits on the UNIQUE(issuer, subject) index, inserts nothing, and the
+// whole transaction (its Principal, audit record and event included) rolls
+// back before the winner is re-read.
+func (r *PostgresRepository) CreateLinkedIdentity(ctx context.Context, principal domain.Principal, external domain.ExternalIdentity, actor AuditActor) (domain.Principal, domain.ExternalIdentity, bool, error) {
+	if r == nil || r.pool == nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, errors.New("repository is not initialized")
+	}
+	if err := validLinkedIdentity(principal, external); err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, err
+	}
+	correlation := actor.CorrelationID
+	if correlation == "" {
+		correlation = domain.NewUUIDv7()
+	}
+	// The event carries the issuer but never the subject (data minimisation,
+	// Shared identity/v1 principal-resolution.openapi.yaml).
+	env, err := events.New(events.Params{Type: eventTypeIdentityCreated, Source: r.eventSource(), Subject: principal.ID,
+		DataSchema: schemaIdentityCreated, CorrelationID: correlation,
+		Data: map[string]any{"principal_id": principal.ID, "actor_type": principal.ActorType, "external_issuer": external.Issuer}})
+	if err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, fmt.Errorf("build identity event: %w", err)
+	}
+	created, err := func() (bool, error) {
+		tx, err := r.pool.Begin(ctx)
+		if err != nil {
+			return false, err
+		}
+		defer tx.Rollback(ctx)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO identity.principal(principal_id, actor_type, status) VALUES ($1::uuid, $2, 'ACTIVE')`,
+			principal.ID, principal.ActorType); err != nil {
+			return false, fmt.Errorf("create principal: %w", err)
+		}
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO identity.external_identity(external_identity_id, principal_id, issuer, subject, provider_type, status)
+			VALUES ($1::uuid, $2::uuid, $3, $4, NULLIF($5, ''), 'ACTIVE')
+			ON CONFLICT (issuer, subject) DO NOTHING`,
+			external.ID, principal.ID, external.Issuer, external.Subject, external.ProviderType)
+		if err != nil {
+			return false, fmt.Errorf("link external identity: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return false, nil // rolled back: no orphan Principal, no event
+		}
+		payload, err := json.Marshal(map[string]string{"external_identity_id": external.ID, "issuer": external.Issuer})
+		if err != nil {
+			return false, err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO audit_events(actor_id, actor_type, client_id, token_id, correlation_id, action, target, result, policy_decision, payload)
+			VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, '')::uuid, $6, $7, $8, $9, $10)`,
+			actor.ActorID, actor.ActorType, actor.ClientID, actor.TokenID, correlation,
+			"identity.principal.created", "principal:"+principal.ID, "success", "ADR-SHARED-042/linked-identity:v1", payload); err != nil {
+			return false, fmt.Errorf("write identity audit record: %w", err)
+		}
+		if err := r.insertOutboxEvent(ctx, tx, "identity.principal", principal.ID, 1, env); err != nil {
+			return false, err
+		}
+		return true, tx.Commit(ctx)
+	}()
+	if err != nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, false, err
+	}
+	if created {
+		return principal, external, true, nil
+	}
+	existingPrincipal, existing, err := r.LookupExternalIdentity(ctx, external.Issuer, external.Subject)
+	return existingPrincipal, existing, false, err
+}
+
+// LookupExternalIdentity implements DelegatedIdentityReader: one row per
+// (issuer, subject) by the UNIQUE constraint, returned whatever its status.
+func (r *PostgresRepository) LookupExternalIdentity(ctx context.Context, issuer, subject string) (domain.Principal, domain.ExternalIdentity, error) {
+	if r == nil || r.pool == nil {
+		return domain.Principal{}, domain.ExternalIdentity{}, errors.New("repository is not initialized")
+	}
+	row := r.pool.QueryRow(ctx, `
+		SELECT p.principal_id::text, p.actor_type, p.status, p.created_at, p.updated_at,
+		       e.external_identity_id::text, e.issuer, e.subject, COALESCE(e.provider_type, ''), e.status, e.created_at
+		FROM identity.external_identity e
+		JOIN identity.principal p ON p.principal_id = e.principal_id
+		WHERE e.issuer = $1 AND e.subject = $2`, issuer, subject)
+	var principal domain.Principal
+	var external domain.ExternalIdentity
+	err := row.Scan(&principal.ID, &principal.ActorType, &principal.Status, &principal.CreatedAt, &principal.UpdatedAt,
+		&external.ID, &external.Issuer, &external.Subject, &external.ProviderType, &external.Status, &external.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Principal{}, domain.ExternalIdentity{}, ErrIdentityNotFound
+		}
+		return domain.Principal{}, domain.ExternalIdentity{}, fmt.Errorf("lookup external identity: %w", err)
+	}
+	external.PrincipalID = principal.ID
+	return principal, external, nil
+}
+
 func (r *PostgresRepository) GetPrincipal(ctx context.Context, principalID string) (domain.Principal, error) {
 	if r == nil || r.pool == nil {
 		return domain.Principal{}, errors.New("repository is not initialized")

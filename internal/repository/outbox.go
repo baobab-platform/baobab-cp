@@ -33,6 +33,10 @@ const (
 	eventTypeTenantProvisioningActive   = "com.baobab-platform.control-plane.tenant.provisioning-active.v1"
 	eventTypeTenantProvisioningFailed   = "com.baobab-platform.control-plane.tenant.provisioning-failed.v1"
 
+	// Shared identity-events/v1 (ADR-SHARED-042 section 4).
+	eventTypeIdentityCreated = "com.baobab-platform.identity.created.v1"
+	schemaIdentityCreated    = "https://schemas.baobab-platform.com/contracts/identity-events/v1/identity-created.schema.json"
+
 	schemaMarketParticipationCreated = "https://contracts.baobab-platform.com/control-plane/v1/market-participation-created.schema.json"
 	schemaMarketParticipationUpdated = "https://contracts.baobab-platform.com/control-plane/v1/market-participation-updated.schema.json"
 	schemaTradeLaneActivated         = "https://contracts.baobab-platform.com/trade-lane/v1/events.schema.json#/$defs/tradeLaneActivatedEventData"
