@@ -21,57 +21,9 @@ var ErrInt03CNotPermitted = errors.New("int03c principal change refused")
 
 var (
 	int03cUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	int03cHex  = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	int03cSHA  = regexp.MustCompile(`^[0-9a-f]{40}package repository
-
-// INT-03C narrowly governed Principal deactivation. A request is an immutable
-// digest-bound plan; a distinct CP-authenticated ACTIVE human checker commits
-// the Principal, linked issuer identity and audit record in ONE transaction.
-// This never provisions an identity or alters a real tenant's memberships.
-import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"fmt"
-	"regexp"
-	"strings"
-	"time"
-
-	"github.com/jackc/pgx/v5"
-)
-
-var ErrInt03CNotPermitted = errors.New("int03c principal change refused")
-
-var (
-	int03cUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	int03cHex  = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	)
-	int03cProofDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}package repository
-
-// INT-03C narrowly governed Principal deactivation. A request is an immutable
-// digest-bound plan; a distinct CP-authenticated ACTIVE human checker commits
-// the Principal, linked issuer identity and audit record in ONE transaction.
-// This never provisions an identity or alters a real tenant's memberships.
-import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"fmt"
-	"regexp"
-	"strings"
-	"time"
-
-	"github.com/jackc/pgx/v5"
-)
-
-var ErrInt03CNotPermitted = errors.New("int03c principal change refused")
-
-var (
-	int03cUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	int03cHex  = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	)
+	int03cHex = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	int03cSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	int03cProofDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
 const int03CIssuer = "https://hydra.int03.test"
