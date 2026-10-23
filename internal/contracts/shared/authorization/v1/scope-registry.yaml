@@ -939,6 +939,18 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
+  - name: "estate:commerce-profile:resolve"
+    description: >-
+      Read-only attestation of the governed commerce model (B2B or B2C) of a
+      Digital Estate for the calling Trade engine instance and a Market
+      (control-plane/v1 estate-commerce-profile.openapi.yaml; ADR-SHARED-042
+      section 14, Decision 8). It classifies the estate only and grants no
+      seller, buyer, market or purchasing authority. Allocated to no
+      workload.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
   - name: "trade:buyer-handoff"
     description: >-
       Lets a registered confidential estate BFF present a human buyer's IAM
