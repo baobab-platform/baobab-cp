@@ -3,7 +3,7 @@
 **Status:** Proposed — the Control Plane's implementation record for ADR-SHARED-042 §14 Decision 8 (CP registry and attestation step)  
 **Governing decision:** Shared ADR-SHARED-042 §14 Decision 8, Platform Owner ruling of 22 October 2026. Where this record and ADR-SHARED-042 differ, ADR-SHARED-042 governs.  
 **Date:** 2026-10-22  
-**Canonical contracts:** `baobab-platform/shared` at `742295e2b4f67a3de6d985e7da6bd89ed0be39cb`:
+**Canonical contracts:** `baobab-platform/shared` at `1517429bcae601a1b0288ca0279e524ce48a3d77` (merged Shared #370; pinned and vendored on the current CP `main`):
 - `control-plane/v1/estate-commerce-profile.schema.json` and `.openapi.yaml`;
 - scope `estate:commerce-profile:resolve` (registered, unallocated).
 
