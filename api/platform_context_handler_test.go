@@ -15,6 +15,77 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/service"
 )
 
+// leasedDevelopmentIdentityRepository models CP's authoritative bootstrap
+// assignment without a live database. It delegates normal identity operations
+// to the standard repository; only the leased assignment is specialized.
+type leasedDevelopmentIdentityRepository struct {
+	repository.IdentityRepository
+	leaseExpiry time.Time
+}
+
+func (r leasedDevelopmentIdentityRepository) DevelopmentTenantLease(_ context.Context, _, clientID, tenantID string, at time.Time) (time.Time, error) {
+	if clientID != "baobab-dev-nabhold-estate" || tenantID != "tenant-123" || !r.leaseExpiry.After(at) {
+		return time.Time{}, repository.ErrIdentityNotFound
+	}
+	return r.leaseExpiry, nil
+}
+
+// An HTTP TTL is only an additional limit: it may never extend the
+// disposable CP bootstrap lease, including when no TTL is configured.
+func TestPlatformContextHandlerCapsDevelopmentLease(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		ttl  time.Duration
+	}{
+		{"long configured TTL", 15 * time.Minute},
+		{"unbounded configured TTL", 0},
+		{"short configured TTL", 5 * time.Second},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			base := repository.NewInMemoryRepository()
+			lease := time.Now().UTC().Add(30 * time.Second)
+			handler := PlatformContextHandler{
+				ContextResolution: service.ContextResolutionService{
+					Identity: service.IdentityService{Repository: leasedDevelopmentIdentityRepository{
+						IdentityRepository: base, leaseExpiry: lease,
+					}, Provision: service.WorkloadOnlyProvisioningPolicy},
+					Tenants: &fakeStore{},
+				},
+				Contexts: base,
+				TTL:      tt.ttl,
+			}
+			principal := auth.Principal{
+				Issuer: "https://hydra.int03.test", Subject: "baobab-dev-nabhold-estate",
+				ClientID: "baobab-dev-nabhold-estate", ActorType: "workload",
+				Scopes: map[string]struct{}{"context:resolve": {}}, TokenID: "synthetic-test",
+			}
+			req := httptest.NewRequest(http.MethodPost, "/v1/platform-context/resolve",
+				bytes.NewReader([]byte(`{"tenant_id":"tenant-123"}`)))
+			req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
+			w := httptest.NewRecorder()
+			handler.Resolve(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+			}
+			var response platformContextResolveResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			want := lease
+			if tt.ttl > 0 && response.ResolvedAt.Add(tt.ttl).Before(want) {
+				want = response.ResolvedAt.Add(tt.ttl)
+			}
+			if response.ExpiresAt == nil || !response.ExpiresAt.Equal(want) {
+				t.Fatalf("context expiry=%v, expected bound %s", response.ExpiresAt, want)
+			}
+			stored, err := base.GetContext(context.Background(), response.ContextID)
+			if err != nil || stored.ExpiresAt == nil || !stored.ExpiresAt.Equal(want) {
+				t.Fatalf("persisted context exceeded lease, context=%+v err=%v", stored.ExpiresAt, err)
+			}
+		})
+	}
+}
+
 func TestPlatformContextHandlerResolvesAndPersistsContext(t *testing.T) {
 	repo := repository.NewInMemoryRepository()
 	handler := PlatformContextHandler{
