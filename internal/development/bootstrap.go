@@ -145,7 +145,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 		e := Enterprise{Key: p.Key, BusinessModel: p.BusinessModel, TenantID: domain.NewTenantID(),
 			OrganisationID: domain.NewUUIDv7(), LegalEntityID: "DEV-" + cfg.RunID[:12] + "-" + strings.ToUpper(p.Key),
 			Markets: p.Markets, RequiredEngines: p.RequiredEngines, OptionalEngines: p.OptionalEngines}
-		metadata, _ := json.Marshal(map[string]any{"synthetic_only": true, "development_run_id": cfg.RunID, "profile": p.Key, "business_model": p.BusinessModel, "expires_at": out.ExpiresAt})
+		// Tenant metadata is a map of strings in the canonical read model.
+		// Keep synthetic provenance explicit without creating unscannable rows.
+		metadata, _ := json.Marshal(map[string]string{"synthetic_only": "true", "development_run_id": cfg.RunID, "profile": p.Key, "business_model": p.BusinessModel, "expires_at": out.ExpiresAt.Format(time.RFC3339Nano)})
 		if err = enterprise(ctx, tx, e, p.DisplayName, metadata, cfg.Now, out.ExpiresAt); err != nil {
 			return out, err
 		}
