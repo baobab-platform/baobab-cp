@@ -141,7 +141,10 @@ func (h PlatformContextHandler) Resolve(w http.ResponseWriter, r *http.Request) 
 	}
 	if h.TTL > 0 {
 		expiresAt := trustedContext.ResolvedAt.Add(h.TTL)
-		trustedContext.ExpiresAt = &expiresAt
+		// TTL may shorten but never extend CP's development bootstrap lease.
+		if trustedContext.ExpiresAt == nil || expiresAt.Before(*trustedContext.ExpiresAt) {
+			trustedContext.ExpiresAt = &expiresAt
+		}
 	}
 	if h.Contexts == nil {
 		problem(w, r, http.StatusServiceUnavailable, "CONTEXT_STORE_UNAVAILABLE", "context persistence is temporarily unavailable", true)

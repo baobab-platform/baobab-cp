@@ -1,0 +1,118 @@
+{
+  "schema": "baobab.development-enterprise-profiles.v1",
+  "environment": "development",
+  "synthetic_only": true,
+  "max_lease_seconds": 86400,
+  "profiles": [
+    {
+      "key": "nabhold",
+      "display_name": "Synthetic nabhold",
+      "business_model": "NON_TRADING_HOLDING",
+      "markets": [
+        "ZA"
+      ],
+      "required_engines": [
+        "baobab-cp",
+        "baobab-iam",
+        "baobab-cms"
+      ],
+      "optional_engines": [
+        "baobab-erp",
+        "baobab-pulse",
+        "baobab-subscriptions",
+        "baobab-regulations"
+      ],
+      "estate": {
+        "key": "nabhold-development",
+        "cms_client_id": "baobab-dev-nabhold-estate"
+      }
+    },
+    {
+      "key": "zuribeans",
+      "display_name": "Synthetic zuribeans",
+      "business_model": "B2B_TRADE",
+      "markets": [
+        "ZA",
+        "UG"
+      ],
+      "required_engines": [
+        "baobab-cp",
+        "baobab-iam",
+        "baobab-cms"
+      ],
+      "optional_engines": [
+        "baobab-trade",
+        "baobab-erp",
+        "baobab-regulations",
+        "baobab-trade-docs"
+      ],
+      "estate": {
+        "key": "zuribeans-development",
+        "cms_client_id": "baobab-dev-zuribeans-estate"
+      }
+    },
+    {
+      "key": "thamani",
+      "display_name": "Synthetic thamani",
+      "business_model": "B2B_LOGISTICS",
+      "markets": [
+        "ZA",
+        "UG"
+      ],
+      "required_engines": [
+        "baobab-cp",
+        "baobab-iam",
+        "baobab-cms"
+      ],
+      "optional_engines": [
+        "baobab-tms",
+        "baobab-erp",
+        "baobab-trade-docs",
+        "baobab-regulations",
+        "baobab-payments"
+      ],
+      "estate": {
+        "key": "thamani-development",
+        "cms_client_id": "baobab-dev-thamani-estate"
+      }
+    },
+    {
+      "key": "equator-estate",
+      "display_name": "Synthetic equator-estate",
+      "business_model": "PROPERTY",
+      "markets": [
+        "ZA",
+        "UG"
+      ],
+      "required_engines": [
+        "baobab-cp",
+        "baobab-iam",
+        "baobab-cms"
+      ],
+      "optional_engines": [
+        "baobab-erp",
+        "baobab-pulse"
+      ],
+      "estate": {
+        "key": "equator-estate-development",
+        "cms_client_id": "baobab-dev-equator-estate-estate"
+      }
+    },
+    {
+      "key": "external-client",
+      "display_name": "Synthetic external-client",
+      "business_model": "EXTERNAL_CLIENT",
+      "markets": [
+        "ZA"
+      ],
+      "required_engines": [
+        "baobab-cp",
+        "baobab-iam"
+      ],
+      "optional_engines": [
+        "baobab-erp"
+      ],
+      "estate": null
+    }
+  ]
+}

@@ -603,3 +603,89 @@ workloads:
     credential_type: federated_workload_token
     rotation_owner: baobab-platform/infrastructure
     status: PROVISIONED
+
+# ADR-SHARED-043 standing isolated development provisioning; never product activation.
+  baobab-int03-cms-consumer:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: ADR-SHARED-043 disposable development baobab-int03-cms-consumer
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+  baobab-int03-cms-validator:
+    repository: baobab-platform/baobab-cms
+    owner: baobab-platform/baobab-cms
+    runtime: ADR-SHARED-043 disposable development baobab-int03-cms-validator
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    allowed_scopes:
+    - context:validate
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-cms
+    status: ACTIVE
+    validates_audiences:
+    - baobab-cms
+  baobab-dev-nabhold-estate:
+    repository: baobab-platform/nabhold
+    owner: baobab-platform/nabhold
+    runtime: ADR-SHARED-043 disposable development baobab-dev-nabhold-estate
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/nabhold
+    status: ACTIVE
+  baobab-dev-zuribeans-estate:
+    repository: baobab-platform/zuribeans
+    owner: baobab-platform/zuribeans
+    runtime: ADR-SHARED-043 disposable development baobab-dev-zuribeans-estate
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/zuribeans
+    status: ACTIVE
+  baobab-dev-thamani-estate:
+    repository: baobab-platform/thamani
+    owner: baobab-platform/thamani
+    runtime: ADR-SHARED-043 disposable development baobab-dev-thamani-estate
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/thamani
+    status: ACTIVE
+  baobab-dev-equator-estate-estate:
+    repository: baobab-platform/equator-estate
+    owner: baobab-platform/equator-estate
+    runtime: ADR-SHARED-043 disposable development baobab-dev-equator-estate-estate
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/equator-estate
+    status: ACTIVE

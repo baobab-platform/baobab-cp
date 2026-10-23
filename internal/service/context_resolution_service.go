@@ -190,6 +190,23 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 	if err != nil {
 		return nil, domain.Context{}, fmt.Errorf("%w: %v", ErrIdentityResolutionFailed, err)
 	}
+	// ADR-SHARED-043 development callers are scoped by CP bootstrap, never by
+	// a caller-selected tenant. Missing assignment storage fails closed. This
+	// does not change the separately governed multi-tenant engine protocols.
+	var developmentLease *time.Time
+	if principal.ActorType == "workload" && auth.IsDevelopmentBootstrapClient(principal.ClientID) {
+		reader, ok := s.Identity.Repository.(interface {
+			DevelopmentTenantLease(context.Context, string, string, string, time.Time) (time.Time, error)
+		})
+		if !ok {
+			return nil, domain.Context{}, errors.New("development workload lease reader unavailable")
+		}
+		expiry, err := reader.DevelopmentTenantLease(ctx, resolvedPrincipal.ID, principal.ClientID, tenantID, now)
+		if err != nil || !expiry.After(now) {
+			return nil, domain.Context{}, errors.New("development workload not assigned to tenant or lease expired")
+		}
+		developmentLease = &expiry
+	}
 	principal.TenantID = tenantID
 	opCtx, trustedContext, err := auth.NewOperationContext(ctx, principal, resolvedPrincipal.ID, correlationID, now)
 	if err != nil {
@@ -255,6 +272,11 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 	}
 	if err := s.resolveMarket(ctx, &trustedContext, tenantID, now); err != nil {
 		return nil, domain.Context{}, err
+	}
+	// A derived Context cannot carry authority beyond its bootstrap run.
+	// This deadline is retained even when the HTTP caller configures no TTL.
+	if developmentLease != nil {
+		trustedContext.ExpiresAt = developmentLease
 	}
 	if err := trustedContext.Validate(); err != nil {
 		return nil, domain.Context{}, err

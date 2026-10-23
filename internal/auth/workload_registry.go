@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -31,6 +32,15 @@ type WorkloadRegistry interface {
 	IsActive(clientID string) (active bool)
 }
 
+// IsDevelopmentBootstrapClient identifies the closed ADR-SHARED-043 proof-only
+// client namespace. Never infer access from the prefix: each client still
+// requires an active CP-owned tenant assignment and unexpired run lease.
+func IsDevelopmentBootstrapClient(clientID string) bool {
+	return strings.HasPrefix(clientID, "baobab-dev-") ||
+		strings.HasPrefix(clientID, "baobab-int03c-") ||
+		strings.HasPrefix(clientID, "baobab-int03-cms-")
+}
+
 // StaticWorkloadRegistry is a WorkloadRegistry backed by an in-memory
 // snapshot, loaded once at process startup rather than fetched over the
 // network on every request (or even periodically) -- this repository has
@@ -44,6 +54,7 @@ type WorkloadRegistry interface {
 // default -- see api.Dependencies.WorkloadRegistry) disables the check
 // entirely, preserving exactly today's behavior until that snapshot exists.
 type StaticWorkloadRegistry struct {
+	environments     map[string]string
 	active           map[string]bool
 	allowedScopes    map[string]map[string]bool
 	reporters        map[string]ReporterScope
@@ -211,6 +222,19 @@ func (r *StaticWorkloadRegistry) IsActive(clientID string) bool {
 	return r.active[clientID]
 }
 
+// WorkloadEnvironmentRegistry prevents development bootstrap credentials from
+// being admitted by a protected or unspecified CP deployment.
+type WorkloadEnvironmentRegistry interface {
+	AllowsEnvironment(clientID, environment string) bool
+}
+
+func (r *StaticWorkloadRegistry) AllowsEnvironment(clientID, environment string) bool {
+	if !r.IsActive(clientID) {
+		return false
+	}
+	return r.environments[clientID] != "development" || environment == "development"
+}
+
 // workloadRegistryFile mirrors the subset of baobab-platform/shared's
 // contracts/identity/v1/workload-registry.yaml this repository actually
 // needs for request-time admission: lifecycle, allowed scopes, reporter
@@ -269,6 +293,7 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 		}
 	}
 	active := make(map[string]bool, len(parsed.Workloads))
+	environments := map[string]string{}
 	allowedScopes := make(map[string]map[string]bool, len(parsed.Workloads))
 	reporters := map[string]ReporterScope{}
 	runtimeObservers := map[string]ReporterScope{}
@@ -276,6 +301,7 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 	purposes := map[string][]string{}
 	subjects := map[string][]string{}
 	for clientID, entry := range parsed.Workloads {
+		environments[clientID] = entry.Environment
 		active[clientID] = entry.Status == "ACTIVE"
 		if active[clientID] {
 			allowedScopes[clientID] = make(map[string]bool, len(entry.AllowedScopes))
@@ -305,5 +331,5 @@ func LoadWorkloadRegistryFile(path string) (*StaticWorkloadRegistry, error) {
 			runtimeObservers[clientID] = ReporterScope{Environment: entry.Environment, Regions: slices.Clone(entry.DeploymentRegions)}
 		}
 	}
-	return &StaticWorkloadRegistry{active: active, allowedScopes: allowedScopes, reporters: reporters, runtimeObservers: runtimeObservers, validators: validators, purposes: purposes, subjects: subjects}, nil
+	return &StaticWorkloadRegistry{environments: environments, active: active, allowedScopes: allowedScopes, reporters: reporters, runtimeObservers: runtimeObservers, validators: validators, purposes: purposes, subjects: subjects}, nil
 }
