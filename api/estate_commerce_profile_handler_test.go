@@ -33,6 +33,7 @@ func (r commerceRegistry) AllowsScope(clientID, scope string) bool {
 type commerceStore struct {
 	profiles   []postgres.EstateCommerceProfile
 	provenance bool
+	assigned   bool
 	provErr    error
 	err        error
 	failRec    bool
@@ -56,6 +57,12 @@ func (s *commerceStore) EstateBindingProvenance(_ context.Context, caller, bindi
 		return false, errors.New("window not bounded")
 	}
 	return s.provenance, s.provErr
+}
+
+func (s *commerceStore) EstateAssignmentProvenance(_ context.Context, caller, attestation, estate, engine, market string,
+	_ time.Time) (bool, error) {
+	s.asked = append(s.asked, "assignment|"+caller+"|"+attestation+"|"+estate+"|"+engine+"|"+market)
+	return s.assigned, s.provErr
 }
 
 func (s *commerceStore) RecordEstateCommerceProfileResolution(_ context.Context, r postgres.EstateCommerceProfileResolution) error {
@@ -224,11 +231,12 @@ func TestEstateCommerceProfileRequiresVerifiedEstateProvenance(t *testing.T) {
 		status  int
 		code    string
 	}{
-		"no attestation for this caller, estate and engine": {func(f *commerceFixture) { f.store.provenance = false }, nil, http.StatusForbidden, "ESTATE_PROVENANCE_INVALID"},
-		"resource assignment is not yet governed":           {nil, commerceBody(map[string]any{"estate_provenance": map[string]any{"kind": "GOVERNED_RESOURCE_ASSIGNMENT", "reference": "assignment:synthetic"}}), http.StatusForbidden, "ESTATE_PROVENANCE_INVALID"},
-		"reference is not a binding":                        {nil, commerceBody(map[string]any{"estate_provenance": map[string]any{"kind": "ESTATE_CLIENT_BINDING", "reference": "zuribeans"}}), http.StatusForbidden, "ESTATE_PROVENANCE_INVALID"},
-		"sales channel is not provenance":                   {nil, commerceBody(map[string]any{"estate_provenance": map[string]any{"kind": "SALES_CHANNEL", "reference": "zuribeans"}}), http.StatusBadRequest, "VALIDATION_FAILED"},
-		"provenance outage":                                 {func(f *commerceFixture) { f.store.provErr = errors.New("down") }, nil, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE"},
+		"no attestation for this caller, estate and engine":   {func(f *commerceFixture) { f.store.provenance = false }, nil, http.StatusForbidden, "ESTATE_PROVENANCE_INVALID"},
+		"resource assignment reference is not an attestation": {nil, commerceBody(map[string]any{"estate_provenance": map[string]any{"kind": "GOVERNED_RESOURCE_ASSIGNMENT", "reference": "assignment:synthetic"}}), http.StatusForbidden, "ESTATE_PROVENANCE_INVALID"},
+		"resource assignment CP did not attest":               {nil, commerceBody(map[string]any{"estate_provenance": map[string]any{"kind": "GOVERNED_RESOURCE_ASSIGNMENT", "reference": estateBinding}}), http.StatusForbidden, "ESTATE_PROVENANCE_INVALID"},
+		"reference is not a binding":                          {nil, commerceBody(map[string]any{"estate_provenance": map[string]any{"kind": "ESTATE_CLIENT_BINDING", "reference": "zuribeans"}}), http.StatusForbidden, "ESTATE_PROVENANCE_INVALID"},
+		"sales channel is not provenance":                     {nil, commerceBody(map[string]any{"estate_provenance": map[string]any{"kind": "SALES_CHANNEL", "reference": "zuribeans"}}), http.StatusBadRequest, "VALIDATION_FAILED"},
+		"provenance outage":                                   {func(f *commerceFixture) { f.store.provErr = errors.New("down") }, nil, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -241,6 +249,27 @@ func TestEstateCommerceProfileRequiresVerifiedEstateProvenance(t *testing.T) {
 				t.Fatalf("status = %d code = %q, want %d %s: %s", res.Code, problemCode(t, res), tc.status, tc.code, res.Body.String())
 			}
 		})
+	}
+}
+
+func TestEstateCommerceProfileAcceptsVerifiedAssignmentProvenance(t *testing.T) {
+	f := newCommerceFixture()
+	f.store.provenance, f.store.assigned = false, true
+	res := f.post(t, commerceBody(map[string]any{"estate_provenance": map[string]any{
+		"kind": "GOVERNED_RESOURCE_ASSIGNMENT", "reference": estateBinding}}))
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", res.Code, res.Body.String())
+	}
+	want := "assignment|" + commerceCaller + "|" + estateBinding + "|" + estateID + "|" + estateEngine + "|" + commerceMarket
+	if len(f.store.asked) != 1 || f.store.asked[0] != want {
+		t.Fatalf("provenance was checked as %v, want %s", f.store.asked, want)
+	}
+	// A binding attestation never stands in for an assignment, or the reverse.
+	f = newCommerceFixture()
+	f.store.provenance, f.store.assigned = true, false
+	if res := f.post(t, commerceBody(map[string]any{"estate_provenance": map[string]any{
+		"kind": "GOVERNED_RESOURCE_ASSIGNMENT", "reference": estateBinding}})); res.Code != http.StatusForbidden {
+		t.Fatalf("an unverified assignment was accepted: %d", res.Code)
 	}
 }
 

@@ -951,6 +951,51 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
+  - name: "estate:resource-assignment:resolve"
+    description: >-
+      Read-only attestation that one non-BFF native commitment operation has
+      governed Digital Estate provenance through an ACTIVE, approved
+      EstateResourceAssignment (control-plane/v1
+      estate-resource-assignment.openapi.yaml; ADR-SHARED-042 section 14,
+      Decision 9). It establishes estate provenance only and grants no
+      seller, buyer, market or purchasing authority. Allocated to no
+      workload.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
+  - name: "estate:resource-assignment:write"
+    description: >-
+      Propose, read, suspend and revoke governed estate resource assignments
+      (ADR-SHARED-042 section 14, Decision 9). Privileged; the actor is
+      always the verified caller. A proposal is never attested. Granted to
+      no role.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "estate:resource-assignment:approve"
+    description: >-
+      Approve or reinstate a governed estate resource assignment (PROPOSED or
+      SUSPENDED to ACTIVE). Privileged; four-eyes: never the assignment's
+      proposer. Granted to no role.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["human"]
+    privileged: true
+
+  - name: "trade:native-commitment:submit"
+    description: >-
+      Identifies an authenticated server application (for example an estate's
+      server-side checkout) to Trade when it submits a native commitment
+      outside a BFF (ADR-SHARED-042 section 14, Decision 9). Trade presents
+      the token to the Control Plane as WORKLOAD evidence; it is identity, not
+      authority: estate provenance comes only from an approved CP resource
+      assignment and the commerce model only from the CP estate commerce
+      profile. Never a Medusa key. Allocated to no workload.
+    audience: ["baobab-trade"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
   - name: "trade:buyer-handoff"
     description: >-
       Lets a registered confidential estate BFF present a human buyer's IAM

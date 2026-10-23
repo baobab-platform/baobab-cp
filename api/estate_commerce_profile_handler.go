@@ -42,6 +42,8 @@ type estateCommerceProfileStore interface {
 	EstateCommerceProfiles(ctx context.Context, digitalEstateID string) ([]postgres.EstateCommerceProfile, error)
 	EstateBindingProvenance(ctx context.Context, callerClientID, bindingID, digitalEstateID, engineInstanceID string,
 		since time.Time) (bool, error)
+	EstateAssignmentProvenance(ctx context.Context, callerClientID, attestationID, digitalEstateID, engineInstanceID,
+		marketID string, now time.Time) (bool, error)
 	RecordEstateCommerceProfileResolution(context.Context, postgres.EstateCommerceProfileResolution) error
 }
 
@@ -176,16 +178,28 @@ func (h estateCommerceProfileHandler) resolve(w http.ResponseWriter, r *http.Req
 	}
 
 	// Provenance first: CP never classifies an estate the caller has not
-	// shown it is acting for. Only an estate client binding attestation this
-	// caller obtained for this estate and engine instance within its
-	// lifetime counts. No governed resource-assignment registry exists yet,
-	// so that kind is refused rather than trusted.
-	if req.EstateProvenance.Kind != "ESTATE_CLIENT_BINDING" || !bindingReferencePattern.MatchString(req.EstateProvenance.Reference) {
+	// shown it is acting for, and re-verifies it from its own record:
+	//   - ESTATE_CLIENT_BINDING (BFF, ADR-BCP-029): an ATTESTED binding
+	//     resolution this caller obtained for this estate and engine
+	//     instance within its lifetime;
+	//   - GOVERNED_RESOURCE_ASSIGNMENT (non-BFF, Decision 9, ADR-BCP-031): a
+	//     current ATTESTED assignment resolution this caller obtained for
+	//     this estate, engine instance and Market, whose assignment is still
+	//     ACTIVE at the attested revision.
+	if !bindingReferencePattern.MatchString(req.EstateProvenance.Reference) {
 		refuse("ESTATE_PROVENANCE_INVALID", "the estate provenance could not be verified")
 		return
 	}
-	proven, err := h.store.EstateBindingProvenance(r.Context(), p.ClientID, req.EstateProvenance.Reference,
-		req.DigitalEstateID, req.EngineInstanceID, now.Add(-bindingProvenanceWindow))
+	var proven bool
+	var err error
+	switch req.EstateProvenance.Kind {
+	case "ESTATE_CLIENT_BINDING":
+		proven, err = h.store.EstateBindingProvenance(r.Context(), p.ClientID, req.EstateProvenance.Reference,
+			req.DigitalEstateID, req.EngineInstanceID, now.Add(-bindingProvenanceWindow))
+	case "GOVERNED_RESOURCE_ASSIGNMENT":
+		proven, err = h.store.EstateAssignmentProvenance(r.Context(), p.ClientID, req.EstateProvenance.Reference,
+			req.DigitalEstateID, req.EngineInstanceID, req.MarketID, now)
+	}
 	if err != nil {
 		h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "the estate provenance is unavailable")
 		return

@@ -118,6 +118,10 @@ type Config struct {
 	// resolution (ESTATE_COMMERCE_PROFILE_ENABLED). Default off; development
 	// or staging only.
 	EstateCommerceProfileEnabled bool
+	// EstateResourceAssignmentEnabled mounts ADR-SHARED-042 Decision 9 governed
+	// estate resource assignment (ESTATE_RESOURCE_ASSIGNMENT_ENABLED). Default
+	// off; development or staging only.
+	EstateResourceAssignmentEnabled bool
 	// OrganisationFirstV2Enabled mounts the LA-03 Organisation-first tenant
 	// onboarding routes (/v2/tenant-onboarding/.../primary-organisation and
 	// /v2/tenants). Default false (ORGANISATION_FIRST_V2_ENABLED). Even when
@@ -200,6 +204,7 @@ func Load() (Config, error) {
 	c.BuyerRegistrationAuthorisedParties = strings.Split(os.Getenv("BUYER_REGISTRATION_AUTHORISED_PARTIES"), ",")
 	c.EstateClientBindingEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("ESTATE_CLIENT_BINDING_ENABLED")), "true")
 	c.EstateCommerceProfileEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("ESTATE_COMMERCE_PROFILE_ENABLED")), "true")
+	c.EstateResourceAssignmentEnabled = strings.EqualFold(strings.TrimSpace(os.Getenv("ESTATE_RESOURCE_ASSIGNMENT_ENABLED")), "true")
 	c.OrganisationFirstV2Enabled = strings.EqualFold(strings.TrimSpace(os.Getenv("ORGANISATION_FIRST_V2_ENABLED")), "true")
 	c.FederationSourceEngineInstanceID = os.Getenv("FEDERATION_SOURCE_ENGINE_INSTANCE_ID")
 	c.WorkloadRegistryFile = strings.TrimSpace(os.Getenv("WORKLOAD_REGISTRY_FILE"))
