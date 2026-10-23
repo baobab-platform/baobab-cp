@@ -385,3 +385,16 @@ func TestDevelopmentEnvironmentBoundary(t *testing.T) {
 		t.Fatal("protected registration changed")
 	}
 }
+
+func TestDevelopmentBootstrapClientClassification(t *testing.T) {
+	for _, id := range []string{"baobab-dev-nabhold-estate", "baobab-int03c-issuer-owner", "baobab-int03-cms-validator"} {
+		if !IsDevelopmentBootstrapClient(id) {
+			t.Fatalf("development client %s not classified", id)
+		}
+	}
+	for _, id := range []string{"baobab-trade", "baobab-cms", "baobab-int03", ""} {
+		if IsDevelopmentBootstrapClient(id) {
+			t.Fatalf("production client %s misclassified", id)
+		}
+	}
+}
