@@ -181,6 +181,10 @@ type Dependencies struct {
 	// estate provenance from CP's own estate client binding resolutions.
 	EstateCommerceProfileEnabled bool
 	EstateCommerceProfiles       estateCommerceProfileStore
+	// ADR-SHARED-042 Decision 9 (ADR-BCP-031): governed estate resource
+	// assignment and its attestation. Default off, development and staging only.
+	EstateResourceAssignmentEnabled bool
+	EstateResourceAssignments       estateResourceAssignmentStore
 	// P0-02B is a separate default-off private scanner boundary. Its verifier
 	// MUST compose current token introspection and fresh registry authority.
 	ScannerIntakeEnabled bool
@@ -993,6 +997,23 @@ func New(dependencies Dependencies) http.Handler {
 		h := estateCommerceProfileHandler{api: a, store: dependencies.EstateCommerceProfiles, now: time.Now}
 		r.With(a.authorize(a.workloadVerifier, "workload", estateCommerceProfileScope)).
 			Post("/internal/estate/v1/commerce-profiles/resolve", h.resolve)
+	}
+	// Decision 9: the same nonproduction boundary. Humans govern assignments
+	// (four-eyes); a Trade workload resolves them for one native commitment.
+	if dependencies.EstateResourceAssignmentEnabled && peoRoutesPermittedIn(dependencies.Environment) &&
+		(dependencies.Environment == "development" || dependencies.Environment == "staging") &&
+		dependencies.WorkloadRegistry != nil && dependencies.EstateResourceAssignments != nil {
+		h := estateResourceAssignmentHandler{api: a, store: dependencies.EstateResourceAssignments,
+			clients: dependencies.BuyerSubjects, introspector: dependencies.BuyerSubjectIntrospector, now: time.Now}
+		r.With(a.authorize(a.workloadVerifier, "workload", estateAssignmentResolveScope)).
+			Post("/internal/estate/v1/resource-assignments/resolve", h.resolve)
+		r.With(a.authorize(a.adminVerifier, "human", estateAssignmentWriteScope), a.requireAdminRole(nil, true)).
+			Post("/v1/estate/resource-assignments", h.propose)
+		r.With(a.authorize(a.adminVerifier, "human", estateAssignmentWriteScope), a.requireAdminRole(nil, true)).
+			Get("/v1/estate/resource-assignments/{assignmentID}", h.get)
+		r.With(a.authorize(a.adminVerifier, "human", estateAssignmentWriteScope+"|"+estateAssignmentApproveScope),
+			a.requireAdminRole(nil, true)).
+			Post("/v1/estate/resource-assignments/{assignmentID}/transitions", h.transition)
 	}
 	// P0-04B Trade-0 grants a CP legal-actor FACT for one Trade operation under
 	// one ACTIVE CP Seller Operating Binding, never provider, money-movement or
