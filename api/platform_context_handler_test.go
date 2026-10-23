@@ -61,7 +61,8 @@ func TestPlatformContextHandlerCapsDevelopmentLease(t *testing.T) {
 			}
 			req := httptest.NewRequest(http.MethodPost, "/v1/platform-context/resolve",
 				bytes.NewReader([]byte(`{"tenant_id":"tenant-123"}`)))
-			req = req.WithContext(auth.WithPrincipal(context.Background(), principal))
+			requestContext := context.WithValue(context.Background(), correlationKey{}, "00000000-0000-4000-8000-000000000043")
+			req = req.WithContext(auth.WithPrincipal(requestContext, principal))
 			w := httptest.NewRecorder()
 			handler.Resolve(w, req)
 			if w.Code != http.StatusOK {
