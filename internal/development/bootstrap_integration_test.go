@@ -167,9 +167,14 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 			t.Fatal("workload inherited external tenant membership")
 		}
 	}
-	var active int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM topology.engine_instance WHERE status='ACTIVE' OR health_status='HEALTHY'`).Scan(&active); err != nil || active != 0 {
-		t.Fatal("bootstrap invented provider readiness")
+	// The topology table records lifecycle status, not a health_status column.
+	// A fixture may register PROVISIONING instances but must never seed an
+	// ACTIVE or otherwise purportedly qualified runtime provider.
+	var notProvisioning int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM topology.engine_instance WHERE status <> 'PROVISIONING'`).Scan(&notProvisioning); err != nil {
+		t.Fatalf("query fixture provider lifecycle: %v", err)
+	} else if notProvisioning != 0 {
+		t.Fatalf("bootstrap invented qualified providers: %d non-PROVISIONING instances", notProvisioning)
 	}
 	// Exercise CP's real existing maker/checker mechanism using synthetic actors.
 	// Bootstrap did not weaken its SQL enforcement or substitute a PASS receipt.
