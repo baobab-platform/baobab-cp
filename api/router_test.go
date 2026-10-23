@@ -111,6 +111,27 @@ func TestResolveContext(t *testing.T) {
 	}
 }
 
+// ADR-SHARED-043: the legacy entitlement context route cannot verify leased
+// tenant assignments. Development clients must use canonical platform context
+// resolution even if the requested sibling has a valid product entitlement.
+func TestResolveContextRejectsDevelopmentBootstrapClient(t *testing.T) {
+	for _, clientID := range []string{"baobab-dev-nabhold-estate", "baobab-int03c-issuer-owner", "baobab-int03-cms-consumer"} {
+		t.Run(clientID, func(t *testing.T) {
+			store := &fakeStore{}
+			principal := workloadPrincipal()
+			principal.ClientID = clientID
+			handler := New(Dependencies{Store: store, WorkloadVerifier: fakeVerifier{principal: principal}})
+			req := httptest.NewRequest(http.MethodPost, "/v1/context/resolve", strings.NewReader(`{"tenant_id":"tn_sibling","product_id":"baobab_trade"}`))
+			req.Header.Set("Authorization", "Bearer development-token")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, req)
+			if response.Code != http.StatusForbidden || store.resolvedCalls != 0 {
+				t.Fatalf("legacy route reached store for %s: status=%d calls=%d body=%s", clientID, response.Code, store.resolvedCalls, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestResolveContextFailsClosed(t *testing.T) {
 	store := &fakeStore{resolveErr: store.ErrContextDenied}
 	handler := New(Dependencies{Store: store, WorkloadVerifier: fakeVerifier{principal: workloadPrincipal()}})
