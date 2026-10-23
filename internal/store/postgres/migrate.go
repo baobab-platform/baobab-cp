@@ -167,6 +167,7 @@ var canonicalMigrationNames = []string{
 	"000130_int03c_principal_deactivation.sql",
 	"000131_estate_commerce_profile.sql",
 	"000132_estate_resource_assignment.sql",
+	"000133_development_bootstrap_run.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {
