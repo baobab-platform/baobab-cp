@@ -30,6 +30,13 @@ func (a *API) resolveContext(w http.ResponseWriter, r *http.Request) {
 	}
 
 	principal, _ := auth.PrincipalFromContext(r.Context())
+	// Legacy product-entitlement resolution bypasses canonical ContextResolutionService.
+	// ADR-SHARED-043 bootstrap workloads must never use this incompatible path;
+	// canonical platform and capability resolution remain available with assignment checks.
+	if principal.ActorType == "workload" && auth.IsDevelopmentBootstrapClient(principal.ClientID) {
+		problem(w, r, http.StatusForbidden, "DEVELOPMENT_CONTEXT_ROUTE_DISABLED", "development workloads must use governed platform context resolution", false)
+		return
+	}
 	tenantID, ok := resolveWorkloadTenant(principal.TenantID, command.TenantID)
 	if !ok {
 		problem(w, r, http.StatusForbidden, "TENANT_CONTEXT_MISMATCH", "requested tenant does not match verified workload identity", false)
