@@ -1,0 +1,65 @@
+# One-time, branch-scoped security lock refresh for CP #430.
+# This workflow is REMOVED as soon as the trusted registry-authenticated
+# pnpm resolution has been committed. Not an ongoing elevated CI path.
+name: CP 430 console security lock refresh
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/repair-console-next-lock.yml"
+      - "frontend/package.json"
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: cp430-security-lock-refresh
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    if: ${{ github.event.pull_request.number == 430 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'ccr-01b461f9-9j6zi3' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Only the verified same-repo PR branch, never a merge ref or fork.
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: frontend/.node-version
+          registry-url: https://npm.pkg.github.com
+          scope: "@baobab-platform"
+      - run: corepack enable
+      - name: Require the exact advisory-patched manifests
+        run: |
+          node -e 'const p=require("./frontend/package.json");if(p.dependencies.next!=="16.4.1"||p.devDependencies["eslint-config-next"]!=="16.4.1")process.exit(1)'
+      - name: Resolve genuine package integrity via authorised registries
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
+      - name: Verify fresh dependency tree and security
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm audit --audit-level high
+          pnpm --filter @baobab-platform/cp-console check:cp-client
+      - name: Commit only the resolver-produced lockfile to the same PR
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          if [[ ! -s pnpm-lock.yaml ]] || ! grep -q 'specifier: 16.4.1' pnpm-lock.yaml; then
+            echo "::error::No valid resolver-produced Next 16.4.1 lockfile"
+            exit 1
+          fi
+          if git diff --quiet -- pnpm-lock.yaml; then
+            echo "::error::Dependency manifest changed but resolver produced no lock update"
+            exit 1
+          fi
+          git diff --name-only | grep -vx 'pnpm-lock.yaml' && { echo "::error::Unexpected modified file"; exit 1; } || true
+          git add pnpm-lock.yaml
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix(console): regenerate Next.js 16.4.1 lockfile from trusted registry'
+          git push origin "HEAD:refs/heads/${HEAD_BRANCH}"
