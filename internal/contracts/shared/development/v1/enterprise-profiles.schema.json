@@ -1,0 +1,657 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/development/v1/enterprise-profiles.schema.json",
+  "title": "Isolated synthetic development enterprise profiles",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "environment",
+    "synthetic_only",
+    "max_lease_seconds",
+    "profiles"
+  ],
+  "properties": {
+    "schema": {
+      "const": "baobab.development-enterprise-profiles.v1"
+    },
+    "environment": {
+      "const": "development"
+    },
+    "synthetic_only": {
+      "const": true
+    },
+    "max_lease_seconds": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 86400
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "display_name",
+          "business_model",
+          "markets",
+          "required_engines",
+          "optional_engines",
+          "estate"
+        ],
+        "properties": {
+          "key": {
+            "enum": [
+              "nabhold",
+              "zuribeans",
+              "thamani",
+              "equator-estate",
+              "external-client"
+            ]
+          },
+          "display_name": {
+            "type": "string",
+            "pattern": "^Synthetic .+",
+            "maxLength": 120
+          },
+          "business_model": {
+            "enum": [
+              "NON_TRADING_HOLDING",
+              "B2B_TRADE",
+              "B2B_LOGISTICS",
+              "PROPERTY",
+              "EXTERNAL_CLIENT"
+            ]
+          },
+          "markets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "ZA",
+                "UG"
+              ]
+            }
+          },
+          "required_engines": {
+            "type": "array",
+            "minItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "baobab-cp",
+                "baobab-iam",
+                "baobab-cms",
+                "baobab-erp",
+                "baobab-trade",
+                "baobab-pulse",
+                "baobab-subscriptions",
+                "baobab-payments",
+                "baobab-regulations",
+                "baobab-trade-docs",
+                "baobab-tms",
+                "baobab-people",
+                "baobab-scf"
+              ]
+            },
+            "allOf": [
+              {
+                "contains": {
+                  "const": "baobab-cp"
+                }
+              },
+              {
+                "contains": {
+                  "const": "baobab-iam"
+                }
+              }
+            ]
+          },
+          "optional_engines": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "baobab-cp",
+                "baobab-iam",
+                "baobab-cms",
+                "baobab-erp",
+                "baobab-trade",
+                "baobab-pulse",
+                "baobab-subscriptions",
+                "baobab-payments",
+                "baobab-regulations",
+                "baobab-trade-docs",
+                "baobab-tms",
+                "baobab-people",
+                "baobab-scf"
+              ]
+            }
+          },
+          "estate": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "key",
+                  "cms_client_id"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]+-development$"
+                  },
+                  "cms_client_id": {
+                    "type": "string",
+                    "pattern": "^baobab-dev-[a-z][a-z0-9-]+-estate$"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "key": {
+                  "const": "nabhold"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "business_model": {
+                  "const": "NON_TRADING_HOLDING"
+                },
+                "estate": {
+                  "const": {
+                    "key": "nabhold-development",
+                    "cms_client_id": "baobab-dev-nabhold-estate"
+                  }
+                },
+                "required_engines": {
+                  "items": {
+                    "not": {
+                      "enum": [
+                        "baobab-trade",
+                        "baobab-tms",
+                        "baobab-scf"
+                      ]
+                    }
+                  }
+                },
+                "optional_engines": {
+                  "items": {
+                    "not": {
+                      "enum": [
+                        "baobab-trade",
+                        "baobab-tms",
+                        "baobab-scf"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "key": {
+                  "const": "zuribeans"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "business_model": {
+                  "const": "B2B_TRADE"
+                },
+                "estate": {
+                  "const": {
+                    "key": "zuribeans-development",
+                    "cms_client_id": "baobab-dev-zuribeans-estate"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "key": {
+                  "const": "thamani"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "business_model": {
+                  "const": "B2B_LOGISTICS"
+                },
+                "estate": {
+                  "const": {
+                    "key": "thamani-development",
+                    "cms_client_id": "baobab-dev-thamani-estate"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "key": {
+                  "const": "equator-estate"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "business_model": {
+                  "const": "PROPERTY"
+                },
+                "estate": {
+                  "const": {
+                    "key": "equator-estate-development",
+                    "cms_client_id": "baobab-dev-equator-estate-estate"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "key": {
+                  "const": "external-client"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "business_model": {
+                  "const": "EXTERNAL_CLIENT"
+                },
+                "estate": {
+                  "const": null
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "estate": {
+                  "type": "object"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-cms"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-cp"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-cp"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-iam"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-iam"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-cms"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-cms"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-erp"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-erp"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-trade"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-trade"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-pulse"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-pulse"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-subscriptions"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-subscriptions"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-payments"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-payments"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-regulations"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-regulations"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-trade-docs"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-trade-docs"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-tms"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-tms"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-people"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-people"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "required_engines": {
+                  "contains": {
+                    "const": "baobab-scf"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "optional_engines": {
+                  "not": {
+                    "contains": {
+                      "const": "baobab-scf"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "key": {
+                "const": "nabhold"
+              }
+            }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "key": {
+                "const": "zuribeans"
+              }
+            }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "key": {
+                "const": "thamani"
+              }
+            }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "key": {
+                "const": "equator-estate"
+              }
+            }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "key": {
+                "const": "external-client"
+              }
+            }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        }
+      ]
+    }
+  }
+}

@@ -357,3 +357,31 @@ func TestSharedRegistryProvisionerPurposeIsScopedToApprovedEvidence(t *testing.T
 		}
 	}
 }
+
+func TestDevelopmentEnvironmentBoundary(t *testing.T) {
+	registry, err := LoadWorkloadRegistryFile(writeTestRegistry(t, `workloads:
+  baobab-dev-nabhold-estate:
+    status: ACTIVE
+    environment: development
+  protected:
+    status: ACTIVE
+    environment: production
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, environment := range []string{"", "ci", "test", "staging", "production"} {
+		if registry.AllowsEnvironment("baobab-dev-nabhold-estate", environment) {
+			t.Fatalf("development credential accepted in %q", environment)
+		}
+	}
+	if !registry.AllowsEnvironment("baobab-dev-nabhold-estate", "development") {
+		t.Fatal("development rejected")
+	}
+	if registry.AllowsEnvironment("unknown", "development") {
+		t.Fatal("unknown credential accepted")
+	}
+	if !registry.AllowsEnvironment("protected", "production") {
+		t.Fatal("protected registration changed")
+	}
+}

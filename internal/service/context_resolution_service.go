@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
@@ -189,6 +190,22 @@ func (s ContextResolutionService) resolve(ctx context.Context, principal auth.Pr
 	resolvedPrincipal, err := s.Identity.Resolve(ctx, principal.Issuer, principal.Subject, principal.ActorType)
 	if err != nil {
 		return nil, domain.Context{}, fmt.Errorf("%w: %v", ErrIdentityResolutionFailed, err)
+	}
+	// ADR-SHARED-043 development callers are scoped by CP bootstrap, never by
+	// a caller-selected tenant. Missing assignment storage fails closed. This
+	// does not change the separately governed multi-tenant engine protocols.
+	if principal.ActorType == "workload" && (strings.HasPrefix(principal.ClientID, "baobab-dev-") ||
+		strings.HasPrefix(principal.ClientID, "baobab-int03c-") || strings.HasPrefix(principal.ClientID, "baobab-int03-cms-")) {
+		reader, ok := s.Identity.Repository.(interface {
+			DevelopmentTenantAllowed(context.Context, string, string, string, time.Time) (bool, error)
+		})
+		if !ok {
+			return nil, domain.Context{}, errors.New("development workload assignment unavailable")
+		}
+		allowed, err := reader.DevelopmentTenantAllowed(ctx, resolvedPrincipal.ID, principal.ClientID, tenantID, now)
+		if err != nil || !allowed {
+			return nil, domain.Context{}, errors.New("development workload not assigned to tenant or lease expired")
+		}
 	}
 	principal.TenantID = tenantID
 	opCtx, trustedContext, err := auth.NewOperationContext(ctx, principal, resolvedPrincipal.ID, correlationID, now)
