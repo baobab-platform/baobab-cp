@@ -49,10 +49,8 @@
         "UG"
       ],
       "requirements": {
-        "operates_b2c": true,
-        "sells_online": true,
-        "manages_inventory": true,
-        "notes": "B2C and shipping/logistics business intent. Uganda incorporation pending; no live carrier or payment authority."
+        "operates_b2b": true,
+        "notes": "B2B integrated logistics-service intent under Accepted ADR-THA-0018. Customer Organisations contract for logistics outcomes; individual consignees and recipients are not proof of B2C commerce. Uganda incorporation pending; no live carrier, customs, payment, or market authority."
       }
     },
     {

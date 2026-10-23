@@ -25,6 +25,11 @@ class NBOFixtureTest(unittest.TestCase):
         self.assertIsNone(by_key["EQUATOR-ESTATE"]["jurisdiction_claim"])
         self.assertEqual(by_key["NABHOLD"]["reported_incorporation"], "REGISTERED_CLAIM_ZA")
         self.assertEqual(by_key["THAMANI-GLOBAL"]["reported_incorporation"], "REGISTERED_CLAIM_ZA")
+        # ADR-THA-0018: receiving a parcel does not make the contractual customer B2C.
+        thamani_requirements = by_key["THAMANI-GLOBAL"]["requirements"]
+        self.assertIs(thamani_requirements["operates_b2b"], True)
+        self.assertNotIn("operates_b2c", thamani_requirements)
+        self.assertNotIn("sells_online", thamani_requirements)
         for org in self.rows:
             self.assertNotIn("registration_identifier", org)
             self.assertNotIn("verified", org)

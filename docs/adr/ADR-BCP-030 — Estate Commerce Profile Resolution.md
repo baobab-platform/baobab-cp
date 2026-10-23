@@ -3,11 +3,11 @@
 **Status:** Proposed — the Control Plane's implementation record for ADR-SHARED-042 §14 Decision 8 (CP registry and attestation step)  
 **Governing decision:** Shared ADR-SHARED-042 §14 Decision 8, Platform Owner ruling of 22 October 2026. Where this record and ADR-SHARED-042 differ, ADR-SHARED-042 governs.  
 **Date:** 2026-10-22  
-**Canonical contracts:** `baobab-platform/shared` at `742295e2b4f67a3de6d985e7da6bd89ed0be39cb`:
+**Canonical contracts:** `baobab-platform/shared` at `1517429bcae601a1b0288ca0279e524ce48a3d77` (merged Shared #370; pinned and vendored on the current CP `main`):
 - `control-plane/v1/estate-commerce-profile.schema.json` and `.openapi.yaml`;
 - scope `estate:commerce-profile:resolve` (registered, unallocated).
 
-**Implementation state:** Source only, behind a default-off switch, in development and staging only. No workload holds `estate:commerce-profile:resolve`, and no profile is registered: the intended ZuriBeans (B2B) and Thamani (B2C) profiles are governed CP onboarding steps, not part of this change. There is no connected acceptance. This is not `REAL_COMPONENT_SYNTHETIC_DATA`, `PROTECTED_STAGING` or production acceptance (ADR-SHARED-042 §12), and it does not satisfy ZB-G03 or ZB-G07 on its own.
+**Implementation state:** Source only, behind a default-off switch, in development and staging only. No workload holds `estate:commerce-profile:resolve`, and no profile is registered: the intended ZuriBeans (B2B) profile is a governed CP onboarding step, not part of this change. Thamani's intended model is B2B integrated logistics under Accepted ADR-THA-0018; its retired B2C storefront is not a profile onboarding candidate. There is no connected acceptance. This is not `REAL_COMPONENT_SYNTHETIC_DATA`, `PROTECTED_STAGING` or production acceptance (ADR-SHARED-042 §12), and it does not satisfy ZB-G03 or ZB-G07 on its own.
 
 ---
 
@@ -80,7 +80,7 @@ CP checks, in order:
 ## 5. Outstanding before activation
 
 - **Registry allocation:** granting the Trade workload `estate:commerce-profile:resolve` through the reviewed Shared registry process. The canonical registry activation hold remains in place.
-- **Governed onboarding:** registering the ZuriBeans B2B and Thamani B2C profiles, with real approval references, through the reviewed CP process.
+- **Governed onboarding:** registering only independently approved estate commerce profiles through the reviewed CP process. ZuriBeans is intended B2B; Thamani's current approved direction is B2B logistics (ADR-THA-0018), not legacy B2C checkout. Do not register any profile without a governed, compatible native Trade commitment and market/engine evidence. No profile is registered by this documentation correction.
 - **Governed write path:** a command for creating, suspending, superseding and revoking profiles.
 - **Resource assignment:** a governed registry for non-BFF provenance (jobs, workflows, callbacks).
 - **Market mapping:** reconciling `market_scope` ids with CP's Market catalogue.

@@ -74,7 +74,7 @@ Initial sponsored roster (group-governance business declarations as of 2026-10-0
 | Organisation | Intended business context | Declared legal/evidence position |
 |---|---|---|
 | Nabhold Group Africa | Registered holding company and proposed legal operating principal for named first-party businesses | Group declares South African incorporation; separately reconcile its official registration evidence and applicable authority |
-| Thamani Global | Independent incorporated B2C/logistics subsidiary of Nabhold | Group declares CIPC registration. Independently verify company registration and Nabhold's corporate relationship before marking either assertion VERIFIED |
+| Thamani Global | Independent incorporated B2B integrated logistics subsidiary of Nabhold (ADR-THA-0018) | Group declares CIPC registration. Independently verify company registration and Nabhold's corporate relationship before marking either assertion VERIFIED |
 | ZuriBeans | Independently operated B2B/cross-border trade business awaiting incorporation | Group expressly declares not separately incorporated. Nabhold is the proposed legally responsible actor for enumerated authorised activities; never manufacture a corporate registration |
 | Equator & Estate Co. | Independently operated property, construction and hospitality business awaiting incorporation | Group expressly declares not separately incorporated. Nabhold is the proposed legally responsible actor for enumerated authorised activities; no implied property, licensing or statutory permissions |
 
