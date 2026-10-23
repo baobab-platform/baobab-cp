@@ -142,11 +142,11 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		if err != nil {
 			t.Fatalf("real CP own-context service: %v", err)
 		}
-		if boundedContext.ExpiresAt == nil || !boundedContext.ExpiresAt.Equal(result.ExpiresAt) {
+		if boundedContext.ExpiresAt == nil || boundedContext.ExpiresAt.Sub(result.ExpiresAt).Abs() > time.Microsecond {
 			t.Fatalf("development context must expire with bootstrap lease: %+v", boundedContext.ExpiresAt)
 		}
 		lease, err := repo.DevelopmentTenantLease(ctx, e.PrincipalID, e.ClientID, e.TenantID, cfg.Now)
-		if err != nil || !lease.Equal(result.ExpiresAt) {
+		if err != nil || lease.Sub(result.ExpiresAt).Abs() > time.Microsecond {
 			t.Fatalf("authoritative tenant lease: expiry=%s err=%v", lease, err)
 		}
 		if _, err = repo.DevelopmentTenantLease(ctx, e.PrincipalID, e.ClientID, e.TenantID, result.ExpiresAt); err == nil {
