@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +30,15 @@ type WorkloadRegistry interface {
 	// §44 ("an orphaned IAM client is a security defect"), the registry is
 	// the sole source of truth here; there is no default-allow case.
 	IsActive(clientID string) (active bool)
+}
+
+// IsDevelopmentBootstrapClient identifies the closed ADR-SHARED-043 proof-only
+// client namespace. Never infer access from the prefix: each client still
+// requires an active CP-owned tenant assignment and unexpired run lease.
+func IsDevelopmentBootstrapClient(clientID string) bool {
+	return strings.HasPrefix(clientID, "baobab-dev-") ||
+		strings.HasPrefix(clientID, "baobab-int03c-") ||
+		strings.HasPrefix(clientID, "baobab-int03-cms-")
 }
 
 // StaticWorkloadRegistry is a WorkloadRegistry backed by an in-memory
