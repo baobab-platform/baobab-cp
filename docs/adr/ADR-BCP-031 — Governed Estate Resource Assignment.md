@@ -52,18 +52,18 @@ The subject is bound to an estate, a Tenant, an engine instance, a Market scope,
 The trigger enforces these rules on every write, whatever path it comes from:
 - **Insert.** An insert must be PROPOSED at revision 1, by an ACTIVE human Principal. The Tenant must be the estate's single governed commerce-profile Tenant. An estate with no profile, or with profiles under two Tenants, cannot be assigned.
 - **Immutable scope.** The subject, estate, Tenant, engine instance, Markets, operations, interval and proposer never change. Once set, the approver never changes either. A different scope is a new assignment.
-- **Transitions.** Every update moves the revision up by exactly one. Each update must be backed, in the same transaction, by this transaction's own immutable `estate_resource_assignment_transition` row, performed by an ACTIVE human. The allowed transitions are:
+- **Transitions.** Every update moves the revision up by exactly one. Each update must be backed by an immutable `estate_resource_assignment_transition` row, performed by an ACTIVE human, that this same transaction inserted. The row's `xmin` proves that, not its writer-supplied timestamp, so a transition committed ahead of time never counts. The allowed transitions are:
   - APPROVE: PROPOSED → ACTIVE
   - SUSPEND: ACTIVE → SUSPENDED
   - REINSTATE: SUSPENDED → ACTIVE
   - REVOKE: any status → REVOKED
 - **Four-eyes.** The proposer can never perform APPROVE or REINSTATE. APPROVE records the performer as `approved_by`.
-- **Terminal and permanent.** REVOKED is terminal. Rows are never deleted or truncated.
+- **Terminal and permanent.** REVOKED is terminal. Rows are never deleted or truncated; all four tables carry delete and truncate guards.
 - **No overlap.** Two ACTIVE assignments never cover the same subject, engine instance, operation and Market over overlapping intervals. This is checked under an advisory lock and surfaces as `ASSIGNMENT_OVERLAP`.
 
 ### Supporting tables
 
-- **`estate_resource_assignment_command`** makes propose and transition idempotent. It is keyed by the actor and the `Idempotency-Key`. Reusing a key with a different request is refused.
+- **`estate_resource_assignment_command`** makes propose and transition idempotent. It is keyed by the actor and the `Idempotency-Key`. Reusing a key with a different request is refused. A replay answers with the exact result the command recorded, never the assignment's later state.
 - **`estate_resource_assignment_resolution`** stores every resolve answer as immutable evidence. An ATTESTED answer, and only an ATTESTED answer, names the assignment, its revision and its Tenant, and expires no more than 60 s after it was resolved.
 
 ## 3. Resolution: `POST /internal/estate/v1/resource-assignments/resolve`

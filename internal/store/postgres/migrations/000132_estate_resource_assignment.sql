@@ -97,12 +97,19 @@ CREATE TABLE registry.estate_resource_assignment_command (
     request_digest char(64) NOT NULL CHECK (request_digest ~ '^[0-9a-f]{64}$'),
     assignment_id uuid NOT NULL REFERENCES registry.estate_resource_assignment(assignment_id),
     result_revision integer NOT NULL,
+    -- The exact assignment this command returned; a replay answers with it,
+    -- never with the assignment's later state.
+    result jsonb NOT NULL CHECK (jsonb_typeof(result) = 'object'
+        AND result->>'assignment_id' = assignment_id::text AND (result->>'revision')::integer = result_revision),
     recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (command_kind, actor_principal_id, idempotency_key)
 );
 CREATE TRIGGER estate_resource_assignment_command_immutable
     BEFORE UPDATE OR DELETE ON registry.estate_resource_assignment_command
     FOR EACH ROW EXECUTE FUNCTION registry.trade_seller_binding_immutable();
+CREATE TRIGGER estate_resource_assignment_command_no_truncate
+    BEFORE TRUNCATE ON registry.estate_resource_assignment_command
+    FOR EACH STATEMENT EXECUTE FUNCTION registry.trade_seller_binding_immutable();
 
 CREATE FUNCTION registry.estate_resource_assignment_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -156,7 +163,10 @@ BEGIN
     SELECT * INTO t FROM registry.estate_resource_assignment_transition x
      WHERE x.assignment_id = OLD.assignment_id AND x.to_revision = NEW.revision AND x.action = expected_action
        AND x.from_status = OLD.status AND x.to_status = NEW.status
-       AND x.performed_at >= now(); -- this transaction's own row (now() is the transaction start)
+       -- This transaction's own row: its inserting transaction is the current
+       -- one. A timestamp cannot prove that (performed_at is writer-supplied,
+       -- so a pre-committed future-dated row would pass); xmin can.
+       AND x.xmin = pg_current_xact_id()::xid;
     IF NOT FOUND OR NOT EXISTS (SELECT 1 FROM identity.principal p WHERE p.principal_id = t.performed_by AND p.actor_type = 'human' AND p.status = 'ACTIVE') THEN
         RAISE EXCEPTION 'missing authenticated human assignment transition' USING ERRCODE = 'check_violation';
     END IF;
@@ -227,6 +237,9 @@ CREATE INDEX estate_resource_assignment_resolution_attestation_idx
 CREATE TRIGGER estate_resource_assignment_resolution_immutable
     BEFORE UPDATE OR DELETE ON registry.estate_resource_assignment_resolution
     FOR EACH ROW EXECUTE FUNCTION registry.trade_seller_binding_immutable();
+CREATE TRIGGER estate_resource_assignment_resolution_no_truncate
+    BEFORE TRUNCATE ON registry.estate_resource_assignment_resolution
+    FOR EACH STATEMENT EXECUTE FUNCTION registry.trade_seller_binding_immutable();
 
 -- Decision 9: the commerce profile resolution may now also record
 -- GOVERNED_RESOURCE_ASSIGNMENT provenance (its CHECK already allows the kind).

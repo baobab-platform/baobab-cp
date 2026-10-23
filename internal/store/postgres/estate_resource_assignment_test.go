@@ -118,7 +118,32 @@ func TestEstateResourceAssignmentGovernanceAndEvidence(t *testing.T) {
 		a.AssignmentID, checker)
 	rejects("a delete", `DELETE FROM registry.estate_resource_assignment WHERE assignment_id = $1::uuid`, a.AssignmentID)
 
-	if a, err = transition(checker, "APPROVE", 1); err != nil {
+	// A transition row committed ahead of time, even future-dated, is not this
+	// transaction's evidence.
+	if _, err := db.pool.Exec(ctx, `INSERT INTO registry.estate_resource_assignment_transition (assignment_id, action,
+		from_status, to_status, to_revision, reason, evidence_reference, performed_by, performed_at)
+		VALUES ($1::uuid, 'APPROVE', 'PROPOSED', 'ACTIVE', 2, 'staged', 'changeset:x', $2::uuid, now() + interval '1 day')`,
+		a.AssignmentID, checker); err != nil {
+		t.Fatal(err)
+	}
+	rejects("an approval backed by a pre-committed transition", `UPDATE registry.estate_resource_assignment
+		SET status = 'ACTIVE', revision = 2, approved_by = $2::uuid, approval_reference = 'approval:x'
+		WHERE assignment_id = $1::uuid`, a.AssignmentID, checker)
+	if _, err := db.pool.Exec(ctx, `DELETE FROM registry.estate_resource_assignment_transition
+		WHERE assignment_id = $1::uuid`, a.AssignmentID); err == nil {
+		t.Fatal("a transition row was deleted")
+	}
+	// The staged row now holds revision 2, so this assignment can never be
+	// approved; continue on a fresh proposal.
+	retry := proposal
+	retry.ProposalReference = "changeset:synthetic-assign-retry"
+	if a, err = db.ProposeEstateResourceAssignment(ctx, key(), meta(maker), maker, retry); err != nil {
+		t.Fatal(err)
+	}
+	approveKey := key()
+	approve := EstateResourceAssignmentTransition{Action: "APPROVE", ExpectedRevision: 1, Reason: "synthetic",
+		EvidenceReference: "changeset:synthetic-assign"}
+	if a, err = db.TransitionEstateResourceAssignment(ctx, approveKey, meta(checker), checker, a.AssignmentID, approve); err != nil {
 		t.Fatal(err)
 	}
 	if a.Status != "ACTIVE" || a.Revision != 2 || a.ApprovedBy != checker {
@@ -166,6 +191,10 @@ func TestEstateResourceAssignmentGovernanceAndEvidence(t *testing.T) {
 	rejects("an evidence update", `UPDATE registry.estate_resource_assignment_resolution SET outcome = 'ASSIGNMENT_NOT_FOUND'
 		WHERE attestation_id = $1::uuid`, attestation)
 	rejects("an evidence delete", `DELETE FROM registry.estate_resource_assignment_resolution WHERE attestation_id = $1::uuid`, attestation)
+	for _, table := range []string{"estate_resource_assignment_resolution", "estate_resource_assignment_command",
+		"estate_resource_assignment_transition", "estate_resource_assignment"} {
+		rejects("a truncate of "+table, `TRUNCATE registry.`+table+` CASCADE`)
+	}
 
 	provenance := func(caller, market string, at time.Time) bool {
 		t.Helper()
@@ -185,6 +214,10 @@ func TestEstateResourceAssignmentGovernanceAndEvidence(t *testing.T) {
 
 	if a, err = transition(other, "SUSPEND", 2); err != nil || a.Status != "SUSPENDED" {
 		t.Fatalf("suspension = %+v, %v", a, err)
+	}
+	if replay, err := db.TransitionEstateResourceAssignment(ctx, approveKey, meta(checker), checker, a.AssignmentID,
+		approve); err != nil || replay.Status != "ACTIVE" || replay.Revision != 2 || replay.ApprovedBy != checker {
+		t.Fatalf("a replayed approval answered %+v, %v instead of its recorded result", replay, err)
 	}
 	if provenance("synthetic-trade", "market_ug", now) {
 		t.Fatal("a suspended assignment still provided provenance")
@@ -213,7 +246,7 @@ func TestEstateResourceAssignmentGovernanceAndEvidence(t *testing.T) {
 		WHERE assignment_id = $1::uuid`, a.AssignmentID)
 
 	candidates, err := db.EstateResourceAssignmentCandidates(ctx, "WORKLOAD", server, estate)
-	if err != nil || len(candidates) != 2 {
+	if err != nil || len(candidates) != 3 {
 		t.Fatalf("candidates = %+v, %v", candidates, err)
 	}
 	if ok, err := db.NativeConfigurationAttested(ctx, "synthetic-trade", "ei_synthetic01", "trade/native/unknown",

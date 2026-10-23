@@ -155,10 +155,11 @@ func replayAssignmentCommand(ctx context.Context, tx pgx.Tx, kind, key, actorID,
 		"estate-resource-assignment-command:"+kind+":"+actorID+":"+key); err != nil {
 		return nil, err
 	}
-	var prior, assignmentID string
-	err := tx.QueryRow(ctx, `SELECT request_digest, assignment_id::text FROM registry.estate_resource_assignment_command
+	var prior string
+	var result []byte
+	err := tx.QueryRow(ctx, `SELECT request_digest, result FROM registry.estate_resource_assignment_command
 		WHERE command_kind = $1 AND actor_principal_id = $2::uuid AND idempotency_key = $3`, kind, actorID, key).
-		Scan(&prior, &assignmentID)
+		Scan(&prior, &result)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -168,9 +169,29 @@ func replayAssignmentCommand(ctx context.Context, tx pgx.Tx, kind, key, actorID,
 	if prior != digest {
 		return nil, basestore.ErrIdempotencyConflict
 	}
-	a, err := scanAssignment(tx.QueryRow(ctx, `SELECT `+assignmentColumns+`
-		FROM registry.estate_resource_assignment WHERE assignment_id = $1::uuid`, assignmentID))
-	return &a, err
+	// The recorded result, not the assignment's current state: an identical
+	// retry after a later transition still answers what this command did.
+	var a EstateResourceAssignment
+	if err := json.Unmarshal(result, &a); err != nil {
+		return nil, fmt.Errorf("decode recorded assignment command result: %w", err)
+	}
+	if a.NativeResource != nil {
+		a.NativeConfigurationReference, a.NativeConfigurationDigest = a.NativeResource.Reference, a.NativeResource.Digest
+	}
+	return &a, nil
+}
+
+// recordAssignmentCommand stores the command and the exact result it returned.
+func recordAssignmentCommand(ctx context.Context, tx pgx.Tx, kind, key, actorID, digest string,
+	a EstateResourceAssignment) error {
+	result, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO registry.estate_resource_assignment_command (command_kind, idempotency_key,
+		actor_principal_id, request_digest, assignment_id, result_revision, result)
+		VALUES ($1, $2, $3::uuid, $4, $5::uuid, $6, $7)`, kind, key, actorID, digest, a.AssignmentID, a.Revision, result)
+	return mapAssignmentError(err)
 }
 
 // ProposeEstateResourceAssignment records a PROPOSED assignment by the
@@ -227,10 +248,8 @@ func (s *Store) ProposeEstateResourceAssignment(ctx context.Context, key string,
 	if err != nil {
 		return empty, mapAssignmentError(err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO registry.estate_resource_assignment_command (command_kind, idempotency_key,
-		actor_principal_id, request_digest, assignment_id, result_revision) VALUES ('PROPOSE', $1, $2::uuid, $3, $4::uuid, 1)`,
-		key, actorID, digest, a.AssignmentID); err != nil {
-		return empty, mapAssignmentError(err)
+	if err := recordAssignmentCommand(ctx, tx, "PROPOSE", key, actorID, digest, a); err != nil {
+		return empty, err
 	}
 	return a, mapAssignmentError(tx.Commit(ctx))
 }
@@ -311,10 +330,8 @@ func (s *Store) TransitionEstateResourceAssignment(ctx context.Context, key stri
 	if err != nil {
 		return empty, mapAssignmentError(err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO registry.estate_resource_assignment_command (command_kind, idempotency_key,
-		actor_principal_id, request_digest, assignment_id, result_revision) VALUES ('TRANSITION', $1, $2::uuid, $3, $4::uuid, $5)`,
-		key, actorID, digest, assignmentID, next); err != nil {
-		return empty, mapAssignmentError(err)
+	if err := recordAssignmentCommand(ctx, tx, "TRANSITION", key, actorID, digest, updated); err != nil {
+		return empty, err
 	}
 	return updated, mapAssignmentError(tx.Commit(ctx))
 }
