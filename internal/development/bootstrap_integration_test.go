@@ -138,8 +138,22 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		}
 		svc := service.ContextResolutionService{Identity: service.IdentityService{Repository: repo}, Tenants: store, Canonical: repo, Mappings: repo, Markets: repo}
 		principal := auth.Principal{Issuer: cfg.Issuer, Subject: e.ClientID, ClientID: e.ClientID, ActorType: "workload", TokenID: "synthetic-provider-evidence", Scopes: map[string]struct{}{"context:resolve": {}}}
-		if _, _, err = svc.WithCountry(e.Markets[0]).Resolve(ctx, principal, e.TenantID, e.OrganisationID, domain.NewUUIDv7(), cfg.Now); err != nil {
+		_, boundedContext, err := svc.WithCountry(e.Markets[0]).Resolve(ctx, principal, e.TenantID, e.OrganisationID, domain.NewUUIDv7(), cfg.Now)
+		if err != nil {
 			t.Fatalf("real CP own-context service: %v", err)
+		}
+		if boundedContext.ExpiresAt == nil || !boundedContext.ExpiresAt.Equal(result.ExpiresAt) {
+			t.Fatalf("development context must expire with bootstrap lease: %+v", boundedContext.ExpiresAt)
+		}
+		lease, err := repo.DevelopmentTenantLease(ctx, e.PrincipalID, e.ClientID, e.TenantID, cfg.Now)
+		if err != nil || !lease.Equal(result.ExpiresAt) {
+			t.Fatalf("authoritative tenant lease: expiry=%s err=%v", lease, err)
+		}
+		if _, err = repo.DevelopmentTenantLease(ctx, e.PrincipalID, e.ClientID, e.TenantID, result.ExpiresAt); err == nil {
+			t.Fatal("expired run still grants a development tenant lease")
+		}
+		if _, err = repo.DevelopmentTenantLease(ctx, e.PrincipalID, e.ClientID, result.Enterprises[4].TenantID, cfg.Now); err == nil {
+			t.Fatal("sibling tenant granted a development lease")
 		}
 		if _, _, err = svc.WithCountry("ZA").Resolve(ctx, principal, result.Enterprises[4].TenantID, result.Enterprises[4].OrganisationID, domain.NewUUIDv7(), cfg.Now); err == nil {
 			t.Fatal("CP service accepted neighbour context")
