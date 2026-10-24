@@ -2,6 +2,7 @@ package development
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -60,5 +61,29 @@ func TestCanonicalProfiles(t *testing.T) {
 	}
 	if _, err = ParseProfiles(bytes.Replace(raw, []byte(`"NON_TRADING_HOLDING"`), []byte(`"B2B_TRADE"`), 1)); err == nil {
 		t.Fatal("holding company changed into trader")
+	}
+}
+
+func TestProfileParentAndOrder(t *testing.T) {
+	raw, _ := contracts.ReadEmbedded("development/v1/examples/nabhold-group.json")
+	var p Profiles
+	if err := json.Unmarshal(raw, &p); err != nil {
+		t.Fatal(err)
+	}
+	p.Profiles[0], p.Profiles[4] = p.Profiles[4], p.Profiles[0]
+	reversed, _ := json.Marshal(p)
+	parsed, err := ParseProfiles(reversed)
+	if err != nil || parsed.Profiles[0].Key != "nabhold" || parsed.Profiles[4].Key != "external-client" {
+		t.Fatalf("unstable parent/order: %v", err)
+	}
+	p.Profiles = []Profile{parsed.Profiles[1]}
+	child, _ := json.Marshal(p)
+	if _, err := ParseProfiles(child); err == nil {
+		t.Fatal("fabricated missing parent")
+	}
+	p.Profiles = []Profile{parsed.Profiles[4]}
+	external, _ := json.Marshal(p)
+	if _, err := ParseProfiles(external); err != nil {
+		t.Fatal(err)
 	}
 }

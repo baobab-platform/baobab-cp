@@ -21,6 +21,7 @@ func main() { os.Exit(run()) }
 
 func run() int {
 	var cfg development.Config
+	checkFixtures := flag.Bool("check-fixtures", false, "read and check existing DEV-02 fixtures without seeding or migrating")
 	profiles := flag.String("profiles", "", "optional canonical development profile file")
 	flag.StringVar(&cfg.RunID, "run-id", "", "unique disposable run nonce (32 hex)")
 	flag.StringVar(&cfg.Issuer, "issuer", "", "actual isolated IAM issuer")
@@ -60,6 +61,13 @@ func run() int {
 	// Guard the actual database BEFORE any migration or seed mutation.
 	if development.CheckDatabase(ctx, pool) != nil {
 		return refused()
+	}
+	if *checkFixtures {
+		report, err := development.CheckFixtures(ctx, pool, cfg)
+		if err != nil || json.NewEncoder(os.Stdout).Encode(report) != nil {
+			return refused()
+		}
+		return 0
 	}
 	store, err := postgres.Open(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
