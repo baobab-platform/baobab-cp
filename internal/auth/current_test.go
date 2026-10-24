@@ -24,7 +24,7 @@ func (v currentStatus) Introspect(context.Context, string) (Introspection, error
 }
 func TestCurrentVerifierEnforcesIssuerStatusAndClaimBinding(t *testing.T) {
 	p := Principal{Issuer: "https://issuer.example", Subject: "subject", ClientID: "client", ExpiresAt: time.Now().Add(time.Minute).Truncate(time.Second), Scopes: map[string]struct{}{"context:resolve": {}}}
-	status := Introspection{Active: true, Issuer: p.Issuer, Subject: p.Subject, ClientID: p.ClientID, ExpiresAt: p.ExpiresAt, Audience: []string{"cp"}, Scopes: p.Scopes}
+	status := Introspection{Active: true, Issuer: p.Issuer, Subject: p.Subject, ClientID: p.ClientID, ExpiresAt: p.ExpiresAt, Audience: []string{"cp"}, Scopes: map[string]struct{}{"context:resolve": {}, "openid": {}}}
 	for _, tc := range []struct {
 		name   string
 		change func(*Introspection)
