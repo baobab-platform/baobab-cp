@@ -161,7 +161,7 @@ func CheckFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config) (Fixture
 					wrong.Market = "UG"
 				}
 				denied := legalactor.Resolve(wrong, candidates, cfg.Now)
-				out.Observations = append(out.Observations, FixtureObservation{enterprise, "wrong_" + field,
+				out.Observations = append(out.Observations, FixtureObservation{enterprise, "boundary_wrong_" + field,
 					denied.Outcome, denied.Outcome == legalactor.NoApplicableMandate && denied.ResponsibleLegalEntityID == ""})
 			}
 		}
