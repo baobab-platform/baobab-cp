@@ -7,6 +7,9 @@ packages:
 overrides:
   # Patched against GHSA-r28c-9q8g-f849 (path traversal) and prior advisories.
   postcss: 8.5.28
+  # Patched against GHSA-mrhx-c7xc-m3w5 and GHSA-xjj6-f33q-929c.
+  zod: 4.6.6
+  undici: 8.12.2
   sharp: 0.35.5
   source-map-js: 1.2.2
   # vitest's vite: patched against GHSA-587h-7wmj-h5pm (launch-editor

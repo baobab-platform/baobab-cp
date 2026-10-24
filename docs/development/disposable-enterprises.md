@@ -51,3 +51,46 @@ failed run. Disposable development evidence is labelled
 REAL_COMPONENT_SYNTHETIC_DATA and `protected_acceptance=false`. It never
 substitutes for independent human approval, provisioning readiness or evidence
 required when readying staging and production.
+
+## DEV-02 identity and mandate fixture semantics
+
+Bootstrap results retain schema `baobab.development-bootstrap.v1` and now carry
+`fixture_version: 2`. Existing version 1 runs must be destroyed and recreated;
+replay never rewrites their identity semantics.
+
+| Profile | Organisation / Tenant | LegalEntity fixture |
+| --- | --- | --- |
+| Nabhold | Independent | Synthetic holding actor, UNKNOWN / UNVERIFIED |
+| ZuriBeans | Independent, unincorporated | None; proposed synthetic Nabhold parent only |
+| Thamani | Independent | Declared separately incorporated, UNKNOWN / UNVERIFIED |
+| Equator Estate | Independent, unincorporated | None; proposed synthetic Nabhold parent only |
+| External client | Independent, no estate required | UNKNOWN / UNVERIFIED |
+
+ZuriBeans and Equator have their own PRIMARY Organisation mappings, nullable
+Tenant and membership legal-entity projections, and no DEFAULT LegalEntity
+mapping. Their parent reference confers no sibling access or legal role.
+Profile ordering cannot select a different parent. A partial profile containing
+an operating business must explicitly include Nabhold; a standalone external
+client remains supported and creates no group proof clients.
+
+CP generates twelve immutable, run-bound `development.mandate_scenario` rows:
+scope-valid, missing, stale, revoked, wrong-market and pending for each
+unincorporated Organisation. These are policy test inputs, never canonical
+`registry.operating_legal_actor_mandate` rows or verified evidence. Scope-valid
+means the role/activity/market/capability/time boundaries match; the expected
+policy outcome is still `ACTOR_NOT_VERIFIED`. Stale/revoked inputs must return
+`REVOKED_OR_EXPIRED`; missing, wrong-market, pending and six wrong-scope cases
+must return `NO_APPLICABLE_MANDATE` without actor or validity leakage.
+
+Invoke the same guarded command with `--check-fixtures` and the run's existing
+arguments to read PostgreSQL and evaluate the 24 checks. This mode does not
+migrate, bootstrap, renew or repair state. It requires a current, unexpired,
+complete five-profile version 2 run. Its report contains case names and outcomes,
+not canonical IDs; official verification, provider permissions and protected
+acceptance remain false. Partial profiles cannot qualify the full DEV-02 matrix.
+
+The native Go CI PostgreSQL job checks atomic rollback, identity projections,
+immutable scenarios, expiry, the ordinary resolver's refusal to consume these
+scenarios, and API success/negative cases against actual CP persistence. API
+component tests inject a labelled synthetic authenticated context; they do not
+claim real IAM or end-to-end qualification, which belongs to DEV-03.

@@ -18,21 +18,24 @@ import (
 )
 
 type Enterprise struct {
-	Key             string   `json:"key"`
-	BusinessModel   string   `json:"business_model"`
-	TenantID        string   `json:"tenant_id"`
-	OrganisationID  string   `json:"organisation_id"`
-	LegalEntityID   string   `json:"legal_entity_id"`
-	EstateID        string   `json:"digital_estate_id,omitempty"`
-	ClientID        string   `json:"client_id,omitempty"`
-	PrincipalID     string   `json:"principal_id,omitempty"`
-	Markets         []string `json:"markets"`
-	RequiredEngines []string `json:"required_engines"`
-	OptionalEngines []string `json:"optional_engines"`
+	Key                          string   `json:"key"`
+	BusinessModel                string   `json:"business_model"`
+	TenantID                     string   `json:"tenant_id"`
+	OrganisationID               string   `json:"organisation_id"`
+	LegalEntityID                string   `json:"legal_entity_id,omitempty"`
+	LegalModel                   string   `json:"legal_model"`
+	SyntheticParentLegalEntityID string   `json:"synthetic_parent_legal_entity_id,omitempty"`
+	EstateID                     string   `json:"digital_estate_id,omitempty"`
+	ClientID                     string   `json:"client_id,omitempty"`
+	PrincipalID                  string   `json:"principal_id,omitempty"`
+	Markets                      []string `json:"markets"`
+	RequiredEngines              []string `json:"required_engines"`
+	OptionalEngines              []string `json:"optional_engines"`
 }
 
 type Result struct {
 	Schema              string            `json:"schema"`
+	FixtureVersion      int               `json:"fixture_version"`
 	RunID               string            `json:"run_id"`
 	ExpiresAt           time.Time         `json:"expires_at"`
 	SyntheticOnly       bool              `json:"synthetic_only"`
@@ -82,7 +85,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('baobab-development-bootstrap',0))`); err != nil {
 		return out, err
 	}
-	request, _ := json.Marshal([]any{string(raw), cfg.Issuer, cfg.WorkloadIssuerValue(), cfg.MakerSubject, cfg.CheckerSubject, int64(cfg.Lease / time.Second)})
+	request, _ := json.Marshal([]any{"DEV-02/2", string(raw), cfg.Issuer, cfg.WorkloadIssuerValue(), cfg.MakerSubject, cfg.CheckerSubject, int64(cfg.Lease / time.Second)})
 	sum := sha256.Sum256(request)
 	digest := hex.EncodeToString(sum[:])
 	var existingDigest string
@@ -111,7 +114,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 	if occupied {
 		return out, errors.New("bootstrap requires fresh disposable database; existing state is never adopted")
 	}
-	out = Result{Schema: "baobab.development-bootstrap.v1", RunID: cfg.RunID, ExpiresAt: cfg.Now.Add(cfg.Lease),
+	out = Result{Schema: "baobab.development-bootstrap.v1", FixtureVersion: 2, RunID: cfg.RunID, ExpiresAt: cfg.Now.Add(cfg.Lease),
 		SyntheticOnly: true, MakerID: domain.NewPrincipalID(), CheckerID: domain.NewPrincipalID(),
 		EngineInstances: map[string]string{}, MarketIDs: map[string]string{}, ProofPrincipals: map[string]string{}}
 	for _, actor := range []struct{ id, subject string }{{out.MakerID, cfg.MakerSubject}, {out.CheckerID, cfg.CheckerSubject}} {
@@ -141,13 +144,21 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 	}
 	engines := map[string]bool{}
 	countries := map[string]bool{}
+	var parentLegalEntityID string
 	for _, p := range profiles.Profiles {
 		e := Enterprise{Key: p.Key, BusinessModel: p.BusinessModel, TenantID: domain.NewTenantID(),
 			OrganisationID: domain.NewUUIDv7(), LegalEntityID: "DEV-" + cfg.RunID[:12] + "-" + strings.ToUpper(p.Key),
-			Markets: p.Markets, RequiredEngines: p.RequiredEngines, OptionalEngines: p.OptionalEngines}
+			Markets: p.Markets, RequiredEngines: p.RequiredEngines, OptionalEngines: p.OptionalEngines, LegalModel: legalModel(p.Key)}
+		if p.Key == "nabhold" {
+			parentLegalEntityID = e.LegalEntityID
+		}
+		if p.Key == "zuribeans" || p.Key == "equator-estate" {
+			e.LegalEntityID = ""
+			e.SyntheticParentLegalEntityID = parentLegalEntityID
+		}
 		// Tenant metadata is a map of strings in the canonical read model.
 		// Keep synthetic provenance explicit without creating unscannable rows.
-		metadata, _ := json.Marshal(map[string]string{"synthetic_only": "true", "development_run_id": cfg.RunID, "profile": p.Key, "business_model": p.BusinessModel, "expires_at": out.ExpiresAt.Format(time.RFC3339Nano)})
+		metadata, _ := json.Marshal(map[string]string{"synthetic_only": "true", "development_run_id": cfg.RunID, "profile": p.Key, "business_model": p.BusinessModel, "legal_model": e.LegalModel, "synthetic_parent_legal_entity_id": e.SyntheticParentLegalEntityID, "expires_at": out.ExpiresAt.Format(time.RFC3339Nano)})
 		if err = enterprise(ctx, tx, e, p.DisplayName, metadata, cfg.Now, out.ExpiresAt); err != nil {
 			return out, err
 		}
@@ -165,7 +176,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 			// Membership is explicit and tenant-local. No parent/sibling inheritance.
 			if _, err = tx.Exec(ctx, `INSERT INTO identity.workforce_membership
     (membership_id,principal_id,tenant_id,legal_entity_id,roles,status)
-    VALUES($1,$2,$3,$4,'{}','ACTIVE')`, domain.NewUUIDv7(), e.PrincipalID, e.TenantID, e.LegalEntityID); err != nil {
+    VALUES($1,$2,$3,$4,'{}','ACTIVE')`, domain.NewUUIDv7(), e.PrincipalID, e.TenantID, nullableLegalEntity(e.LegalEntityID)); err != nil {
 				return out, err
 			}
 		}
@@ -228,7 +239,11 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 	}
 	// Proof callers have separate canonical identities but one explicit fixture
 	// tenant. The validator is a resource server, not a tenant-context caller.
-	for _, subject := range []string{"baobab-int03c-issuer-owner", "baobab-int03c-issuer-verifier", "baobab-int03-cms-consumer", "baobab-int03-cms-validator"} {
+	var proofSubjects []string
+	if parentLegalEntityID != "" {
+		proofSubjects = []string{"baobab-int03c-issuer-owner", "baobab-int03c-issuer-verifier", "baobab-int03-cms-consumer", "baobab-int03-cms-validator"}
+	}
+	for _, subject := range proofSubjects {
 		id := domain.NewPrincipalID()
 		if err = identity(ctx, tx, id, "workload", cfg.WorkloadIssuerValue(), subject); err != nil {
 			return out, err
@@ -240,6 +255,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 		return out, err
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO development.bootstrap_run(run_id,request_digest,created_at,expires_at,result) VALUES($1,$2,$3,$4,$5)`, cfg.RunID, digest, cfg.Now, out.ExpiresAt, encoded); err != nil {
+		return out, err
+	}
+	if err = seedMandateFixtures(ctx, tx, cfg, out); err != nil {
 		return out, err
 	}
 	for _, e := range out.Enterprises {
@@ -273,23 +291,27 @@ func identity(ctx context.Context, tx pgx.Tx, id, kind, issuer, subject string) 
 
 func enterprise(ctx context.Context, tx pgx.Tx, e Enterprise, name string, metadata []byte, now, expiry time.Time) error {
 	statements := []struct {
-		sql  string
-		args []any
+		sql       string
+		args      []any
+		legalOnly bool
 	}{
-		{`INSERT INTO legal_entities(legal_entity_id) VALUES($1)`, []any{e.LegalEntityID}},
+		{`INSERT INTO legal_entities(legal_entity_id) VALUES($1)`, []any{e.LegalEntityID}, true},
 		{`INSERT INTO tenants(tenant_id,legal_entity_id,display_name,isolation_strategy,residency_region,metadata,desired_state,observed_state,registration_basis,bootstrap_reason,bootstrap_evidence_reference,primary_organisation_enforced)
-   VALUES($1,$2,$3,'row_level_security','af-south-1',$4,'active','active','BOOTSTRAP','ADR-SHARED-043 isolated synthetic development bootstrap',$5,true)`, []any{e.TenantID, e.LegalEntityID, name, metadata, "development:" + e.TenantID}},
-		{`INSERT INTO registry.canonical_entity(canonical_entity_id,tenant_id,entity_type,status) VALUES($1,$2,'ORGANISATION','active')`, []any{e.OrganisationID, e.TenantID}},
+   VALUES($1,$2,$3,'row_level_security','af-south-1',$4,'active','active','BOOTSTRAP','ADR-SHARED-043 isolated synthetic development bootstrap',$5,true)`, []any{e.TenantID, nullableLegalEntity(e.LegalEntityID), name, metadata, "development:" + e.TenantID}, false},
+		{`INSERT INTO registry.canonical_entity(canonical_entity_id,tenant_id,entity_type,status) VALUES($1,$2,'ORGANISATION','active')`, []any{e.OrganisationID, e.TenantID}, false},
 		{`INSERT INTO registry.organisation_profile(canonical_entity_id,display_name,verification_state,source_authority,status,effective_from,effective_to,metadata)
-   VALUES($1,$2,'UNVERIFIED','DEVELOPMENT_FIXTURE','ACTIVE',$3,$4,$5)`, []any{e.OrganisationID, name, now, expiry, metadata}},
+   VALUES($1,$2,'UNVERIFIED','DEVELOPMENT_FIXTURE','ACTIVE',$3,$4,$5)`, []any{e.OrganisationID, name, now, expiry, metadata}, false},
 		{`INSERT INTO registry.legal_entity_profile(legal_entity_id,organisation_id,legal_name,legal_status,source_authority,verification_state,effective_from,effective_to,metadata)
-   VALUES($1,$2,$3,'UNKNOWN','DEVELOPMENT_FIXTURE','UNVERIFIED',$4,$5,$6)`, []any{e.LegalEntityID, e.OrganisationID, name, now, expiry, metadata}},
+   VALUES($1,$2,$3,'UNKNOWN','DEVELOPMENT_FIXTURE','UNVERIFIED',$4,$5,$6)`, []any{e.LegalEntityID, e.OrganisationID, name, now, expiry, metadata}, true},
 		{`INSERT INTO registry.tenant_organisation_mapping(tenant_organisation_mapping_id,tenant_id,organisation_id,mapping_role,status,effective_from,effective_to,provenance,metadata)
-   VALUES($1,$2,$3,'PRIMARY_ORGANISATION','ACTIVE',$4,$5,'DEVELOPMENT_FIXTURE',$6)`, []any{domain.NewUUIDv7(), e.TenantID, e.OrganisationID, now, expiry, metadata}},
+   VALUES($1,$2,$3,'PRIMARY_ORGANISATION','ACTIVE',$4,$5,'DEVELOPMENT_FIXTURE',$6)`, []any{domain.NewUUIDv7(), e.TenantID, e.OrganisationID, now, expiry, metadata}, false},
 		{`INSERT INTO registry.tenant_legal_entity_mapping(tenant_legal_entity_mapping_id,tenant_id,legal_entity_id,mapping_role,status,effective_from,effective_to,provenance,metadata)
-   VALUES($1,$2,$3,'DEFAULT','ACTIVE',$4,$5,'DEVELOPMENT_FIXTURE',$6)`, []any{domain.NewUUIDv7(), e.TenantID, e.LegalEntityID, now, expiry, metadata}},
+   VALUES($1,$2,$3,'DEFAULT','ACTIVE',$4,$5,'DEVELOPMENT_FIXTURE',$6)`, []any{domain.NewUUIDv7(), e.TenantID, e.LegalEntityID, now, expiry, metadata}, true},
 	}
 	for i, s := range statements {
+		if e.LegalEntityID == "" && s.legalOnly {
+			continue
+		}
 		if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
 			return fmt.Errorf("development enterprise step %d: %w", i, err)
 		}

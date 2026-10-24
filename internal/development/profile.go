@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -53,6 +54,19 @@ func ParseProfiles(raw []byte) (Profiles, error) {
 	if err = json.Unmarshal(raw, &out); err != nil {
 		return out, err
 	}
+	// Input order must never select the parent legal actor or proof tenant.
+	// A partial headless profile is allowed; an operating business's proposed
+	// parent must be present rather than silently fabricated outside the input.
+	hasParent, needsParent := false, false
+	rank := map[string]int{"nabhold": 0, "zuribeans": 1, "thamani": 2, "equator-estate": 3, "external-client": 4}
+	for _, profile := range out.Profiles {
+		hasParent = hasParent || profile.Key == "nabhold"
+		needsParent = needsParent || profile.Key == "zuribeans" || profile.Key == "equator-estate"
+	}
+	if needsParent && !hasParent {
+		return out, errors.New("operating-business fixture requires an explicit synthetic parent profile")
+	}
+	sort.Slice(out.Profiles, func(i, j int) bool { return rank[out.Profiles[i].Key] < rank[out.Profiles[j].Key] })
 	return out, nil
 }
 

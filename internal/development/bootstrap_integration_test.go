@@ -2,17 +2,23 @@ package development
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/api"
 	"github.com/baobab-platform/baobab-cp/internal/auth"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/service"
+	"github.com/baobab-platform/baobab-cp/internal/service/legalactor"
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -76,6 +82,21 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := fixtureConfig()
+
+	// A failure after entity/tenant writes must roll back the whole bootstrap.
+	if _, err = pool.Exec(ctx, `CREATE FUNCTION development.reject_fixture_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected failure'; END $$; CREATE TRIGGER reject_fixture_test BEFORE INSERT ON development.mandate_scenario FOR EACH ROW EXECUTE FUNCTION development.reject_fixture_test()`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = Bootstrap(ctx, pool, cfg, raw); err == nil {
+		t.Fatal("injected fixture failure accepted")
+	}
+	var partial int
+	if err = pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM tenants)+(SELECT count(*) FROM development.bootstrap_run)+(SELECT count(*) FROM registry.organisation_profile)`).Scan(&partial); err != nil || partial != 0 {
+		t.Fatalf("partial transaction survived: %d %v", partial, err)
+	}
+	if _, err = pool.Exec(ctx, `DROP TRIGGER reject_fixture_test ON development.mandate_scenario; DROP FUNCTION development.reject_fixture_test()`); err != nil {
+		t.Fatal(err)
+	}
 	result, err := Bootstrap(ctx, pool, cfg, raw)
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +123,24 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 	if _, err = Bootstrap(ctx, pool, protected, raw); err == nil {
 		t.Fatal("staging bootstrap accepted")
 	}
+
+	report, err := CheckFixtures(ctx, pool, cfg)
+	if err != nil || len(report.Observations) != 24 || report.OfficialActorVerified || report.ProviderPermissionsGranted || report.ProtectedAcceptance {
+		t.Fatalf("fixture checks: %+v %v", report, err)
+	}
+	if _, err := CheckFixtures(ctx, pool, expired); err == nil {
+		t.Fatal("expired fixture check accepted")
+	}
+	if _, err := pool.Exec(ctx, `UPDATE development.mandate_scenario SET status='PENDING' WHERE case_key='valid_scoped'`); err == nil {
+		t.Fatal("fixture history mutable")
+	}
+	var legalCount, canonicalMandates int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM registry.legal_entity_profile`).Scan(&legalCount); err != nil || legalCount != 3 {
+		t.Fatalf("invented legal entity: %d %v", legalCount, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM registry.operating_legal_actor_mandate`).Scan(&canonicalMandates); err != nil || canonicalMandates != 0 {
+		t.Fatalf("fixture fabricated legal authority: %v", err)
+	}
 	seen := map[string]bool{}
 	repo, err := repository.Open(ctx, u.String())
 	if err != nil {
@@ -119,6 +158,24 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		}
 		if err = pool.QueryRow(ctx, `SELECT count(*) FROM registry.legal_entity_profile WHERE legal_entity_id=$1 AND verification_state='VERIFIED'`, e.LegalEntityID).Scan(&verified); err != nil || verified != 0 {
 			t.Fatal("synthetic company misrepresented as verified")
+		}
+
+		if e.Key == "zuribeans" || e.Key == "equator-estate" {
+			if e.LegalEntityID != "" || e.SyntheticParentLegalEntityID != result.Enterprises[0].LegalEntityID {
+				t.Fatal("incorrect unincorporated parent model")
+			}
+			var defaultCount int
+			var hasDefault bool
+			if err := pool.QueryRow(ctx, `SELECT legal_entity_id IS NOT NULL FROM tenants WHERE tenant_id=$1`, e.TenantID).Scan(&hasDefault); err != nil || hasDefault {
+				t.Fatalf("invented default legal actor: %v", err)
+			}
+			if err := pool.QueryRow(ctx, `SELECT count(*) FROM registry.tenant_legal_entity_mapping WHERE tenant_id=$1`, e.TenantID).Scan(&defaultCount); err != nil || defaultCount != 0 {
+				t.Fatalf("parent inherited as default: %v", err)
+			}
+			resolution, err := store.ResolveOperatingLegalActor(ctx, legalactor.Request{TenantID: e.TenantID, OperatingOrganisationID: e.OrganisationID, Role: "CONTRACTING_PARTY", Activity: fixtureActivity, Market: "ZA", Capability: fixtureCapability, EffectiveAt: cfg.Now})
+			if err != nil || resolution.Outcome != legalactor.NoApplicableMandate || resolution.ResponsibleLegalEntityID != "" {
+				t.Fatalf("production resolver consumed scenario: %+v %v", resolution, err)
+			}
 		}
 		if e.Key == "external-client" {
 			if e.EstateID != "" || e.PrincipalID != "" {
@@ -145,6 +202,35 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		if boundedContext.ExpiresAt == nil || boundedContext.ExpiresAt.Sub(result.ExpiresAt).Abs() > time.Microsecond {
 			t.Fatalf("development context must expire with bootstrap lease: %+v", boundedContext.ExpiresAt)
 		}
+
+		// Component API checks use an explicitly synthetic authenticated context;
+		// real IAM qualification remains DEV-03. Persistence and policy are real PG.
+		handler := api.New(api.Dependencies{Store: store, Environment: "development",
+			WorkloadVerifier: fixtureTokenVerifier{principal}, Identity: service.IdentityService{Repository: repo},
+			Identities: repo, Contexts: repo, Canonical: service.CanonicalEntityService{Repository: repo},
+			OrganisationMappings: repo, MarketParticipations: repo})
+		for _, tc := range []struct {
+			name, tenant, org, market string
+			authenticated             bool
+			want                      int
+		}{
+			{"own", e.TenantID, e.OrganisationID, e.Markets[0], true, http.StatusOK},
+			{"other tenant", result.Enterprises[4].TenantID, result.Enterprises[4].OrganisationID, "ZA", true, http.StatusForbidden},
+			{"other organisation", e.TenantID, result.Enterprises[4].OrganisationID, e.Markets[0], true, http.StatusForbidden},
+			{"other market", e.TenantID, e.OrganisationID, "GB", true, http.StatusForbidden},
+			{"anonymous", e.TenantID, e.OrganisationID, e.Markets[0], false, http.StatusUnauthorized},
+		} {
+			body, _ := json.Marshal(map[string]string{"tenant_id": tc.tenant, "organisation_id": tc.org, "country_code": tc.market})
+			req := httptest.NewRequest(http.MethodPost, "/v1/platform-context/resolve", strings.NewReader(string(body)))
+			if tc.authenticated {
+				req.Header.Set("Authorization", "Bearer synthetic-component-token")
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, req)
+			if response.Code != tc.want {
+				t.Fatalf("%s %s HTTP %d wanted %d: %s", e.Key, tc.name, response.Code, tc.want, response.Body.String())
+			}
+		}
 		lease, err := repo.DevelopmentTenantLease(ctx, e.PrincipalID, e.ClientID, e.TenantID, cfg.Now)
 		if err != nil || lease.Sub(result.ExpiresAt).Abs() > time.Microsecond {
 			t.Fatalf("authoritative tenant lease: expiry=%s err=%v", lease, err)
@@ -165,6 +251,16 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		other := result.Enterprises[4].TenantID
 		if _, err = repo.GetWorkforceMembership(ctx, e.PrincipalID, other); err == nil {
 			t.Fatal("workload inherited external tenant membership")
+		}
+	}
+	for _, environment := range []string{"development", "staging", "production"} {
+		handler := api.New(api.Dependencies{Store: store, Environment: environment})
+		for _, route := range []string{"/v1/development/bootstrap", "/internal/legal-actor/v1/assess"} {
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, route, strings.NewReader(`{}`)))
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("%s exposed guarded route %s: %d", environment, route, response.Code)
+			}
 		}
 	}
 	// The topology table records lifecycle status, not a health_status column.
@@ -190,4 +286,14 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 	if _, err = repo.ApproveInt03CProvenance(ctx, provenance.ProvenanceID, result.CheckerID, digest); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// This verifier is only a component seam; it makes no signed-token claim.
+type fixtureTokenVerifier struct{ principal auth.Principal }
+
+func (v fixtureTokenVerifier) Verify(_ context.Context, token string) (auth.Principal, error) {
+	if token != "synthetic-component-token" {
+		return auth.Principal{}, errors.New("synthetic component token required")
+	}
+	return v.principal, nil
 }
