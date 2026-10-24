@@ -23,6 +23,9 @@ type SubjectVerifiers interface {
 // keeps it. A discovery failure is not cached, so a transient outage heals.
 type AudienceVerifiers struct {
 	Issuer string
+	// Optional current-status reader shared with the workload PEP. It is
+	// applied for each subject audience; discovery may cache, status may not.
+	Introspector Introspector
 
 	mu        sync.Mutex
 	verifiers map[string]TokenVerifier
@@ -45,6 +48,14 @@ func (v *AudienceVerifiers) For(ctx context.Context, audience string) (TokenVeri
 	if v.verifiers == nil {
 		v.verifiers = map[string]TokenVerifier{}
 	}
-	v.verifiers[audience] = verifier
-	return verifier, nil
+	current := v.current(verifier, audience)
+	v.verifiers[audience] = current
+	return current, nil
+}
+
+func (v *AudienceVerifiers) current(base TokenVerifier, audience string) TokenVerifier {
+	if v.Introspector == nil {
+		return base
+	}
+	return CurrentVerifier{Verifier: base, Introspector: v.Introspector, Audience: audience}
 }
