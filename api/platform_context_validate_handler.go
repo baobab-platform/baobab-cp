@@ -244,6 +244,9 @@ func (h ContextValidationHandler) verifySubject(ctx context.Context, audiences [
 			continue
 		}
 		principal, err := verifier.Verify(ctx, token)
+		if errors.Is(err, auth.ErrIntrospectionUnavailable) {
+			unavailable = true
+		}
 		// Contexts are resolved by workloads; a human token proves nothing
 		// about one.
 		if err == nil && principal.ActorType == "workload" {

@@ -106,3 +106,15 @@ same-origin HTTPS RFC 7662 endpoint on every request. Subject, client, audience,
 expiry and scopes must match. Inactive tokens deny; issuer outages return 503
 without a signature-only fallback. Partial configuration refuses startup.
 These inputs confer no canonical Principal, tenant assignment or capability.
+
+### DEV-05 cross-service subject status
+
+When `WORKLOAD_INTROSPECTION_*` is configured, the same current-status reader
+also wraps each audience-specific subject verifier used by the CP context
+validator. The CMS-addressed subject is independently signature-verified and
+bound to issuer-native status on every request, with its own audience, scopes,
+subject, client and expiry. Cached JWKS/discovery never caches positive status.
+A revoked subject is denied; issuer status failure is retryable unavailable,
+not a fabricated invalid-subject result. Omitting the entire configuration
+retains the existing deployment mode; partial/cross-origin configuration still
+refuses startup. This grants no validator privilege or provider activation.
