@@ -268,7 +268,13 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 			t.Fatal("CP service accepted neighbour context")
 		}
 		own, err := repo.GetWorkforceMembership(ctx, e.PrincipalID, e.TenantID)
-		if err != nil || own.Status != "ACTIVE" {
+		if e.Key == "external-client" {
+			// An unrelated API workload is not an employee/estate service.
+			// Its CP-owned lease above supplies only its own tenant scope.
+			if err == nil {
+				t.Fatal("external workload fabricated workforce membership")
+			}
+		} else if err != nil || own.Status != "ACTIVE" {
 			t.Fatalf("own tenant relationship: %v", err)
 		}
 		other := foreign.TenantID
