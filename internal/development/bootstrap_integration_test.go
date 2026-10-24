@@ -82,6 +82,7 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := fixtureConfig()
+	cfg.ExternalAPI = true
 
 	// A failure after entity/tenant writes must roll back the whole bootstrap.
 	if _, err = pool.Exec(ctx, `CREATE FUNCTION development.reject_fixture_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected failure'; END $$; CREATE TRIGGER reject_fixture_test BEFORE INSERT ON development.mandate_scenario FOR EACH ROW EXECUTE FUNCTION development.reject_fixture_test()`); err != nil {
@@ -104,9 +105,18 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 	if !result.SyntheticOnly || result.ProtectedAcceptance || len(result.Enterprises) != 5 || result.MakerID == result.CheckerID {
 		t.Fatalf("invalid bootstrap result: %+v", result)
 	}
+	facts, err := CheckExternalAPI(ctx, pool, cfg)
+	if err != nil || !facts.ZeroEstates || !facts.OwnAssignment || !facts.ValidatorUnassigned || !facts.IndependentTenant || facts.ProtectedAcceptance {
+		t.Fatalf("external facts: %+v %v", facts, err)
+	}
 	again, err := Bootstrap(ctx, pool, cfg, raw)
 	if err != nil || again.Enterprises[0].TenantID != result.Enterprises[0].TenantID {
 		t.Fatalf("idempotent replay: %v", err)
+	}
+	withoutAPI := cfg
+	withoutAPI.ExternalAPI = false
+	if _, err = Bootstrap(ctx, pool, withoutAPI, raw); err == nil {
+		t.Fatal("API fixture flag drift accepted")
 	}
 	drift := cfg
 	drift.CheckerSubject = "different-synthetic-checker"
@@ -117,6 +127,9 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 	expired.Now = result.ExpiresAt.Add(time.Second)
 	if _, err = Bootstrap(ctx, pool, expired, raw); err == nil {
 		t.Fatal("expired lease renewed")
+	}
+	if _, err := CheckExternalAPI(ctx, pool, expired); err == nil {
+		t.Fatal("expired external facts accepted")
 	}
 	protected := cfg
 	protected.Environment = "staging"
@@ -178,16 +191,22 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 			}
 		}
 		if e.Key == "external-client" {
-			if e.EstateID != "" || e.PrincipalID != "" {
+			if e.EstateID != "" || e.PrincipalID == "" || e.ClientID != ExternalAPIClient {
 				t.Fatal("external client forced to have estate")
 			}
-			continue
+			var estates int
+			if err := pool.QueryRow(ctx, `SELECT count(*) FROM estate.digital_estate WHERE tenant_id=$1`, e.TenantID).Scan(&estates); err != nil || estates != 0 {
+				t.Fatal("API-only tenant has an estate")
+			}
+			if ok, err := repo.DevelopmentTenantAllowed(ctx, result.ProofPrincipals[PulseValidatorClient], PulseValidatorClient, e.TenantID, cfg.Now); err != nil || ok {
+				t.Fatal("validator obtained tenant assignment")
+			}
 		}
 		allowed, err := repo.DevelopmentTenantAllowed(ctx, e.PrincipalID, e.ClientID, e.TenantID, cfg.Now)
 		if err != nil || !allowed {
 			t.Fatalf("development own-tenant assignment: %v", err)
 		}
-		if allowed, err = repo.DevelopmentTenantAllowed(ctx, e.PrincipalID, e.ClientID, result.Enterprises[4].TenantID, cfg.Now); err != nil || allowed {
+		if allowed, err = repo.DevelopmentTenantAllowed(ctx, e.PrincipalID, e.ClientID, result.Enterprises[(len(seen))%len(result.Enterprises)].TenantID, cfg.Now); err != nil || allowed {
 			t.Fatal("development cross-tenant assignment accepted")
 		}
 		if allowed, err = repo.DevelopmentTenantAllowed(ctx, e.PrincipalID, e.ClientID, e.TenantID, result.ExpiresAt); err != nil || allowed {

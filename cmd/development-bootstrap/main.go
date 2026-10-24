@@ -22,6 +22,7 @@ func main() { os.Exit(run()) }
 func run() int {
 	var cfg development.Config
 	checkFixtures := flag.Bool("check-fixtures", false, "read and check existing DEV-02 fixtures without seeding or migrating")
+	checkExternal := flag.Bool("check-external-api", false, "read current DEV-06 zero-estate and assignment facts")
 	profiles := flag.String("profiles", "", "optional canonical development profile file")
 	flag.StringVar(&cfg.RunID, "run-id", "", "unique disposable run nonce (32 hex)")
 	flag.StringVar(&cfg.Issuer, "issuer", "", "actual isolated IAM issuer")
@@ -29,6 +30,7 @@ func run() int {
 	flag.StringVar(&cfg.MakerSubject, "maker-subject", "", "actual synthetic IAM maker subject")
 	flag.StringVar(&cfg.CheckerSubject, "checker-subject", "", "actual distinct synthetic IAM checker subject")
 	flag.DurationVar(&cfg.Lease, "lease", time.Hour, "development lease, at most 24h")
+	flag.BoolVar(&cfg.ExternalAPI, "external-api", false, "DEV-06 independent API-only workload; never creates an estate")
 	flag.Parse()
 	cfg.Environment = os.Getenv("BAOBAB_ENVIRONMENT")
 	cfg.Enabled = os.Getenv("BAOBAB_DEV_BOOTSTRAP_ENABLED") == "true"
@@ -61,6 +63,13 @@ func run() int {
 	// Guard the actual database BEFORE any migration or seed mutation.
 	if development.CheckDatabase(ctx, pool) != nil {
 		return refused()
+	}
+	if *checkExternal {
+		report, err := development.CheckExternalAPI(ctx, pool, cfg)
+		if err != nil || json.NewEncoder(os.Stdout).Encode(report) != nil {
+			return refused()
+		}
+		return 0
 	}
 	if *checkFixtures {
 		report, err := development.CheckFixtures(ctx, pool, cfg)

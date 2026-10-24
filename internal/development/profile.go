@@ -70,7 +70,12 @@ func ParseProfiles(raw []byte) (Profiles, error) {
 	return out, nil
 }
 
+// ExternalAPI opts into DEV-06 identities without manufacturing a DigitalEstate.
+const ExternalAPIClient = "baobab-dev-external-api"
+const PulseValidatorClient = "baobab-dev-pulse-validator"
+
 type Config struct {
+	ExternalAPI    bool
 	Environment    string
 	Enabled        bool
 	RunID          string
