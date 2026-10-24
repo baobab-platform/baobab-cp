@@ -94,3 +94,15 @@ immutable scenarios, expiry, the ordinary resolver's refusal to consume these
 scenarios, and API success/negative cases against actual CP persistence. API
 component tests inject a labelled synthetic authenticated context; they do not
 claim real IAM or end-to-end qualification, which belongs to DEV-03.
+
+## Current issuer status (DEV-03)
+
+Signature validation alone does not establish that an unexpired token remains
+active at its issuer. Configure both `ADMIN_INTROSPECTION_ENDPOINT`,
+`ADMIN_INTROSPECTION_CLIENT_ID`, `ADMIN_INTROSPECTION_CLIENT_SECRET` and the
+corresponding `WORKLOAD_INTROSPECTION_*` values for the native DEV-03 profile.
+CP locally verifies signature/issuer/audience first, then calls the issuer's
+same-origin HTTPS RFC 7662 endpoint on every request. Subject, client, audience,
+expiry and scopes must match. Inactive tokens deny; issuer outages return 503
+without a signature-only fallback. Partial configuration refuses startup.
+These inputs confer no canonical Principal, tenant assignment or capability.
