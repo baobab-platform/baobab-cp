@@ -118,3 +118,21 @@ A revoked subject is denied; issuer status failure is retryable unavailable,
 not a fabricated invalid-subject result. Omitting the entire configuration
 retains the existing deployment mode; partial/cross-origin configuration still
 refuses startup. This grants no validator privilege or provider activation.
+
+## DEV-06 headless external client
+
+`--external-api` explicitly opts into fixture version 3. Version 2 and its
+ordinary profiles retain their previous behavior. The flag is part of the
+immutable bootstrap request; replay cannot add it to an existing run. CP
+creates `baobab-dev-external-api` as a separate canonical workload assigned only
+to the unrelated external Tenant. It creates `baobab-dev-pulse-validator` as an
+independent resource-server Principal with no tenant assignment. No DigitalEstate,
+commercial subscription, capability grant, binding, provider activation or
+certification is created by selecting this option.
+
+`--external-api --check-external-api` performs read-only current PostgreSQL
+checks of the zero-estate invariant, independent tenant, own assignment and
+unassigned validator. It refuses expiry, missing profile and inconsistent rows.
+Infrastructure must additionally prove genuine OAuth issuance, current context,
+negative isolation and actual Pulse operations. Direct component reads cannot
+qualify INT-07's still-required canonical subscription/grant/binding journey.

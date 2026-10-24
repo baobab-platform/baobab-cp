@@ -85,7 +85,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('baobab-development-bootstrap',0))`); err != nil {
 		return out, err
 	}
-	request, _ := json.Marshal([]any{"DEV-02/2", string(raw), cfg.Issuer, cfg.WorkloadIssuerValue(), cfg.MakerSubject, cfg.CheckerSubject, int64(cfg.Lease / time.Second)})
+	request, _ := json.Marshal([]any{"DEV-02/2", cfg.ExternalAPI, string(raw), cfg.Issuer, cfg.WorkloadIssuerValue(), cfg.MakerSubject, cfg.CheckerSubject, int64(cfg.Lease / time.Second)})
 	sum := sha256.Sum256(request)
 	digest := hex.EncodeToString(sum[:])
 	var existingDigest string
@@ -117,6 +117,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 	out = Result{Schema: "baobab.development-bootstrap.v1", FixtureVersion: 2, RunID: cfg.RunID, ExpiresAt: cfg.Now.Add(cfg.Lease),
 		SyntheticOnly: true, MakerID: domain.NewPrincipalID(), CheckerID: domain.NewPrincipalID(),
 		EngineInstances: map[string]string{}, MarketIDs: map[string]string{}, ProofPrincipals: map[string]string{}}
+	if cfg.ExternalAPI {
+		out.FixtureVersion = 3
+	}
 	for _, actor := range []struct{ id, subject string }{{out.MakerID, cfg.MakerSubject}, {out.CheckerID, cfg.CheckerSubject}} {
 		if err = identity(ctx, tx, actor.id, "human", cfg.Issuer, actor.subject); err != nil {
 			return out, err
@@ -177,6 +180,16 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 			if _, err = tx.Exec(ctx, `INSERT INTO identity.workforce_membership
     (membership_id,principal_id,tenant_id,legal_entity_id,roles,status)
     VALUES($1,$2,$3,$4,'{}','ACTIVE')`, domain.NewUUIDv7(), e.PrincipalID, e.TenantID, nullableLegalEntity(e.LegalEntityID)); err != nil {
+				return out, err
+			}
+		}
+		if cfg.ExternalAPI && p.Key == "external-client" {
+			// A registered headless caller has its own Principal and leased
+			// tenant assignment. No estate, group link, commercial grant,
+			// provider certification or product entitlement is invented.
+			e.ClientID = ExternalAPIClient
+			e.PrincipalID = domain.NewPrincipalID()
+			if err = identity(ctx, tx, e.PrincipalID, "workload", cfg.WorkloadIssuerValue(), e.ClientID); err != nil {
 				return out, err
 			}
 		}
@@ -243,6 +256,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 	if parentLegalEntityID != "" {
 		proofSubjects = []string{"baobab-int03c-issuer-owner", "baobab-int03c-issuer-verifier", "baobab-int03-cms-consumer", "baobab-int03-cms-validator"}
 	}
+	if cfg.ExternalAPI {
+		proofSubjects = append(proofSubjects, PulseValidatorClient)
+	}
 	for _, subject := range proofSubjects {
 		id := domain.NewPrincipalID()
 		if err = identity(ctx, tx, id, "workload", cfg.WorkloadIssuerValue(), subject); err != nil {
@@ -268,7 +284,7 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 		}
 	}
 	for subject, id := range out.ProofPrincipals {
-		if subject != "baobab-int03-cms-validator" {
+		if subject != "baobab-int03-cms-validator" && subject != PulseValidatorClient {
 			if _, err = tx.Exec(ctx, `INSERT INTO development.principal_assignment(principal_id,run_id,client_id,tenant_id) VALUES($1,$2,$3,$4)`, id, cfg.RunID, subject, out.Enterprises[0].TenantID); err != nil {
 				return out, err
 			}

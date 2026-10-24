@@ -387,7 +387,7 @@ func TestDevelopmentEnvironmentBoundary(t *testing.T) {
 }
 
 func TestDevelopmentBootstrapClientClassification(t *testing.T) {
-	for _, id := range []string{"baobab-dev-nabhold-estate", "baobab-int03c-issuer-owner", "baobab-int03-cms-validator"} {
+	for _, id := range []string{"baobab-dev-nabhold-estate", "baobab-int03c-issuer-owner", "baobab-int03-cms-validator", "baobab-dev-external-api", "baobab-dev-pulse-validator"} {
 		if !IsDevelopmentBootstrapClient(id) {
 			t.Fatalf("development client %s not classified", id)
 		}

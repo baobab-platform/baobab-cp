@@ -88,7 +88,7 @@ func CheckFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config) (Fixture
 		return out, err
 	}
 	var run Result
-	if err := json.Unmarshal(raw, &run); err != nil || run.FixtureVersion != 2 || len(run.Enterprises) != 5 {
+	if err := json.Unmarshal(raw, &run); err != nil || (run.FixtureVersion != 2 && run.FixtureVersion != 3) || len(run.Enterprises) != 5 {
 		return out, errors.New("DEV-02 checks require the current complete five-profile run")
 	}
 	rows, err := pool.Query(ctx, `SELECT enterprise_key,case_key,COALESCE(fixture_mandate_id::text,''),

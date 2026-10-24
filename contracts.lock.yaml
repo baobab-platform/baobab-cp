@@ -2,12 +2,12 @@ contract_bundle:
   name: "baobab-platform-resolution"
   version: "1.0.0"
   source_repository: "baobab-platform/shared"
-  source_commit: cce79e121241668629c21a68bdf7ce4cecd91004
+  source_commit: 19769790d0bac4a625f1416ffbf6849e8219124d
 schema: baobab-contract-consumer-lock
 version: "1.0"
 source:
   repository: baobab-platform/shared
-  commit: cce79e121241668629c21a68bdf7ce4cecd91004
+  commit: 19769790d0bac4a625f1416ffbf6849e8219124d
 # This file previously listed 4 of the ~14 contracts this repository actually
 # implements against - see docs/reconciliation/shared-control-plane-audit.md
 # §6. It must declare every schema/policy file whose shape this repository's
