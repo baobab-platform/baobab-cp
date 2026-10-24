@@ -1249,6 +1249,10 @@ func (a *API) authorize(verifier auth.TokenVerifier, actorType, requiredScope st
 				return
 			}
 			principal, err := verifier.Verify(r.Context(), raw)
+			if errors.Is(err, auth.ErrIntrospectionUnavailable) {
+				problem(w, r, http.StatusServiceUnavailable, "AUTH_VERIFIER_UNAVAILABLE", "current issuer status is unavailable", true)
+				return
+			}
 			if err != nil {
 				problem(w, r, http.StatusUnauthorized, "AUTH_TOKEN_INVALID", "the bearer token is invalid", false)
 				return
