@@ -165,6 +165,10 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 			t.Fatal("tenant identity reused/invalid")
 		}
 		seen[e.TenantID] = true
+		foreign := result.Enterprises[0]
+		if foreign.TenantID == e.TenantID {
+			foreign = result.Enterprises[len(result.Enterprises)-1]
+		}
 		var primary, verified int
 		if err = pool.QueryRow(ctx, `SELECT count(*) FROM registry.tenant_organisation_mapping WHERE tenant_id=$1 AND organisation_id=$2 AND mapping_role='PRIMARY_ORGANISATION' AND status='ACTIVE'`, e.TenantID, e.OrganisationID).Scan(&primary); err != nil || primary != 1 {
 			t.Fatalf("PRIMARY mapping: %v", err)
@@ -206,7 +210,7 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		if err != nil || !allowed {
 			t.Fatalf("development own-tenant assignment: %v", err)
 		}
-		if allowed, err = repo.DevelopmentTenantAllowed(ctx, e.PrincipalID, e.ClientID, result.Enterprises[(len(seen))%len(result.Enterprises)].TenantID, cfg.Now); err != nil || allowed {
+		if allowed, err = repo.DevelopmentTenantAllowed(ctx, e.PrincipalID, e.ClientID, foreign.TenantID, cfg.Now); err != nil || allowed {
 			t.Fatal("development cross-tenant assignment accepted")
 		}
 		if allowed, err = repo.DevelopmentTenantAllowed(ctx, e.PrincipalID, e.ClientID, e.TenantID, result.ExpiresAt); err != nil || allowed {
@@ -234,8 +238,8 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 			want                      int
 		}{
 			{"own", e.TenantID, e.OrganisationID, e.Markets[0], true, http.StatusOK},
-			{"other tenant", result.Enterprises[4].TenantID, result.Enterprises[4].OrganisationID, "ZA", true, http.StatusForbidden},
-			{"other organisation", e.TenantID, result.Enterprises[4].OrganisationID, e.Markets[0], true, http.StatusForbidden},
+			{"other tenant", foreign.TenantID, foreign.OrganisationID, "ZA", true, http.StatusForbidden},
+			{"other organisation", e.TenantID, foreign.OrganisationID, e.Markets[0], true, http.StatusForbidden},
 			{"other market", e.TenantID, e.OrganisationID, "GB", true, http.StatusForbidden},
 			{"anonymous", e.TenantID, e.OrganisationID, e.Markets[0], false, http.StatusUnauthorized},
 		} {
@@ -257,17 +261,17 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		if _, err = repo.DevelopmentTenantLease(ctx, e.PrincipalID, e.ClientID, e.TenantID, result.ExpiresAt); err == nil {
 			t.Fatal("expired run still grants a development tenant lease")
 		}
-		if _, err = repo.DevelopmentTenantLease(ctx, e.PrincipalID, e.ClientID, result.Enterprises[4].TenantID, cfg.Now); err == nil {
+		if _, err = repo.DevelopmentTenantLease(ctx, e.PrincipalID, e.ClientID, foreign.TenantID, cfg.Now); err == nil {
 			t.Fatal("sibling tenant granted a development lease")
 		}
-		if _, _, err = svc.WithCountry("ZA").Resolve(ctx, principal, result.Enterprises[4].TenantID, result.Enterprises[4].OrganisationID, domain.NewUUIDv7(), cfg.Now); err == nil {
+		if _, _, err = svc.WithCountry("ZA").Resolve(ctx, principal, foreign.TenantID, foreign.OrganisationID, domain.NewUUIDv7(), cfg.Now); err == nil {
 			t.Fatal("CP service accepted neighbour context")
 		}
 		own, err := repo.GetWorkforceMembership(ctx, e.PrincipalID, e.TenantID)
 		if err != nil || own.Status != "ACTIVE" {
 			t.Fatalf("own tenant relationship: %v", err)
 		}
-		other := result.Enterprises[4].TenantID
+		other := foreign.TenantID
 		if _, err = repo.GetWorkforceMembership(ctx, e.PrincipalID, other); err == nil {
 			t.Fatal("workload inherited external tenant membership")
 		}
