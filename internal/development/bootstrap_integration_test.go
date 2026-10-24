@@ -3,6 +3,7 @@ package development
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -204,7 +205,10 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 
 		// Component API checks use an explicitly synthetic authenticated context;
 		// real IAM qualification remains DEV-03. Persistence and policy are real PG.
-		handler := api.PlatformContextHandler{ContextResolution: svc, Contexts: repo}
+		handler := api.New(api.Dependencies{Store: store, Environment: "development",
+			WorkloadVerifier: fixtureTokenVerifier{principal}, Identity: service.IdentityService{Repository: repo},
+			Identities: repo, Contexts: repo, Canonical: service.CanonicalEntityService{Repository: repo},
+			OrganisationMappings: repo, MarketParticipations: repo})
 		for _, tc := range []struct {
 			name, tenant, org, market string
 			authenticated             bool
@@ -219,10 +223,10 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 			body, _ := json.Marshal(map[string]string{"tenant_id": tc.tenant, "organisation_id": tc.org, "country_code": tc.market})
 			req := httptest.NewRequest(http.MethodPost, "/v1/platform-context/resolve", strings.NewReader(string(body)))
 			if tc.authenticated {
-				req = req.WithContext(auth.WithPrincipal(req.Context(), principal))
+				req.Header.Set("Authorization", "Bearer synthetic-component-token")
 			}
 			response := httptest.NewRecorder()
-			handler.Resolve(response, req)
+			handler.ServeHTTP(response, req)
 			if response.Code != tc.want {
 				t.Fatalf("%s %s HTTP %d wanted %d: %s", e.Key, tc.name, response.Code, tc.want, response.Body.String())
 			}
@@ -249,6 +253,16 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 			t.Fatal("workload inherited external tenant membership")
 		}
 	}
+	for _, environment := range []string{"development", "staging", "production"} {
+		handler := api.New(api.Dependencies{Store: store, Environment: environment})
+		for _, route := range []string{"/v1/development/bootstrap", "/internal/legal-actor/v1/assess"} {
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, route, strings.NewReader(`{}`)))
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("%s exposed guarded route %s: %d", environment, route, response.Code)
+			}
+		}
+	}
 	// The topology table records lifecycle status, not a health_status column.
 	// A fixture may register PROVISIONING instances but must never seed an
 	// ACTIVE or otherwise purportedly qualified runtime provider.
@@ -272,4 +286,14 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 	if _, err = repo.ApproveInt03CProvenance(ctx, provenance.ProvenanceID, result.CheckerID, digest); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// This verifier is only a component seam; it makes no signed-token claim.
+type fixtureTokenVerifier struct{ principal auth.Principal }
+
+func (v fixtureTokenVerifier) Verify(_ context.Context, token string) (auth.Principal, error) {
+	if token != "synthetic-component-token" {
+		return auth.Principal{}, errors.New("synthetic component token required")
+	}
+	return v.principal, nil
 }
