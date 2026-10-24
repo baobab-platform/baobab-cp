@@ -1226,7 +1226,12 @@ func (a *API) adminOrWorkload(adminScope, workloadScope string) func(http.Handle
 		workload := a.authorize(a.workloadVerifier, "workload", workloadScope)(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if raw, ok := bearerToken(r.Header.Get("Authorization")); ok && a.adminVerifier != nil {
-				if principal, err := a.adminVerifier.Verify(r.Context(), raw); err == nil && principal.ActorType == "human" {
+				principal, err := a.adminVerifier.Verify(r.Context(), raw)
+				if errors.Is(err, auth.ErrIntrospectionUnavailable) {
+					problem(w, r, http.StatusServiceUnavailable, "AUTH_VERIFIER_UNAVAILABLE", "current issuer status is unavailable", true)
+					return
+				}
+				if err == nil && principal.ActorType == "human" {
 					admin.ServeHTTP(w, r)
 					return
 				}
