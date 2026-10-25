@@ -21,6 +21,7 @@ func main() { os.Exit(run()) }
 
 func run() int {
 	var cfg development.Config
+	subscriptionPhase := flag.String("subscriptions-phase", "", "bounded CP-owned COMMERCIAL subscription fixture: prepare/read/advance/suspend")
 	checkFixtures := flag.Bool("check-fixtures", false, "read and check existing DEV-02 fixtures without seeding or migrating")
 	checkExternal := flag.Bool("check-external-api", false, "read current DEV-06 zero-estate and assignment facts")
 	profiles := flag.String("profiles", "", "optional canonical development profile file")
@@ -63,6 +64,13 @@ func run() int {
 	// Guard the actual database BEFORE any migration or seed mutation.
 	if development.CheckDatabase(ctx, pool) != nil {
 		return refused()
+	}
+	if *subscriptionPhase != "" {
+		report, err := development.SubscriptionFixtures(ctx, pool, cfg, *subscriptionPhase)
+		if err != nil || json.NewEncoder(os.Stdout).Encode(report) != nil {
+			return refused()
+		}
+		return 0
 	}
 	if *checkExternal {
 		report, err := development.CheckExternalAPI(ctx, pool, cfg)

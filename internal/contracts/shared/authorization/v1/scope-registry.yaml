@@ -581,6 +581,24 @@ scopes:
     allowed_actors: ["human"]
     privileged: true
 
+  - name: "subscription:current-workload-read"
+    description: >-
+      Read the current authoritative tenant-bound ProductSubscription status,
+      revision, classification, policy and primary Organisation. Invoking the
+      read grants no commercial, payer or financial authority.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    privileged: true
+
+  - name: "subscription:commercial-authority"
+    description: >-
+      Request a fresh deny-by-default, operation/revision-bound pre-dispatch
+      decision from the Control Plane. A current subscription alone never
+      approves a payer, versioned plan, provider or movement of money.
+    audience: ["baobab-control-plane"]
+    allowed_actors: ["workload"]
+    privileged: true
+
   - name: "subscription:internal-authority"
     description: >-
       Allows an authenticated registered baobab-subscriptions workload to ask

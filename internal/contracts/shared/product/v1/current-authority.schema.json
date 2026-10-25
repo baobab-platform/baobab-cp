@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/product/v1/current-authority.schema.json",
+  "title": "ProductSubscription current-state and commercial pre-dispatch authority v1",
+  "description": "The Control Plane owns canonical subscription/organisation state, not billing accounts, prices, payer consent or provider activation.",
+  "$defs": {
+    "CurrentSubscription": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "product_subscription_id",
+        "product_id",
+        "status",
+        "authoritative_revision",
+        "classification",
+        "primary_organisation_id",
+        "evaluated_at",
+        "expires_at",
+        "policy_reference"
+      ],
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "minLength": 3
+        },
+        "product_subscription_id": {
+          "type": "string",
+          "pattern": "^sub_[a-z0-9]+$"
+        },
+        "product_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "DRAFT",
+            "PENDING",
+            "ACTIVE",
+            "SUSPENDED",
+            "CANCELLED",
+            "EXPIRED"
+          ]
+        },
+        "authoritative_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "classification": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "classification_id",
+                "subscription_type",
+                "classification_source",
+                "classification_reference"
+              ],
+              "properties": {
+                "classification_id": {
+                  "type": "string",
+                  "pattern": "^subcls_[a-z0-9]+$"
+                },
+                "subscription_type": {
+                  "enum": [
+                    "COMMERCIAL",
+                    "INTERNAL",
+                    "TRIAL",
+                    "PARTNER",
+                    "MANUAL",
+                    "MIGRATION"
+                  ]
+                },
+                "classification_source": {
+                  "enum": [
+                    "ADMISSION_DECISION",
+                    "RECLASSIFICATION",
+                    "MIGRATION",
+                    "MANUAL_GOVERNANCE"
+                  ]
+                },
+                "classification_reference": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 128
+                }
+              }
+            }
+          ]
+        },
+        "primary_organisation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "policy_reference": {
+          "const": "ADR-SHARED-011/ADR-BCP-017/ADR-SUB-0003/current:v1"
+        }
+      }
+    },
+    "CommercialAuthorityRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "product_subscription_id",
+        "authoritative_revision",
+        "operation_id",
+        "operation_kind",
+        "provider_kind"
+      ],
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "minLength": 3
+        },
+        "product_subscription_id": {
+          "type": "string",
+          "pattern": "^sub_[a-z0-9]+$"
+        },
+        "authoritative_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "operation_kind": {
+          "const": "ENSURE_SUBSCRIPTION"
+        },
+        "provider_kind": {
+          "const": "KILL_BILL"
+        }
+      }
+    },
+    "CommercialAuthorityDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "product_subscription_id",
+        "authoritative_revision",
+        "operation_id",
+        "outcome",
+        "reason_code",
+        "evaluated_at",
+        "expires_at",
+        "policy_reference"
+      ],
+      "properties": {
+        "tenant_id": {
+          "type": "string",
+          "minLength": 3
+        },
+        "product_subscription_id": {
+          "type": "string",
+          "pattern": "^sub_[a-z0-9]+$"
+        },
+        "authoritative_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "outcome": {
+          "const": "DENIED"
+        },
+        "reason_code": {
+          "enum": [
+            "SUBSCRIPTION_NOT_ACTIVE",
+            "CLASSIFICATION_NOT_COMMERCIAL",
+            "REVISION_STALE",
+            "CURRENT_ORGANISATION_UNVERIFIED",
+            "COMMERCIAL_TERMS_NOT_ATTESTED"
+          ]
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "policy_reference": {
+          "const": "ADR-SHARED-011/ADR-BCP-017/ADR-SUB-0015/financial-preflight:v1"
+        }
+      },
+      "description": "Version 1 deliberately has NO AUTHORISED outcome: CP alone does not own payer, price, account, or Kill Bill provision. Future positive authority requires an independently accepted higher-version contract."
+    }
+  }
+}
