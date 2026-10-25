@@ -66,10 +66,12 @@ func run() int {
 		return refused()
 	}
 	if *subscriptionPhase != "" {
-        report, err := development.SubscriptionFixtures(ctx, pool, cfg, *subscriptionPhase)
-        if err != nil || json.NewEncoder(os.Stdout).Encode(report) != nil { return refused() }
-        return 0
-    }
+		report, err := development.SubscriptionFixtures(ctx, pool, cfg, *subscriptionPhase)
+		if err != nil || json.NewEncoder(os.Stdout).Encode(report) != nil {
+			return refused()
+		}
+		return 0
+	}
 	if *checkExternal {
 		report, err := development.CheckExternalAPI(ctx, pool, cfg)
 		if err != nil || json.NewEncoder(os.Stdout).Encode(report) != nil {

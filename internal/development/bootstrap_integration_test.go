@@ -109,19 +109,35 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 	if err != nil || !facts.ZeroEstates || !facts.OwnAssignment || !facts.ValidatorUnassigned || !facts.IndependentTenant || facts.ProtectedAcceptance {
 		t.Fatalf("external facts: %+v %v", facts, err)
 	}
-    sub, err := SubscriptionFixtures(ctx,pool,cfg,"prepare")
-    if err!=nil || sub.Status!="ACTIVE" || sub.Revision!=1 || sub.TenantID==sub.OtherTenantID { t.Fatalf("subscription fixture: %+v %v",sub,err) }
-    replay,err:=SubscriptionFixtures(ctx,pool,cfg,"prepare")
-    if err!=nil || replay.SubscriptionID!=sub.SubscriptionID {t.Fatal("subscription fixture replay",err)}
-    if _,err=SubscriptionFixtures(ctx,pool,cfg,"suspend");err==nil {t.Fatal("out of order subscription transition")}
-    advanced,err:=SubscriptionFixtures(ctx,pool,cfg,"advance")
-    if err!=nil || advanced.Revision!=2 {t.Fatal("subscription revision",err)}
-    suspended,err:=SubscriptionFixtures(ctx,pool,cfg,"suspend")
-    if err!=nil || suspended.Revision!=3 || suspended.Status!="SUSPENDED" {t.Fatal("subscription suspension",err)}
-    bad:=cfg;bad.Environment="production"
-    if _,err=SubscriptionFixtures(ctx,pool,bad,"prepare");err==nil {t.Fatal("protected subscription fixture accepted")}
-    bad=cfg;bad.Now=result.ExpiresAt.Add(time.Second)
-    if _,err=SubscriptionFixtures(ctx,pool,bad,"read");err==nil {t.Fatal("expired subscription fixture accepted")}
+	sub, err := SubscriptionFixtures(ctx, pool, cfg, "prepare")
+	if err != nil || sub.Status != "ACTIVE" || sub.Revision != 1 || sub.TenantID == sub.OtherTenantID {
+		t.Fatalf("subscription fixture: %+v %v", sub, err)
+	}
+	replay, err := SubscriptionFixtures(ctx, pool, cfg, "prepare")
+	if err != nil || replay.SubscriptionID != sub.SubscriptionID {
+		t.Fatal("subscription fixture replay", err)
+	}
+	if _, err = SubscriptionFixtures(ctx, pool, cfg, "suspend"); err == nil {
+		t.Fatal("out of order subscription transition")
+	}
+	advanced, err := SubscriptionFixtures(ctx, pool, cfg, "advance")
+	if err != nil || advanced.Revision != 2 {
+		t.Fatal("subscription revision", err)
+	}
+	suspended, err := SubscriptionFixtures(ctx, pool, cfg, "suspend")
+	if err != nil || suspended.Revision != 3 || suspended.Status != "SUSPENDED" {
+		t.Fatal("subscription suspension", err)
+	}
+	bad := cfg
+	bad.Environment = "production"
+	if _, err = SubscriptionFixtures(ctx, pool, bad, "prepare"); err == nil {
+		t.Fatal("protected subscription fixture accepted")
+	}
+	bad = cfg
+	bad.Now = result.ExpiresAt.Add(time.Second)
+	if _, err = SubscriptionFixtures(ctx, pool, bad, "read"); err == nil {
+		t.Fatal("expired subscription fixture accepted")
+	}
 	again, err := Bootstrap(ctx, pool, cfg, raw)
 	if err != nil || again.Enterprises[0].TenantID != result.Enterprises[0].TenantID {
 		t.Fatalf("idempotent replay: %v", err)
