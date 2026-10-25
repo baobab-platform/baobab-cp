@@ -3,44 +3,24 @@ package api
 // ADR-SHARED-044: current ProductSubscription workload reads are separate
 // from financial authorization. CP does not own pricing, payer or Kill Bill.
 import (
- "encoding/json"
- "errors"
- "io"
- "regexp"
- "net/http"
- "time"
+    "encoding/json"
+    "errors"
+    "io"
+    "net/http"
+    "regexp"
+    "time"
 
- "github.com/baobab-platform/baobab-cp/internal/auth"
- "github.com/baobab-platform/baobab-cp/internal/domain"
- "github.com/baobab-platform/baobab-cp/internal/repository"
- "github.com/baobab-platform/baobab-cp/internal/service/subscription"
- "github.com/go-chi/chi/v5"
+    "github.com/baobab-platform/baobab-cp/internal/auth"
+    "github.com/baobab-platform/baobab-cp/internal/domain"
+    "github.com/baobab-platform/baobab-cp/internal/repository"
+    "github.com/baobab-platform/baobab-cp/internal/service/subscription"
+    "github.com/go-chi/chi/v5"
 )
 
 const currentSubscriptionPolicy = "ADR-SHARED-011/ADR-BCP-017/ADR-SUB-0003/current:v1"
 const commercialPreflightPolicy = "ADR-SHARED-011/ADR-BCP-017/ADR-SUB-0015/financial-preflight:v1"
 
-var commercialUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}package api
-
-// ADR-SHARED-044: current ProductSubscription workload reads are separate
-// from financial authorization. CP does not own pricing, payer or Kill Bill.
-import (
- "encoding/json"
- "errors"
- "io"
- "regexp"
- "net/http"
- "time"
-
- "github.com/baobab-platform/baobab-cp/internal/auth"
- "github.com/baobab-platform/baobab-cp/internal/domain"
- "github.com/baobab-platform/baobab-cp/internal/repository"
- "github.com/baobab-platform/baobab-cp/internal/service/subscription"
- "github.com/go-chi/chi/v5"
-)
-
-const currentSubscriptionPolicy = "ADR-SHARED-011/ADR-BCP-017/ADR-SUB-0003/current:v1"
-)
+var commercialUUID = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 type subscriptionCurrentHandler struct {
  reader repository.CurrentProductSubscriptionReader
