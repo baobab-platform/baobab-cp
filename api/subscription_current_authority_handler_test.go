@@ -80,6 +80,22 @@ func TestSubscriptionCurrentAuthorityDenyOnlyAndCrossTenant(t *testing.T){
  unscopedRouter.ServeHTTP(w,r)
  if w.Code!=403{t.Fatalf("revoked workload reached PDP: %d",w.Code)}
 }
+func TestSubscriptionCurrentRefusesNotYetEffectivePrimaryMapping(t *testing.T) {
+    now:=time.Date(2026,10,25,18,0,0,0,time.UTC)
+    h:=subscriptionCurrentHandler{reader:&subscriptionCurrentFakeReader{
+        row:repository.CurrentProductSubscription{TenantID:currentTestTenant,
+        SubscriptionID:currentTestSub,ProductID:"synthetic-product",Status:"ACTIVE",Revision:2}},
+        organisations:subscriptionCurrentFakeOrgs{live:[]domain.TenantOrganisationMapping{{
+        TenantID:currentTestTenant,OrganisationID:"org_future",
+        MappingRole:domain.TenantOrgRolePrimary,Status:domain.RelationshipStatusActive,
+        EffectiveFrom:now.Add(time.Hour)}}},
+        now:func()time.Time{return now}}
+    r:=httptest.NewRequest(http.MethodGet,"/current",nil)
+    snap,err:=h.current(r,currentTestTenant,currentTestSub)
+    if err!=nil{t.Fatal(err)}
+    if snap.PrimaryOrganisationID!=nil{t.Fatal("future-dated mapping improperly qualified")}
+}
+
 func TestSubscriptionCurrentWorkloadReadCannotGrantPayerAuthority(t *testing.T){
  reader:=&subscriptionCurrentFakeReader{row:repository.CurrentProductSubscription{
  TenantID:currentTestTenant,SubscriptionID:currentTestSub,ProductID:"synthetic-product",
