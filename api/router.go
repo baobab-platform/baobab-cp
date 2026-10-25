@@ -216,6 +216,11 @@ type Dependencies struct {
 	// PEO-02D: workload-only and nonproduction-only live INTERNAL PDP.
 	CurrentInternalAuthorityEnabled  bool
 	CurrentInternalAuthorityClientID string
+	// ADR-SHARED-044: current canonical ProductSubscription workload read.
+	// Deny-only commercial preflight is not permission to bill or pay.
+	CurrentSubscriptionAuthorityEnabled bool
+	CurrentSubscriptionAuthorityReader repository.CurrentProductSubscriptionReader
+	CurrentSubscriptionAuthorityClientID string
 	// Metrics is served on GET /metrics to workloads holding metrics:read.
 	// Nil serves nothing.
 	Metrics  *metrics.Registry
@@ -1153,6 +1158,21 @@ func New(dependencies Dependencies) http.Handler {
 		r.With(authorise...).Post("/v1/tenant-onboarding-requests/{requestID}/authorisation", ob.authorise())
 		r.With(request...).Post("/v1/tenant-onboarding-requests/{requestID}/cancellation", ob.cancel())
 		r.With(request...).Post("/v1/tenant-onboarding-requests/{requestID}/fulfilment", ob.fulfil())
+	}
+	if dependencies.CurrentSubscriptionAuthorityEnabled &&
+		dependencies.CurrentSubscriptionAuthorityReader != nil &&
+		dependencies.Classifications != nil &&
+		dependencies.CurrentSubscriptionAuthorityClientID != "" &&
+		dependencies.WorkloadRegistry != nil &&
+		peoRoutesPermittedIn(dependencies.Environment) {
+		h := subscriptionCurrentHandler{reader: dependencies.CurrentSubscriptionAuthorityReader,
+			organisations: dependencies.Classifications.Orgs,
+			registry: dependencies.WorkloadRegistry,
+			clientID: dependencies.CurrentSubscriptionAuthorityClientID}
+		r.With(a.authorize(a.workloadVerifier, "workload", "subscription:current-workload-read")).
+			Get("/internal/subscriptions/v1/tenants/{tenantID}/product-subscriptions/{subscriptionID}/current", h.read)
+		r.With(a.authorize(a.workloadVerifier, "workload", "subscription:commercial-authority")).
+			Post("/internal/subscriptions/v1/tenants/{tenantID}/product-subscriptions/{subscriptionID}/commercial-authority", h.preflight)
 	}
 	if dependencies.Classifications != nil &&
 		dependencies.CurrentInternalAuthorityEnabled &&
