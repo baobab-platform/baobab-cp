@@ -5,6 +5,8 @@ package api
 import (
  "encoding/json"
  "errors"
+ "io"
+ "regexp"
  "net/http"
  "time"
 
@@ -17,6 +19,28 @@ import (
 
 const currentSubscriptionPolicy = "ADR-SHARED-011/ADR-BCP-017/ADR-SUB-0003/current:v1"
 const commercialPreflightPolicy = "ADR-SHARED-011/ADR-BCP-017/ADR-SUB-0015/financial-preflight:v1"
+
+var commercialUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}package api
+
+// ADR-SHARED-044: current ProductSubscription workload reads are separate
+// from financial authorization. CP does not own pricing, payer or Kill Bill.
+import (
+ "encoding/json"
+ "errors"
+ "io"
+ "regexp"
+ "net/http"
+ "time"
+
+ "github.com/baobab-platform/baobab-cp/internal/auth"
+ "github.com/baobab-platform/baobab-cp/internal/domain"
+ "github.com/baobab-platform/baobab-cp/internal/repository"
+ "github.com/baobab-platform/baobab-cp/internal/service/subscription"
+ "github.com/go-chi/chi/v5"
+)
+
+const currentSubscriptionPolicy = "ADR-SHARED-011/ADR-BCP-017/ADR-SUB-0003/current:v1"
+)
 
 type subscriptionCurrentHandler struct {
  reader repository.CurrentProductSubscriptionReader
@@ -125,9 +149,13 @@ func (h subscriptionCurrentHandler) preflight(w http.ResponseWriter,r *http.Requ
  decoder:=json.NewDecoder(http.MaxBytesReader(w,r.Body,8192))
  decoder.DisallowUnknownFields()
  if err:=decoder.Decode(&req);err!=nil{problem(w,r,400,"INVALID_COMMERCIAL_AUTHORITY_REQUEST","invalid request",false);return}
+ // No second JSON document may hide an alternate request from audit.
+ var trailing json.RawMessage
+ if err:=decoder.Decode(&trailing);err!=io.EOF{
+ problem(w,r,400,"INVALID_COMMERCIAL_AUTHORITY_REQUEST","trailing payload forbidden",false);return}
  if req.TenantID!=tenantID||req.SubscriptionID!=subID||req.Revision<1||
  req.OperationKind!="ENSURE_SUBSCRIPTION"||req.ProviderKind!="KILL_BILL"||
- len(req.OperationID)!=36 {
+ !commercialUUID.MatchString(req.OperationID) {
  problem(w,r,400,"INVALID_COMMERCIAL_AUTHORITY_REQUEST","invalid operation or revision",false);return}
  if _,err:=domain.ParseResourceID(domain.ProductSubscriptionIDPrefix,subID);err!=nil{
  problem(w,r,400,"INVALID_COMMERCIAL_AUTHORITY_REQUEST","canonical subscription required",false);return}
