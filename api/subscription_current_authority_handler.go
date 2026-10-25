@@ -98,7 +98,7 @@ func (h subscriptionCurrentHandler) current(r *http.Request,tenantID,subID strin
  if err!=nil{return out,err}
  count:=0
  for _,m:=range live{
- if m.MappingRole==domain.TenantOrgRolePrimary&&m.Status==domain.RelationshipStatusActive {
+ if m.MappingRole==domain.TenantOrgRolePrimary&&m.Status==domain.RelationshipStatusActive&&m.InEffect(now) {
  count++
  id:=m.OrganisationID
  out.PrimaryOrganisationID=&id
