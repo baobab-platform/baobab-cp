@@ -57,10 +57,18 @@ func (h internalAuthorityHandler) read(w http.ResponseWriter, r *http.Request) {
 			"the subscription identifier is invalid", false)
 		return
 	}
-	explanation, err := h.classifications.Explain(r.Context(), productSubscriptionID)
-	if errors.Is(err, repository.ErrProductSubscriptionNotFound) ||
-		errors.Is(err, subscription.ErrNotFound) ||
-		errors.Is(err, subscription.ErrNotClassified) {
+	// Scope a tenant-bound workload before any canonical row lookup.
+	if _, ok := resolveWorkloadTenant(principal.TenantID, tenantID); !ok {
+		problem(w, r, http.StatusNotFound, "PRODUCT_SUBSCRIPTION_NOT_FOUND",
+			"no current classified ProductSubscription", false)
+		return
+	}
+	now := time.Now().UTC()
+	if h.now != nil {
+		now = h.now().UTC()
+	}
+	eligible, err := h.classifications.CurrentInternalAuthority(r.Context(), tenantID, productSubscriptionID, ref, now)
+	if errors.Is(err, repository.ErrProductSubscriptionNotFound) || errors.Is(err, subscription.ErrNotFound) {
 		problem(w, r, http.StatusNotFound, "PRODUCT_SUBSCRIPTION_NOT_FOUND",
 			"no current classified ProductSubscription", false)
 		return
@@ -70,39 +78,6 @@ func (h internalAuthorityHandler) read(w http.ResponseWriter, r *http.Request) {
 			"the current INTERNAL policy cannot be evaluated", true)
 		return
 	}
-	now := time.Now().UTC()
-	if h.now != nil {
-		now = h.now().UTC()
-	}
-	// Reconcile the actual current primary Organisation; a classification
-	// attached to an old tenant/organisation must never be a continuing
-	// charge waiver after a tenant-organisation re-point.
-	currentPrimary := ""
-	primaryCount := 0
-	if explanation.Current.InternalEligibility != nil {
-		mappings, e := h.classifications.Orgs.ListLiveTenantOrganisationMappings(r.Context(), tenantID)
-		if e != nil {
-			problem(w, r, http.StatusServiceUnavailable, "CURRENT_AUTHORITY_UNAVAILABLE",
-				"the live primary Organisation could not be confirmed", true)
-			return
-		}
-		for _, m := range mappings {
-			if m.MappingRole == domain.TenantOrgRolePrimary && m.Status == domain.RelationshipStatusActive {
-				primaryCount++
-				currentPrimary = m.OrganisationID
-			}
-		}
-	}
-	eligible := explanation.TenantID == tenantID &&
-		explanation.SubscriptionID == productSubscriptionID &&
-		explanation.Current.SubscriptionID == productSubscriptionID &&
-		explanation.Current.TenantID == tenantID &&
-		explanation.Current.SubscriptionType == domain.SubscriptionInternal &&
-		explanation.Current.Reference == ref &&
-		explanation.Current.InternalEligibility != nil &&
-		explanation.CurrentEligibility != nil &&
-		explanation.CurrentEligibility.EligibilityStatus == "ELIGIBLE" &&
-		primaryCount == 1 && currentPrimary == explanation.Current.InternalEligibility.OrganisationID
 	expires := now.Add(3 * time.Second)
 	// A negative result is also transient. The consumer is never permitted
 	// to cache TRUE across expiry/revocation; the CP endpoint explicitly
