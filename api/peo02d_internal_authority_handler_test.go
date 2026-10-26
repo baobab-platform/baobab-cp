@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/go-chi/chi/v5"
 )
 
 func TestCurrentInternalAuthorityRejectsUnregisteredWorkloadAndHuman(t *testing.T) {
@@ -31,5 +32,19 @@ func TestCurrentInternalAuthorityRejectsUnregisteredWorkloadAndHuman(t *testing.
 				t.Fatal("an unauthorised PDP response could be cached")
 			}
 		})
+	}
+}
+
+func TestCurrentInternalAuthorityTenantBindingDeniesBeforeCanonicalRead(t *testing.T) {
+	handler := internalAuthorityHandler{clientID: "baobab-subscriptions"}
+	router := chi.NewRouter()
+	router.Get("/tenants/{tenantID}/subscriptions/{subscriptionID}", handler.read)
+	r := httptest.NewRequest(http.MethodGet, "/tenants/tn_other/subscriptions/sub_0190a1b2c3d4e5f60718293a4b5c6d7e?classification_reference=adm_test", nil)
+	r = r.WithContext(auth.WithPrincipal(r.Context(), auth.Principal{ActorType: "workload", ClientID: "baobab-subscriptions", TenantID: "tn_bound"}))
+	w := httptest.NewRecorder()
+	// No Classifier is installed: a cross-tenant request must stop first.
+	router.ServeHTTP(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("cross-tenant authority got %d", w.Code)
 	}
 }

@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -18,6 +20,9 @@ type CurrentProductSubscription struct {
 	SubscriptionType        string
 	ClassificationSource    string
 	ClassificationReference string
+	EffectiveFrom           time.Time
+	EffectiveTo             *time.Time
+	InternalEligibility     *domain.InternalEligibilityRecord
 }
 
 type CurrentProductSubscriptionReader interface {
@@ -35,16 +40,19 @@ func (r *PostgresRepository) ReadCurrentProductSubscription(ctx context.Context,
 		return out, ErrProductSubscriptionNotFound
 	}
 	var rawID, rawClassification string
+	var eligibility []byte
 	err = r.pool.QueryRow(ctx, `SELECT s.subscription_id::text, s.tenant_id, s.product_id, s.status, s.version,
  COALESCE(s.classification_id::text,''), COALESCE(s.subscription_type,''),
- COALESCE(c.classification_source,''), COALESCE(c.classification_reference,'')
+ COALESCE(c.classification_source,''), COALESCE(c.classification_reference,''),
+ s.effective_from, s.effective_to, c.internal_eligibility
  FROM product.product_subscription s
  LEFT JOIN product.subscription_classification c
  ON c.classification_id=s.classification_id AND c.subscription_id=s.subscription_id
  AND c.tenant_id=s.tenant_id AND c.subscription_type=s.subscription_type
  WHERE s.subscription_id=$1::uuid AND s.tenant_id=$2`, id, tenantID).Scan(
 		&rawID, &out.TenantID, &out.ProductID, &out.Status, &out.Revision, &rawClassification,
-		&out.SubscriptionType, &out.ClassificationSource, &out.ClassificationReference)
+		&out.SubscriptionType, &out.ClassificationSource, &out.ClassificationReference,
+		&out.EffectiveFrom, &out.EffectiveTo, &eligibility)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, ErrProductSubscriptionNotFound
 	}
@@ -65,6 +73,11 @@ func (r *PostgresRepository) ReadCurrentProductSubscription(ctx context.Context,
 		}
 	} else if out.SubscriptionType != "" || out.ClassificationSource != "" || out.ClassificationReference != "" {
 		return CurrentProductSubscription{}, errors.New("inconsistent unclassified subscription")
+	}
+	if len(eligibility) > 0 {
+		if err := json.Unmarshal(eligibility, &out.InternalEligibility); err != nil {
+			return CurrentProductSubscription{}, err
+		}
 	}
 	return out, nil
 }
