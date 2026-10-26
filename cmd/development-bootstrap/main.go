@@ -22,6 +22,8 @@ func main() { os.Exit(run()) }
 func run() int {
 	var cfg development.Config
 	subscriptionPhase := flag.String("subscriptions-phase", "", "bounded CP-owned COMMERCIAL subscription fixture: prepare/read/advance/suspend")
+	externalPhase := flag.String("external-capability-phase", "", "owned normal DEV-06 authority phases")
+	externalSource := flag.String("external-capability-source", "", "immutable actual owner source/OCI proof file for register")
 	checkFixtures := flag.Bool("check-fixtures", false, "read and check existing DEV-02 fixtures without seeding or migrating")
 	checkExternal := flag.Bool("check-external-api", false, "read current DEV-06 zero-estate and assignment facts")
 	profiles := flag.String("profiles", "", "optional canonical development profile file")
@@ -64,6 +66,27 @@ func run() int {
 	// Guard the actual database BEFORE any migration or seed mutation.
 	if development.CheckDatabase(ctx, pool) != nil {
 		return refused()
+	}
+	if *externalPhase != "" {
+		var source development.ExternalCapabilitySource
+		if *externalSource != "" {
+			f, e := os.Open(*externalSource)
+			if e != nil {
+				return refused()
+			}
+			defer f.Close()
+			decoder := json.NewDecoder(io.LimitReader(f, 8192))
+			decoder.DisallowUnknownFields()
+			var extra json.RawMessage
+			if decoder.Decode(&source) != nil || decoder.Decode(&extra) != io.EOF {
+				return refused()
+			}
+		}
+		report, e := development.ExternalCapabilityFixtures(ctx, pool, cfg, *externalPhase, source)
+		if e != nil || json.NewEncoder(os.Stdout).Encode(report) != nil {
+			return refused()
+		}
+		return 0
 	}
 	if *subscriptionPhase != "" {
 		report, err := development.SubscriptionFixtures(ctx, pool, cfg, *subscriptionPhase)
