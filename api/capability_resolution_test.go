@@ -21,13 +21,16 @@ import (
 
 // resolutionStore is an in-memory service.CapabilityResolutionStore.
 type resolutionStore struct {
-	capabilities map[string]capabilitydomain.Capability
-	grants       []capabilitydomain.CapabilityGrant
-	scopes       map[string]capabilitydomain.CapabilityScope
-	bindings     []resolver.CapabilityBinding
-	instances    []resolver.EngineInstance
-	invocations  map[string]repository.ProviderInvocation
-	recorded     []repository.CapabilityResolutionRecord
+	capabilities      map[string]capabilitydomain.Capability
+	grants            []capabilitydomain.CapabilityGrant
+	scopes            map[string]capabilitydomain.CapabilityScope
+	bindings          []resolver.CapabilityBinding
+	instances         []resolver.EngineInstance
+	invocations       map[string]repository.ProviderInvocation
+	sourceWithdrawn   bool
+	providerWithdrawn bool
+	provenanceError   error
+	recorded          []repository.CapabilityResolutionRecord
 }
 
 func (s *resolutionStore) GetCapability(_ context.Context, key string) (capabilitydomain.Capability, error) {
@@ -277,5 +280,43 @@ func TestCapabilityResolutionConformsToCapabilityV1(t *testing.T) {
 	if len(decided.Decisions) != 2 || decided.Decisions[0].Decision != "RESOLVED" || decided.Decisions[1].ReasonCode != "CAPABILITY_UNKNOWN" ||
 		len(store.recorded) != 2 {
 		t.Fatalf("batch decisions: %+v (recorded %d)", decided.Decisions, len(store.recorded))
+	}
+}
+
+func (s *resolutionStore) GrantSourceCurrent(context.Context, capabilitydomain.CapabilityGrant, time.Time) (bool, error) {
+	return !s.sourceWithdrawn, s.provenanceError
+}
+func (s *resolutionStore) BindingProviderCurrent(context.Context, resolver.CapabilityBinding, time.Time) (bool, error) {
+	return !s.providerWithdrawn, s.provenanceError
+}
+
+func TestCapabilityResolutionRevalidatesSourceProviderAndScope(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		change   func(*resolutionStore)
+		decision string
+	}{
+		{"current", func(*resolutionStore) {}, service.DecisionResolved},
+		{"absent subscription provenance", func(s *resolutionStore) { s.sourceWithdrawn = true }, service.DecisionDenied},
+		{"withdrawn provider", func(s *resolutionStore) { s.providerWithdrawn = true }, service.DecisionUnavailable},
+		{"retired binding", func(s *resolutionStore) { s.bindings[0].Status = "RETIRED" }, service.DecisionUnavailable},
+		{"unentitled resource country", func(s *resolutionStore) {
+			scope := s.scopes[resolutionScope]
+			scope.IncludeCountries = []string{"UG"}
+			s.scopes[resolutionScope] = scope
+		}, service.DecisionDenied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newResolutionStore()
+			tc.change(s)
+			rec, err := (service.CapabilityResolutionService{Store: s}).Resolve(context.Background(), service.CapabilityResolutionRequest{
+				Context: domain.Context{ID: resolutionContext, TenantID: resolutionTenant, CountryCode: "ZA"}, CapabilityKey: resolutionKey, RequiredContractVersion: 1, CorrelationID: domain.NewUUIDv7()})
+			if err != nil || rec.Decision != tc.decision {
+				t.Fatalf("%s: %v %+v", tc.name, err, rec)
+			}
+			if len(s.recorded) != 1 {
+				t.Fatal("normal decision must be durably recorded")
+			}
+		})
 	}
 }
