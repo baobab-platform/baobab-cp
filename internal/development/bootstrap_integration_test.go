@@ -344,6 +344,33 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 	if _, err = repo.ApproveInt03CProvenance(ctx, provenance.ProvenanceID, result.CheckerID, digest); err != nil {
 		t.Fatal(err)
 	}
+	proof := ExternalCapabilitySource{SourceSHA: strings.Repeat("a", 40), ManifestDigest: "sha256:" + strings.Repeat("b", 64), DeclarationDigest: "sha256:" + strings.Repeat("c", 64)}
+	registered, err := ExternalCapabilityFixtures(ctx, pool, cfg, "register", proof)
+	if err != nil || registered.Phase != "REGISTERED" || registered.TenantID == "" || registered.ProviderID == "" {
+		t.Fatalf("owned registration: %+v %v", registered, err)
+	}
+	externalAgain, err := ExternalCapabilityFixtures(ctx, pool, cfg, "register", proof)
+	if err != nil || externalAgain.ProviderID != registered.ProviderID {
+		t.Fatalf("registration replay: %v", err)
+	}
+	if _, err = ExternalCapabilityFixtures(ctx, pool, cfg, "absent", proof); err == nil {
+		t.Fatal("out-of-order withdrawal accepted")
+	}
+	if _, err = ExternalCapabilityFixtures(ctx, pool, protected, "read", proof); err == nil {
+		t.Fatal("protected fixture accepted")
+	}
+	if _, err = ExternalCapabilityFixtures(ctx, pool, expired, "read", proof); err == nil {
+		t.Fatal("expired fixture accepted")
+	}
+	var providerState string
+	if err = pool.QueryRow(ctx, `SELECT status FROM capability.capability_provider WHERE provider_id=$1::uuid`, registered.ProviderID).Scan(&providerState); err != nil || providerState != "DRAFT" {
+		t.Fatal("registration self-activated provider")
+	}
+	var invented int
+	if err = pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM capability.capability_grant WHERE tenant_id=$1)+(SELECT count(*) FROM estate.digital_estate WHERE tenant_id=$1)`, registered.TenantID).Scan(&invented); err != nil || invented != 0 {
+		t.Fatal("registration invented a grant or estate")
+	}
+
 }
 
 // This verifier is only a component seam; it makes no signed-token claim.
