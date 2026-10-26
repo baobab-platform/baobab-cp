@@ -484,6 +484,10 @@ func TestEngineProfileBootstrapPostgres(t *testing.T) {
 			if result.FixtureVersion != 4 || result.ProtectedAcceptance {
 				t.Fatal("incorrect engine profile result")
 			}
+			report, err := CheckFixtures(ctx, pool, cfg)
+			if err != nil || len(report.Observations) != 24 || report.OfficialActorVerified || report.ProviderPermissionsGranted {
+				t.Fatalf("engine bootstrap must retain non-authorising enterprise fixture checks: %+v, %v", report, err)
+			}
 			repo, err := repository.Open(ctx, u.String())
 			if err != nil {
 				t.Fatal(err)
