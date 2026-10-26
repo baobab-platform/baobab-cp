@@ -8,7 +8,9 @@ package repository_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	capabilitydomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	productdomain "github.com/baobab-platform/baobab-cp/internal/product/domain"
@@ -188,4 +190,39 @@ func TestPostgresCompositionProductAndEntitlementProjectionRoundTrip(t *testing.
 	if len(grants) != 1 || grants[0].Source != capabilitydomain.GrantSourceProductSubscription || grants[0].SourceReference != subscriptionID {
 		t.Fatalf("expected a single subscription-sourced grant, got %+v", grants)
 	}
+	checkCurrent := func(want bool) {
+		t.Helper()
+		current, err := repo.GrantSourceCurrent(ctx, grants[0], time.Now().UTC())
+		if err != nil || current != want {
+			t.Fatalf("current subscription projection=%v error=%v want=%v", current, err, want)
+		}
+	}
+	checkCurrent(true)
+	if _, err := admin.Exec(ctx, `UPDATE product.product_subscription SET status='SUSPENDED' WHERE subscription_id=$1::uuid`, subscriptionID); err != nil {
+		t.Fatal(err)
+	}
+	checkCurrent(false)
+	if _, err := admin.Exec(ctx, `UPDATE product.product_subscription SET status='ACTIVE',effective_from=now()+interval '1 hour' WHERE subscription_id=$1::uuid`, subscriptionID); err != nil {
+		t.Fatal(err)
+	}
+	checkCurrent(false)
+	if _, err := admin.Exec(ctx, `UPDATE product.product_subscription SET effective_from=now()-interval '1 hour',effective_to=now() WHERE subscription_id=$1::uuid`, subscriptionID); err != nil {
+		t.Fatal(err)
+	}
+	checkCurrent(false)
+	if _, err := admin.Exec(ctx, `UPDATE product.product_subscription SET effective_to=NULL WHERE subscription_id=$1::uuid`, subscriptionID); err != nil {
+		t.Fatal(err)
+	}
+	checkCurrent(true)
+	grants[0].SourceReference = "sub_" + strings.ReplaceAll(subscriptionID, "-", "")
+	checkCurrent(true)
+	if _, err := admin.Exec(ctx, `UPDATE product.entitlement_projection SET status='PENDING' WHERE subscription_id=$1::uuid`, subscriptionID); err != nil {
+		t.Fatal(err)
+	}
+	checkCurrent(false)
+	if _, err := admin.Exec(ctx, `DELETE FROM product.product_subscription WHERE subscription_id=$1::uuid`, subscriptionID); err != nil {
+		t.Fatal(err)
+	}
+	checkCurrent(false)
+
 }

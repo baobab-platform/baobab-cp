@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -110,6 +111,25 @@ func TestCreateBindingResolvesItsProvider(t *testing.T) {
 	if _, got, _ := stored(scopes[0]); got != first {
 		t.Fatalf("binding provider = %q, want the engine's only provider %s", got, first)
 	}
+	probe := binding(scopes[0], "ACTIVE", first)
+	checkRuntime := func(want bool) {
+		t.Helper()
+		current, err := repo.BindingProviderCurrent(ctx, probe, time.Now().UTC())
+		if err != nil || current != want {
+			t.Fatalf("current provider=%v err=%v want=%v", current, err, want)
+		}
+	}
+	checkRuntime(true)
+	exec(`UPDATE capability.capability_provider SET status='SUSPENDED' WHERE provider_id=$1`, first)
+	checkRuntime(false)
+	exec(`UPDATE capability.capability_provider SET status='ACTIVE' WHERE provider_id=$1`, first)
+	exec(`UPDATE capability.provider_capability_support SET status='SUSPENDED' WHERE provider_id=$1`, first)
+	checkRuntime(false)
+	exec(`UPDATE capability.provider_capability_support SET status='ACTIVE',effective_to=now() WHERE provider_id=$1`, first)
+	checkRuntime(false)
+	exec(`UPDATE capability.provider_capability_support SET effective_to=NULL WHERE provider_id=$1`, first)
+	checkRuntime(true)
+
 	// Another engine's provider is never the binding's.
 	if err := repo.CreateBinding(ctx, binding(scopes[1], "ACTIVE", foreign)); !errors.Is(err, ErrBindingProviderUnresolved) {
 		t.Fatalf("a provider of another engine: %v", err)

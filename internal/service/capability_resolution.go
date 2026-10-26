@@ -36,6 +36,8 @@ type CapabilityResolutionStore interface {
 	HealthLevels(ctx context.Context, engineInstanceID, providerID, capabilityKey string) (health.Levels, error)
 	ProviderInvocationByID(ctx context.Context, providerID string) (repository.ProviderInvocation, bool, error)
 	RecordCapabilityResolution(ctx context.Context, r repository.CapabilityResolutionRecord) error
+	GrantSourceCurrent(context.Context, capabilitydomain.CapabilityGrant, time.Time) (bool, error)
+	BindingProviderCurrent(context.Context, resolver.CapabilityBinding, time.Time) (bool, error)
 }
 
 // CapabilityResolutionRequest is one capability to decide for a resolved,
@@ -119,6 +121,21 @@ func (s CapabilityResolutionService) decide(ctx context.Context, req CapabilityR
 	if err != nil {
 		return fmt.Errorf("load capability grants: %w", err)
 	}
+	// Projected grants do not outlive their authoritative subscription.
+	// Read the current source on every invocation; a stale projection/event
+	// cannot substitute for current provenance. Other independent sources
+	// retain their existing effectiveness and scope rules.
+	currentGrants := make([]capabilitydomain.CapabilityGrant, 0, len(grants))
+	for _, g := range grants {
+		current, err := s.Store.GrantSourceCurrent(ctx, g, now)
+		if err != nil {
+			return fmt.Errorf("read current grant source: %w", err)
+		}
+		if current {
+			currentGrants = append(currentGrants, g)
+		}
+	}
+	grants = currentGrants
 	for _, g := range grants {
 		if err := scope(g.ScopeID); err != nil {
 			return err
@@ -141,10 +158,22 @@ func (s CapabilityResolutionService) decide(ctx context.Context, req CapabilityR
 		return fmt.Errorf("load capability bindings: %w", err)
 	}
 	usable := bindings[:0:0]
+	currentProviders := 0
 	for _, b := range bindings {
+		current, err := s.Store.BindingProviderCurrent(ctx, b, now)
+		if err != nil {
+			return fmt.Errorf("read current binding provider: %w", err)
+		}
+		if !current {
+			continue
+		}
+		currentProviders++
 		if req.RequiredContractVersion == 0 || contractMajor(b.ContractVersion) == req.RequiredContractVersion {
 			usable = append(usable, b)
 		}
+	}
+	if len(bindings) > 0 && currentProviders == 0 {
+		return decideAs(rec, DecisionUnavailable, "PROVIDER_UNAVAILABLE")
 	}
 	if len(bindings) > 0 && len(usable) == 0 {
 		return decideAs(rec, DecisionIncompatible, "CONTRACT_VERSION_UNSUPPORTED")
