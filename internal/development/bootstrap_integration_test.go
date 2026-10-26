@@ -406,3 +406,106 @@ func (v fixtureTokenVerifier) Verify(_ context.Context, token string) (auth.Prin
 	}
 	return v.principal, nil
 }
+
+// Separate disposable stores prove descriptor-driven identity/tenant assignment.
+// This PG component test does not claim actual issuer or engine execution.
+func TestEngineProfileBootstrapPostgres(t *testing.T) {
+	for _, profileName := range []string{"pulse-intelligence", "payments-sandbox"} {
+		t.Run(profileName, func(t *testing.T) {
+			dsn := os.Getenv("TEST_DATABASE_URL")
+			if dsn == "" {
+				t.Skip("TEST_DATABASE_URL not configured")
+			}
+			ctx := context.Background()
+			admin, err := pgxpool.New(ctx, dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer admin.Close()
+			var exists bool
+			if err = admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='baobab_dev')`).Scan(&exists); err != nil {
+				t.Fatal(err)
+			}
+			if !exists {
+				if _, err = admin.Exec(ctx, `CREATE ROLE baobab_dev LOGIN SUPERUSER`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			database := "baobab_dev_" + strings.ReplaceAll(domain.NewUUIDv7(), "-", "")
+			name := pgx.Identifier{database}.Sanitize()
+			if _, err = admin.Exec(ctx, `CREATE DATABASE `+name+` OWNER baobab_dev`); err != nil {
+				t.Fatal(err)
+			}
+			defer admin.Exec(ctx, `DROP DATABASE `+name+` WITH (FORCE)`)
+			u, err := url.Parse(dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			u.User = url.User("baobab_dev")
+			u.Path = "/" + database
+			pool, err := pgxpool.New(ctx, u.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer pool.Close()
+			if CheckDatabase(ctx, pool) == nil {
+				t.Fatal("unmarked development database accepted")
+			}
+			if _, err = admin.Exec(ctx, `COMMENT ON DATABASE `+name+` IS '`+DatabaseMarker+`'`); err != nil {
+				t.Fatal(err)
+			}
+			store, err := postgres.Open(ctx, u.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			if err = store.ApplyMigrations(ctx); err != nil {
+				t.Fatal(err)
+			}
+
+			raw, err := contracts.ReadEmbedded("development/v1/examples/nabhold-group.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			profileRaw, err := contracts.ReadEmbedded("development/v1/examples/engines/" + profileName + ".json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			profile, err := ParseEngineIntegrationProfile(profileRaw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg := fixtureConfig()
+			cfg.IntegrationProfile = profile
+			result, err := Bootstrap(ctx, pool, cfg, raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.FixtureVersion != 4 || result.ProtectedAcceptance {
+				t.Fatal("incorrect engine profile result")
+			}
+			repo, err := repository.Open(ctx, u.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer repo.Close()
+			for _, e := range result.Enterprises {
+				for _, role := range []string{"caller", "neighbour", "validator"} {
+					id := profile.IAM[role].ClientID
+					allowed, err := repo.DevelopmentTenantAllowed(ctx, result.ProofPrincipals[id], id, e.TenantID, cfg.Now)
+					expected := role == "caller" && e.Key == profile.EnterpriseSeed || role == "neighbour" && e.Key == profile.NeighbourSeed
+					if err != nil || allowed != expected {
+						t.Fatalf("%s/%s assignment: %v %v", role, e.Key, allowed, err)
+					}
+				}
+			}
+			if _, err = Bootstrap(ctx, pool, cfg, raw); err != nil {
+				t.Fatal("identical replay refused", err)
+			}
+			cfg.IntegrationProfile = nil
+			if _, err = Bootstrap(ctx, pool, cfg, raw); err == nil {
+				t.Fatal("different descriptor adopted old run")
+			}
+		})
+	}
+}

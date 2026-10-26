@@ -75,22 +75,28 @@ const ExternalAPIClient = "baobab-dev-external-api"
 const PulseValidatorClient = "baobab-dev-pulse-validator"
 
 type Config struct {
-	ExternalAPI    bool
-	Environment    string
-	Enabled        bool
-	RunID          string
-	Issuer         string
-	WorkloadIssuer string
-	MakerSubject   string
-	CheckerSubject string
-	Lease          time.Duration
-	Now            time.Time
+	IntegrationProfile *EngineIntegrationProfile
+	ExternalAPI        bool
+	Environment        string
+	Enabled            bool
+	RunID              string
+	Issuer             string
+	WorkloadIssuer     string
+	MakerSubject       string
+	CheckerSubject     string
+	Lease              time.Duration
+	Now                time.Time
 }
 
 var nonce = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var databaseName = regexp.MustCompile(`^baobab_dev_[a-z0-9_]{1,48}$`)
 
 func (c Config) Validate() error {
+	if c.IntegrationProfile != nil {
+		if c.ExternalAPI || c.IntegrationProfile.Validate() != nil || c.Lease > time.Duration(c.IntegrationProfile.RunPolicy.MaxLeaseSeconds)*time.Second {
+			return errors.New("invalid engine integration profile")
+		}
+	}
 	if c.Environment != "development" || !c.Enabled || !nonce.MatchString(c.RunID) ||
 		c.Now.IsZero() || c.Lease < time.Minute || c.Lease > 24*time.Hour {
 		return errors.New("explicit bounded development bootstrap required")

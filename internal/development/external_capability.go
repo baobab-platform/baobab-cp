@@ -45,6 +45,8 @@ type ExternalCapabilityFixture struct {
 	VersionID         string                   `json:"product_version_id"`
 	GrantID           string                   `json:"grant_id"`
 	BindingID         string                   `json:"binding_id"`
+	Grants            map[string]string        `json:"grants,omitempty"`
+	Bindings          map[string]string        `json:"bindings,omitempty"`
 	Phase             string                   `json:"phase"`
 	SourcePresent     bool                     `json:"source_present"`
 	SourceActive      bool                     `json:"source_active"`
@@ -220,7 +222,7 @@ func nativeCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Confi
 		if err = repo.CreateProduct(ctx, productdomain.Product{ID: profile.product, Name: "Disposable " + profile.key + " trial", Status: productdomain.ProductLifecycleActive, Owner: "development:" + cfg.RunID}); err != nil {
 			return out, err
 		}
-		if err = repo.CreateComposition(ctx, capdomain.CapabilityComposition{CompositionKey: "solution." + profile.product, CompositionType: capdomain.CompositionTypeProduct, Version: "1.0.0", Lifecycle: capdomain.CapabilityLifecycleActive, Members: []capdomain.CompositionMember{{CapabilityKey: profile.capability, Criticality: capdomain.MembershipCriticalityMandatory}}}); err != nil {
+		if err = repo.CreateComposition(ctx, capdomain.CapabilityComposition{CompositionKey: "solution." + profile.product, CompositionType: capdomain.CompositionTypeProduct, Version: "1.0.0", Lifecycle: capdomain.CapabilityLifecycleActive, Members: profile.compositionMembers()}); err != nil {
 			return out, err
 		}
 		version := productdomain.ProductVersion{ProductID: profile.product, Version: "1.0.0", CompositionKey: "solution." + profile.product, Status: productdomain.ProductLifecycleActive, ReleasedAt: &now}
@@ -244,22 +246,51 @@ func nativeCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Confi
 			return out, err
 		}
 		fmt.Println(profile.diagnostic + "_OWNER_STAGE=BINDING")
-		if err = repo.CreateBinding(ctx, resolver.CapabilityBinding{EngineID: engineID, CapabilityKey: profile.capability, EngineInstanceID: out.InstanceID, ProviderID: out.ProviderID, ScopeID: scope.ScopeID, BindingMode: capdomain.BindingModePrimary, Priority: 100, Status: "ACTIVE", ContractVersion: "1"}); err != nil {
-			return out, err
+		if profile.engineProfile != nil {
+			out.Bindings = map[string]string{}
 		}
-		if err = pool.QueryRow(ctx, `SELECT id::text FROM capability.capability_binding WHERE engine_instance_id=$1::uuid AND scope_id=$2::uuid AND provider_id=$3::uuid AND status='ACTIVE'`, out.InstanceID, scope.ScopeID, out.ProviderID).Scan(&out.BindingID); err != nil {
-			return out, err
+		for _, key := range profile.capabilityKeys() {
+			version := "1"
+			if profile.engineProfile != nil {
+				for _, c := range profile.engineProfile.Capabilities {
+					if c.Key == key {
+						version = fmt.Sprint(c.Version)
+					}
+				}
+			}
+			if err = repo.CreateBinding(ctx, resolver.CapabilityBinding{EngineID: engineID, CapabilityKey: key, EngineInstanceID: out.InstanceID, ProviderID: out.ProviderID, ScopeID: scope.ScopeID, BindingMode: capdomain.BindingModePrimary, Priority: 100, Status: "ACTIVE", ContractVersion: version}); err != nil {
+				return out, err
+			}
+			var id string
+			if err = pool.QueryRow(ctx, `SELECT id::text FROM capability.capability_binding WHERE engine_instance_id=$1::uuid AND scope_id=$2::uuid AND provider_id=$3::uuid AND capability_key=$4 AND status='ACTIVE'`, out.InstanceID, scope.ScopeID, out.ProviderID, key).Scan(&id); err != nil {
+				return out, err
+			}
+			if key == profile.capability {
+				out.BindingID = id
+			}
+			if out.Bindings != nil {
+				out.Bindings[key] = id
+			}
 		}
 		out.Phase = "ACTIVE"
 		return out, save()
 	}
 	if phase == "unentitled" && out.Phase == "ACTIVE" {
-		var version int64
-		if err = pool.QueryRow(ctx, `SELECT version FROM capability.capability_grant WHERE grant_id::text=$1 AND tenant_id=$2`, out.GrantID, out.TenantID).Scan(&version); err != nil {
-			return out, err
+		ids := []string{out.GrantID}
+		if out.Grants != nil {
+			ids = nil
+			for _, key := range profile.capabilityKeys() {
+				ids = append(ids, out.Grants[key])
+			}
 		}
-		if err = repo.RevokeGrant(ctx, out.GrantID, run.MakerID, "controlled DEV-06 resource entitlement withdrawal", version); err != nil {
-			return out, err
+		for _, id := range ids {
+			var version int64
+			if err = pool.QueryRow(ctx, `SELECT version FROM capability.capability_grant WHERE grant_id::text=$1 AND tenant_id=$2`, id, out.TenantID).Scan(&version); err != nil {
+				return out, err
+			}
+			if err = repo.RevokeGrant(ctx, id, run.MakerID, "controlled disposable resource entitlement withdrawal", version); err != nil {
+				return out, err
+			}
 		}
 		out.Phase = "UNENTITLED"
 		return out, save()
@@ -273,10 +304,9 @@ func nativeCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Confi
 		if e != nil {
 			return out, e
 		}
-		if len(projections) != 1 || projections[0].Status != productdomain.EntitlementProjectionStatusMaterialized {
-			return out, errors.New("normal re-expansion failed")
+		if err = profile.recordProjections(&out, projections); err != nil {
+			return out, err
 		}
-		out.GrantID = projections[0].GrantID
 		out.Phase = "ACTIVE"
 		return out, save()
 	}
@@ -299,26 +329,32 @@ func nativeCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Confi
 		return out, save()
 	}
 	if phase == "retire" && out.Phase == "ACTIVE" {
-		var version int64
-		if err = pool.QueryRow(ctx, `SELECT version FROM capability.capability_binding WHERE id=$1::uuid`, out.BindingID).Scan(&version); err != nil {
-			return out, err
-		}
-		list, e := repo.ListBindings(ctx, profile.capability)
-		if e != nil {
-			return out, e
-		}
-		found := false
-		for _, b := range list {
-			if b.ID == out.BindingID {
-				b.Status = "RETIRED"
-				if err = repo.SaveBinding(ctx, b, version); err != nil {
-					return out, err
-				}
-				found = true
+		for _, key := range profile.capabilityKeys() {
+			id := out.BindingID
+			if out.Bindings != nil {
+				id = out.Bindings[key]
 			}
-		}
-		if !found {
-			return out, errors.New("owned binding required")
+			var version int64
+			if err = pool.QueryRow(ctx, `SELECT version FROM capability.capability_binding WHERE id=$1::uuid`, id).Scan(&version); err != nil {
+				return out, err
+			}
+			list, e := repo.ListBindings(ctx, key)
+			if e != nil {
+				return out, e
+			}
+			found := false
+			for _, b := range list {
+				if b.ID == id {
+					b.Status = "RETIRED"
+					if err = repo.SaveBinding(ctx, b, version); err != nil {
+						return out, err
+					}
+					found = true
+				}
+			}
+			if !found {
+				return out, errors.New("owned binding required")
+			}
 		}
 		out.Phase = "RETIRED"
 		return out, save()
@@ -338,11 +374,7 @@ func capabilitySubscription(ctx context.Context, pool *pgxpool.Pool, repo *repos
 	if err != nil {
 		return err
 	}
-	if len(projections) != 1 || projections[0].Status != productdomain.EntitlementProjectionStatusMaterialized {
-		return errors.New("normal composition expansion did not materialize")
-	}
-	out.GrantID = projections[0].GrantID
-	return nil
+	return profile.recordProjections(out, projections)
 }
 func developmentChangeset(ctx context.Context, repo *repository.PostgresRepository, run Result, label string, desired changeset.DesiredChange, now time.Time, actor repository.AuditActor) error {
 	base, found, err := repo.TargetRevision(ctx, desired)

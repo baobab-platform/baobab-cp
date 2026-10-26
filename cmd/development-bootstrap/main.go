@@ -21,6 +21,10 @@ func main() { os.Exit(run()) }
 
 func run() int {
 	var cfg development.Config
+	engineProfile := flag.String("engine-profile", "", "Shared closed unprivileged engine integration descriptor")
+	enginePhase := flag.String("engine-capability-phase", "", "normal owner capability fixture phase")
+	engineSource := flag.String("engine-capability-source", "", "immutable actual owner proof file")
+	engineRegistration := flag.String("engine-registration", "", "normal DRAFT owner registration document")
 	subscriptionPhase := flag.String("subscriptions-phase", "", "bounded CP-owned COMMERCIAL subscription fixture: prepare/read/advance/suspend")
 	externalPhase := flag.String("external-capability-phase", "", "owned normal DEV-06 authority phases")
 	externalSource := flag.String("external-capability-source", "", "immutable actual owner source/OCI proof file for register")
@@ -40,6 +44,21 @@ func run() int {
 	cfg.Environment = os.Getenv("BAOBAB_ENVIRONMENT")
 	cfg.Enabled = os.Getenv("BAOBAB_DEV_BOOTSTRAP_ENABLED") == "true"
 	cfg.Now = time.Now().UTC()
+	if *engineProfile != "" {
+		f, err := os.Open(*engineProfile)
+		if err != nil {
+			return refused()
+		}
+		raw, err := io.ReadAll(io.LimitReader(f, 65537))
+		_ = f.Close()
+		if err != nil {
+			return refused()
+		}
+		cfg.IntegrationProfile, err = development.ParseEngineIntegrationProfile(raw)
+		if err != nil {
+			return refused()
+		}
+	}
 	if cfg.Validate() != nil {
 		return refused()
 	}
@@ -70,13 +89,40 @@ func run() int {
 		return refused()
 	}
 	selected := 0
-	for _, phase := range []string{*externalPhase, *cmsPhase, *subscriptionPhase} {
+	for _, phase := range []string{*externalPhase, *cmsPhase, *subscriptionPhase, *enginePhase} {
 		if phase != "" {
 			selected++
 		}
 	}
 	if selected > 1 {
 		return refused()
+	}
+	if *enginePhase != "" {
+		read := func(path string) ([]byte, error) {
+			f, e := os.Open(path)
+			if e != nil {
+				return nil, e
+			}
+			defer f.Close()
+			return io.ReadAll(io.LimitReader(f, 65537))
+		}
+		raw, e := read(*engineSource)
+		if e != nil {
+			return refused()
+		}
+		var source development.ExternalCapabilitySource
+		if json.Unmarshal(raw, &source) != nil || source.Validate() != nil {
+			return refused()
+		}
+		registration, e := read(*engineRegistration)
+		if e != nil {
+			return refused()
+		}
+		report, e := development.EngineCapabilityFixtures(ctx, pool, cfg, *enginePhase, source, registration)
+		if e != nil || json.NewEncoder(os.Stdout).Encode(report) != nil {
+			return refused()
+		}
+		return 0
 	}
 	if *externalPhase != "" || *cmsPhase != "" {
 		var source development.ExternalCapabilitySource
