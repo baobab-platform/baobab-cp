@@ -262,7 +262,7 @@ func nativeCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Confi
 				return out, err
 			}
 			var id string
-			if err = pool.QueryRow(ctx, `SELECT id::text FROM capability.capability_binding WHERE engine_instance_id=$1::uuid AND scope_id=$2::uuid AND provider_id=$3::uuid AND capability_key=$4 AND status='ACTIVE'`, out.InstanceID, scope.ScopeID, out.ProviderID, key).Scan(&id); err != nil {
+			if err = pool.QueryRow(ctx, `SELECT b.id::text FROM capability.capability_binding b JOIN capability.capability c USING(capability_id) WHERE b.engine_instance_id=$1::uuid AND b.scope_id=$2::uuid AND b.provider_id=$3::uuid AND c.code=$4 AND b.status='ACTIVE'`, out.InstanceID, scope.ScopeID, out.ProviderID, key).Scan(&id); err != nil {
 				return out, err
 			}
 			if key == profile.capability {

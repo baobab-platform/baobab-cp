@@ -14,7 +14,9 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/billing"
 	"github.com/baobab-platform/baobab-cp/internal/capability/catalogue"
 	capdomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
+	"github.com/baobab-platform/baobab-cp/internal/health"
 	productdomain "github.com/baobab-platform/baobab-cp/internal/product/domain"
+	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -116,6 +118,31 @@ func EngineCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Confi
 		}
 		return nil
 	}
+	if phase == "refresh" {
+		// A fresh active probe extends health only inside the original run
+		// lease; this is never provider activation or certification.
+		existing, e := observedCapabilityFixtures(ctx, pool, cfg, "read", source, profile)
+		if e != nil {
+			return empty, e
+		}
+		if e = profile.readiness(ctx); e != nil {
+			return empty, e
+		}
+		repo, e := repository.Open(ctx, pool.Config().ConnString())
+		if e != nil {
+			return empty, e
+		}
+		defer repo.Close()
+		now := time.Now().UTC()
+		until := now.Add(2 * time.Minute)
+		if run.ExpiresAt.Before(until) {
+			until = run.ExpiresAt
+		}
+		if e = repo.RecordHealthObservation(ctx, health.Observation{Subject: health.Subject{EngineInstanceID: existing.InstanceID}, Status: health.StatusHealthy, ObservedAt: now, ExpiresAt: until, Source: health.SourceActiveProbe, Reasons: []string{}}); e != nil {
+			return empty, e
+		}
+		phase = "read"
+	}
 	out, err := observedCapabilityFixtures(ctx, pool, cfg, phase, source, profile)
 	if err != nil {
 		return out, err
@@ -125,8 +152,8 @@ func EngineCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Confi
 		for _, key := range profile.capabilityKeys() {
 			var grant, binding, projection bool
 			err = pool.QueryRow(ctx, `SELECT
-    EXISTS(SELECT 1 FROM capability.capability_grant WHERE grant_id::text=$1 AND tenant_id=$2 AND capability_key=$3 AND status='ACTIVE'),
-    EXISTS(SELECT 1 FROM capability.capability_binding WHERE id::text=$4 AND capability_key=$3 AND provider_id::text=$5 AND engine_instance_id::text=$6 AND status='ACTIVE'),
+    EXISTS(SELECT 1 FROM capability.capability_grant g JOIN capability.capability c USING(capability_id) WHERE g.grant_id::text=$1 AND g.tenant_id=$2 AND c.code=$3 AND g.status='ACTIVE'),
+    EXISTS(SELECT 1 FROM capability.capability_binding b JOIN capability.capability c USING(capability_id) WHERE b.id::text=$4 AND c.code=$3 AND b.provider_id::text=$5 AND b.engine_instance_id::text=$6 AND b.status='ACTIVE'),
     EXISTS(SELECT 1 FROM product.entitlement_projection WHERE subscription_id::text=$7 AND tenant_id=$2 AND capability_key=$3 AND grant_id::text=$1 AND status='MATERIALIZED')`, out.Grants[key], out.TenantID, key, out.Bindings[key], out.ProviderID, out.InstanceID, out.SubscriptionID).Scan(&grant, &binding, &projection)
 			if err != nil {
 				return out, err
