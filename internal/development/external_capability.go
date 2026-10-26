@@ -129,6 +129,7 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 	}
 	actor := repository.AuditActor{ActorID: run.MakerID, ActorType: "human", CorrelationID: domain.NewUUIDv7()}
 	if phase == "register" {
+		fmt.Println("DEV06_OWNER_STAGE=REGISTER")
 		if exists {
 			return out, nil
 		}
@@ -168,9 +169,11 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if out.Phase != "REGISTERED" {
 			return out, errors.New("activation out of order")
 		}
+		fmt.Println("DEV06_OWNER_STAGE=OCI")
 		if err = probeExternalOCI(ctx, out.Source.ManifestDigest); err != nil {
 			return out, err
 		}
+		fmt.Println("DEV06_OWNER_STAGE=READINESS")
 		if err = probeExternalPulse(ctx); err != nil {
 			return out, err
 		}
@@ -182,9 +185,11 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if _, err = pool.Exec(ctx, `UPDATE topology.engine_instance SET status='ACTIVE' WHERE engine_instance_id=$1::uuid AND environment='development' AND status='PROVISIONING'`, out.InstanceID); err != nil {
 			return out, err
 		}
+		fmt.Println("DEV06_OWNER_STAGE=HEALTH")
 		if err = repo.RecordHealthObservation(ctx, health.Observation{Subject: health.Subject{EngineInstanceID: out.InstanceID}, Status: health.StatusHealthy, ObservedAt: now, ExpiresAt: until, Source: health.SourceActiveProbe, Reasons: []string{}}); err != nil {
 			return out, err
 		}
+		fmt.Println("DEV06_OWNER_STAGE=RELEASE")
 		rel, _, e := repo.RecordEngineRelease(ctx, release.RecordRequest{EngineID: "baobab-pulse", ReleaseVersion: "0.0.0-dev06." + cfg.RunID,
 			Artifacts:                           []release.Artifact{{ArtifactType: "OCI_IMAGE", Repository: "probe:8090/baobab-pulse", Digest: out.Source.ManifestDigest}},
 			ProviderSupport:                     []release.ProviderSupport{{ProviderKey: "baobab-pulse.core", CapabilityKey: externalCapability, ContractVersions: []int{1}}, {ProviderKey: "baobab-pulse.core", CapabilityKey: "intelligence.research-mission.manage", ContractVersions: []int{1}}},
@@ -193,12 +198,15 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if e != nil {
 			return out, e
 		}
+		fmt.Println("DEV06_OWNER_STAGE=RELEASE_APPROVAL")
 		if err = externalChangeset(ctx, repo, run, changeset.DesiredChange{Kind: changeset.KindReleaseApproval, ReleaseID: rel.ReleaseID}, now, actor); err != nil {
 			return out, err
 		}
+		fmt.Println("DEV06_OWNER_STAGE=PROVIDER_ACTIVATION")
 		if err = externalChangeset(ctx, repo, run, changeset.DesiredChange{Kind: changeset.KindProviderActivation, ProviderID: domain.ProviderID(out.ProviderID)}, now, actor); err != nil {
 			return out, err
 		}
+		fmt.Println("DEV06_OWNER_STAGE=COMPOSITION")
 		if err = repo.CreateProduct(ctx, productdomain.Product{ID: "dev06-external", Name: "Disposable external evidence trial", Status: productdomain.ProductLifecycleActive, Owner: "development:" + cfg.RunID}); err != nil {
 			return out, err
 		}
@@ -213,6 +221,7 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 			return out, err
 		}
 		out.SubscriptionID = domain.NewUUIDv7()
+		fmt.Println("DEV06_OWNER_STAGE=SUBSCRIPTION")
 		if err = externalSubscription(ctx, pool, repo, run, &out); err != nil {
 			return out, err
 		}
@@ -224,6 +233,7 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if err = pool.QueryRow(ctx, `SELECT engine_id::text FROM topology.engine_instance WHERE engine_instance_id=$1::uuid AND environment='development'`, out.InstanceID).Scan(&engineID); err != nil {
 			return out, err
 		}
+		fmt.Println("DEV06_OWNER_STAGE=BINDING")
 		if err = repo.CreateBinding(ctx, resolver.CapabilityBinding{EngineID: engineID, CapabilityKey: externalCapability, EngineInstanceID: out.InstanceID, ProviderID: out.ProviderID, ScopeID: scope.ScopeID, BindingMode: capdomain.BindingModePrimary, Priority: 100, Status: "ACTIVE", ContractVersion: "1"}); err != nil {
 			return out, err
 		}
