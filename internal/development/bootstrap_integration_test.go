@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +16,8 @@ import (
 
 	"github.com/baobab-platform/baobab-cp/api"
 	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/billing"
+	"github.com/baobab-platform/baobab-cp/internal/capability/catalogue"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
@@ -493,6 +497,44 @@ func TestEngineProfileBootstrapPostgres(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer repo.Close()
+			if profileName == "payments-sandbox" {
+				if _, err := catalogue.SyncEmbedded(ctx, repo); err != nil {
+					t.Fatal(err)
+				}
+				registrations, err := billing.EmbeddedRegistrations()
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, registration := range registrations {
+					if registration.Provider.ProviderKey != "baobab-payments.sandbox" {
+						continue
+					}
+					// Real owner registration precedes CP startup replay. The
+					// complete embedded bundle must preserve its route/metadata.
+					registration.Provider.EngineKey = "sandbox"
+					registration.Provider.Invocation = &repository.ProviderInvocation{ServiceReference: "service://baobab-payments/payments", Protocol: "http"}
+					if err := repo.RegisterEngine(ctx, registration); err != nil {
+						t.Fatal(err)
+					}
+				}
+				var provider, status string
+				var before, after int64
+				if err := pool.QueryRow(ctx, `SELECT provider_id::text,version FROM capability.capability_provider WHERE provider_key='baobab-payments.sandbox'`).Scan(&provider, &before); err != nil {
+					t.Fatal(err)
+				}
+				for i := 0; i < 2; i++ {
+					if _, err := billing.RegisterEmbeddedEngines(ctx, repo, "development", slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+						t.Fatal(err)
+					}
+					invocation, exists, err := repo.ProviderInvocationByID(ctx, provider)
+					if err != nil || !exists || invocation.ServiceReference != "service://baobab-payments/payments" || invocation.Protocol != "http" {
+						t.Fatalf("startup removed native invocation: %+v %v %v", invocation, exists, err)
+					}
+					if err := pool.QueryRow(ctx, `SELECT version,status FROM capability.capability_provider WHERE provider_id::text=$1`, provider).Scan(&after, &status); err != nil || after != before || status != "DRAFT" {
+						t.Fatalf("startup changed owner registration or authority: %d -> %d, %s, %v", before, after, status, err)
+					}
+				}
+			}
 			for _, e := range result.Enterprises {
 				for _, role := range []string{"caller", "neighbour", "validator"} {
 					id := profile.IAM[role].ClientID
