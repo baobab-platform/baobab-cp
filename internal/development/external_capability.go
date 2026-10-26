@@ -18,7 +18,6 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/capability/catalogue"
 	capdomain "github.com/baobab-platform/baobab-cp/internal/capability/domain"
 	"github.com/baobab-platform/baobab-cp/internal/changeset"
-	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/health"
 	productdomain "github.com/baobab-platform/baobab-cp/internal/product/domain"
@@ -62,10 +61,18 @@ func (s ExternalCapabilitySource) Validate() error {
 	}
 	return nil
 }
-func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, phase string, source ExternalCapabilitySource) (ExternalCapabilityFixture, error) {
+func nativeCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, phase string, source ExternalCapabilitySource, profile nativeCapabilityProfile) (ExternalCapabilityFixture, error) {
 	var out ExternalCapabilityFixture
-	if _, err := CheckExternalAPI(ctx, pool, cfg); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return out, err
+	}
+	if err := CheckDatabase(ctx, pool); err != nil {
+		return out, err
+	}
+	if profile.key == "external" {
+		if _, err := CheckExternalAPI(ctx, pool, cfg); err != nil {
+			return out, err
+		}
 	}
 	if phase != "register" && phase != "activate" && phase != "absent" && phase != "restore" && phase != "retire" && phase != "read" && phase != "unentitled" && phase != "regrant" {
 		return out, errors.New("unsupported external capability phase")
@@ -77,10 +84,10 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		return out, err
 	}
 	defer conn.Release()
-	if _, err = conn.Exec(ctx, `SELECT pg_advisory_lock(hashtextextended($1,0))`, cfg.RunID+":external-capability"); err != nil {
+	if _, err = conn.Exec(ctx, `SELECT pg_advisory_lock(hashtextextended($1,0))`, cfg.RunID+":"+profile.key+"-capability"); err != nil {
 		return out, err
 	}
-	defer conn.Exec(context.Background(), `SELECT pg_advisory_unlock(hashtextextended($1,0))`, cfg.RunID+":external-capability")
+	defer conn.Exec(context.Background(), `SELECT pg_advisory_unlock(hashtextextended($1,0))`, cfg.RunID+":"+profile.key+"-capability")
 	var raw []byte
 	if err = pool.QueryRow(ctx, `SELECT result FROM development.bootstrap_run WHERE run_id=$1 AND expires_at>$2`, cfg.RunID, cfg.Now).Scan(&raw); err != nil {
 		return out, err
@@ -92,10 +99,10 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 	if !run.SyntheticOnly || run.ProtectedAcceptance || run.MakerID == run.CheckerID {
 		return out, errors.New("leased synthetic maker/checker required")
 	}
-	if _, err = pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS development.external_capability_fixture(run_id text PRIMARY KEY REFERENCES development.bootstrap_run(run_id), result jsonb NOT NULL)`); err != nil {
+	if _, err = pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS development.native_capability_fixture(run_id text REFERENCES development.bootstrap_run(run_id), profile text NOT NULL, result jsonb NOT NULL, PRIMARY KEY(run_id,profile))`); err != nil {
 		return out, err
 	}
-	err = pool.QueryRow(ctx, `SELECT result FROM development.external_capability_fixture WHERE run_id=$1`, cfg.RunID).Scan(&raw)
+	err = pool.QueryRow(ctx, `SELECT result FROM development.native_capability_fixture WHERE run_id=$1 AND profile=$2`, cfg.RunID, profile.key).Scan(&raw)
 	exists := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return out, err
@@ -108,11 +115,14 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		out.RunID = cfg.RunID
 		out.Source = source
 		for _, e := range run.Enterprises {
-			if e.Key == "external-client" {
+			if e.Key == profile.tenantKey {
 				out.TenantID = e.TenantID
 			}
 		}
-		out.InstanceID = run.EngineInstances["baobab-pulse"]
+		out.InstanceID = run.EngineInstances[profile.engine]
+	}
+	if exists && out.Source != source {
+		return out, errors.New("immutable owner proof changed")
 	}
 	repo, err := repository.Open(ctx, pool.Config().ConnString())
 	if err != nil {
@@ -124,17 +134,17 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if e != nil {
 			return e
 		}
-		_, e = pool.Exec(ctx, `INSERT INTO development.external_capability_fixture(run_id,result) VALUES($1,$2) ON CONFLICT(run_id) DO UPDATE SET result=EXCLUDED.result`, cfg.RunID, raw)
+		_, e = pool.Exec(ctx, `INSERT INTO development.native_capability_fixture(run_id,profile,result) VALUES($1,$2,$3) ON CONFLICT(run_id,profile) DO UPDATE SET result=EXCLUDED.result`, cfg.RunID, profile.key, raw)
 		return e
 	}
 	actor := repository.AuditActor{ActorID: run.MakerID, ActorType: "human", CorrelationID: domain.NewUUIDv7()}
 	if phase == "register" {
-		fmt.Println("DEV06_OWNER_STAGE=REGISTER")
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=REGISTER")
 		if exists {
 			return out, nil
 		}
 		if out.TenantID == "" || out.InstanceID == "" {
-			return out, errors.New("owned external tenant/Pulse instance required")
+			return out, errors.New("owned profile tenant and engine instance required")
 		}
 		if err = source.Validate(); err != nil {
 			return out, err
@@ -142,7 +152,7 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if _, err = catalogue.SyncEmbedded(ctx, repo); err != nil {
 			return out, err
 		}
-		raw, err = contracts.ReadEmbedded("intelligence/v1/pulse-registration.json")
+		raw, err = profile.registration()
 		if err != nil {
 			return out, err
 		}
@@ -153,7 +163,7 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if err = repo.RegisterEngine(ctx, registration); err != nil {
 			return out, err
 		}
-		if err = pool.QueryRow(ctx, `SELECT provider_id::text FROM capability.capability_provider WHERE provider_key='baobab-pulse.core' AND status='DRAFT'`).Scan(&out.ProviderID); err != nil {
+		if err = pool.QueryRow(ctx, `SELECT provider_id::text FROM capability.capability_provider WHERE provider_key=$1 AND status='DRAFT'`, profile.providerKey).Scan(&out.ProviderID); err != nil {
 			return out, err
 		}
 		out.Phase = "REGISTERED"
@@ -169,12 +179,12 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if out.Phase != "REGISTERED" {
 			return out, errors.New("activation out of order")
 		}
-		fmt.Println("DEV06_OWNER_STAGE=OCI")
-		if err = probeExternalOCI(ctx, out.Source.ManifestDigest); err != nil {
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=OCI")
+		if err = probePublishedOCI(ctx, out.Source.ManifestDigest, profile.engine); err != nil {
 			return out, err
 		}
-		fmt.Println("DEV06_OWNER_STAGE=READINESS")
-		if err = probeExternalPulse(ctx); err != nil {
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=READINESS")
+		if err = profile.readiness(ctx); err != nil {
 			return out, err
 		}
 		now := time.Now().UTC()
@@ -185,44 +195,44 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if _, err = pool.Exec(ctx, `UPDATE topology.engine_instance SET status='ACTIVE' WHERE engine_instance_id=$1::uuid AND environment='development' AND status='PROVISIONING'`, out.InstanceID); err != nil {
 			return out, err
 		}
-		fmt.Println("DEV06_OWNER_STAGE=HEALTH")
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=HEALTH")
 		if err = repo.RecordHealthObservation(ctx, health.Observation{Subject: health.Subject{EngineInstanceID: out.InstanceID}, Status: health.StatusHealthy, ObservedAt: now, ExpiresAt: until, Source: health.SourceActiveProbe, Reasons: []string{}}); err != nil {
 			return out, err
 		}
-		fmt.Println("DEV06_OWNER_STAGE=RELEASE")
-		rel, _, e := repo.RecordEngineRelease(ctx, release.RecordRequest{EngineID: "baobab-pulse", ReleaseVersion: "0.0.0-dev06." + cfg.RunID,
-			Artifacts:                           []release.Artifact{{ArtifactType: "OCI_IMAGE", Repository: "probe:8090/baobab-pulse", Digest: out.Source.ManifestDigest}},
-			ProviderSupport:                     []release.ProviderSupport{{ProviderKey: "baobab-pulse.core", CapabilityKey: externalCapability, ContractVersions: []int{1}}, {ProviderKey: "baobab-pulse.core", CapabilityKey: "intelligence.research-mission.manage", ContractVersions: []int{1}}},
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=RELEASE")
+		rel, _, e := repo.RecordEngineRelease(ctx, release.RecordRequest{EngineID: profile.engine, ReleaseVersion: "0.0.0-" + profile.key + "." + cfg.RunID,
+			Artifacts:                           []release.Artifact{{ArtifactType: "OCI_IMAGE", Repository: "probe:8090/" + profile.engine, Digest: out.Source.ManifestDigest}},
+			ProviderSupport:                     profile.support(),
 			CapabilityProviderDeclarationDigest: out.Source.DeclarationDigest, SourceRevision: out.Source.SourceSHA,
 			Reason: "Disposable OCI image published to the private run-owned artifact endpoint; no provider certification or protected release"}, run.MakerID, now, actor)
 		if e != nil {
 			return out, e
 		}
-		fmt.Println("DEV06_OWNER_STAGE=RELEASE_APPROVAL")
-		if err = externalChangeset(ctx, repo, run, changeset.DesiredChange{Kind: changeset.KindReleaseApproval, ReleaseID: rel.ReleaseID}, now, actor); err != nil {
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=RELEASE_APPROVAL")
+		if err = developmentChangeset(ctx, repo, run, profile.diagnostic, changeset.DesiredChange{Kind: changeset.KindReleaseApproval, ReleaseID: rel.ReleaseID}, now, actor); err != nil {
 			return out, err
 		}
-		fmt.Println("DEV06_OWNER_STAGE=PROVIDER_ACTIVATION")
-		if err = externalChangeset(ctx, repo, run, changeset.DesiredChange{Kind: changeset.KindProviderActivation, ProviderID: domain.ProviderID(out.ProviderID)}, now, actor); err != nil {
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=PROVIDER_ACTIVATION")
+		if err = developmentChangeset(ctx, repo, run, profile.diagnostic, changeset.DesiredChange{Kind: changeset.KindProviderActivation, ProviderID: domain.ProviderID(out.ProviderID)}, now, actor); err != nil {
 			return out, err
 		}
-		fmt.Println("DEV06_OWNER_STAGE=COMPOSITION")
-		if err = repo.CreateProduct(ctx, productdomain.Product{ID: "dev06-external", Name: "Disposable external evidence trial", Status: productdomain.ProductLifecycleActive, Owner: "development:" + cfg.RunID}); err != nil {
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=COMPOSITION")
+		if err = repo.CreateProduct(ctx, productdomain.Product{ID: profile.product, Name: "Disposable " + profile.key + " trial", Status: productdomain.ProductLifecycleActive, Owner: "development:" + cfg.RunID}); err != nil {
 			return out, err
 		}
-		if err = repo.CreateComposition(ctx, capdomain.CapabilityComposition{CompositionKey: "solution.dev06-external", CompositionType: capdomain.CompositionTypeProduct, Version: "1.0.0", Lifecycle: capdomain.CapabilityLifecycleActive, Members: []capdomain.CompositionMember{{CapabilityKey: externalCapability, Criticality: capdomain.MembershipCriticalityMandatory}}}); err != nil {
+		if err = repo.CreateComposition(ctx, capdomain.CapabilityComposition{CompositionKey: "solution." + profile.product, CompositionType: capdomain.CompositionTypeProduct, Version: "1.0.0", Lifecycle: capdomain.CapabilityLifecycleActive, Members: []capdomain.CompositionMember{{CapabilityKey: profile.capability, Criticality: capdomain.MembershipCriticalityMandatory}}}); err != nil {
 			return out, err
 		}
-		version := productdomain.ProductVersion{ProductID: "dev06-external", Version: "1.0.0", CompositionKey: "solution.dev06-external", Status: productdomain.ProductLifecycleActive, ReleasedAt: &now}
+		version := productdomain.ProductVersion{ProductID: profile.product, Version: "1.0.0", CompositionKey: "solution." + profile.product, Status: productdomain.ProductLifecycleActive, ReleasedAt: &now}
 		if err = repo.CreateProductVersion(ctx, version); err != nil {
 			return out, err
 		}
-		if err = pool.QueryRow(ctx, `SELECT product_version_id::text FROM product.product_version WHERE product_id='dev06-external' AND version='1.0.0'`).Scan(&out.VersionID); err != nil {
+		if err = pool.QueryRow(ctx, `SELECT product_version_id::text FROM product.product_version WHERE product_id=$1 AND version='1.0.0'`, profile.product).Scan(&out.VersionID); err != nil {
 			return out, err
 		}
 		out.SubscriptionID = domain.NewUUIDv7()
-		fmt.Println("DEV06_OWNER_STAGE=SUBSCRIPTION")
-		if err = externalSubscription(ctx, pool, repo, run, &out); err != nil {
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=SUBSCRIPTION")
+		if err = capabilitySubscription(ctx, pool, repo, run, &out, profile); err != nil {
 			return out, err
 		}
 		scope := capdomain.CapabilityScope{ScopeID: domain.NewUUIDv7(), TenantID: out.TenantID}
@@ -233,8 +243,8 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if err = pool.QueryRow(ctx, `SELECT engine_id::text FROM topology.engine_instance WHERE engine_instance_id=$1::uuid AND environment='development'`, out.InstanceID).Scan(&engineID); err != nil {
 			return out, err
 		}
-		fmt.Println("DEV06_OWNER_STAGE=BINDING")
-		if err = repo.CreateBinding(ctx, resolver.CapabilityBinding{EngineID: engineID, CapabilityKey: externalCapability, EngineInstanceID: out.InstanceID, ProviderID: out.ProviderID, ScopeID: scope.ScopeID, BindingMode: capdomain.BindingModePrimary, Priority: 100, Status: "ACTIVE", ContractVersion: "1"}); err != nil {
+		fmt.Println(profile.diagnostic + "_OWNER_STAGE=BINDING")
+		if err = repo.CreateBinding(ctx, resolver.CapabilityBinding{EngineID: engineID, CapabilityKey: profile.capability, EngineInstanceID: out.InstanceID, ProviderID: out.ProviderID, ScopeID: scope.ScopeID, BindingMode: capdomain.BindingModePrimary, Priority: 100, Status: "ACTIVE", ContractVersion: "1"}); err != nil {
 			return out, err
 		}
 		if err = pool.QueryRow(ctx, `SELECT id::text FROM capability.capability_binding WHERE engine_instance_id=$1::uuid AND scope_id=$2::uuid AND provider_id=$3::uuid AND status='ACTIVE'`, out.InstanceID, scope.ScopeID, out.ProviderID).Scan(&out.BindingID); err != nil {
@@ -271,7 +281,7 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		return out, save()
 	}
 	if phase == "absent" && out.Phase == "ACTIVE" {
-		tag, e := pool.Exec(ctx, `DELETE FROM product.product_subscription WHERE subscription_id=$1::uuid AND tenant_id=$2 AND source_reference=$3`, out.SubscriptionID, out.TenantID, "development:"+cfg.RunID+":external-capability")
+		tag, e := pool.Exec(ctx, `DELETE FROM product.product_subscription WHERE subscription_id=$1::uuid AND tenant_id=$2 AND source_reference=$3`, out.SubscriptionID, out.TenantID, "development:"+cfg.RunID+":"+profile.key+"-capability")
 		if e != nil {
 			return out, e
 		}
@@ -282,7 +292,7 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		return out, save()
 	}
 	if phase == "restore" && out.Phase == "ABSENT" {
-		if err = externalSubscription(ctx, pool, repo, run, &out); err != nil {
+		if err = capabilitySubscription(ctx, pool, repo, run, &out, profile); err != nil {
 			return out, err
 		}
 		out.Phase = "ACTIVE"
@@ -293,7 +303,7 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 		if err = pool.QueryRow(ctx, `SELECT version FROM capability.capability_binding WHERE id=$1::uuid`, out.BindingID).Scan(&version); err != nil {
 			return out, err
 		}
-		list, e := repo.ListBindings(ctx, externalCapability)
+		list, e := repo.ListBindings(ctx, profile.capability)
 		if e != nil {
 			return out, e
 		}
@@ -315,8 +325,8 @@ func externalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Con
 	}
 	return out, errors.New("fixture transition out of order")
 }
-func externalSubscription(ctx context.Context, pool *pgxpool.Pool, repo *repository.PostgresRepository, run Result, out *ExternalCapabilityFixture) error {
-	_, err := pool.Exec(ctx, `INSERT INTO product.product_subscription(subscription_id,tenant_id,product_id,product_version_id,status,source,source_reference,effective_to) VALUES($1,$2,'dev06-external',$3,'ACTIVE','TRIAL',$4,$5)`, out.SubscriptionID, out.TenantID, out.VersionID, "development:"+run.RunID+":external-capability", run.ExpiresAt)
+func capabilitySubscription(ctx context.Context, pool *pgxpool.Pool, repo *repository.PostgresRepository, run Result, out *ExternalCapabilityFixture, profile nativeCapabilityProfile) error {
+	_, err := pool.Exec(ctx, `INSERT INTO product.product_subscription(subscription_id,tenant_id,product_id,product_version_id,status,source,source_reference,effective_to) VALUES($1,$2,$6,$3,'ACTIVE','TRIAL',$4,$5)`, out.SubscriptionID, out.TenantID, out.VersionID, "development:"+run.RunID+":"+profile.key+"-capability", run.ExpiresAt, profile.product)
 	if err != nil {
 		return err
 	}
@@ -334,7 +344,7 @@ func externalSubscription(ctx context.Context, pool *pgxpool.Pool, repo *reposit
 	out.GrantID = projections[0].GrantID
 	return nil
 }
-func externalChangeset(ctx context.Context, repo *repository.PostgresRepository, run Result, desired changeset.DesiredChange, now time.Time, actor repository.AuditActor) error {
+func developmentChangeset(ctx context.Context, repo *repository.PostgresRepository, run Result, label string, desired changeset.DesiredChange, now time.Time, actor repository.AuditActor) error {
 	base, found, err := repo.TargetRevision(ctx, desired)
 	if err != nil {
 		return err
@@ -342,11 +352,11 @@ func externalChangeset(ctx context.Context, repo *repository.PostgresRepository,
 	if !found {
 		return errors.New("governed target required")
 	}
-	draft, err := changeset.Draft(changeset.CreateRequest{Title: "Disposable DEV-06 owner activation", Reason: "Actual local component source/image and observed dependencies; no certification or protected authority", DesiredChange: desired}, domain.NewResourceID("cs"), run.MakerID, "API", actor.CorrelationID, base, now)
+	draft, err := changeset.Draft(changeset.CreateRequest{Title: "Disposable " + label + " owner activation", Reason: "Actual local component source/image and observed dependencies; no certification or protected authority", DesiredChange: desired}, domain.NewResourceID("cs"), run.MakerID, "API", actor.CorrelationID, base, now)
 	if err != nil {
 		return err
 	}
-	draft, err = repo.CreateChangeset(ctx, draft, draft.ChangesetID, "dev06:"+draft.ChangesetID, actor)
+	draft, err = repo.CreateChangeset(ctx, draft, draft.ChangesetID, label+":"+draft.ChangesetID, actor)
 	if err != nil {
 		return err
 	}
@@ -369,7 +379,7 @@ func externalChangeset(ctx context.Context, repo *repository.PostgresRepository,
 	if err != nil {
 		return err
 	}
-	_, _, err = repo.ApplyChangeset(ctx, approved.ChangesetID, approved.Revision, domain.NewResourceID("op"), "dev06:"+approved.ChangesetID, "dev06", run.MakerID, now, actor)
+	_, _, err = repo.ApplyChangeset(ctx, approved.ChangesetID, approved.Revision, domain.NewResourceID("op"), label+":"+approved.ChangesetID, label, run.MakerID, now, actor)
 	return err
 }
 func probeExternalPulse(ctx context.Context) error {
@@ -396,8 +406,8 @@ func probeExternalPulse(ctx context.Context) error {
 	return nil
 }
 
-func probeExternalOCI(ctx context.Context, digest string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://probe:8090/v2/baobab-pulse/manifests/"+digest, nil)
+func probePublishedOCI(ctx context.Context, digest, engine string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://probe:8090/v2/"+engine+"/manifests/"+digest, nil)
 	if err != nil {
 		return err
 	}
@@ -426,8 +436,8 @@ func probeExternalOCI(ctx context.Context, digest string) error {
 
 // Read back independent current source/grant/binding facts after each phase;
 // a requested transition or saved fixture JSON is never its own observation.
-func ExternalCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, phase string, source ExternalCapabilitySource) (ExternalCapabilityFixture, error) {
-	out, err := externalCapabilityFixtures(ctx, pool, cfg, phase, source)
+func observedCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, phase string, source ExternalCapabilitySource, profile nativeCapabilityProfile) (ExternalCapabilityFixture, error) {
+	out, err := nativeCapabilityFixtures(ctx, pool, cfg, phase, source, profile)
 	if err != nil {
 		return out, err
 	}

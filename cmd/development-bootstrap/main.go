@@ -24,6 +24,8 @@ func run() int {
 	subscriptionPhase := flag.String("subscriptions-phase", "", "bounded CP-owned COMMERCIAL subscription fixture: prepare/read/advance/suspend")
 	externalPhase := flag.String("external-capability-phase", "", "owned normal DEV-06 authority phases")
 	externalSource := flag.String("external-capability-source", "", "immutable actual owner source/OCI proof file for register")
+	cmsPhase := flag.String("cms-capability-phase", "", "owned normal DEV-05 CMS authority phases")
+	cmsSource := flag.String("cms-capability-source", "", "immutable actual CMS source/OCI proof file")
 	checkFixtures := flag.Bool("check-fixtures", false, "read and check existing DEV-02 fixtures without seeding or migrating")
 	checkExternal := flag.Bool("check-external-api", false, "read current DEV-06 zero-estate and assignment facts")
 	profiles := flag.String("profiles", "", "optional canonical development profile file")
@@ -67,10 +69,23 @@ func run() int {
 	if development.CheckDatabase(ctx, pool) != nil {
 		return refused()
 	}
-	if *externalPhase != "" {
+	selected := 0
+	for _, phase := range []string{*externalPhase, *cmsPhase, *subscriptionPhase} {
+		if phase != "" {
+			selected++
+		}
+	}
+	if selected > 1 {
+		return refused()
+	}
+	if *externalPhase != "" || *cmsPhase != "" {
 		var source development.ExternalCapabilitySource
-		if *externalSource != "" {
-			f, e := os.Open(*externalSource)
+		proof := *externalSource
+		if *cmsPhase != "" {
+			proof = *cmsSource
+		}
+		if proof != "" {
+			f, e := os.Open(proof)
 			if e != nil {
 				return refused()
 			}
@@ -82,7 +97,13 @@ func run() int {
 				return refused()
 			}
 		}
-		report, e := development.ExternalCapabilityFixtures(ctx, pool, cfg, *externalPhase, source)
+		var report development.ExternalCapabilityFixture
+		var e error
+		if *cmsPhase != "" {
+			report, e = development.CMSCapabilityFixtures(ctx, pool, cfg, *cmsPhase, source)
+		} else {
+			report, e = development.ExternalCapabilityFixtures(ctx, pool, cfg, *externalPhase, source)
+		}
 		if e != nil || json.NewEncoder(os.Stdout).Encode(report) != nil {
 			return refused()
 		}

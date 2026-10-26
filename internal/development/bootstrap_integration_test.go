@@ -362,6 +362,30 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 	if _, err = ExternalCapabilityFixtures(ctx, pool, expired, "read", proof); err == nil {
 		t.Fatal("expired fixture accepted")
 	}
+	cms, err := CMSCapabilityFixtures(ctx, pool, cfg, "register", proof)
+	if err != nil || cms.Phase != "REGISTERED" || cms.ProviderID == "" || cms.TenantID == registered.TenantID || cms.InstanceID == registered.InstanceID {
+		t.Fatalf("CMS owner registration did not preserve profile/tenant isolation: %+v %v", cms, err)
+	}
+	if cms.SourcePresent || cms.GrantActive || cms.BindingActive || cms.ProviderActive {
+		t.Fatal("CMS registration invented active authority")
+	}
+	cmsReplay, err := CMSCapabilityFixtures(ctx, pool, cfg, "register", proof)
+	if err != nil || cmsReplay.ProviderID != cms.ProviderID {
+		t.Fatal("CMS registration replay failed")
+	}
+	changedProof := proof
+	changedProof.SourceSHA = strings.Repeat("d", 40)
+	if _, err = CMSCapabilityFixtures(ctx, pool, cfg, "register", changedProof); err == nil {
+		t.Fatal("CMS registration adopted changed source proof")
+	}
+	for _, denied := range []Config{protected, expired} {
+		if _, err = CMSCapabilityFixtures(ctx, pool, denied, "read", proof); err == nil {
+			t.Fatal("CMS protected/expired fixture accepted")
+		}
+	}
+	if _, err = CMSCapabilityFixtures(ctx, pool, cfg, "unentitled", proof); err == nil {
+		t.Fatal("CMS withdrew absent grant")
+	}
 	var providerState string
 	if err = pool.QueryRow(ctx, `SELECT status FROM capability.capability_provider WHERE provider_id=$1::uuid`, registered.ProviderID).Scan(&providerState); err != nil || providerState != "DRAFT" {
 		t.Fatal("registration self-activated provider")
