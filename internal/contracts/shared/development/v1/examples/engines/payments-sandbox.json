@@ -1,0 +1,182 @@
+{
+  "schema": "baobab.engine-integration-profile.v1",
+  "profile_key": "payments-sandbox",
+  "subject_engine": "baobab-payments",
+  "provider_key": "baobab-payments.sandbox",
+  "mode": "l4",
+  "references": {
+    "environment": ".baobab/environment.yaml",
+    "capability_provider": ".baobab/capability-provider.yaml",
+    "enterprise_profiles": "development/v1/examples/nabhold-group.json"
+  },
+  "enterprise_seed": "external-client",
+  "neighbour_seed": "nabhold",
+  "iam": {
+    "caller": {
+      "client_id": "baobab-dev-payments-onboarding",
+      "audiences": [
+        "baobab-control-plane",
+        "baobab-payments"
+      ],
+      "scopes": [
+        "context:resolve",
+        "payment:execute",
+        "payment:read",
+        "payment:refund"
+      ]
+    },
+    "neighbour": {
+      "client_id": "baobab-dev-payments-onboarding-neighbour",
+      "audiences": [
+        "baobab-control-plane",
+        "baobab-payments"
+      ],
+      "scopes": [
+        "context:resolve",
+        "payment:execute",
+        "payment:read",
+        "payment:refund"
+      ]
+    },
+    "validator": {
+      "client_id": "baobab-dev-payments-validator",
+      "audiences": [
+        "baobab-control-plane"
+      ],
+      "scopes": [
+        "context:validate"
+      ]
+    }
+  },
+  "services": {
+    "required": [
+      {
+        "key": "iam",
+        "kind": "iam",
+        "owner": "baobab-iam",
+        "depends_on": []
+      },
+      {
+        "key": "control-plane",
+        "kind": "control-plane",
+        "owner": "baobab-cp",
+        "depends_on": [
+          "iam"
+        ]
+      },
+      {
+        "key": "subject",
+        "kind": "engine",
+        "owner": "baobab-payments",
+        "depends_on": [
+          "control-plane"
+        ]
+      }
+    ],
+    "optional": []
+  },
+  "capabilities": [
+    {
+      "capability_key": "payment.intent.create",
+      "contract_version": 1
+    },
+    {
+      "capability_key": "payment.intent.cancel",
+      "contract_version": 1
+    },
+    {
+      "capability_key": "payment.payment.authorize",
+      "contract_version": 1
+    },
+    {
+      "capability_key": "payment.payment.capture",
+      "contract_version": 1
+    },
+    {
+      "capability_key": "payment.refund.create",
+      "contract_version": 1
+    }
+  ],
+  "adapter": {
+    "path": ".baobab/development_adapter.py",
+    "driver": "probe",
+    "dockerfile": "Dockerfile",
+    "port": 8080,
+    "readiness_path": "/health/ready",
+    "environment": {
+      "WORKLOAD_ISSUER": {
+        "source": "iam.issuer"
+      },
+      "WORKLOAD_JWKS_URI": {
+        "source": "iam.jwks"
+      },
+      "WORKLOAD_ALLOWED_CLIENTS": {
+        "source": "iam.allowed_clients"
+      },
+      "SANDBOX_CP_ORIGIN": {
+        "source": "cp.origin"
+      },
+      "SANDBOX_CP_CLIENT_ID": {
+        "source": "iam.validator.client_id"
+      },
+      "SANDBOX_CP_CLIENT_SECRET": {
+        "source": "iam.validator.client_secret"
+      },
+      "SANDBOX_CAPABILITY_PROVIDER_ID": {
+        "source": "cp.provider_id"
+      },
+      "SANDBOX_ENGINE_INSTANCE_ID": {
+        "source": "cp.engine_instance_id"
+      },
+      "SSL_CERT_FILE": {
+        "source": "tls.ca_file"
+      },
+      "BAOBAB_ENVIRONMENT": {
+        "constant": "development"
+      },
+      "PAYMENT_PROVIDER": {
+        "constant": "sandbox"
+      },
+      "WORKLOAD_AUDIENCE": {
+        "constant": "baobab-payments"
+      }
+    }
+  },
+  "run_policy": {
+    "environment": "development",
+    "synthetic_only": true,
+    "max_lease_seconds": 3600,
+    "network": "private",
+    "expose_admin_ports": false,
+    "cleanup": "required"
+  },
+  "reporting": {
+    "case_ids": [
+      "ENG-ONB-01",
+      "ENG-ONB-02",
+      "ENG-ONB-03",
+      "ENG-ONB-04",
+      "ENG-ONB-05",
+      "ENG-ONB-06",
+      "ENG-ONB-07",
+      "ENG-ONB-08",
+      "ENG-ONB-09",
+      "PAYMENTS-INTENT-CONFIRM-AUTHORIZE-CAPTURE",
+      "PAYMENTS-CANCEL",
+      "PAYMENTS-REFUND",
+      "PAYMENTS-OVER-REFUND",
+      "PAYMENTS-IDEMPOTENCY-CONFLICT",
+      "PAYMENTS-LOST-RESPONSE-RETRY",
+      "PAYMENTS-CROSS-TENANT",
+      "PAYMENTS-ACTOR-MARKET-CURRENCY",
+      "PAYMENTS-REVOKED-GRANT",
+      "PAYMENTS-EVENT-REPLAY",
+      "PAYMENTS-UNTRUSTED-WEBHOOK",
+      "PAYMENTS-MISSING-MANDATE",
+      "PAYMENTS-PSP-NOT-CONFIGURED",
+      "PAYMENTS-SIMULATION-TRUTH"
+    ],
+    "protected_acceptance": false,
+    "production_authorized": false
+  }
+}

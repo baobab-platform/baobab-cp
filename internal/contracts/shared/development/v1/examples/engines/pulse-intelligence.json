@@ -1,0 +1,197 @@
+{
+  "schema": "baobab.engine-integration-profile.v1",
+  "profile_key": "pulse-intelligence",
+  "subject_engine": "baobab-pulse",
+  "provider_key": "baobab-pulse.core",
+  "mode": "l4",
+  "references": {
+    "environment": ".baobab/environment.yaml",
+    "capability_provider": ".baobab/capability-provider.yaml",
+    "enterprise_profiles": "development/v1/examples/nabhold-group.json"
+  },
+  "enterprise_seed": "external-client",
+  "neighbour_seed": "nabhold",
+  "iam": {
+    "caller": {
+      "client_id": "baobab-dev-pulse-onboarding",
+      "audiences": [
+        "baobab-control-plane",
+        "baobab-pulse"
+      ],
+      "scopes": [
+        "context:resolve",
+        "intelligence:evidence:search",
+        "intelligence:research-mission:manage"
+      ]
+    },
+    "neighbour": {
+      "client_id": "baobab-dev-pulse-onboarding-neighbour",
+      "audiences": [
+        "baobab-control-plane",
+        "baobab-pulse"
+      ],
+      "scopes": [
+        "context:resolve",
+        "intelligence:evidence:search",
+        "intelligence:research-mission:manage"
+      ]
+    },
+    "validator": {
+      "client_id": "baobab-dev-pulse-validator",
+      "audiences": [
+        "baobab-control-plane"
+      ],
+      "scopes": [
+        "context:validate"
+      ]
+    }
+  },
+  "services": {
+    "required": [
+      {
+        "key": "iam",
+        "kind": "iam",
+        "owner": "baobab-iam",
+        "depends_on": []
+      },
+      {
+        "key": "control-plane",
+        "kind": "control-plane",
+        "owner": "baobab-cp",
+        "depends_on": [
+          "iam"
+        ]
+      },
+      {
+        "key": "subject",
+        "kind": "engine",
+        "owner": "baobab-pulse",
+        "depends_on": [
+          "control-plane",
+          "canonical-store",
+          "semantic-projection"
+        ]
+      },
+      {
+        "key": "canonical-store",
+        "kind": "postgresql",
+        "owner": "baobab-pulse",
+        "depends_on": []
+      },
+      {
+        "key": "semantic-projection",
+        "kind": "qdrant",
+        "owner": "baobab-pulse",
+        "depends_on": []
+      }
+    ],
+    "optional": []
+  },
+  "capabilities": [
+    {
+      "capability_key": "intelligence.evidence.search",
+      "contract_version": 1
+    },
+    {
+      "capability_key": "intelligence.research-mission.manage",
+      "contract_version": 1
+    }
+  ],
+  "adapter": {
+    "path": ".baobab/development_adapter.py",
+    "driver": "engine",
+    "dockerfile": "Dockerfile.integration",
+    "port": 8000,
+    "readiness_path": "/readyz",
+    "environment": {
+      "PULSE_DATABASE_URL": {
+        "source": "native.canonical-store.url"
+      },
+      "PULSE_QDRANT_URL": {
+        "source": "native.semantic-projection.url"
+      },
+      "PULSE_IAM_ISSUER_URL": {
+        "source": "iam.issuer"
+      },
+      "PULSE_IAM_JWKS_URL": {
+        "source": "iam.jwks"
+      },
+      "PULSE_IAM_TOKEN_URL": {
+        "source": "iam.token"
+      },
+      "PULSE_IAM_CLIENT_ID": {
+        "source": "iam.validator.client_id"
+      },
+      "PULSE_IAM_CLIENT_SECRET": {
+        "source": "iam.validator.client_secret"
+      },
+      "PULSE_CONTROL_PLANE_CONTEXT_VALIDATION_URL": {
+        "source": "cp.context_validation"
+      },
+      "PULSE_CONTROL_PLANE_CAPABILITY_RESOLUTION_URL": {
+        "source": "cp.capability_resolution"
+      },
+      "PULSE_CAPABILITY_PROVIDER_ID": {
+        "source": "cp.provider_id"
+      },
+      "PULSE_ENGINE_INSTANCE_ID": {
+        "source": "cp.engine_instance_id"
+      },
+      "SSL_CERT_FILE": {
+        "source": "tls.ca_file"
+      },
+      "PULSE_ENVIRONMENT": {
+        "constant": "development"
+      },
+      "PULSE_EMBEDDING_PROVIDER": {
+        "constant": "mock"
+      },
+      "PULSE_EMBEDDING_DIMENSION": {
+        "constant": "16"
+      },
+      "PULSE_QDRANT_COLLECTION_PREFIX": {
+        "constant": "dev15"
+      },
+      "PULSE_IAM_CLOCK_SKEW_SECONDS": {
+        "constant": "0"
+      },
+      "HAYSTACK_TELEMETRY_ENABLED": {
+        "constant": "false"
+      }
+    }
+  },
+  "run_policy": {
+    "environment": "development",
+    "synthetic_only": true,
+    "max_lease_seconds": 3600,
+    "network": "private",
+    "expose_admin_ports": false,
+    "cleanup": "required"
+  },
+  "reporting": {
+    "case_ids": [
+      "ENG-ONB-01",
+      "ENG-ONB-02",
+      "ENG-ONB-03",
+      "ENG-ONB-04",
+      "ENG-ONB-05",
+      "ENG-ONB-06",
+      "ENG-ONB-07",
+      "ENG-ONB-08",
+      "ENG-ONB-09",
+      "PULSE-CANONICAL-SEARCH",
+      "PULSE-MISSION-CREATE-GET",
+      "PULSE-MISSION-REPLAY-CONFLICT",
+      "PULSE-WRONG-TENANT",
+      "PULSE-CLASSIFICATION",
+      "PULSE-ORPHAN-VECTOR",
+      "PULSE-PROJECTION-MISMATCH",
+      "PULSE-QDRANT-OUTAGE-RECOVERY",
+      "PULSE-PROJECTION-REBUILD",
+      "PULSE-INVALID-EVENT-CONTEXT",
+      "PULSE-REVOKED-ACCESS"
+    ],
+    "protected_acceptance": false,
+    "production_authorized": false
+  }
+}

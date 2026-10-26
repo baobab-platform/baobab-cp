@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/billing"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/topology/release"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,8 @@ import (
 type nativeCapabilityProfile struct {
 	key, tenantKey, engine, providerKey, capability, product, diagnostic string
 	readiness                                                            func(context.Context) error
+	engineProfile                                                        *EngineIntegrationProfile
+	registrationData                                                     []byte
 }
 
 var pulseCapabilityProfile = nativeCapabilityProfile{
@@ -39,6 +42,17 @@ func CMSCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, 
 }
 
 func (p nativeCapabilityProfile) support() []release.ProviderSupport {
+	if p.engineProfile != nil {
+		registration, err := billing.ParseRegistration(p.registrationData)
+		if err != nil {
+			return nil
+		}
+		out := []release.ProviderSupport{}
+		for _, support := range registration.Support {
+			out = append(out, release.ProviderSupport{ProviderKey: p.providerKey, CapabilityKey: support.CapabilityKey, ContractVersions: support.ContractVersions})
+		}
+		return out
+	}
 	out := []release.ProviderSupport{{ProviderKey: p.providerKey, CapabilityKey: p.capability, ContractVersions: []int{1}}}
 	if p.key == "external" {
 		out = append(out, release.ProviderSupport{ProviderKey: p.providerKey, CapabilityKey: "intelligence.research-mission.manage", ContractVersions: []int{1}})
@@ -47,6 +61,9 @@ func (p nativeCapabilityProfile) support() []release.ProviderSupport {
 }
 
 func (p nativeCapabilityProfile) registration() ([]byte, error) {
+	if p.engineProfile != nil {
+		return p.registrationData, nil
+	}
 	if p.key == "external" {
 		return contracts.ReadEmbedded("intelligence/v1/pulse-registration.json")
 	}
@@ -112,4 +129,15 @@ func probeCMSReadiness(ctx context.Context) error {
 		return errors.New("actual CMS database readiness required")
 	}
 	return nil
+}
+
+func (p nativeCapabilityProfile) capabilityKeys() []string {
+	if p.engineProfile == nil {
+		return []string{p.capability}
+	}
+	out := []string{}
+	for _, c := range p.engineProfile.Capabilities {
+		out = append(out, c.Key)
+	}
+	return out
 }

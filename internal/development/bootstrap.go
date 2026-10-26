@@ -34,18 +34,19 @@ type Enterprise struct {
 }
 
 type Result struct {
-	Schema              string            `json:"schema"`
-	FixtureVersion      int               `json:"fixture_version"`
-	RunID               string            `json:"run_id"`
-	ExpiresAt           time.Time         `json:"expires_at"`
-	SyntheticOnly       bool              `json:"synthetic_only"`
-	ProtectedAcceptance bool              `json:"protected_acceptance"`
-	MakerID             string            `json:"maker_id"`
-	CheckerID           string            `json:"checker_id"`
-	Enterprises         []Enterprise      `json:"enterprises"`
-	EngineInstances     map[string]string `json:"engine_instances"`
-	MarketIDs           map[string]string `json:"market_ids"`
-	ProofPrincipals     map[string]string `json:"proof_principals"`
+	Schema                   string            `json:"schema"`
+	FixtureVersion           int               `json:"fixture_version"`
+	RunID                    string            `json:"run_id"`
+	ExpiresAt                time.Time         `json:"expires_at"`
+	SyntheticOnly            bool              `json:"synthetic_only"`
+	ProtectedAcceptance      bool              `json:"protected_acceptance"`
+	MakerID                  string            `json:"maker_id"`
+	CheckerID                string            `json:"checker_id"`
+	Enterprises              []Enterprise      `json:"enterprises"`
+	EngineInstances          map[string]string `json:"engine_instances"`
+	MarketIDs                map[string]string `json:"market_ids"`
+	ProofPrincipals          map[string]string `json:"proof_principals"`
+	IntegrationProfileDigest string            `json:"integration_profile_digest,omitempty"`
 }
 
 // CheckDatabase must succeed before either migration or bootstrap is attempted.
@@ -86,6 +87,9 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 		return out, err
 	}
 	request, _ := json.Marshal([]any{"DEV-02/2", cfg.ExternalAPI, string(raw), cfg.Issuer, cfg.WorkloadIssuerValue(), cfg.MakerSubject, cfg.CheckerSubject, int64(cfg.Lease / time.Second)})
+	if cfg.IntegrationProfile != nil {
+		request, _ = json.Marshal([]any{string(request), string(cfg.IntegrationProfile.raw)})
+	}
 	sum := sha256.Sum256(request)
 	digest := hex.EncodeToString(sum[:])
 	var existingDigest string
@@ -146,6 +150,12 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 		}
 	}
 	engines := map[string]bool{}
+	if cfg.IntegrationProfile != nil {
+		engines[cfg.IntegrationProfile.SubjectEngine] = true
+		out.FixtureVersion = 4
+		profileDigest := sha256.Sum256(cfg.IntegrationProfile.raw)
+		out.IntegrationProfileDigest = hex.EncodeToString(profileDigest[:])
+	}
 	countries := map[string]bool{}
 	var parentLegalEntityID string
 	for _, p := range profiles.Profiles {
@@ -259,6 +269,11 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 	if cfg.ExternalAPI {
 		proofSubjects = append(proofSubjects, PulseValidatorClient)
 	}
+	if cfg.IntegrationProfile != nil {
+		for _, role := range []string{"caller", "neighbour", "validator"} {
+			proofSubjects = append(proofSubjects, cfg.IntegrationProfile.IAM[role].ClientID)
+		}
+	}
 	for _, subject := range proofSubjects {
 		id := domain.NewPrincipalID()
 		if err = identity(ctx, tx, id, "workload", cfg.WorkloadIssuerValue(), subject); err != nil {
@@ -284,6 +299,37 @@ func Bootstrap(ctx context.Context, pool *pgxpool.Pool, cfg Config, raw []byte) 
 		}
 	}
 	for subject, id := range out.ProofPrincipals {
+		if cfg.IntegrationProfile != nil {
+			handled := false
+			for _, role := range []string{"caller", "neighbour", "validator"} {
+				if subject != cfg.IntegrationProfile.IAM[role].ClientID {
+					continue
+				}
+				handled = true
+				if role == "validator" {
+					break
+				}
+				seed := cfg.IntegrationProfile.EnterpriseSeed
+				if role == "neighbour" {
+					seed = cfg.IntegrationProfile.NeighbourSeed
+				}
+				tenant := ""
+				for _, e := range out.Enterprises {
+					if e.Key == seed {
+						tenant = e.TenantID
+					}
+				}
+				if tenant == "" {
+					return out, errors.New("profile tenant missing")
+				}
+				if _, err = tx.Exec(ctx, `INSERT INTO development.principal_assignment(principal_id,run_id,client_id,tenant_id) VALUES($1,$2,$3,$4)`, id, cfg.RunID, subject, tenant); err != nil {
+					return out, err
+				}
+			}
+			if handled {
+				continue
+			}
+		}
 		if subject != "baobab-int03-cms-validator" && subject != PulseValidatorClient {
 			if _, err = tx.Exec(ctx, `INSERT INTO development.principal_assignment(principal_id,run_id,client_id,tenant_id) VALUES($1,$2,$3,$4)`, id, cfg.RunID, subject, out.Enterprises[0].TenantID); err != nil {
 				return out, err

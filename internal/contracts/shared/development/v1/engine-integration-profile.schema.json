@@ -1,0 +1,494 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "profile_key",
+    "subject_engine",
+    "provider_key",
+    "mode",
+    "references",
+    "enterprise_seed",
+    "neighbour_seed",
+    "iam",
+    "services",
+    "capabilities",
+    "adapter",
+    "run_policy",
+    "reporting"
+  ],
+  "properties": {
+    "schema": {
+      "const": "baobab.engine-integration-profile.v1"
+    },
+    "profile_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,62}$",
+      "maxLength": 63
+    },
+    "subject_engine": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,62}$",
+      "maxLength": 63
+    },
+    "provider_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+      "maxLength": 128
+    },
+    "mode": {
+      "enum": [
+        "component",
+        "l4"
+      ]
+    },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment",
+        "capability_provider",
+        "enterprise_profiles"
+      ],
+      "properties": {
+        "environment": {
+          "const": ".baobab/environment.yaml"
+        },
+        "capability_provider": {
+          "const": ".baobab/capability-provider.yaml"
+        },
+        "enterprise_profiles": {
+          "const": "development/v1/examples/nabhold-group.json"
+        }
+      }
+    },
+    "enterprise_seed": {
+      "enum": [
+        "nabhold",
+        "zuribeans",
+        "thamani",
+        "equator-estate",
+        "external-client"
+      ]
+    },
+    "neighbour_seed": {
+      "enum": [
+        "nabhold",
+        "zuribeans",
+        "thamani",
+        "equator-estate",
+        "external-client"
+      ]
+    },
+    "iam": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caller",
+        "neighbour",
+        "validator"
+      ],
+      "properties": {
+        "caller": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "client_id",
+            "audiences",
+            "scopes"
+          ],
+          "properties": {
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,62}$",
+              "maxLength": 63
+            },
+            "audiences": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,62}$",
+                "maxLength": 63
+              },
+              "uniqueItems": true
+            },
+            "scopes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9:_-]{1,127}$",
+                "maxLength": 128
+              },
+              "uniqueItems": true
+            }
+          }
+        },
+        "neighbour": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "client_id",
+            "audiences",
+            "scopes"
+          ],
+          "properties": {
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,62}$",
+              "maxLength": 63
+            },
+            "audiences": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,62}$",
+                "maxLength": 63
+              },
+              "uniqueItems": true
+            },
+            "scopes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9:_-]{1,127}$",
+                "maxLength": 128
+              },
+              "uniqueItems": true
+            }
+          }
+        },
+        "validator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "client_id",
+            "audiences",
+            "scopes"
+          ],
+          "properties": {
+            "client_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,62}$",
+              "maxLength": 63
+            },
+            "audiences": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,62}$",
+                "maxLength": 63
+              },
+              "uniqueItems": true
+            },
+            "scopes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9:_-]{1,127}$",
+                "maxLength": 128
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    },
+    "services": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "optional"
+      ],
+      "properties": {
+        "required": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "kind",
+              "owner",
+              "depends_on"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,62}$",
+                "maxLength": 63
+              },
+              "kind": {
+                "enum": [
+                  "iam",
+                  "control-plane",
+                  "engine",
+                  "postgresql",
+                  "qdrant",
+                  "redis"
+                ]
+              },
+              "owner": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,62}$",
+                "maxLength": 63
+              },
+              "depends_on": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{1,62}$",
+                  "maxLength": 63
+                },
+                "uniqueItems": true
+              }
+            }
+          }
+        },
+        "optional": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "kind",
+              "owner",
+              "depends_on"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,62}$",
+                "maxLength": 63
+              },
+              "kind": {
+                "enum": [
+                  "iam",
+                  "control-plane",
+                  "engine",
+                  "postgresql",
+                  "qdrant",
+                  "redis"
+                ]
+              },
+              "owner": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,62}$",
+                "maxLength": 63
+              },
+              "depends_on": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{1,62}$",
+                  "maxLength": 63
+                },
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "capability_key",
+          "contract_version"
+        ],
+        "properties": {
+          "capability_key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+            "maxLength": 128
+          },
+          "contract_version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99
+          }
+        }
+      },
+      "uniqueItems": true
+    },
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "driver",
+        "dockerfile",
+        "port",
+        "readiness_path",
+        "environment"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
+          "maxLength": 255,
+          "not": {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          }
+        },
+        "driver": {
+          "enum": [
+            "engine",
+            "probe"
+          ]
+        },
+        "dockerfile": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
+          "maxLength": 255,
+          "not": {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          }
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "readiness_path": {
+          "type": "string",
+          "pattern": "^/[a-zA-Z0-9/_-]{1,127}$",
+          "maxLength": 128
+        },
+        "environment": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,95}$",
+            "maxLength": 96
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "source"
+                ],
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "pattern": "^(?:iam\\.(?:issuer|jwks|token|introspection|allowed_clients|(?:caller|neighbour|validator)\\.(?:client_id|client_secret))|cp\\.(?:origin|context_validation|capability_resolution|provider_id|engine_instance_id)|tls\\.ca_file|run\\.id|tenant\\.(?:id|organisation_id|legal_entity_id|market_id|country)|native\\.[a-z][a-z0-9-]*\\.(?:url|password))$",
+                    "maxLength": 128
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "constant"
+                ],
+                "properties": {
+                  "constant": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                    "maxLength": 64
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "run_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment",
+        "synthetic_only",
+        "max_lease_seconds",
+        "network",
+        "expose_admin_ports",
+        "cleanup"
+      ],
+      "properties": {
+        "environment": {
+          "const": "development"
+        },
+        "synthetic_only": {
+          "const": true
+        },
+        "max_lease_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 86400
+        },
+        "network": {
+          "const": "private"
+        },
+        "expose_admin_ports": {
+          "const": false
+        },
+        "cleanup": {
+          "const": "required"
+        }
+      }
+    },
+    "reporting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_ids",
+        "protected_acceptance",
+        "production_authorized"
+      ],
+      "properties": {
+        "case_ids": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9-]{2,79}$",
+            "maxLength": 80
+          },
+          "uniqueItems": true
+        },
+        "protected_acceptance": {
+          "const": false
+        },
+        "production_authorized": {
+          "const": false
+        }
+      }
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/development/v1/engine-integration-profile.schema.json",
+  "title": "Unprivileged engine development integration-run profile"
+}
