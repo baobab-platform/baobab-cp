@@ -113,11 +113,15 @@
     "provider_key": "baobab-payments.sandbox",
     "name": "Sandbox payment provider (non-production only)",
     "provider_type": "BAOBAB_ENGINE",
-    "engine_key": "sandbox-payments",
+    "engine_key": "sandbox",
     "lifecycle": "DRAFT",
     "ownership": "baobab-payments",
     "simulated": true,
-    "production_permitted": false
+    "production_permitted": false,
+    "invocation": {
+      "service_reference": "service://baobab-payments/payments",
+      "protocol": "http"
+    }
   },
   "support": [
     {
