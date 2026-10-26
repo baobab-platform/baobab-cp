@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/baobab-platform/baobab-cp/internal/billing"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/topology/release"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,9 +43,13 @@ func CMSCapabilityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, 
 
 func (p nativeCapabilityProfile) support() []release.ProviderSupport {
 	if p.engineProfile != nil {
+		registration, err := billing.ParseRegistration(p.registrationData)
+		if err != nil {
+			return nil
+		}
 		out := []release.ProviderSupport{}
-		for _, c := range p.engineProfile.Capabilities {
-			out = append(out, release.ProviderSupport{ProviderKey: p.providerKey, CapabilityKey: c.Key, ContractVersions: []int{c.Version}})
+		for _, support := range registration.Support {
+			out = append(out, release.ProviderSupport{ProviderKey: p.providerKey, CapabilityKey: support.CapabilityKey, ContractVersions: support.ContractVersions})
 		}
 		return out
 	}
