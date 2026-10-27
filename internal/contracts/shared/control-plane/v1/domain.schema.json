@@ -53,7 +53,10 @@
       "maxLength": 63,
       "description": "Version-1 product identifier. Canonical engine products use kebab case; underscore aliases remain accepted during migration."
     },
-    "estateId": { "$ref": "#/$defs/resourceId" },
+    "estateId": {
+      "anyOf": [{ "$ref": "#/$defs/resourceId" }, { "$ref": "#/$defs/uuid" }],
+      "description": "The unchanged CP-owned Digital Estate identifier. Accepts native CP UUIDs and existing opaque resource IDs; never derive or mint an alias from either."
+    },
     "environment": {
       "type": "string",
       "enum": ["local", "development", "staging", "production"]
@@ -67,7 +70,7 @@
     },
     "engineInstanceId": {
       "type": "string",
-      "pattern": "^ei_[a-z0-9]+$",
+      "pattern": "^(?:ei_[a-z0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
       "minLength": 6,
       "maxLength": 63,
       "description": "Control Plane-minted identifier of a concrete engine deployment. The single grammar for engine_instance_id in every contract (ADR-SHARED-012)."

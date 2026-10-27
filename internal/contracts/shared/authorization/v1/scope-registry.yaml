@@ -927,8 +927,7 @@ scopes:
       presents the human's IAM access token, audience-bound to its own
       resource, as subject evidence; the Control Plane verifies it itself and
       resolves the exact (issuer, subject). Creates nothing and grants no
-      tenant, membership, role, market or purchasing authority. Allocated to
-      no workload.
+      tenant, membership, role, market or purchasing authority. Allocated only to the named DEV-07 development validator; no protected allocation.
     audience: ["baobab-control-plane"]
     allowed_actors: ["workload"]
     grants_authority: false
@@ -952,7 +951,7 @@ scopes:
       estate-client-binding.openapi.yaml; ADR-SHARED-042 CAA-04). The calling
       workload presents the BFF's own IAM workload token as client evidence;
       the Control Plane verifies it itself. Grants no buyer, membership,
-      market or purchasing authority. Allocated to no workload.
+      market or purchasing authority. Allocated only to the named DEV-07 development client; no protected allocation.
     audience: ["baobab-control-plane"]
     allowed_actors: ["workload"]
     grants_authority: false
@@ -1020,7 +1019,7 @@ scopes:
       access token to Trade as subject evidence (identity/v1
       buyer-identity-handoff v1.1, BffCallerTokenClaims). Authenticates the
       BFF as the caller; grants no identity, estate, membership, market or
-      purchasing authority. Allocated to no workload.
+      purchasing authority. Allocated only to the named DEV-07 development client; no protected allocation.
     audience: ["baobab-trade"]
     allowed_actors: ["workload"]
     grants_authority: false

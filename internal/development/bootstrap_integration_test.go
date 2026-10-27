@@ -399,6 +399,54 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 		t.Fatal("registration invented a grant or estate")
 	}
 
+	t.Run("DEV07BuyerIdentityOwnerFixture", func(t *testing.T) {
+		buyer, e := BuyerIdentityFixtures(ctx, pool, cfg, "prepare")
+		if e != nil || buyer.Status != "ACTIVE" || buyer.Revision != 1 || !buyer.SyntheticOnly || buyer.ProtectedAcceptance {
+			t.Fatalf("buyer prepare: %+v %v", buyer, e)
+		}
+		var own Enterprise
+		for _, candidate := range result.Enterprises {
+			if candidate.Key == "zuribeans" {
+				own = candidate
+			}
+		}
+		if buyer.EstateID != own.EstateID || buyer.EngineInstanceID != result.EngineInstances["baobab-trade"] ||
+			buyer.TenantID != own.TenantID || buyer.OrganisationID != own.OrganisationID {
+			t.Fatal("fixture invented topology identifiers")
+		}
+		replay, e := BuyerIdentityFixtures(ctx, pool, cfg, "prepare")
+		if e != nil || replay.BindingID != buyer.BindingID || replay.PrincipalID != buyer.PrincipalID {
+			t.Fatal("buyer replay", e)
+		}
+		for _, bad := range []Config{protected, expired} {
+			if _, e = BuyerIdentityFixtures(ctx, pool, bad, "read"); e == nil {
+				t.Fatal("protected/expired buyer fixture accepted")
+			}
+		}
+		changed := cfg
+		changed.MakerSubject = "other-subject"
+		if _, e = BuyerIdentityFixtures(ctx, pool, changed, "read"); e == nil {
+			t.Fatal("wrong subject adopted run")
+		}
+		for _, phase := range []string{"suspend", "restore", "revoke"} {
+			current, e := BuyerIdentityFixtures(ctx, pool, cfg, phase)
+			if e != nil || current.Revision <= buyer.Revision {
+				t.Fatalf("buyer %s: %+v %v", phase, current, e)
+			}
+			buyer = current
+		}
+		if _, e = BuyerIdentityFixtures(ctx, pool, cfg, "restore"); e == nil {
+			t.Fatal("revoked buyer binding restored")
+		}
+		if _, e = BuyerIdentityFixtures(ctx, pool, cfg, "unknown"); e == nil {
+			t.Fatal("unknown buyer phase")
+		}
+		current, e := BuyerIdentityFixtures(ctx, pool, cfg, "read")
+		if e != nil || current.Status != "REVOKED" {
+			t.Fatal("terminal buyer readback", e)
+		}
+	})
+
 }
 
 // This verifier is only a component seam; it makes no signed-token claim.

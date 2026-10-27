@@ -21,6 +21,7 @@ func main() { os.Exit(run()) }
 
 func run() int {
 	var cfg development.Config
+	buyerPhase := flag.String("buyer-identity-phase", "", "DEV-07 guarded leased buyer identity fixture: prepare/read/suspend/restore/revoke")
 	engineProfile := flag.String("engine-profile", "", "Shared closed unprivileged engine integration descriptor")
 	enginePhase := flag.String("engine-capability-phase", "", "normal owner capability fixture phase")
 	engineSource := flag.String("engine-capability-source", "", "immutable actual owner proof file")
@@ -89,13 +90,20 @@ func run() int {
 		return refused()
 	}
 	selected := 0
-	for _, phase := range []string{*externalPhase, *cmsPhase, *subscriptionPhase, *enginePhase} {
+	for _, phase := range []string{*externalPhase, *cmsPhase, *subscriptionPhase, *enginePhase, *buyerPhase} {
 		if phase != "" {
 			selected++
 		}
 	}
 	if selected > 1 {
 		return refused()
+	}
+	if *buyerPhase != "" {
+		report, e := development.BuyerIdentityFixtures(ctx, pool, cfg, *buyerPhase)
+		if e != nil || json.NewEncoder(os.Stdout).Encode(report) != nil {
+			return refused()
+		}
+		return 0
 	}
 	if *enginePhase != "" {
 		read := func(path string) ([]byte, error) {
