@@ -95,12 +95,17 @@ func BuyerIdentityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, 
 	if own.TenantID == "" || own.EstateID == "" || instance == "" || other.OrganisationID == "" {
 		return out, errors.New("buyer topology unavailable")
 	}
-	var topology bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM estate.digital_estate d JOIN topology.engine_instance i ON i.engine_instance_id=$3 JOIN topology.engine e ON e.engine_id=i.engine_id WHERE d.digital_estate_id=$1 AND d.tenant_id=$2 AND upper(d.status)='ACTIVE' AND e.code='baobab-trade' AND i.environment='development' AND i.effective_to=$4)`, own.EstateID, own.TenantID, instance, deadline).Scan(&topology); err != nil {
+	var estateKey, instanceKey string
+	if err = tx.QueryRow(ctx, `SELECT d.digital_estate_key,i.engine_instance_key
+      FROM estate.digital_estate d JOIN topology.engine_instance i ON i.engine_instance_id=$3
+      JOIN topology.engine e ON e.engine_id=i.engine_id
+      WHERE d.digital_estate_id=$1 AND d.tenant_id=$2 AND upper(d.status)='ACTIVE'
+        AND e.code='baobab-trade' AND i.environment='development' AND i.effective_to=$4`,
+		own.EstateID, own.TenantID, instance, deadline).Scan(&estateKey, &instanceKey); err != nil {
 		return out, err
 	}
-	if !topology {
-		return out, errors.New("buyer topology not current")
+	if !domain.ValidEngineInstanceID(instanceKey) || estateKey == "" {
+		return out, errors.New("buyer public topology keys unavailable")
 	}
 	var principal, binding string
 	err = tx.QueryRow(ctx, `SELECT principal_id::text,binding_id::text FROM development.buyer_identity_fixture WHERE run_id=$1`, cfg.RunID).Scan(&principal, &binding)
@@ -114,7 +119,7 @@ func BuyerIdentityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, 
 			return out, err
 		}
 		evidence := "development:" + cfg.RunID + ":dev07:maker:" + run.MakerID + ":checker:" + run.CheckerID
-		if _, err = tx.Exec(ctx, `INSERT INTO registry.estate_client_binding(binding_id,issuer,bff_client_id,digital_estate_id,tenant_id,engine_instance_id,environment,deployment_reference,status,revision,effective_from,effective_until,evidence_reference) VALUES($1,$2,$3,$4,$5,$6,'development',$7,'ACTIVE',1,$8,$9,$10)`, binding, cfg.Issuer, BuyerBFFClient, own.EstateID, own.TenantID, instance, "dev07."+cfg.RunID, cfg.Now, deadline, evidence); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO registry.estate_client_binding(binding_id,issuer,bff_client_id,digital_estate_id,tenant_id,engine_instance_id,environment,deployment_reference,status,revision,effective_from,effective_until,evidence_reference) VALUES($1,$2,$3,$4,$5,$6,'development',$7,'ACTIVE',1,$8,$9,$10)`, binding, cfg.Issuer, BuyerBFFClient, estateKey, own.TenantID, instanceKey, "dev07."+cfg.RunID, cfg.Now, deadline, evidence); err != nil {
 			return out, err
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO development.buyer_identity_fixture(run_id,principal_id,binding_id,tenant_id,estate_id,engine_instance_id) VALUES($1,$2,$3,$4,$5,$6)`, cfg.RunID, principal, binding, own.TenantID, own.EstateID, instance); err != nil {
@@ -125,8 +130,8 @@ func BuyerIdentityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, 
 	}
 	// Read back every immutable binding and identity pairing, including on
 	// replay. A mismatched or retired fixture is never repaired or adopted.
-	out = BuyerIdentityFixture{RunID: cfg.RunID, TenantID: own.TenantID, OrganisationID: own.OrganisationID, OtherOrganisationID: other.OrganisationID, PrincipalID: principal, BindingID: binding, EstateID: own.EstateID, EngineInstanceID: instance, ExpiresAt: deadline, SyntheticOnly: true}
-	if err = tx.QueryRow(ctx, `SELECT b.status,b.revision FROM development.buyer_identity_fixture f JOIN registry.estate_client_binding b ON b.binding_id=f.binding_id JOIN development.principal_assignment a ON a.principal_id=f.principal_id JOIN identity.external_identity e ON e.principal_id=f.principal_id JOIN identity.principal p ON p.principal_id=f.principal_id WHERE f.run_id=$1 AND f.tenant_id=$2 AND f.estate_id=$3 AND f.engine_instance_id=$4 AND b.issuer=$5 AND b.bff_client_id=$6 AND b.digital_estate_id=$3::text AND b.tenant_id=$2 AND b.engine_instance_id=$4::text AND b.environment='development' AND b.deployment_reference=$7 AND b.effective_until=$8 AND a.run_id=$1 AND a.tenant_id=$2 AND a.client_id=$9 AND e.issuer=$10 AND e.subject=$9 AND e.status='ACTIVE' AND p.status='ACTIVE' AND p.actor_type='workload'`, cfg.RunID, own.TenantID, own.EstateID, instance, cfg.Issuer, BuyerBFFClient, "dev07."+cfg.RunID, deadline, BuyerValidatorClient, cfg.WorkloadIssuerValue()).Scan(&out.Status, &out.Revision); err != nil {
+	out = BuyerIdentityFixture{RunID: cfg.RunID, TenantID: own.TenantID, OrganisationID: own.OrganisationID, OtherOrganisationID: other.OrganisationID, PrincipalID: principal, BindingID: binding, EstateID: estateKey, EngineInstanceID: instanceKey, ExpiresAt: deadline, SyntheticOnly: true}
+	if err = tx.QueryRow(ctx, `SELECT b.status,b.revision FROM development.buyer_identity_fixture f JOIN registry.estate_client_binding b ON b.binding_id=f.binding_id JOIN development.principal_assignment a ON a.principal_id=f.principal_id JOIN identity.external_identity e ON e.principal_id=f.principal_id JOIN identity.principal p ON p.principal_id=f.principal_id WHERE f.run_id=$1 AND f.tenant_id=$2 AND f.estate_id=$3 AND f.engine_instance_id=$4 AND b.issuer=$5 AND b.bff_client_id=$6 AND b.digital_estate_id=$11 AND b.tenant_id=$2 AND b.engine_instance_id=$12 AND b.environment='development' AND b.deployment_reference=$7 AND b.effective_until=$8 AND a.run_id=$1 AND a.tenant_id=$2 AND a.client_id=$9 AND e.issuer=$10 AND e.subject=$9 AND e.status='ACTIVE' AND p.status='ACTIVE' AND p.actor_type='workload'`, cfg.RunID, own.TenantID, own.EstateID, instance, cfg.Issuer, BuyerBFFClient, "dev07."+cfg.RunID, deadline, BuyerValidatorClient, cfg.WorkloadIssuerValue(), estateKey, instanceKey).Scan(&out.Status, &out.Revision); err != nil {
 		return out, err
 	}
 	target := ""

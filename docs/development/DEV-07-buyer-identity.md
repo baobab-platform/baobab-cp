@@ -21,8 +21,10 @@ adopting drift. `suspend`, `restore` and `revoke` operate only on this run's
 exact binding, incrementing its database-guarded revision. REVOKED is terminal.
 Unknown phase, wrong issuer/subject, missing topology, changed state, expired
 lease, unmarked store and any protected environment refuse. The fixture never
-creates a substitute estate ID or marks an instance/provider ready. Existing
-prefixed binding IDs remain compatible alongside native CP UUID references.
+creates a substitute estate ID or marks an instance/provider ready. CP reads its existing engine_instance_key and owns the generated public
+estate key; internal UUIDs never cross the binding wire. ADR-SHARED-012's
+canonical grammar remains unchanged. The estate key is another representation
+of the same CP row, not a second estate or a consumer-derived mapping.
 
 Infrastructure must register real IAM clients from IAM's owner builder, enable
 the existing buyer-resolution/estate-binding feature flags only in the disposable

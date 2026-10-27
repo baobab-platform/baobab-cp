@@ -410,7 +410,11 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 				own = candidate
 			}
 		}
-		if buyer.EstateID != own.EstateID || buyer.EngineInstanceID != result.EngineInstances["baobab-trade"] ||
+		var estateKey, instanceKey string
+		if e = pool.QueryRow(ctx, `SELECT d.digital_estate_key,i.engine_instance_key FROM estate.digital_estate d CROSS JOIN topology.engine_instance i WHERE d.digital_estate_id=$1 AND i.engine_instance_id=$2`, own.EstateID, result.EngineInstances["baobab-trade"]).Scan(&estateKey, &instanceKey); e != nil {
+			t.Fatal(e)
+		}
+		if buyer.EstateID != estateKey || buyer.EngineInstanceID != instanceKey ||
 			buyer.TenantID != own.TenantID || buyer.OrganisationID != own.OrganisationID {
 			t.Fatal("fixture invented topology identifiers")
 		}
