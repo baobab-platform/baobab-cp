@@ -415,7 +415,7 @@ func TestDevelopmentBootstrapPostgres(t *testing.T) {
 			t.Fatal(e)
 		}
 		if buyer.EstateID != estateKey || buyer.EngineInstanceID != instanceKey ||
-			buyer.TenantID != own.TenantID || buyer.OrganisationID != own.OrganisationID {
+			buyer.TenantID != own.TenantID || buyer.OrganisationID == own.OrganisationID || buyer.OrganisationID == "" {
 			t.Fatal("fixture invented topology identifiers")
 		}
 		replay, e := BuyerIdentityFixtures(ctx, pool, cfg, "prepare")

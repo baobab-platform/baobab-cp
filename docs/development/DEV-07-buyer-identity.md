@@ -12,7 +12,10 @@ maker/checker subjects and fixed lease. CP checks the actual store marker,
 current bootstrap lease, distinct ACTIVE canonical maker/checker links, native
 ZuriBeans estate/tenant and actual Trade instance. It owns creation of the
 validator Principal, its single leased tenant assignment, and an ACTIVE BFF
-binding bounded by the bootstrap deadline. The binding carries both synthetic
+binding bounded by the bootstrap deadline. An independently minted synthetic buyer Organisation has its own explicitly leased
+ADDITIONAL_ORGANISATION mapping; the seller PRIMARY Organisation is never reused
+as the buyer. It remains UNVERIFIED and carries no legal verification claim.
+The binding carries both synthetic
 maker/checker provenance; this is ADR-SHARED-043 development provenance, not a
 claim of protected independent-human approval.
 

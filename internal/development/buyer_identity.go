@@ -107,9 +107,22 @@ func BuyerIdentityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, 
 	if !domain.ValidEngineInstanceID(instanceKey) || estateKey == "" {
 		return out, errors.New("buyer public topology keys unavailable")
 	}
-	var principal, binding string
-	err = tx.QueryRow(ctx, `SELECT principal_id::text,binding_id::text FROM development.buyer_identity_fixture WHERE run_id=$1`, cfg.RunID).Scan(&principal, &binding)
+	var principal, binding, buyerOrganisation string
+	err = tx.QueryRow(ctx, `SELECT principal_id::text,binding_id::text,buyer_organisation_id::text FROM development.buyer_identity_fixture WHERE run_id=$1`, cfg.RunID).Scan(&principal, &binding, &buyerOrganisation)
 	if errors.Is(err, pgx.ErrNoRows) && phase == "prepare" {
+		// Explicitly distinct buyer: the seller Tenant's PRIMARY Organisation
+		// is never silently reused as the buyer company.
+		buyerOrganisation = domain.NewUUIDv7()
+		metadata, _ := json.Marshal(map[string]string{"synthetic_only": "true", "development_run_id": cfg.RunID, "purpose": "DEV07_BUYER"})
+		if _, err = tx.Exec(ctx, `INSERT INTO registry.canonical_entity(canonical_entity_id,tenant_id,entity_type,status) VALUES($1,$2,'ORGANISATION','active')`, buyerOrganisation, own.TenantID); err != nil {
+			return out, err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO registry.organisation_profile(canonical_entity_id,display_name,verification_state,source_authority,status,effective_from,effective_to,metadata) VALUES($1,'Synthetic independent DEV07 buyer','UNVERIFIED','DEVELOPMENT_FIXTURE','ACTIVE',$2,$3,$4)`, buyerOrganisation, cfg.Now, deadline, metadata); err != nil {
+			return out, err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO registry.tenant_organisation_mapping(tenant_organisation_mapping_id,tenant_id,organisation_id,mapping_role,status,effective_from,effective_to,provenance,metadata) VALUES($1,$2,$3,'ADDITIONAL_ORGANISATION','ACTIVE',$4,$5,'DEVELOPMENT_FIXTURE',$6)`, domain.NewUUIDv7(), own.TenantID, buyerOrganisation, cfg.Now, deadline, metadata); err != nil {
+			return out, err
+		}
 		principal = domain.NewPrincipalID()
 		binding = domain.NewUUIDv7()
 		if err = identity(ctx, tx, principal, "workload", cfg.WorkloadIssuerValue(), BuyerValidatorClient); err != nil {
@@ -122,7 +135,7 @@ func BuyerIdentityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, 
 		if _, err = tx.Exec(ctx, `INSERT INTO registry.estate_client_binding(binding_id,issuer,bff_client_id,digital_estate_id,tenant_id,engine_instance_id,environment,deployment_reference,status,revision,effective_from,effective_until,evidence_reference) VALUES($1,$2,$3,$4,$5,$6,'development',$7,'ACTIVE',1,$8,$9,$10)`, binding, cfg.Issuer, BuyerBFFClient, estateKey, own.TenantID, instanceKey, "dev07."+cfg.RunID, cfg.Now, deadline, evidence); err != nil {
 			return out, err
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO development.buyer_identity_fixture(run_id,principal_id,binding_id,tenant_id,estate_id,engine_instance_id) VALUES($1,$2,$3,$4,$5,$6)`, cfg.RunID, principal, binding, own.TenantID, own.EstateID, instance); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO development.buyer_identity_fixture(run_id,principal_id,binding_id,tenant_id,estate_id,engine_instance_id,buyer_organisation_id) VALUES($1,$2,$3,$4,$5,$6,$7)`, cfg.RunID, principal, binding, own.TenantID, own.EstateID, instance, buyerOrganisation); err != nil {
 			return out, err
 		}
 	} else if err != nil {
@@ -130,8 +143,12 @@ func BuyerIdentityFixtures(ctx context.Context, pool *pgxpool.Pool, cfg Config, 
 	}
 	// Read back every immutable binding and identity pairing, including on
 	// replay. A mismatched or retired fixture is never repaired or adopted.
-	out = BuyerIdentityFixture{RunID: cfg.RunID, TenantID: own.TenantID, OrganisationID: own.OrganisationID, OtherOrganisationID: other.OrganisationID, PrincipalID: principal, BindingID: binding, EstateID: estateKey, EngineInstanceID: instanceKey, ExpiresAt: deadline, SyntheticOnly: true}
-	if err = tx.QueryRow(ctx, `SELECT b.status,b.revision FROM development.buyer_identity_fixture f JOIN registry.estate_client_binding b ON b.binding_id=f.binding_id JOIN development.principal_assignment a ON a.principal_id=f.principal_id JOIN identity.external_identity e ON e.principal_id=f.principal_id JOIN identity.principal p ON p.principal_id=f.principal_id WHERE f.run_id=$1 AND f.tenant_id=$2 AND f.estate_id=$3 AND f.engine_instance_id=$4 AND b.issuer=$5 AND b.bff_client_id=$6 AND b.digital_estate_id=$11 AND b.tenant_id=$2 AND b.engine_instance_id=$12 AND b.environment='development' AND b.deployment_reference=$7 AND b.effective_until=$8 AND a.run_id=$1 AND a.tenant_id=$2 AND a.client_id=$9 AND e.issuer=$10 AND e.subject=$9 AND e.status='ACTIVE' AND p.status='ACTIVE' AND p.actor_type='workload'`, cfg.RunID, own.TenantID, own.EstateID, instance, cfg.Issuer, BuyerBFFClient, "dev07."+cfg.RunID, deadline, BuyerValidatorClient, cfg.WorkloadIssuerValue(), estateKey, instanceKey).Scan(&out.Status, &out.Revision); err != nil {
+	out = BuyerIdentityFixture{RunID: cfg.RunID, TenantID: own.TenantID, OrganisationID: buyerOrganisation, OtherOrganisationID: other.OrganisationID, PrincipalID: principal, BindingID: binding, EstateID: estateKey, EngineInstanceID: instanceKey, ExpiresAt: deadline, SyntheticOnly: true}
+	if err = tx.QueryRow(ctx, `SELECT b.status,b.revision FROM development.buyer_identity_fixture f JOIN registry.estate_client_binding b ON b.binding_id=f.binding_id
+      JOIN registry.canonical_entity buyer ON buyer.canonical_entity_id=f.buyer_organisation_id
+      JOIN registry.organisation_profile bp ON bp.canonical_entity_id=f.buyer_organisation_id
+      JOIN registry.tenant_organisation_mapping bm ON bm.organisation_id=f.buyer_organisation_id AND bm.tenant_id=f.tenant_id
+      JOIN development.principal_assignment a ON a.principal_id=f.principal_id JOIN identity.external_identity e ON e.principal_id=f.principal_id JOIN identity.principal p ON p.principal_id=f.principal_id WHERE f.run_id=$1 AND f.tenant_id=$2 AND f.estate_id=$3 AND f.engine_instance_id=$4 AND b.issuer=$5 AND b.bff_client_id=$6 AND b.digital_estate_id=$11 AND b.tenant_id=$2 AND b.engine_instance_id=$12 AND b.environment='development' AND b.deployment_reference=$7 AND b.effective_until=$8 AND a.run_id=$1 AND a.tenant_id=$2 AND a.client_id=$9 AND e.issuer=$10 AND e.subject=$9 AND e.status='ACTIVE' AND p.status='ACTIVE' AND p.actor_type='workload' AND buyer.entity_type='ORGANISATION' AND upper(buyer.status)='ACTIVE' AND buyer.canonical_entity_id<>$14 AND bp.status='ACTIVE' AND bp.effective_to=$8 AND bp.effective_from<=$13 AND bm.mapping_role='ADDITIONAL_ORGANISATION' AND bm.status='ACTIVE' AND bm.effective_to=$8 AND bm.effective_from<=$13`, cfg.RunID, own.TenantID, own.EstateID, instance, cfg.Issuer, BuyerBFFClient, "dev07."+cfg.RunID, deadline, BuyerValidatorClient, cfg.WorkloadIssuerValue(), estateKey, instanceKey, cfg.Now, own.OrganisationID).Scan(&out.Status, &out.Revision); err != nil {
 		return out, err
 	}
 	target := ""
