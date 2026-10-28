@@ -14,26 +14,26 @@ import (
 )
 
 const (
-	PolicyReference = "baobab-platform/shared#409:PROPOSED"
+	PolicyReference           = "baobab-platform/shared#409:PROPOSED"
 	ReasonContractNotAccepted = "TMS_NATIVE_AUTHORITY_CONTRACT_NOT_ACCEPTED"
 )
 
 var (
 	ErrInvalidRequest = errors.New("invalid TMS native operation request")
-	uuid = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-	hash = regexp.MustCompile("^sha256:[0-9a-f]{64}$")
-	identifier = regexp.MustCompile("^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,159}$")
-	operations = map[string]string{
-		"tms.plan.revise": "TransportPlan",
+	uuid              = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+	hash              = regexp.MustCompile("^sha256:[0-9a-f]{64}$")
+	identifier        = regexp.MustCompile("^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,159}$")
+	operations        = map[string]string{
+		"tms.plan.revise":           "TransportPlan",
 		"tms.booking.intent.create": "TransportBooking",
-		"tms.booking.submit": "TransportBooking",
-		"tms.booking.reconcile": "TransportBooking",
-		"tms.capacity.hold": "CapacityReservation",
-		"tms.capacity.release": "CapacityReservation",
-		"tms.movement.dispatch": "TransportMovement",
-		"tms.native.provision": "NativeProviderInstance",
-		"tms.native.suspend": "NativeProviderInstance",
-		"tms.native.deprovision": "NativeProviderInstance",
+		"tms.booking.submit":        "TransportBooking",
+		"tms.booking.reconcile":     "TransportBooking",
+		"tms.capacity.hold":         "CapacityReservation",
+		"tms.capacity.release":      "CapacityReservation",
+		"tms.movement.dispatch":     "TransportMovement",
+		"tms.native.provision":      "NativeProviderInstance",
+		"tms.native.suspend":        "NativeProviderInstance",
+		"tms.native.deprovision":    "NativeProviderInstance",
 	}
 )
 
@@ -41,14 +41,14 @@ var (
 // market, permission, provider credentials, IAM audience or result status.
 // The future CP PDP must independently resolve these facts.
 type Request struct {
-	ContextID string
-	Operation string
-	ResourceType string
-	ResourceID string
-	NativeBindingReference string
-	IntentDigest string
-	PlanDigest string
-	ExpectedBindingRevision string
+	ContextID                 string
+	Operation                 string
+	ResourceType              string
+	ResourceID                string
+	NativeBindingReference    string
+	IntentDigest              string
+	PlanDigest                string
+	ExpectedBindingRevision   string
 	ExpectedFencingGeneration int64
 }
 
@@ -79,7 +79,10 @@ func ParseRequest(raw []byte) (Request, error) {
 		}
 		known := false
 		for _, field := range requestFields {
-			if field == key { known = true; break }
+			if field == key {
+				known = true
+				break
+			}
 		}
 		if !known || fields[key] != nil {
 			return Request{}, ErrInvalidRequest
@@ -98,13 +101,13 @@ func ParseRequest(raw []byte) (Request, error) {
 		return Request{}, ErrInvalidRequest
 	}
 	values := map[string]*string{
-		"context_id": &out.ContextID,
-		"operation": &out.Operation,
-		"resource_type": &out.ResourceType,
-		"resource_id": &out.ResourceID,
-		"native_binding_reference": &out.NativeBindingReference,
-		"intent_digest": &out.IntentDigest,
-		"plan_digest": &out.PlanDigest,
+		"context_id":                &out.ContextID,
+		"operation":                 &out.Operation,
+		"resource_type":             &out.ResourceType,
+		"resource_id":               &out.ResourceID,
+		"native_binding_reference":  &out.NativeBindingReference,
+		"intent_digest":             &out.IntentDigest,
+		"plan_digest":               &out.PlanDigest,
 		"expected_binding_revision": &out.ExpectedBindingRevision,
 	}
 	for field, dest := range values {
@@ -137,21 +140,23 @@ func (r Request) Validate() error {
 // No authenticated CP/IAM/mandate/lease adapter exists for this proposal.
 type Candidate struct {
 	Request
-	SubjectIssuer string
-	SubjectReference string
-	ProviderReleaseDigest string
-	LegalActorReference string
-	MarketReference string
-	CurrentBindingRevision string
+	SubjectIssuer            string
+	SubjectReference         string
+	ProviderReleaseDigest    string
+	LegalActorReference      string
+	MarketReference          string
+	CurrentBindingRevision   string
 	CurrentFencingGeneration int64
-	ContextExpiresAt time.Time
-	MandateExpiresAt time.Time
-	BindingActive bool
-	MandateActive bool
+	ContextExpiresAt         time.Time
+	MandateExpiresAt         time.Time
+	BindingActive            bool
+	MandateActive            bool
 }
 
 func Preflight(c Candidate, now time.Time) error {
-	if err := c.Request.Validate(); err != nil { return err }
+	if err := c.Request.Validate(); err != nil {
+		return err
+	}
 	if now.IsZero() || c.SubjectIssuer == "" || c.SubjectReference == "" ||
 		!hash.MatchString(c.ProviderReleaseDigest) ||
 		!identifier.MatchString(c.LegalActorReference) ||
@@ -167,23 +172,25 @@ func Preflight(c Candidate, now time.Time) error {
 
 // Decision is never a CP-native operation grant in this version.
 type Decision struct {
-	Outcome string
-	Reason string
+	Outcome         string
+	Reason          string
 	PolicyReference string
-	EvaluatedAt time.Time
-	ExpiresAt time.Time
-	CanExecute bool
-	CanActivate bool
+	EvaluatedAt     time.Time
+	ExpiresAt       time.Time
+	CanExecute      bool
+	CanActivate     bool
 }
 
 // Evaluate never changes its outcome based on a forged ALLOW or candidate:
 // the approved Shared/CP/IAM authority contract does not yet exist.
 func Evaluate(_ Candidate, now time.Time) Decision {
-	if now.IsZero() { now = time.Now().UTC() }
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 	now = now.UTC()
 	return Decision{
-		Outcome:"HELD", Reason:ReasonContractNotAccepted,
-		PolicyReference:PolicyReference, EvaluatedAt:now,ExpiresAt:now,
-		CanExecute:false,CanActivate:false,
+		Outcome: "HELD", Reason: ReasonContractNotAccepted,
+		PolicyReference: PolicyReference, EvaluatedAt: now, ExpiresAt: now,
+		CanExecute: false, CanActivate: false,
 	}
 }
