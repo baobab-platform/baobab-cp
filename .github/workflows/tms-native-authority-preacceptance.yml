@@ -1,0 +1,41 @@
+name: CP TMS Native Authority Preacceptance
+on:
+  pull_request:
+    paths:
+      - "internal/service/tmsauthority/**"
+      - "docs/integrations/tms-native-authority-proposal.md"
+      - ".github/workflows/tms-native-authority-preacceptance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "internal/service/tmsauthority/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  provisional-authority:
+    name: TMS proposed execution authority always HELD
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout CP
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Pinned Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Show formatter-normalised proposal source for review and Go tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Diagnostic output is source-only; no secrets or environment values.
+          for file in internal/service/tmsauthority/proposal.go internal/service/tmsauthority/proposal_test.go; do
+            echo "BEGIN_FORMATTED_SOURCE:$file"
+            gofmt "$file"
+            echo "END_FORMATTED_SOURCE:$file"
+          done
+          go test -race -count=1 ./internal/service/tmsauthority
+          go vet ./internal/service/tmsauthority
