@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   foundation:
-    uses: baobab-platform/shared/.github/workflows/foundation-repository-gates.yml@756892fbdbcf0eb89bf62f720c372bad53748dea
+    uses: baobab-platform/shared/.github/workflows/foundation-repository-gates.yml@ab7a473a1f69784f115ad353e36383faf9b95965
     secrets:
       SHARED_READ_TOKEN: ${{ secrets.SHARED_READ_TOKEN }}
     with:
