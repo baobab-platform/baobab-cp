@@ -1,0 +1,11 @@
+# TMS native authority: accepted design, runtime adoption held
+
+Shared #409 was accepted as development design and merged at `84c392105046406f190ee0fe87006ce3510760ef`. The schemas remain in proposals, outside active CP/IAM contracts and registries. CP #447 and IAM #141 track runtime adoption; Shared #413's scoped programme acceptance confers no native operation grant.
+
+This consolidates CP #448/#449 into one internal/tmsauthority package. ParseRequest is an unmounted candidate parser, not an HTTP contract. It bounds input and rejects duplicate, unknown, absent, null and trailing fields. The operation/resource catalogue includes plan revision and matches the accepted development design. Caller input cannot state Tenant, Principal, legal actor, Market or ALLOW. No route or durable decision is installed.
+
+AssessCandidate is diagnostic only: even plausible candidate fields always return HELD, Executable=false and ActivatesProvider=false. A struct containing boolean assertions is never trusted CP readback. Missing identity, canonical scope, capability, legal mandate, provider release/binding, intent and current generation produce additional diagnostics. Candidate lease lifetime is at most five seconds, matching the accepted design; this is not an issued lease or concurrency proof. The generic context validator and execution-operation status do not authorise booking.
+
+The future adoption must pin an active Shared contract and distinct subject/validator identities, authoritative current CP/IAM sources, approved plan/carrier purchase and CONTROL/DATA bindings, per-attempt online claim and atomic native generation fence. Require independent current source verification, two-tenant positive/negative runtime receipts, durable audit and teardown before native effects. Existing TMS SQL custody leases confer no CP authority.
+
+The Platform Owner authorised comprehensive correction and merge after satisfactory final-head review and passing CI on 29 October 2026. This approves source diagnostics only, with runtime/provider/protected activation held. Tests cover every operation, closed parsing, plausible forged inputs, stale and greater-than-five-second leases, revocations and missing facts; no synthetic receipt claims actual issuer or native execution.
