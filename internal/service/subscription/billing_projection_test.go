@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/billing"
+	"github.com/baobab-platform/baobab-cp/internal/capability/catalogue"
 	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
@@ -412,6 +413,11 @@ func (e *env) classification(t *testing.T, sub string) billing.Classification {
 func TestEnginesRegisterFromSharedRegistrations(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
+	// Match startup ordering: the pinned canonical catalogue is projected
+	// before provider registration. Never depend on another test seeding it.
+	if _, err := catalogue.SyncEmbedded(ctx, e.repo); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := e.admin.Exec(ctx, `DELETE FROM capability.capability_provider WHERE provider_key IN
 		('baobab-subscriptions.temporary-billing', 'baobab-payments.sandbox', 'baobab-pulse.core')`); err != nil {
 		t.Fatal(err)
