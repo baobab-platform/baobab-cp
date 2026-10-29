@@ -1,24 +1,11 @@
-# TMS HYB-04 — CP owner-side authority assessment boundary
+# TMS native authority: accepted design, runtime adoption held
 
-**Status: engineering preflight, NOT an Accepted CP authority endpoint.**
-Parent architecture contract is Shared [proposal #409](https://github.com/baobab-platform/shared/pull/409), and the owning CP decision is [issue #447](https://github.com/baobab-platform/baobab-cp/issues/447). User instructed **do not merge any PR** until explicitly authorised.
+Shared #409 was accepted as development design and merged at `84c392105046406f190ee0fe87006ce3510760ef`. The schemas remain in proposals, outside active CP/IAM contracts and registries. CP #447 and IAM #141 track runtime adoption; Shared #413's scoped programme acceptance confers no native operation grant.
 
-## Existing CP authorities inspected
+This consolidates CP #448/#449 into one internal/tmsauthority package. ParseRequest is an unmounted candidate parser, not an HTTP contract. It bounds input and rejects duplicate, unknown, absent, null and trailing fields. The operation/resource catalogue includes plan revision and matches the accepted development design. Caller input cannot state Tenant, Principal, legal actor, Market or ALLOW. No route or durable decision is installed.
 
-- \`POST /v1/platform-context/validate\` checks the registered validator's own IAM identity/scope and that its submitted subject token is the owner of a bounded context. It provides no native booking command or legal-actor mandate.
-- \`POST /v1/capabilities/resolve\` resolves the authenticated caller's own context and does not create delegated native effects.
-- ERP's separate posting authority and Trade's buying/binding authority are operation-specific and must **not** be reused as a TMS-native operation grant.
+AssessCandidate is diagnostic only: even plausible candidate fields always return HELD, Executable=false and ActivatesProvider=false. A struct containing boolean assertions is never trusted CP readback. Missing identity, canonical scope, capability, legal mandate, provider release/binding, intent and current generation produce additional diagnostics. Candidate lease lifetime is at most five seconds, matching the accepted design; this is not an issued lease or concurrency proof. The generic context validator and execution-operation status do not authorise booking.
 
-## This increment
+The future adoption must pin an active Shared contract and distinct subject/validator identities, authoritative current CP/IAM sources, approved plan/carrier purchase and CONTROL/DATA bindings, per-attempt online claim and atomic native generation fence. Require independent current source verification, two-tenant positive/negative runtime receipts, durable audit and teardown before native effects. Existing TMS SQL custody leases confer no CP authority.
 
-\`internal/tmsauthority\` introduces a CP-owned *internal model* of the evidence a future native operation decision will require: exact Tenant, operating Organisation, legal actor, Market, environment, verified issuer/subject/client/Principal/token ID, current context and legal mandate, approved capability/provider binding and release, resource/intent digest, monotonic lease generation, bounded short expiry, revocation and legal hold.
-
-\`AssessCandidate\` evaluates obvious missing or stale inputs and **always returns HELD, executable=false, activatesProvider=false**, even if everything looks correct. Synthetic fixture inputs are never trusted CP readbacks. There is **no new HTTP route, storage write, workload credential, IAM client, Shared contract activation, native provider activation or carrier operation**. Changes to this invariant require accepted Shared/CP/IAM owner decisions, backed by actual-current source integration and independent runtime evidence, not merely passing Go tests.
-
-## Tests and next gate
-
-Go tests cover every defined operation with fully populated synthetic inputs and wrong legal actor, Tenant, issuer, stale lease, revoked grant, missing mandate, legal hold, mismatched provider binding, stale release and malformed digest. No operation can become executable.
-
-Once Shared #409 is formally accepted, the CP owner must implement its versioned decision/lease API over trusted IAM/current CP repositories, explicitly authorized operation scope, legal actor/mandate, native provider mapping, atomic decision custody and actual current revocation/readback. Resource-server integration must establish valid audience/issuer and Principal independently. Until then the TMS first-party PG17 lease at TMS #26 remains UNVERIFIED.
-
-**Merge hold:** Leave this PR and all TMS/Shared PRs open pending explicit authorization.
+The Platform Owner authorised comprehensive correction and merge after satisfactory final-head review and passing CI on 29 October 2026. This approves source diagnostics only, with runtime/provider/protected activation held. Tests cover every operation, closed parsing, plausible forged inputs, stale and greater-than-five-second leases, revocations and missing facts; no synthetic receipt claims actual issuer or native execution.

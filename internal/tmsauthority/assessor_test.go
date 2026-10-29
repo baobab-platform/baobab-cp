@@ -35,7 +35,7 @@ func TestAllNativeEffectsHeldEvenWithPerfectSyntheticInputs(t *testing.T) {
 		in.Operation = op
 		d := AssessCandidate(in, now)
 		if d.Status != StatusHeld || d.Executable || d.ActivatesProvider ||
-			!slices.Contains(d.Reasons, "TMS_NATIVE_EXECUTION_CONTRACT_NOT_ACCEPTED") {
+			!slices.Contains(d.Reasons, "TMS_NATIVE_AUTHORITY_RUNTIME_NOT_ADOPTED") {
 			t.Fatalf("%s incorrectly admitted: %+v", op, d)
 		}
 	}
@@ -60,7 +60,7 @@ func TestMissingCurrentFactsAndIdentityCannotMintGrant(t *testing.T) {
 		{"malformed digest", func(i *TrustedInput) { i.IntentDigest = "sha256:unknown" }, "RESOURCE_OR_INTENT_NOT_PINNED"},
 		{"stale lease", func(i *TrustedInput) { i.FencingGeneration = 0 }, "OPERATION_FENCE_NOT_CURRENT"},
 		{"expired lease", func(i *TrustedInput) { i.LeaseValidUntil = now.Add(-1 * time.Second) }, "OPERATION_FENCE_NOT_CURRENT"},
-		{"long lease", func(i *TrustedInput) { i.LeaseValidUntil = now.Add(time.Minute) }, "OPERATION_FENCE_NOT_CURRENT"},
+		{"long lease", func(i *TrustedInput) { i.LeaseValidUntil = now.Add(5*time.Second + time.Nanosecond) }, "OPERATION_FENCE_NOT_CURRENT"},
 		{"unknown operation", func(i *TrustedInput) { i.Operation = "native.admin" }, "OPERATION_NOT_DEFINED"},
 	}
 	for _, tt := range tests {

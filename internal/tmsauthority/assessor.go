@@ -1,7 +1,7 @@
-// Package tmsauthority models the still-unaccepted CP-native transport
+// Package tmsauthority models the not-yet-adopted CP-native transport
 // execution authority boundary (ADR-TMS-0004/0013/0020/0021, EA v2.3).
 //
-// Shared proposal #409 is NOT an accepted contract. This package MUST NOT
+// Shared #409 is an accepted development design, not an active contract. This package MUST NOT
 // mint ALLOW, perform an HTTP handler, persist a decision or activate a
 // carrier; its source inputs are review fixtures, not CP repository readbacks.
 package tmsauthority
@@ -13,13 +13,14 @@ import (
 
 const (
 	StatusHeld     = "HELD"
-	ContractStatus = "PROPOSED_NOT_ACCEPTED"
+	ContractStatus = "DESIGN_ACCEPTED_RUNTIME_NOT_ADOPTED"
 )
 
 // Operation belongs to TMS, not to the generic CP provisioning operation enum.
 type Operation string
 
 const (
+	PlanRevise        Operation = "tms.plan.revise"
 	BookingIntent     Operation = "tms.booking.intent.create"
 	BookingSubmit     Operation = "tms.booking.submit"
 	BookingReconcile  Operation = "tms.booking.reconcile"
@@ -32,7 +33,7 @@ const (
 )
 
 var operations = map[Operation]bool{
-	BookingIntent: true, BookingSubmit: true, BookingReconcile: true,
+	PlanRevise: true, BookingIntent: true, BookingSubmit: true, BookingReconcile: true,
 	CapacityHold: true, CapacityRelease: true, MovementDispatch: true,
 	NativeProvision: true, NativeSuspend: true, NativeDeprovision: true,
 }
@@ -76,7 +77,7 @@ type TrustedInput struct {
 }
 
 // Decision NEVER represents CP authority. Even a fully-populated input is
-// HELD until accepted Shared/IAM/CP wire contracts and independent readbacks.
+// HELD until active Shared/IAM/CP wire adoption and independent readbacks.
 type Decision struct {
 	Status            string
 	ContractStatus    string
@@ -125,11 +126,11 @@ func AssessCandidate(in TrustedInput, now time.Time) Decision {
 		!nonblank(in.BindingID) || !nonblank(in.BindingRevision) ||
 		!digest(in.ProviderReleaseDigest), "RESOURCE_OR_INTENT_NOT_PINNED")
 	add(in.FencingGeneration == 0 || now.IsZero() ||
-		!in.LeaseValidUntil.After(now) || in.LeaseValidUntil.After(now.Add(30*time.Second)),
+		!in.LeaseValidUntil.After(now) || in.LeaseValidUntil.After(now.Add(5*time.Second)),
 		"OPERATION_FENCE_NOT_CURRENT")
 	// Even a perfect, fresh and apparently trusted candidate is NOT a CP
-	// decision until owners accept and implement the missing authority.
-	reasons = append(reasons, "TMS_NATIVE_EXECUTION_CONTRACT_NOT_ACCEPTED")
+	// decision until owners adopt and implement the missing runtime authority.
+	reasons = append(reasons, "TMS_NATIVE_AUTHORITY_RUNTIME_NOT_ADOPTED")
 	return Decision{
 		Status: StatusHeld, ContractStatus: ContractStatus,
 		Executable: false, ActivatesProvider: false, Reasons: reasons,
