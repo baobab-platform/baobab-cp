@@ -240,7 +240,7 @@ func testIdentityRuntimeProfilePersistenceAt(t *testing.T, facet, environment st
 	}
 	if _, err := repo.RecordIdentityRuntimeProfile(
 		ctx, next, reporterSource,
-		"staging", []string{"eu-west-1"}, now.Add(time.Second),
+		environment, []string{"eu-west-1"}, now.Add(time.Second),
 	); !errors.Is(err, ErrIdentityRuntimeProfileOutOfScope) {
 		t.Fatalf("wrong region accepted: %v", err)
 	}
