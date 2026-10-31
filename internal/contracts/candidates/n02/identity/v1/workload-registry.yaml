@@ -1,0 +1,849 @@
+# workload-registry.yaml
+# Canonical registry of workload (service-to-service) identities across the
+# Baobab platform (ADR-0007 §§42-43 "Workload Registration"/"Workload
+# Inventory", §101's illustrative shape). baobab-platform/baobab-iam owns
+# provider-side workload credential/token mechanics; this registry owns the
+# canonical workload IDs, lifecycle, audiences, scopes and credential profile.
+# baobab-platform/baobab-cp enforces against it at request time
+# (rejecting any workload token whose client_id isn't listed here, or whose
+# audience/scope falls outside what its entry allows) -- per ADR-0007 §99's
+# ownership table, this file is the single source of truth both repos build
+# from, rather than either repo inventing its own copy (§100: "Existing
+# Shared identity contracts SHALL be extended rather than duplicated").
+#
+# Fields per entry (ADR-0007 §42's registration field list):
+#   client_id           -- the OAuth client_id issued by baobab-iam. SHALL
+#                           be globally unique (§44: two clients answering
+#                           to one clientId is a security defect, not a
+#                           convenience -- baobab-iam#5 fixed exactly this).
+#   repository           -- the workload's owning source repository.
+#   owner                -- team/repository accountable for this workload
+#                           (§44: "Every workload client SHALL have a
+#                           defined owning repository/team. Orphaned IAM
+#                           clients SHALL be considered a security defect.").
+#   runtime               -- what actually runs as this workload (a
+#                            deployed service, a batch job, a CI job, etc).
+#   environment            -- development | staging | production. A
+#                             credential issued for one environment SHALL
+#                             NOT authenticate as this workload in another
+#                             (ADR-0007 §102's "development credential
+#                             rejected in production" isolation test).
+#   deployment_regions     -- optional; required of workloads that may hold
+#                             deployment:observe or identity-runtime:observe.
+#                             The deployment
+#                             regions the reporter may report on, within its
+#                             `environment` (ADR-BCP-025 section 2.9: "a
+#                             reporter is registered for the environments and
+#                             regions it may report on"). An observation for
+#                             another environment or region is refused, never
+#                             stored. One reporter is one environment; a
+#                             platform with several environments registers one
+#                             reporter per environment.
+#   allowed_audiences      -- the aud values baobab-cp's verifier accepts
+#                             for this workload's tokens (§§24-25: "A token
+#                             intended for Control Plane SHALL not
+#                             automatically work against ERP").
+#   allowed_scopes         -- the OAuth scopes this workload may be granted,
+#                             drawn from scope-registry.yaml (§§22-23: scope
+#                             SHALL follow least privilege; scope=* or
+#                             scope=admin for an internal workload is
+#                             prohibited).
+#   credential_type        -- how this workload authenticates:
+#                             client_credentials   -- an IdP-issued client
+#                                                     credential (the type
+#                                                     baobab-iam issues for
+#                                                     the older entries);
+#                             federated_workload_token -- the workload
+#                                                     presents a short-lived,
+#                                                     platform-projected token
+#                                                     (for example a Kubernetes
+#                                                     service-account token)
+#                                                     and holds no static
+#                                                     secret (assessment EA-04).
+#                                                     The IdP mechanism that
+#                                                     exchanges it is decided
+#                                                     by the identity-provider
+#                                                     migration ADR.
+#                             mTLS client-certificate auth is owned by
+#                             baobab-platform/infrastructure (ADR-0007 §§34-41,
+#                             §94, §99) and is not modelled here until
+#                             that repository defines how it registers.
+#   validates_audiences     -- optional; required of exactly the workloads that
+#                              may hold context:validate, and nobody else. The
+#                              resource-server audiences whose callers' tokens
+#                              this workload may present to
+#                              POST /platform-context/validate as subject
+#                              evidence (docs/architecture/
+#                              context-authority-for-workloads.md). This is an
+#                              explicit registered relationship: the Control
+#                              Plane never infers it from allowed_audiences
+#                              (which lists the audiences this workload's OWN
+#                              tokens carry and may hold baobab-control-plane
+#                              and a resource server together), and a request
+#                              cannot choose an audience. Each audience is a
+#                              resource-server audience that some registered
+#                              scope is issued for, is never
+#                              baobab-control-plane. Several independently
+#                              revocable workloads may explicitly register the
+#                              same subject audience; registration for one
+#                              workload grants nothing to another. ERP validates
+#                              baobab-erp, Pulse validates baobab-pulse and the
+#                              CMS validates baobab-cms; each relationship is
+#                              explicit on its own entry.
+#   subject_principal_audiences -- optional; required of exactly the workloads
+#                              that may hold identity:principal:resolve,
+#                              identity:principal:register-buyer or
+#                              estate:client-binding:resolve, and nobody
+#                              else (ADR-SHARED-042 section 3; CAA-04). The human
+#                              resource audiences whose access tokens this
+#                              workload may present to the Control Plane as
+#                              subject evidence for delegated Principal
+#                              resolution (identity/v1
+#                              principal-resolution.openapi.yaml). It is the
+#                              registered validator relationship: CP never
+#                              infers it from allowed_audiences and a request
+#                              cannot choose it. Each audience is one a
+#                              human-only scope is issued for, and is never
+#                              baobab-control-plane. For estate binding the
+#                              same audience bounds the BFF client evidence
+#                              CP accepts (control-plane/v1
+#                              estate-client-binding.openapi.yaml). Trade
+#                              would list baobab-trade; no workload holds it
+#                              yet.
+#   human_token_profile     -- optional; required of exactly the workloads
+#                              that hold trade:buyer-handoff, and nobody else
+#                              (ADR-SHARED-042 section 14, CAA-03/CAA-04). A
+#                              confidential estate BFF (client_credentials)
+#                              that also obtains human buyer tokens through
+#                              the authorization code flow registers here the
+#                              human resource audiences and human-only scopes
+#                              it may request for the person:
+#                                purpose: ESTATE_BFF_BUYER
+#                                audiences: [baobab-trade]
+#                                scopes: [trade:buy]
+#                              IAM grants a human token no audience or scope
+#                              outside it, and only after authentication. The
+#                              same client presents its own trade:buyer-handoff
+#                              token to Trade, so the buyer token's azp always
+#                              names a registered BFF. Never baobab-control-
+#                              plane. No workload holds it yet.
+#   context_purposes        -- optional. The Control Plane context authority
+#                              purposes (control-plane/v1 ContextAuthorityPurpose)
+#                              a context owned by this workload may carry.
+#                              Absent means none beyond the RUNTIME contexts the
+#                              workload resolves for itself. TENANT_PROVISIONING
+#                              is the pre-activation provisioning authority: it
+#                              is listed only by the dedicated provisioner
+#                              workload, which may hold no context:resolve and
+#                              no context:validate and must use a federated
+#                              workload token, so the identity that provisions a
+#                              not-yet-active tenant can never also act as a
+#                              runtime caller or a validator.
+#   rotation_owner          -- team/repository responsible for rotating
+#                              this workload's credential.
+#   status                  -- PROVISIONED | ACTIVE | SUSPENDED | REVOKED |
+#                              RETIRED (ADR-0007 §45's workload lifecycle
+#                              states). ACTIVE means the configured credential
+#                              profile has live evidence end to end: the identity
+#                              provider can issue/exchange a token and the actual
+#                              target resource server accepts it under this
+#                              registry's audience/scope constraints.
+#                              PROVISIONED means registered but not yet proven
+#                              under that full path; baobab-cp rejects incoming
+#                              tokens for non-ACTIVE registry entries. ACTIVE
+#                              attests the entry's credential profile, not each
+#                              scope or audience it lists: allowed_scopes,
+#                              allowed_audiences and validates_audiences are
+#                              ceilings on what baobab-iam may issue, and
+#                              authorise nothing until baobab-iam issues them
+#                              (its CI rejects any issued scope the registry does
+#                              not allow). A newly allowed scope is therefore
+#                              added here first and proven afterwards, in the
+#                              baobab-iam and resource-server changes that follow.
+#                              Allocation is not activation: a new path lands
+#                              here first (and a new workload as PROVISIONED),
+#                              and is promoted to ACTIVE only when all of this
+#                              has been shown, in order: this registry allows
+#                              it; baobab-iam can issue or exchange the
+#                              credential; the token carries exactly the
+#                              audience and scope; the resource server verifies
+#                              it; the resource server validates the Context
+#                              through the Control Plane; and the cross-tenant
+#                              and not-the-owner negative tests pass.
+#
+# scripts/validate-authorization-contracts.rb checks every entry: its scopes
+# are registered, workload-usable and issued for one of its audiences; it
+# grants no privileged scope; and each audience is used by one of its scopes.
+#
+# Adding a workload: add an entry here first (ADR-0007 §42), then let
+# baobab-platform/baobab-iam provision the selected provider mechanics for the
+# declared credential_type. A federated_workload_token entry MUST NOT be
+# downgraded to a stored client secret. Promote PROVISIONED -> ACTIVE only after
+# the resource-server proof described above. Removing one: move the canonical
+# lifecycle to a non-active state before provider-side authority can continue,
+# so no live credential survives a canonical suspension/revocation/retirement.
+#
+# Named deliberate exceptions to "ACTIVE only after the proof": baobab-cp-provisioning-evidence-workload
+# (FB-05, owner ruling 2026-10-07) is the identity that PRODUCES the proof, in the staging
+# evidence environment only. It is ACTIVE so the proof can run, the production identity it
+# mirrors stays PROVISIONED, and scripts/validate-erp-contracts.rb pins it exactly so the
+# exception cannot spread to another workload, scope or environment.
+# baobab-int02-pulse-consumer is separately accepted by the owner on 2026-10-18:
+# docs/architecture/int02-pulse-proof-bootstrap-decision.md. It may produce
+# synthetic proof only during a disposable development INT-02 run; ACTIVE is
+# not qualification. validate-authorization-contracts.rb pins its entire row.
+
+schema:
+  name: baobab-platform-workload-registry
+  version: "1.0"
+
+workloads:
+  # Owner-approved named evidence producer; fixture-only issuance with a fresh
+  # per-run secret, verified ephemeral issuer and synthetic explicit grants.
+  # No production/staging credential or context-validation/admin authority.
+  baobab-int02-pulse-consumer:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: "INT-02 disposable real-component Pulse qualification consumer"
+    environment: development
+    allowed_audiences: ["baobab-control-plane", "baobab-pulse"]
+    allowed_scopes: ["context:resolve", "intelligence:evidence:search"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+
+  # Accepted named INT-03C development-only proof-bootstrap exception.
+  # ACTIVE permits ephemeral IAM/CP proof production, not qualification,
+  # access to CMS, human/production accounts, or persistent tenant authority.
+  # Each identity is recreated with unique credentials only inside a single
+  # bounded disposable test run and destroyed before completion.
+  baobab-int03c-issuer-owner:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: "INT-03C supervised disposable issuer proof owner"
+    environment: development
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+
+  # Distinct credential and issuer client, used only to independently
+  # introspect the owner's current token state and observe revocation.
+  # No context:validate, administration, identity-registration or tenant
+  # provisioning powers. The existing verifier runner must not conflate
+  # this entry with either of the held Shared #354 CMS identities.
+  baobab-int03c-issuer-verifier:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: "INT-03C independent disposable issuer verifier"
+    environment: development
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+
+  baobab-cms-workload:
+    repository: baobab-platform/baobab-cms
+    owner: baobab-platform/baobab-cms
+    runtime: "baobab-cms service"
+    environment: production
+    # content.entry.resolve (content/v1): CMS is the resource server of the
+    # baobab-cms audience, so it validates the PlatformContext named by each
+    # caller against that caller through the Control Plane, presenting the
+    # caller's token as subject evidence. context:validate grants no
+    # tenant/business authority; validates_audiences binds this validator to
+    # the one subject audience it may present. Like the other validators this
+    # is a ceiling on what baobab-iam may issue, not activation: baobab-iam
+    # issuance and the resource-server proof follow.
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "context:validate", "provider-migration:task"]
+    validates_audiences: ["baobab-cms"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-cms
+    status: ACTIVE
+
+  baobab-erp-workload:
+    repository: baobab-platform/baobab-erp
+    owner: baobab-platform/baobab-erp
+    runtime: "baobab-erp service"
+    environment: production
+    # Gate IAM-10 (ADR-0014 §111): added baobab-erp/erp:integrate so this
+    # workload's own iDempiere OSGi bundles (org.baobab-platform.baobab.erp.context/
+    # mapping) can authenticate to baobab-app's HTTP boundary, which
+    # previously trusted network location alone. The client stays
+    # tenant-neutral: no tenant_id is stamped on it, because tenant
+    # entitlement is a Control Plane decision (ADR-0007 sections 88-91).
+    # ERP is the resource server of the Boundary API, not a caller of it, so
+    # it holds neither erp:read nor erp:provision: those belong to the
+    # workloads that call it, each with credentials of its own. ERP is the
+    # validator of the baobab-erp audience: context:validate lets it ask the
+    # Control Plane whether a context belongs to the caller it authenticated,
+    # and validates_audiences registers the one subject audience it may
+    # validate (docs/architecture/context-authority-for-workloads.md).
+    allowed_audiences: ["baobab-control-plane", "baobab-erp"]
+    allowed_scopes: ["context:resolve", "context:validate", "erp:integrate", "provider-migration:task"]
+    validates_audiences: ["baobab-erp"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-erp
+    status: ACTIVE
+
+  baobab-pulse-workload:
+    repository: baobab-platform/baobab-pulse
+    owner: baobab-platform/baobab-pulse
+    runtime: "baobab-pulse service and validator of the baobab-pulse resource-server audience"
+    environment: production
+    # P-CAP-07: Pulse's own workload calls the Control Plane as the validator
+    # of subject tokens presented to the Pulse capability API. context:validate
+    # grants no tenant/business authority; validates_audiences binds this
+    # validator to the one subject audience it is permitted to present.
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "context:validate", "provider-migration:task"]
+    validates_audiences: ["baobab-pulse"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-pulse
+    status: ACTIVE
+
+  baobab-trade-workload:
+    repository: baobab-platform/baobab-trade
+    owner: baobab-platform/baobab-trade
+    runtime: "baobab-trade service"
+    environment: production
+    # Trade reads ERP's order consequences and inventory availability
+    # (erp:read, audience baobab-erp). It acts in the tenant of a Control
+    # Plane context it resolved itself; the scope grants no tenant authority.
+    allowed_audiences: ["baobab-control-plane", "baobab-erp"]
+    allowed_scopes: ["context:resolve", "erp:read", "provider-migration:task"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-trade
+    status: ACTIVE
+
+  thamani-backend:
+    repository: baobab-platform/thamani
+    owner: baobab-platform/thamani
+    runtime: "thamani backend service"
+    environment: production
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/thamani
+    status: ACTIVE
+
+  zuribeans-backend:
+    repository: baobab-platform/zuribeans
+    owner: baobab-platform/zuribeans
+    runtime: "zuribeans backend service"
+    environment: production
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/zuribeans
+    status: ACTIVE
+
+  # Nabhold corporate digital estate (NAB-GOLIVE-MP-001, release R0). The
+  # server-side runtime of the Nabhold estate resolves its own RUNTIME
+  # PlatformContext (context:resolve) and reads PUBLISHED corporate content
+  # from the CMS (content:entry:resolve, audience baobab-cms). It acts in the
+  # tenant of the Control Plane context it resolved; neither scope grants
+  # tenant authority, and no tenant_id is stamped on the client. It holds
+  # neither content:entry:preview (issue that only when editorial preview is
+  # served) nor context:validate (Nabhold is a caller, not a resource server),
+  # and no scope for any other engine: later releases add theirs explicitly.
+  # Registered PROVISIONED: this entry is a ceiling, and it is promoted to
+  # ACTIVE only after baobab-iam issues the credential, the CMS verifies it,
+  # the CMS validates the Context through the Control Plane, and the
+  # cross-tenant and not-the-owner negative tests pass.
+  nabhold-backend:
+    repository: baobab-platform/nabhold
+    owner: baobab-platform/nabhold
+    runtime: "nabhold server-side service (Next.js server components and route handlers)"
+    environment: production
+    allowed_audiences: ["baobab-control-plane", "baobab-cms"]
+    allowed_scopes: ["context:resolve", "content:entry:resolve"]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/nabhold
+    status: PROVISIONED
+
+  # Assessment §22 / EA-04: the Control Plane -> Subscriptions -> Payments
+  # chain. Each identity is issued only for the one engine it calls, and is
+  # separate from the Control Plane's browser and admin clients. Both use the
+  # no-static-secret federated profile. They remain PROVISIONED until the
+  # identity-provider path can exchange the projected assertion and the actual
+  # target engine accepts the resulting access token with the audience,
+  # workload identity and scopes below. Provider configuration alone is not
+  # activation evidence.
+  baobab-cp-workload:
+    repository: baobab-platform/baobab-cp
+    owner: baobab-platform/baobab-cp
+    runtime: "baobab-cp service (billing projection of classified ProductSubscriptions)"
+    environment: production
+    allowed_audiences: ["baobab-subscriptions"]
+    allowed_scopes: ["billing:manage", "billing:read"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-cp
+    status: PROVISIONED
+
+  # The credential boundary of the baobab-cp worker that executes approved
+  # provisioning plans against external engines (authorised onboarding ->
+  # desired state -> deterministic plan -> approval -> execution ->
+  # reconciliation). ERP provisioning authority belongs to this Control
+  # Plane execution identity: not to Trade, and not to ERP itself. It is
+  # deliberately not baobab-cp-workload, whose runtime is the billing
+  # projection: one identity per authority keeps revocation, audit and least
+  # privilege separable. The Context it presents to ERP belongs to this
+  # workload's own principal, not to the human who approved the plan, who
+  # remains immutable provenance on the approval and the operation.
+  # Allocation is not activation: PROVISIONED until the end-to-end evidence
+  # in the header above exists.
+  baobab-cp-provisioning-workload:
+    repository: baobab-platform/baobab-cp
+    owner: baobab-platform/baobab-cp
+    runtime: "baobab-cp tenant provisioning execution worker"
+    environment: production
+    allowed_audiences: ["baobab-erp"]
+    allowed_scopes: ["erp:provision"]
+    context_purposes: ["TENANT_PROVISIONING"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-cp
+    status: PROVISIONED
+
+  # FB-05 evidence provisioner (owner ruling 2026-10-07). The Control Plane's
+  # provisioning execution worker as it runs in the STAGING evidence
+  # environment, and nowhere else. It exists so the end-to-end proof listed in
+  # the header can be produced without weakening anything in production:
+  # baobab-cp-provisioning-workload above stays PROVISIONED, keeps its
+  # production environment and is untouched. Staging evidence must never reuse
+  # production credentials or claim production activation, so this is a
+  # separate identity: a credential issued for staging cannot authenticate as
+  # the production worker (environment isolation, ADR-0007 section 102), and a
+  # production credential cannot authenticate as this one.
+  # It is ACTIVE by ruling, not by promotion: the registry's PROVISIONED ->
+  # ACTIVE rule governs real runtime identities, and this identity's only
+  # purpose is to carry the evidence run, in an environment that holds no
+  # tenant data of record. It holds exactly the one scope and the one context
+  # purpose its production counterpart does, no static secret, and no
+  # context:resolve or context:validate. The credential is a short-lived
+  # platform-projected token; its lifetime is bounded by the issuer and the
+  # Context it presents is bounded to 15 minutes (control-plane/v1).
+  baobab-cp-provisioning-evidence-workload:
+    repository: baobab-platform/baobab-cp
+    owner: baobab-platform/baobab-cp
+    runtime: "baobab-cp tenant provisioning execution worker, staging evidence environment only"
+    environment: staging
+    allowed_audiences: ["baobab-erp"]
+    allowed_scopes: ["erp:provision"]
+    context_purposes: ["TENANT_PROVISIONING"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-cp
+    status: ACTIVE
+
+  baobab-subscriptions-workload:
+    repository: baobab-platform/baobab-subscriptions
+    owner: baobab-platform/baobab-subscriptions
+    runtime: "baobab-subscriptions service (payment execution for billing that requires it)"
+    environment: production
+    allowed_audiences: ["baobab-payments"]
+    allowed_scopes: ["payment:execute", "payment:refund", "payment:read"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-subscriptions
+    status: PROVISIONED
+
+  # LA-05G staging evidence profiles: PROVISIONED, not issued or ACTIVE.
+  # Shared registry entries express only maximum allowed transport scopes.
+  # Human mandate approvals, runtime PlatformContext ownership, issuer proof,
+  # provider readiness and service-specific execution grants remain separate.
+  baobab-trade-legal-actor-assessor-staging:
+    repository: baobab-platform/baobab-trade
+    owner: baobab-platform/baobab-trade
+    runtime: "trade seller-of-record PEP staging proof; no live checkout authority"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess", "trade-seller-binding:attest", "trade-seller-binding:resolve", "trade-order-authority:resolve"]
+    context_purposes: ["RUNTIME"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-trade
+    status: PROVISIONED
+
+  baobab-erp-legal-actor-assessor-staging:
+    repository: baobab-platform/baobab-erp
+    owner: baobab-platform/baobab-erp
+    runtime: "ERP invoice issuer/accounting PEP staging proof; no posting authority"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess", "documentary:restriction-assess", "erp-posting-authority:resolve"]
+    context_purposes: ["RUNTIME"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-erp
+    status: PROVISIONED
+
+  baobab-payments-legal-actor-assessor-staging:
+    repository: baobab-platform/baobab-payments
+    owner: baobab-platform/baobab-payments
+    runtime: "payments beneficiary/contracting-party PEP sandbox staging proof; no fund-moving authority"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess", "documentary:restriction-assess", "payments-money-movement-authority:resolve"]
+    context_purposes: ["RUNTIME"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-payments
+    status: PROVISIONED
+
+  baobab-trade-docs-legal-actor-assessor-staging:
+    repository: baobab-platform/baobab-trade-docs
+    owner: baobab-platform/baobab-trade-docs
+    runtime: "Trade Docs document issuer PEP reference staging only; no deployed issuer"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["context:resolve", "legal-actor:assess"]
+    context_purposes: ["RUNTIME"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-trade-docs
+    status: PROVISIONED
+
+  # PEO-03G: dedicated, non-authorising CIPC lookup identity.
+  # It does not act for an applicant or decide verification; credentials and
+  # activation require a separate, protected proof with CP. Never reuse a
+  # production credential here. CP's independent client allowlist must name
+  # the exact client_id; registry allocation cannot make a route available.
+  baobab-cipc-verifier-staging:
+    repository: baobab-platform/baobab-cp
+    owner: baobab-platform/baobab-cp
+    runtime: "certification-bound staging CIPC source observation worker"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["verification:source-capture"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-iam
+    status: PROVISIONED
+
+  # PEO-03J independent document extractor. Its identity is not the CIPC
+  # registry verifier: text extraction is non-authorising candidate evidence.
+  # Staging issuance/CP acceptance and encrypted custody proof are mandatory
+  # before ACTIVE promotion. No production credential is allocated here.
+  baobab-document-extractor-staging:
+    repository: baobab-platform/baobab-cp
+    owner: baobab-platform/baobab-cp
+    runtime: "scanned-evidence document candidate extraction staging worker"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["verification:document-extract"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-iam
+    status: PROVISIONED
+
+  # PEO-03K custody implementation extension: isolated malware signer. Separation is
+  # mandatory: this principal is NOT an OCR extractor or CIPC source verifier.
+  # Scanner private Ed25519 signing key is provided only to the isolated
+  # scanner process, never via IAM registry or to the CP/extractor.
+  baobab-independent-scanner-staging:
+    repository: baobab-platform/baobab-cp
+    owner: baobab-platform/baobab-cp
+    runtime: "independent malware scan and signed evidence attestation staging"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["verification:scan-attest"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-iam
+    status: PROVISIONED
+
+  # MP2-C staging IAM authority consumer. It is distinct from browser,
+  # administrator and provider-native identities and may call only the private
+  # Control Plane federation authority surface. PROVISIONED until Hydra issues
+  # the federated workload token and CP accepts the exact audience/scope end to
+  # end; registration alone is not activation evidence.
+  baobab-iam-staging:
+    repository: baobab-platform/baobab-iam
+    owner: baobab-platform/baobab-iam
+    runtime: "staging IAM federation authority service"
+    environment: staging
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["federation-authority:read"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/baobab-iam
+    status: PROVISIONED
+
+  # MP2-C staging reporter. Separate workload identity is deliberate:
+  # staging evidence must never reuse production credentials or claim production
+  # activation. It may read staging desired releases, submit deployment
+  # observations and publish secret-free identity runtime profiles for
+  # af-south-1. PROVISIONED until the federated exchange and both CP write
+  # paths are proven end to end in staging.
+  baobab-deployment-controller-staging:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: "staging deployment controller and runtime verifier"
+    environment: staging
+    deployment_regions: [af-south-1]
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["desired-release:read", "deployment:observe", "identity-runtime:observe"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/infrastructure
+    status: PROVISIONED
+
+  # ADR-BCP-025 section 2.9 reporter for production. Owner ruling: the reporter
+  # is infrastructure-owned deployment tooling, not an engine and not an
+  # admission webhook (production is ECS/Fargate; EKS is deferred). It reads
+  # desired releases and reports the artifact digests it observes actually
+  # running, after each deployment and periodically (an observation expires
+  # within release-policy.yaml observation.ttl_seconds.maximum, 3600 s), from
+  # the runtime's own state rather than from the release it intended to
+  # deploy. It holds no static secret. PROVISIONED until the federated
+  # exchange is proven end to end and the Control Plane accepts
+  # aud=baobab-control-plane, deployment:observe, this environment and region
+  # from it; only then is it promoted to ACTIVE.
+  baobab-deployment-controller-production:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: "production deployment controller and runtime observer"
+    environment: production
+    deployment_regions: [af-south-1]
+    allowed_audiences: ["baobab-control-plane"]
+    allowed_scopes: ["desired-release:read", "deployment:observe"]
+    credential_type: federated_workload_token
+    rotation_owner: baobab-platform/infrastructure
+    status: PROVISIONED
+
+# ADR-SHARED-043 standing isolated development provisioning; never product activation.
+  baobab-int03-cms-consumer:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: ADR-SHARED-043 disposable development baobab-int03-cms-consumer
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+  baobab-int03-cms-validator:
+    repository: baobab-platform/baobab-cms
+    owner: baobab-platform/baobab-cms
+    runtime: ADR-SHARED-043 disposable development baobab-int03-cms-validator
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    allowed_scopes:
+    - context:validate
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-cms
+    status: ACTIVE
+    validates_audiences:
+    - baobab-cms
+  baobab-dev-nabhold-estate:
+    repository: baobab-platform/nabhold
+    owner: baobab-platform/nabhold
+    runtime: ADR-SHARED-043 disposable development baobab-dev-nabhold-estate
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/nabhold
+    status: ACTIVE
+  baobab-dev-zuribeans-estate:
+    repository: baobab-platform/zuribeans
+    owner: baobab-platform/zuribeans
+    runtime: ADR-SHARED-043 disposable development baobab-dev-zuribeans-estate
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/zuribeans
+    status: ACTIVE
+  baobab-dev-thamani-estate:
+    repository: baobab-platform/thamani
+    owner: baobab-platform/thamani
+    runtime: ADR-SHARED-043 disposable development baobab-dev-thamani-estate
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/thamani
+    status: ACTIVE
+  baobab-dev-equator-estate-estate:
+    repository: baobab-platform/equator-estate
+    owner: baobab-platform/equator-estate
+    runtime: ADR-SHARED-043 disposable development baobab-dev-equator-estate-estate
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    - baobab-cms
+    allowed_scopes:
+    - context:resolve
+    - content:entry:resolve
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/equator-estate
+    status: ACTIVE
+
+  # DEV-06 / INT-07: unrelated API-only client. No estate or group membership.
+  # These identities exist only in leased ADR-SHARED-043 disposable runtimes.
+  baobab-dev-external-api:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: DEV-06 synthetic EXTERNAL_CLIENT API-only workload
+    environment: development
+    allowed_audiences: [baobab-control-plane, baobab-pulse]
+    allowed_scopes: [context:resolve, intelligence:evidence:search]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+  baobab-dev-pulse-validator:
+    repository: baobab-platform/baobab-pulse
+    owner: baobab-platform/baobab-pulse
+    runtime: DEV-06 independent disposable Pulse context validator
+    environment: development
+    allowed_audiences: [baobab-control-plane]
+    allowed_scopes: [context:validate]
+    validates_audiences: [baobab-pulse]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-pulse
+    status: ACTIVE
+
+  # ADR-SHARED-043 named proof-bootstrap identities, only for a bounded
+  # synthetic development run. ACTIVE permits evidence production, never
+  # production/federated-profile activation, payment execution or entitlement.
+  # Separate clients and audience-specific credentials; issuer readback and
+  # revocation/cleanup are required by the connected owner suite.
+  baobab-dev-cp-subscriptions:
+    repository: baobab-platform/baobab-cp
+    owner: baobab-platform/baobab-cp
+    runtime: ADR-SHARED-043 disposable CP subscription command and event producer
+    environment: development
+    allowed_audiences:
+    - baobab-subscriptions
+    allowed_scopes:
+    - billing:manage
+    - billing:read
+    - billing:observe
+    - usage:record
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-cp
+    status: ACTIVE
+  baobab-dev-subscriptions-assessor:
+    repository: baobab-platform/baobab-subscriptions
+    owner: baobab-platform/baobab-subscriptions
+    runtime: ADR-SHARED-043 disposable Subscriptions current CP authority reader
+    environment: development
+    allowed_audiences:
+    - baobab-control-plane
+    allowed_scopes:
+    - subscription:internal-authority
+    - subscription:current-workload-read
+    - subscription:commercial-authority
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-subscriptions
+    status: ACTIVE
+
+  # DEV-14/15 leased, headless onboarding clients. No product/protected activation.
+  baobab-dev-pulse-onboarding:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: DEV-14/15 disposable pulse-intelligence caller
+    environment: development
+    allowed_audiences: [baobab-control-plane, baobab-pulse]
+    allowed_scopes: [context:resolve, intelligence:evidence:search, intelligence:research-mission:manage]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+  baobab-dev-pulse-onboarding-neighbour:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: DEV-14/15 disposable pulse-intelligence neighbour
+    environment: development
+    allowed_audiences: [baobab-control-plane, baobab-pulse]
+    allowed_scopes: [context:resolve, intelligence:evidence:search, intelligence:research-mission:manage]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+  baobab-dev-payments-onboarding:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: DEV-14/15 disposable payments-sandbox caller
+    environment: development
+    allowed_audiences: [baobab-control-plane, baobab-payments]
+    allowed_scopes: [context:resolve, payment:execute, payment:read, payment:refund]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+  baobab-dev-payments-onboarding-neighbour:
+    repository: baobab-platform/infrastructure
+    owner: baobab-platform/infrastructure
+    runtime: DEV-14/15 disposable payments-sandbox neighbour
+    environment: development
+    allowed_audiences: [baobab-control-plane, baobab-payments]
+    allowed_scopes: [context:resolve, payment:execute, payment:read, payment:refund]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/infrastructure
+    status: ACTIVE
+  baobab-dev-payments-validator:
+    repository: baobab-platform/baobab-payments
+    owner: baobab-platform/baobab-payments
+    runtime: DEV-14/15 disposable payments-sandbox validator
+    environment: development
+    allowed_audiences: [baobab-control-plane]
+    allowed_scopes: [context:validate]
+    validates_audiences: [baobab-payments]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-payments
+    status: ACTIVE
+
+  # DEV-07 only: actual IAM-issued buyer handoff and CP subject resolution.
+  # These ceilings create no native client, Principal, binding or purchase right.
+  baobab-dev-trade-buyer-validator:
+    repository: baobab-platform/baobab-trade
+    owner: baobab-platform/baobab-trade
+    runtime: DEV-07 leased synthetic buyer Principal and estate resolver
+    environment: development
+    allowed_audiences: [baobab-control-plane]
+    allowed_scopes: [context:resolve, identity:principal:resolve, estate:client-binding:resolve]
+    subject_principal_audiences: [baobab-trade]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-trade
+    status: ACTIVE
+  # IAM-N02: a separate CP-audience validator for ZuriBeans' confidential
+  # estate BFF. The browser human token (aud=baobab-trade) and BFF's
+  # trade:buyer-handoff token must NEVER be used as the CP caller credential.
+  # PROVISIONED until real Hydra issuance, CP exact registered caller and
+  # active Principal resolution, negative tests and teardown are witnessed.
+  # This ceiling creates no Principal, market grant or buyer authority.
+  baobab-dev-zuribeans-cp-principal-validator:
+    repository: baobab-platform/zuribeans
+    owner: baobab-platform/zuribeans
+    runtime: IAM-N02 disposable ZuriBeans BFF CP Principal validator
+    environment: development
+    allowed_audiences: [baobab-control-plane]
+    allowed_scopes: [identity:principal:resolve]
+    subject_principal_audiences: [baobab-trade]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/zuribeans
+    status: PROVISIONED
+
+  baobab-dev-zuribeans-bff:
+    repository: baobab-platform/zuribeans
+    owner: baobab-platform/zuribeans
+    runtime: DEV-07 leased synthetic confidential buyer BFF caller
+    environment: development
+    allowed_audiences: [baobab-trade]
+    allowed_scopes: [trade:buyer-handoff]
+    human_token_profile:
+      purpose: ESTATE_BFF_BUYER
+      audiences: [baobab-trade]
+      scopes: [trade:buy]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/zuribeans
+    status: ACTIVE

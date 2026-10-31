@@ -815,6 +815,24 @@ workloads:
     credential_type: client_credentials
     rotation_owner: baobab-platform/baobab-trade
     status: ACTIVE
+  # IAM-N02: a separate CP-audience validator for ZuriBeans' confidential
+  # estate BFF. The browser human token (aud=baobab-trade) and BFF's
+  # trade:buyer-handoff token must NEVER be used as the CP caller credential.
+  # PROVISIONED until real Hydra issuance, CP exact registered caller and
+  # active Principal resolution, negative tests and teardown are witnessed.
+  # This ceiling creates no Principal, market grant or buyer authority.
+  baobab-dev-zuribeans-cp-principal-validator:
+    repository: baobab-platform/zuribeans
+    owner: baobab-platform/zuribeans
+    runtime: IAM-N02 disposable ZuriBeans BFF CP Principal validator
+    environment: development
+    allowed_audiences: [baobab-control-plane]
+    allowed_scopes: [identity:principal:resolve]
+    subject_principal_audiences: [baobab-trade]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/zuribeans
+    status: PROVISIONED
+
   baobab-dev-zuribeans-bff:
     repository: baobab-platform/zuribeans
     owner: baobab-platform/zuribeans
