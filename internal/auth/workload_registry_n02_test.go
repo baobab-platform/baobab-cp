@@ -49,11 +49,11 @@ func TestN02ProposedEstatePrincipalReaderCannotCreateAuthority(t *testing.T) {
 	}
 }
 
-func TestN02CandidateNotAnAcceptedRuntimeRegistry(t *testing.T) {
-	// Until CP contracts.lock and every owning CP contract consumer are
-	// independently reviewed, runtime loads only the already pinned Shared
-	// registry. The proposed synthetic Principal reader cannot be admitted
-	// merely by placing its candidate YAML next to the accepted source.
+func TestN02PinnedCandidateCannotActivatePrincipalReader(t *testing.T) {
+	// The N02 Shared contract has now been pinned across the whole CP
+	// consumer lock, but its PROVISIONED caller is still inert: a signed
+	// workload token is not a grant or a current human Principal.
+	// The candidate file is independent source-review material only.
 	accepted := filepath.Join("..", "contracts", "shared", "identity", "v1", "workload-registry.yaml")
 	runtime, err := LoadWorkloadRegistryFile(accepted)
 	if err != nil {
