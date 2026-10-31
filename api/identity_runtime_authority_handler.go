@@ -63,6 +63,28 @@ func runtimeSnapshotWire(out repository.FederationPlatformSnapshot, req identity
 	return wire
 }
 
+// exactN04RuntimeReadback performs a final boundary check on CP's returned
+// private runtime binding. It does not infer authority: the repository MUST
+// still prove current lifecycle, approved release/certification and valid
+// evidence in its PostgreSQL transaction. A substituted or stale-shaped
+// projection must never be released to an IAM or resource-side reader.
+func exactN04RuntimeReadback(req identityRuntimeBindingRequest,
+	out repository.FederationPlatformSnapshot) bool {
+	return out.ProviderID == req.ProviderID &&
+		out.EngineInstanceID == req.EngineInstanceID &&
+		out.Scope.OrganisationID == req.OrganisationID &&
+		out.Scope.EstateID == req.EstateID &&
+		out.RuntimeCapability == req.RuntimeCapability &&
+		out.ProviderStatus == "ACTIVE" &&
+		out.InstanceStatus == "ACTIVE" &&
+		out.BindingStatus == "ACTIVE" &&
+		out.SupportStatus == "VERIFIED" &&
+		out.ProfileRevision > 0 &&
+		out.ArtifactDigest != "" &&
+		out.ArtifactDigest == out.DeployedArtifactDigest &&
+		!out.EvidenceExpiresAt.IsZero()
+}
+
 func (h identityRuntimeAuthorityHandler) active(p auth.Principal) bool {
 	if h.api == nil || h.api.workloadRegistry == nil || p.ActorType != "workload" ||
 		p.ClientID == "" || !p.HasScope("identity-runtime:read") || !h.api.workloadRegistry.IsActive(p.ClientID) {
@@ -106,6 +128,10 @@ func (h identityRuntimeAuthorityHandler) binding(w http.ResponseWriter, r *http.
 	}
 	if err != nil {
 		h.deny(w, http.StatusServiceUnavailable)
+		return
+	}
+	if !exactN04RuntimeReadback(req, out) {
+		h.deny(w, http.StatusConflict)
 		return
 	}
 	observers, runtimeOK := h.api.workloadRegistry.(auth.IdentityRuntimeObserverRegistry)
