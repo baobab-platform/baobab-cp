@@ -26,7 +26,25 @@ func TestIdentityRuntimeProfilePersistence(t *testing.T) {
 	}
 }
 
+// N04 explicitly proves that the same genuine PostgreSQL registration,
+ // runtime evidence revisions and negative support lifecycle work in a
+ // disposable DEVELOPMENT store, without invoking staging/production approval.
+func TestN04DevelopmentNativeIssuerPostgresLifecycle(t *testing.T) {
+	for _, facet := range []string{"WORKLOAD_TOKEN_ISSUANCE", "OAUTH_AUTHORIZATION_SERVER"} {
+		t.Run(facet, func(t *testing.T) {
+			testIdentityRuntimeProfilePersistenceAt(t, facet, "development")
+		})
+	}
+}
+
 func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
+	testIdentityRuntimeProfilePersistenceAt(t, facet, "staging")
+}
+
+func testIdentityRuntimeProfilePersistenceAt(t *testing.T, facet, environment string) {
+	if environment != "staging" && environment != "development" {
+		t.Fatal("unreviewed test environment")
+	}
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping PostgreSQL integration test")
@@ -57,6 +75,7 @@ func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
 	suffix := strings.ReplaceAll(domain.NewUUIDv7(), "-", "")[20:]
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
+	reporterSource := "workload:baobab-deployment-controller-" + environment
 	// The reference namespace policy fixes these owning engine codes. Reuse the
 	// canonical engine rows if another integration test has already created
 	// them; the test-specific instances and provider remain isolated.
@@ -87,14 +106,14 @@ func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
 	}
 	if err := admin.QueryRow(ctx, `
 		INSERT INTO topology.engine_instance(engine_id, region, environment, status)
-		VALUES ($1::uuid, 'af-south-1', 'staging', 'ACTIVE')
-		RETURNING engine_instance_key`, iamEngineID).Scan(&iamInstance); err != nil {
+		VALUES ($1::uuid, 'af-south-1', $2, 'ACTIVE')
+		RETURNING engine_instance_key`, iamEngineID, environment).Scan(&iamInstance); err != nil {
 		t.Fatal(err)
 	}
 	if err := admin.QueryRow(ctx, `
 		INSERT INTO topology.engine_instance(engine_id, region, environment, status)
-		VALUES ($1::uuid, 'af-south-1', 'staging', 'ACTIVE')
-		RETURNING engine_instance_key`, cpEngineID).Scan(&cpInstance); err != nil {
+		VALUES ($1::uuid, 'af-south-1', $2, 'ACTIVE')
+		RETURNING engine_instance_key`, cpEngineID, environment).Scan(&cpInstance); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,8 +130,8 @@ func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
 				environment, native_entity_type, native_id, source_authority,
 				status, first_seen_at, last_verified_at
 			)
-			VALUES ($1,$2,$3,$4,'staging',$5,$6,'reconciliation','active',$7,$7)`,
-			id, namespace, engine, instance, entityType, "mp2c-"+suffix+"-"+entityType, now); err != nil {
+			VALUES ($1,$2,$3,$4,$8,$5,$6,'reconciliation','active',$7,$7)`,
+			id, namespace, engine, instance, entityType, "mp2c-"+suffix+"-"+entityType, now, environment); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -170,15 +189,15 @@ func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
 	}
 
 	replay, err := repo.RecordIdentityRuntimeProfile(
-		ctx, profile, "workload:baobab-deployment-controller-staging",
-		"staging", []string{"af-south-1"}, now,
+		ctx, profile, reporterSource,
+		environment, []string{"af-south-1"}, now,
 	)
 	if err != nil || replay {
 		t.Fatalf("first publication: replay=%v err=%v", replay, err)
 	}
 	replay, err = repo.RecordIdentityRuntimeProfile(
-		ctx, profile, "workload:baobab-deployment-controller-staging",
-		"staging", []string{"af-south-1"}, now,
+		ctx, profile, reporterSource,
+		environment, []string{"af-south-1"}, now,
 	)
 	if err != nil || !replay {
 		t.Fatalf("exact retry: replay=%v err=%v", replay, err)
@@ -187,8 +206,8 @@ func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
 	conflict := profile
 	conflict.PublishedAt = now.Add(time.Second)
 	if _, err := repo.RecordIdentityRuntimeProfile(
-		ctx, conflict, "workload:baobab-deployment-controller-staging",
-		"staging", []string{"af-south-1"}, now.Add(time.Second),
+		ctx, conflict, reporterSource,
+		environment, []string{"af-south-1"}, now.Add(time.Second),
 	); !errors.Is(err, ErrIdentityRuntimeProfileConflict) {
 		t.Fatalf("same revision with different content: %v", err)
 	}
@@ -197,8 +216,8 @@ func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
 	next.Revision = 2
 	next.PublishedAt = now.Add(time.Second)
 	if _, err := repo.RecordIdentityRuntimeProfile(
-		ctx, next, "workload:baobab-deployment-controller-staging",
-		"staging", []string{"af-south-1"}, now.Add(time.Second),
+		ctx, next, reporterSource,
+		environment, []string{"af-south-1"}, now.Add(time.Second),
 	); err != nil {
 		t.Fatalf("next revision: %v", err)
 	}
@@ -207,20 +226,20 @@ func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
 	gap.Revision = 4
 	gap.PublishedAt = now.Add(2 * time.Second)
 	if _, err := repo.RecordIdentityRuntimeProfile(
-		ctx, gap, "workload:baobab-deployment-controller-staging",
-		"staging", []string{"af-south-1"}, now.Add(2*time.Second),
+		ctx, gap, reporterSource,
+		environment, []string{"af-south-1"}, now.Add(2*time.Second),
 	); !errors.Is(err, ErrIdentityRuntimeProfileConflict) {
 		t.Fatalf("revision gap accepted: %v", err)
 	}
 
 	if _, err := repo.RecordIdentityRuntimeProfile(
-		ctx, next, "workload:baobab-deployment-controller-staging",
+		ctx, next, reporterSource,
 		"production", []string{"af-south-1"}, now.Add(time.Second),
 	); !errors.Is(err, ErrIdentityRuntimeProfileOutOfScope) {
 		t.Fatalf("wrong environment accepted: %v", err)
 	}
 	if _, err := repo.RecordIdentityRuntimeProfile(
-		ctx, next, "workload:baobab-deployment-controller-staging",
+		ctx, next, reporterSource,
 		"staging", []string{"eu-west-1"}, now.Add(time.Second),
 	); !errors.Is(err, ErrIdentityRuntimeProfileOutOfScope) {
 		t.Fatalf("wrong region accepted: %v", err)
@@ -243,7 +262,7 @@ func testIdentityRuntimeProfilePersistence(t *testing.T, facet string) {
 		t.Fatalf("stored rows: profiles=%d observations=%d", profileRows, observationRows)
 	}
 
-	verifyRuntimeReadiness(t, repo, admin, next, refs, suffix, iamEngineID, now.Add(2*time.Second))
+	verifyRuntimeReadiness(t, repo, admin, next, refs, suffix, iamEngineID, environment, now.Add(2*time.Second))
 
 	// Runtime evidence is append-only to the same standard as deployment
 	// observations. UPDATE/DELETE must reach our append-only trigger. TRUNCATE
