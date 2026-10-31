@@ -927,7 +927,7 @@ scopes:
       presents the human's IAM access token, audience-bound to its own
       resource, as subject evidence; the Control Plane verifies it itself and
       resolves the exact (issuer, subject). Creates nothing and grants no
-      tenant, membership, role, market or purchasing authority. Allocated only to the named DEV-07 development validator; no protected allocation.
+      tenant, membership, role, market or purchasing authority. The DEV-07 named validator remains the existing active development allocation; IAM-N02 adds only a PROVISIONED, separately registered ZuriBeans-owned development CP validator candidate. No live N02 issuance, CP permission, protected allocation or approval follows from this ceiling.
     audience: ["baobab-control-plane"]
     allowed_actors: ["workload"]
     grants_authority: false
