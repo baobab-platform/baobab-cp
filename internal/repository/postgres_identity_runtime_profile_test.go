@@ -27,8 +27,8 @@ func TestIdentityRuntimeProfilePersistence(t *testing.T) {
 }
 
 // N04 explicitly proves that the same genuine PostgreSQL registration,
- // runtime evidence revisions and negative support lifecycle work in a
- // disposable DEVELOPMENT store, without invoking staging/production approval.
+// runtime evidence revisions and negative support lifecycle work in a
+// disposable DEVELOPMENT store, without invoking staging/production approval.
 func TestN04DevelopmentNativeIssuerPostgresLifecycle(t *testing.T) {
 	for _, facet := range []string{"WORKLOAD_TOKEN_ISSUANCE", "OAUTH_AUTHORIZATION_SERVER"} {
 		t.Run(facet, func(t *testing.T) {
