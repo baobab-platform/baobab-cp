@@ -50,20 +50,22 @@ func TestN02ProposedEstatePrincipalReaderCannotCreateAuthority(t *testing.T) {
 }
 
 func TestN02CandidateNotAnAcceptedRuntimeRegistry(t *testing.T) {
-    // Until CP contracts.lock and every owning CP contract consumer are
-    // independently reviewed, runtime loads only the already pinned Shared
-    // registry. The proposed synthetic Principal reader cannot be admitted
-    // merely by placing its candidate YAML next to the accepted source.
-    accepted := filepath.Join("..", "contracts", "shared", "identity", "v1", "workload-registry.yaml")
-    runtime, err := LoadWorkloadRegistryFile(accepted)
-    if err != nil { t.Fatal(err) }
-    for _, name := range []string{
-        "baobab-dev-zuribeans-cp-principal-validator",
-        "baobab-dev-zuribeans-native-browser-bff",
-    } {
-        if runtime.IsActive(name) || runtime.AllowsScope(name, PrincipalResolveScope) ||
-           len(runtime.SubjectPrincipalAudiences(name)) != 0 {
-            t.Fatalf("draft N02 client %s leaked into accepted CP runtime", name)
-        }
-    }
+	// Until CP contracts.lock and every owning CP contract consumer are
+	// independently reviewed, runtime loads only the already pinned Shared
+	// registry. The proposed synthetic Principal reader cannot be admitted
+	// merely by placing its candidate YAML next to the accepted source.
+	accepted := filepath.Join("..", "contracts", "shared", "identity", "v1", "workload-registry.yaml")
+	runtime, err := LoadWorkloadRegistryFile(accepted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"baobab-dev-zuribeans-cp-principal-validator",
+		"baobab-dev-zuribeans-native-browser-bff",
+	} {
+		if runtime.IsActive(name) || runtime.AllowsScope(name, PrincipalResolveScope) ||
+			len(runtime.SubjectPrincipalAudiences(name)) != 0 {
+			t.Fatalf("draft N02 client %s leaked into accepted CP runtime", name)
+		}
+	}
 }
