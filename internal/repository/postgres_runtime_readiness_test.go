@@ -16,12 +16,16 @@ import (
 // Extends the real profile persistence fixture with governed support/bindings,
 // an approved release and current deployment. No provider is activated outside
 // this isolated PostgreSQL construction fixture.
-func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.Pool, p IdentityRuntimeProfile, refs map[string]string, suffix, engine string, now time.Time) {
+func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.Pool, p IdentityRuntimeProfile, refs map[string]string, suffix, engine, environment string, now time.Time) {
 	t.Helper()
 	ctx := context.Background()
+	sqlEnvironment := func(sql string) string {
+		// Test-only environment selection, constrained by the parent fixture.
+		return strings.ReplaceAll(sql, "'staging'", "'"+environment+"'")
+	}
 	exec := func(sql string, args ...any) {
 		t.Helper()
-		if _, err := db.Exec(ctx, sql, args...); err != nil {
+		if _, err := db.Exec(ctx, sqlEnvironment(sql), args...); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -48,7 +52,7 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 		{`SELECT engine_instance_id::text FROM topology.engine_instance WHERE engine_instance_key=$1`, []any{p.EngineInstanceID}, &instance},
 		{`INSERT INTO capability.capability_scope(tenant_id,organisation_id,digital_estate_id,environment) VALUES($1,$2,$3,'staging') RETURNING scope_id::text`, []any{tenant, org, estate}, &scope},
 	} {
-		if err := db.QueryRow(ctx, q.sql, q.args...).Scan(q.out); err != nil {
+		if err := db.QueryRow(ctx, sqlEnvironment(q.sql), q.args...).Scan(q.out); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -109,9 +113,9 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 	})
 	read := func(at time.Time) (FederationPlatformSnapshot, error) {
 		if IdentityRuntimePlatformCapability(facet) != "" {
-			return repo.ReadIdentityRuntimeSnapshot(ctx, p.ProviderID, p.EngineInstanceID, org, estate, facet, p.ConfigurationReference, p.SecurityDomainReference, "staging", at)
+			return repo.ReadIdentityRuntimeSnapshot(ctx, p.ProviderID, p.EngineInstanceID, org, estate, facet, p.ConfigurationReference, p.SecurityDomainReference, environment, at)
 		}
-		return repo.ReadFederationPlatformSnapshot(ctx, p.ProviderID, p.EngineInstanceID, org, estate, facet, p.ConfigurationReference, trust, "staging", at)
+		return repo.ReadFederationPlatformSnapshot(ctx, p.ProviderID, p.EngineInstanceID, org, estate, facet, p.ConfigurationReference, trust, environment, at)
 	}
 	allow := func() {
 		t.Helper()
@@ -131,11 +135,11 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 		for _, wrong := range []struct{ config, security string }{
 			{"ref_unknownconfig", p.SecurityDomainReference}, {p.ConfigurationReference, "ref_unknownsecurity"},
 		} {
-			if _, err := repo.ReadIdentityRuntimeSnapshot(ctx, p.ProviderID, p.EngineInstanceID, org, estate, facet, wrong.config, wrong.security, "staging", now); !errors.Is(err, ErrFederationPlatformEvidenceNotFound) {
+			if _, err := repo.ReadIdentityRuntimeSnapshot(ctx, p.ProviderID, p.EngineInstanceID, org, estate, facet, wrong.config, wrong.security, environment, now); !errors.Is(err, ErrFederationPlatformEvidenceNotFound) {
 				t.Fatalf("foreign composition reference accepted: %v", err)
 			}
 		}
-		if _, err := repo.ReadIdentityRuntimeSnapshot(ctx, p.ProviderID, p.EngineInstanceID, org, estate, "OIDC_FEDERATION", p.ConfigurationReference, p.SecurityDomainReference, "staging", now); !errors.Is(err, ErrFederationPlatformEvidenceNotFound) {
+		if _, err := repo.ReadIdentityRuntimeSnapshot(ctx, p.ProviderID, p.EngineInstanceID, org, estate, "OIDC_FEDERATION", p.ConfigurationReference, p.SecurityDomainReference, environment, now); !errors.Is(err, ErrFederationPlatformEvidenceNotFound) {
 			t.Fatalf("federation facet accepted on runtime boundary: %v", err)
 		}
 		exec(`UPDATE mapping.external_reference SET status='archived' WHERE external_reference_id=$1`, trust)
@@ -168,7 +172,7 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 		evidence.EvidenceReference = caseReference
 		p.CapabilityObservations = []IdentityRuntimeCapabilityObservation{observation}
 		id := createRelease(tc.label, p.ArtifactDigest, tc.key, tc.capability, tc.major)
-		if _, err := repo.RecordIdentityRuntimeProfile(ctx, p, "test-readiness", "staging", []string{"af-south-1"}, now); err != nil {
+		if _, err := repo.RecordIdentityRuntimeProfile(ctx, p, "test-readiness", environment, []string{"af-south-1"}, now); err != nil {
 			t.Fatal(err)
 		}
 		exec(`UPDATE topology.engine_instance SET desired_release_id=$1::uuid WHERE engine_instance_key=$2`, id, p.EngineInstanceID)
@@ -180,7 +184,7 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 	revision := p.Revision + 1
 	p = baseProfile
 	p.Revision = revision
-	if _, err := repo.RecordIdentityRuntimeProfile(ctx, p, "test-readiness", "staging", []string{"af-south-1"}, now); err != nil {
+	if _, err := repo.RecordIdentityRuntimeProfile(ctx, p, "test-readiness", environment, []string{"af-south-1"}, now); err != nil {
 		t.Fatal(err)
 	}
 	exec(`UPDATE topology.engine_instance SET desired_release_id=$1::uuid WHERE engine_instance_key=$2`, release, p.EngineInstanceID)
@@ -204,7 +208,7 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 	// A second scope with the same requested dimensions must not be hidden by
 	// the per-scope PRIMARY exclusion constraint or by the projection's LIMIT.
 	var competingScope string
-	if err := db.QueryRow(ctx, `INSERT INTO capability.capability_scope(tenant_id,organisation_id,digital_estate_id,environment) VALUES($1,$2,$3,'staging') RETURNING scope_id::text`, tenant, org, estate).Scan(&competingScope); err != nil {
+	if err := db.QueryRow(ctx, sqlEnvironment(`INSERT INTO capability.capability_scope(tenant_id,organisation_id,digital_estate_id,environment) VALUES($1,$2,$3,'staging') RETURNING scope_id::text`), tenant, org, estate).Scan(&competingScope); err != nil {
 		t.Fatal(err)
 	}
 	exec(`INSERT INTO capability.capability_binding(capability_id,engine_instance_id,scope_id,provider_id,binding_mode,status,contract_version,effective_from) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,'PRIMARY','ACTIVE','1',$5)`, capID, instance, competingScope, provider, now.Add(-time.Minute))
@@ -223,7 +227,7 @@ func verifyRuntimeReadiness(t *testing.T, repo *PostgresRepository, db *pgxpool.
 	next.Revision++
 	next.PublishedAt = now.Add(3 * time.Second)
 	next.CapabilityObservations = []IdentityRuntimeCapabilityObservation{{Capability: facet, VerificationStatus: "UNSUPPORTED"}}
-	if _, err := repo.RecordIdentityRuntimeProfile(ctx, next, "test-readiness", "staging", []string{"af-south-1"}, next.PublishedAt); err != nil {
+	if _, err := repo.RecordIdentityRuntimeProfile(ctx, next, "test-readiness", environment, []string{"af-south-1"}, next.PublishedAt); err != nil {
 		t.Fatal(err)
 	}
 	deny(next.PublishedAt) // no fallback to an older VERIFIED profile
