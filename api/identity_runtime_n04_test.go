@@ -55,6 +55,7 @@ func TestN04NativeWorkloadRuntimeResponseCannotSwapRegisteredAuthority(t *testin
 		"missing artifact": func(v *repository.FederationPlatformSnapshot) { v.ArtifactDigest = "" },
 		"zero profile revision": func(v *repository.FederationPlatformSnapshot) { v.ProfileRevision = 0 },
 		"missing evidence deadline": func(v *repository.FederationPlatformSnapshot) { v.EvidenceExpiresAt = time.Time{} },
+		"expired evidence deadline": func(v *repository.FederationPlatformSnapshot) { v.EvidenceExpiresAt = time.Now().Add(-time.Second) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			substituted := current
