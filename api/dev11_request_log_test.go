@@ -66,6 +66,11 @@ func TestDEV11RequestLogUnmatchedRouteIsClosed(t *testing.T) {
     router := chi.NewRouter()
     a := &API{}
     router.Use(a.requestLog)
+    // chi bypasses middleware when a Mux has no routes at all. Register a
+    // legitimate route so this exercises middleware on an unmatched request.
+    router.Get("/known", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusNoContent)
+    })
     request := httptest.NewRequest(http.MethodGet, "/not-found/customer-private-123", nil)
     router.ServeHTTP(httptest.NewRecorder(), request)
     var fields map[string]any
