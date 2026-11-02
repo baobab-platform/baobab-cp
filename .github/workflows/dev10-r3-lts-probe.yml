@@ -61,6 +61,10 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/codespaces/private-npm.mjs
       - name: Regenerate candidate lock then prove frozen reinstallation
+        # Credentials are not in the workspace or the file: this variable
+        # satisfies the literal user-level npmrc expression only in this step.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
