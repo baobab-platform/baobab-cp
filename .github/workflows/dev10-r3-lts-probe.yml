@@ -21,14 +21,23 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.13.0"
-      - name: Explicit Node26 Corepack and pnpm12 (offline after preparation)
+      - name: Install official checksum-verified native pnpm12 and exact Corepack
         shell: bash
         run: |
           set -euo pipefail
-          npm install --global corepack@0.36.0 pnpm@12.16.1
-          test "$(pnpm --version)" = 12.16.1
           test "$(node --version)" = v26.13.0
+          npm install --global corepack@0.36.0
           test "$(corepack --version)" = 0.36.0
+          native_dir="$RUNNER_TEMP/dev10-native-pnpm"
+          mkdir -p "$native_dir/bin" "$native_dir/unpack"
+          curl -fsSL --retry 3 -o "$native_dir/pnpm.tar.gz"             "https://github.com/pnpm/pnpm/releases/download/v12.16.1/pnpm-linux-x64.tar.gz"
+          printf '%s  %s\n'             "565ff81174a14f6f7bd5d84c1b17e51031a80230d370a1fe24be5d16bd02a825"             "$native_dir/pnpm.tar.gz" | sha256sum -c -
+          tar -xzf "$native_dir/pnpm.tar.gz" -C "$native_dir/unpack"
+          bin="$(find "$native_dir/unpack" -type f \( -name pnpm -o -name pnpm-linux-x64 \) -print -quit)"
+          test -n "$bin" && test -f "$bin"
+          install -m 0755 "$bin" "$native_dir/bin/pnpm"
+          (cd "$RUNNER_TEMP"; test "$("$native_dir/bin/pnpm" --version)" = 12.16.1)
+          echo "$native_dir/bin" >> "$GITHUB_PATH"
           echo COREPACK_ENABLE_NETWORK=0 >> "$GITHUB_ENV"
           echo COREPACK_DEFAULT_TO_LATEST=0 >> "$GITHUB_ENV"
           echo COREPACK_ENABLE_DOWNLOAD_PROMPT=0 >> "$GITHUB_ENV"
