@@ -17,6 +17,7 @@ import (
 	"github.com/baobab-platform/baobab-cp/internal/eventingress"
 	"github.com/baobab-platform/baobab-cp/internal/health"
 	"github.com/baobab-platform/baobab-cp/internal/metrics"
+	"github.com/baobab-platform/baobab-cp/internal/observability"
 	"github.com/baobab-platform/baobab-cp/internal/repository"
 	"github.com/baobab-platform/baobab-cp/internal/service"
 	"github.com/baobab-platform/baobab-cp/internal/service/application"
@@ -414,7 +415,7 @@ func New(dependencies Dependencies) http.Handler {
 	capabilityResolution := service.CapabilityResolutionService{Store: dependencies.CapabilityResolutions}
 	contextResolution := service.ContextResolutionService{Identity: dependencies.Identity, Tenants: dependencies.Store, Canonical: dependencies.Canonical.Repository, Mappings: dependencies.OrganisationMappings, IamOrganisations: dependencies.IamOrganisations, CounterpartyRoles: dependencies.Counterparties, Markets: dependencies.MarketParticipations}
 	r := chi.NewRouter()
-	r.Use(a.securityHeaders, a.correlation, a.requestLog)
+	r.Use(a.securityHeaders, a.correlation, observability.Server, a.requestLog)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -1529,9 +1530,13 @@ func (a *API) requestLog(next http.Handler) http.Handler {
 				route = pattern
 			}
 		}
+		// Runtime trace IDs are high-cardinality log-only fields, never metric
+		// labels or authorisation inputs; route is a server-owned template.
+		span, _ := observability.Current(r.Context())
 		slog.InfoContext(r.Context(), "request completed",
 			"method", r.Method, "route", route, "status", response.status,
-			"correlation_id", correlationID(r),
+			"correlation_id", correlationID(r), "trace_id", span.TraceID,
+			"span_id", span.SpanID, "parent_span_id", span.ParentSpanID,
 			"duration_ms", time.Since(started).Milliseconds())
 	})
 }
