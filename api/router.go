@@ -1519,8 +1519,20 @@ func (a *API) requestLog(next http.Handler) http.Handler {
 		started := time.Now()
 		response := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(response, r)
-		principal, _ := auth.PrincipalFromContext(r.Context())
-		slog.InfoContext(r.Context(), "request completed", "method", r.Method, "path", r.URL.Path, "status", response.status, "actor_id", principal.Subject, "actor_type", principal.ActorType, "client_id", principal.ClientID, "tenant_id", principal.TenantID, "correlation_id", correlationID(r), "duration_ms", time.Since(started).Milliseconds())
+		// DEV-11: a raw URL path may contain a customer/tenant/resource ID,
+		// an email or a credential-like path component. Use only the server-owned
+		// chi route template (or a closed fallback for unmatched requests).
+		// The audit trail, not the generic HTTP request log, owns actor identity.
+		route := "UNMATCHED"
+		if routeContext := chi.RouteContext(r.Context()); routeContext != nil {
+			if pattern := routeContext.RoutePattern(); pattern != "" {
+				route = pattern
+			}
+		}
+		slog.InfoContext(r.Context(), "request completed",
+			"method", r.Method, "route", route, "status", response.status,
+			"correlation_id", correlationID(r),
+			"duration_ms", time.Since(started).Milliseconds())
 	})
 }
 
