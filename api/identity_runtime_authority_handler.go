@@ -82,7 +82,8 @@ func exactN04RuntimeReadback(req identityRuntimeBindingRequest,
 		out.ProfileRevision > 0 &&
 		out.ArtifactDigest != "" &&
 		out.ArtifactDigest == out.DeployedArtifactDigest &&
-		!out.EvidenceExpiresAt.IsZero()
+		// A nonzero but already expired receipt is still unqualified.
+		out.EvidenceExpiresAt.After(time.Now().UTC())
 }
 
 func (h identityRuntimeAuthorityHandler) active(p auth.Principal) bool {
