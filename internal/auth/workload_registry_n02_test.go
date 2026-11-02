@@ -50,10 +50,10 @@ func TestN02ProposedEstatePrincipalReaderCannotCreateAuthority(t *testing.T) {
 }
 
 func TestN02PinnedCandidateCannotActivatePrincipalReader(t *testing.T) {
-	// The N02 Shared contract has now been pinned across the whole CP
-	// consumer lock, but its PROVISIONED caller is still inert: a signed
-	// workload token is not a grant or a current human Principal.
-	// The candidate file is independent source-review material only.
+	// N02 is an inert candidate: Shared #421 is not merged into
+	// Shared main, so CP's accepted contract lock/embedded registry must
+	// stay unchanged. A signed workload token is not a CP grant or Principal.
+	// Candidate data may never activate runtime source authority.
 	accepted := filepath.Join("..", "contracts", "shared", "identity", "v1", "workload-registry.yaml")
 	runtime, err := LoadWorkloadRegistryFile(accepted)
 	if err != nil {
