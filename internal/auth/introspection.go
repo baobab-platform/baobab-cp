@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/baobab-platform/baobab-cp/internal/observability"
 )
 
 // ErrIntrospectionUnavailable means the issuer could not say whether a token
@@ -86,10 +88,14 @@ func (i *HTTPIntrospector) Introspect(ctx context.Context, token string) (Intros
 		return Introspection{}, ErrIntrospectionUnavailable
 	}
 	form := url.Values{"token": {token}, "token_type_hint": {"access_token"}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, i.Endpoint, strings.NewReader(form.Encode()))
+	// Child span follows the actual HTTPS introspection call; trace context is
+	// diagnostics, never a substitute for the issuer's active-token decision.
+	callCtx := observability.Child(ctx)
+	req, err := http.NewRequestWithContext(callCtx, http.MethodPost, i.Endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return Introspection{}, ErrIntrospectionUnavailable
 	}
+	_ = observability.Inject(callCtx, req)
 	req.SetBasicAuth(url.QueryEscape(i.ClientID), url.QueryEscape(i.ClientSecret))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
