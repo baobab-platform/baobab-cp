@@ -316,7 +316,10 @@ func TestFederationBindingRouteUsesExactFacetAndCurrentEvidenceSources(t *testin
 }
 
 func TestIdentityRuntimeBindingRouteEnforcesIndependentAuthority(t *testing.T) {
-	now := time.Date(2026, 10, 4, 18, 0, 0, 0, time.UTC)
+	// Current runtime evidence must genuinely be unexpired. A fixed historical
+	// date makes otherwise-valid fixtures expire as time advances, hiding the
+	// intended reporter/caller/grant revocation assertions behind HTTP 409.
+	now := time.Now().UTC()
 	for _, tc := range []struct {
 		name                 string
 		readerScope          bool
