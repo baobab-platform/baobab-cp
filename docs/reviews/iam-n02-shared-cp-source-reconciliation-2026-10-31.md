@@ -1,85 +1,116 @@
-# IAM-N02 — proposed estate CP Principal reader: source-only reconciliation
+# IAM-N02/N04/N07 — accepted Shared authority inventory and CP source adoption
 
-**Re-reviewed:** 2 November 2026. **Status: HELD / PROVISIONED CANDIDATE.**
-**Governing:** EA v2.3, ADR-SHARED-043, CP's accepted workload/Principal
-authority and exact Shared contract-consumer pin. This is not a release,
-protected permission, native browser qualification or acceptance receipt.
+**Reconciled:** 4 November 2026. **State:** accepted SOURCE; development workload
+identities remain `PROVISIONED` and unadmitted. This review updates
+[`baobab-cp#455`](https://github.com/baobab-platform/baobab-cp/pull/455)
+under EA v2.3, ADR-SHARED-042/043 and CP's existing Principal, context,
+administrative-grant and contract-consumer controls.
 
-## Accepted CP runtime source remains unchanged
+## Authoritative source and reviewed change boundary
 
-The authoritative CP `contracts.lock.yaml` retains **both** references to
-accepted Shared commit `2fde03e2f5f3a8a6cbc1e2081b4859fdccc1bb53`.
-Its embedded `internal/contracts/shared/identity/v1/workload-registry.yaml`
-and `internal/contracts/shared/authorization/v1/scope-registry.yaml`
-remain the **byte-for-byte accepted main copies**. The Foundation consumer
-lock/embedded contract checks MUST continue to reject any attempt to pin a
-Shared commit not reachable from Shared main.
+Shared [#430](https://github.com/baobab-platform/shared/pull/430) merged to
+`main` as **`7f547ccdd759208355ef9224d2177929f4bf224e`**, replacing
+competing Shared #420/#421/#422 development registry proposals. Do not pin
+the historical PR head `1dc7a7eba0c197159473864c5cd8bea7637e4a8c`:
+a pull-request head is not an accepted mainline contract.
 
-Shared [#421](https://github.com/baobab-platform/shared/pull/421) commit
-`38704895c3b0c2897d4c72d4b1353945d2bbb2ff` is an
-**unmerged proposal**. The previous CP draft mistakenly promoted that
-commit into both accepted CP lock references, while also replacing the
-embedded runtime identity/scope registry. Foundation correctly failed:
+CP's prior accepted Shared source was
+`2fde03e2f5f3a8a6cbc1e2081b4859fdccc1bb53`. Comparing that
+commit to the accepted merge traverses 55 Shared commits. Among the files
+declared in CP `contracts.lock.yaml`, only these two changed:
 
-`contracts.lock.yaml: source.commit 387048... is not on Shared main`.
+1. `contracts/identity/v1/workload-registry.yaml`
+2. `contracts/authorization/v1/scope-registry.yaml`
 
-The 2 November correction restores the accepted runtime copies and pin.
-The candidate Shared workload registry is retained only under
-`internal/contracts/candidates/n02/identity/v1/workload-registry.yaml`,
-as inert **source-review data**.
+The prior embedded copies were independently confirmed byte-for-byte equal
+to their files at the prior accepted source. The new embedded copies are
+byte-for-byte copies from the accepted Shared merge commit, not assembled
+from overlapping proposed branches. Both
+`contract_bundle.source_commit` and `source.commit` now pin the same
+accepted merge SHA. No unrelated CP-consumed contract was changed.
 
-## Exact proposed identity ceiling
+The newly published Shared `native-browser-client-registry.yaml` is an
+IAM-owned browser-client declaration. CP does **not** admit it as a
+client-credentials workload, nor is it an authority-bearing CP registry.
+It is deliberately not added to CP's runtime workload registry.
 
-### 4 November reconciliation
+## Closed development-only identity inventory
 
-The inert workload file now comes from consolidated Shared #430 commit
-`1dc7a7eba0c197159473864c5cd8bea7637e4a8c`, superseding the three
-overlapping #420/#421/#422 proposals for source review. Its exact SHA-256
-and proposal provenance are recorded in `internal/contracts/candidates/n02/source.json`.
-The directory name is retained for existing review links; it now contains
-the single N02/N04/N07 candidate. Go tests bind its original bytes and
-deny activity, all proposed scopes, delegation and environment admission
-for the N02 reader, N04 reader and both N07 TMS clients. The browser client
-remains outside the workload registry.
+| Identity | Owner | Allowed declared ceiling | Runtime status |
+| --- | --- | --- | --- |
+| `baobab-dev-iam-runtime-reader` | IAM | CP `identity-runtime:read` | PROVISIONED |
+| `baobab-dev-zuribeans-cp-principal-validator` | ZuriBeans | CP `identity:principal:resolve`, subject audience `baobab-trade` | PROVISIONED |
+| `baobab-dev-tms-subject` | TMS | `context:resolve`, `legal-actor:assess`, TMS transport `tms:booking:submit` | PROVISIONED |
+| `baobab-dev-tms-validator` | TMS | CP `context:validate`, validated audience `baobab-tms` | PROVISIONED |
 
-This updates review data only. Both accepted lock references and every
-embedded runtime contract remain unchanged. Shared #430 is unmerged;
-controlled runtime admission and genuine issuer/CP/native readbacks remain
-BLOCKED until accepted-source adoption is available. No ACTIVE status,
-Principal, AdministrativeGrant, buyer mandate or booking right is created.
+The separate `baobab-dev-zuribeans-native-browser-bff` has an
+authorization-code/S256 PKCE profile in Shared, **not** in the CP workload
+registry. It also remains PROVISIONED without a real browser, issuer or CP
+authority receipt.
 
-- `baobab-dev-zuribeans-cp-principal-validator`: separately owned by
-  ZuriBeans, development only, `PROVISIONED`, CP audience only,
-  `identity:principal:resolve` as a declaration, delegated human subject
-  audience `baobab-trade`. It is NOT an active workload, issued credential,
-  CP Principal, role, purchasing permission or real registration.
-- Existing `baobab-dev-zuribeans-bff`: separate Trade-audience
-  buyer-handoff workload; must never inherit CP reader scope.
-- `baobab-dev-zuribeans-native-browser-bff`: proposed separate
-  authorization-code / PKCE human client, **not** a workload entry.
+`PROVISIONED` grants no active issuer/CP workload admission. CP must deny
+the declared scopes, subject delegation, audience validation and all
+development/staging/production runtime admission until there is separately
+governed activation. The existing ACTIVE Trade buyer validator and
+ZuriBeans buyer-handoff workload remain separate and retain their original
+limited authorities.
 
-The Go tests load only the proposed candidate for exact separation and
-negative admission cases; they independently verify that **no** candidate
-identity is active in CP's accepted runtime registry. A candidate parser
-success is not an IAM registration, a valid bearer or CP authorization.
+A CP-facing bearer, an IAM client registration, a CP Principal,
+`AdministrativeGrant`, market mandate, buyer purchase or TMS booking
+authority are **not interchangeable**. `tms:booking:submit` has
+`grants_authority=false` and cannot perform native transport booking.
 
-## Remaining gates — no implicit authority promotion
+## Inert candidate preservation and independent regression
 
-1. Coordinate a **single reviewed closed workload inventory** across
-   Shared #420/#421/#422 and respective IAM/CP/TMS consumers. Never merge
-   incompatible independent allowlists or silently lose scopes.
-2. Have the Shared proposal accepted and merged with its ADR-043 negative
-   conformance tests. Review the **new Shared main SHA**, not an unmerged
-   PR commit; update both CP consumer pin fields atomically and byte-for-byte
-   copy every changed CP-consumed contract on a **separate reviewed PR**.
-3. Require independent IAM client registration, real issuer issuance, native
-   BFF/CP Principal resolver current authority and exact audience/scope,
-   wrong subject, revoked, expiry and cross-tenant negatives.
-4. Qualify the ZuriBeans browser authorization-code + S256 PKCE journey
-   and the original INT03C/N02 cases on a disposable environment, with
-   source pins, TLS and independent teardown/custody.
-5. Require final-head Go/Shared Foundation CI and independent operator
-   review. Protected staging/production grants remain denied.
+The pre-existing candidate path
+`internal/contracts/candidates/n02/identity/v1/workload-registry.yaml`
+remains for review history. It is intentionally identical to the accepted
+runtime registry bytes, but its
+`internal/contracts/candidates/n02/source.json` now identifies the
+**merged** Shared main commit and remains
+`source_review_only=true`, `runtime_authority=false`. Candidate retention
+cannot override CP's accepted contract lock.
 
-**Rollback:** reverting this candidate must not change the accepted
-embedded contract copy, published image or CP runtime authority.
+Go regression tests verify:
+
+- exact candidate SHA-256 and accepted source provenance;
+- equality between candidate review bytes and CP's accepted embedded
+  workload contract;
+- both immutable CP Shared source-lock fields;
+- no runtime admission, delegated subject audience, scope or environment
+  for any four PROVISIONED workload clients;
+- no accidental upgrade of the existing Trade buyer handoff into a CP
+  Principal-resolution caller;
+- browser client isolation from workload registration.
+
+Contract currency is *source adoption*, not execution qualification.
+
+## Remaining integration and acceptance gates
+
+1. CP current-head CI must independently pass Go, Shared contract lock,
+   Foundation, Security, Readiness and applicable generated-client checks.
+   The N02 candidate remains fail-closed.
+2. IAM must register genuinely distinct native Hydra clients and obtain
+   independently read-back, still-valid issuer credentials within a
+   disposable owner-approved development run. Shared registry declarations
+   are not issuer credentials.
+3. CP must independently establish and verify current Principal, grant,
+   context/market and legal-actor authority for the exact operator and
+   operation. No PROVISIONED identity should be silently promoted.
+4. Qualify the ZuriBeans browser authorization-code/S256, Kratos AAL2,
+   recovery, revocation and negative paths against actual native services,
+   with original same-run N02/INT-03C evidence.
+5. Qualify TMS N07 issuer/CP/native-resource denials separately from
+   **executable** TMS booking, which remains fenced until its own
+   native provider, mandate and idempotent commitment requirements pass.
+6. Infrastructure #69 must independently source-pin, retain private
+   originals and prove complete teardown. Its old candidate lock files
+   cannot be treated as accepted-source runtime proof.
+7. Protected staging/production and provider-support promotion remain
+   explicitly unauthorized.
+
+**Disposition:** Reconcile source under CP #455 and keep that PR open for
+final-head review. Do not merge #455 merely because a closed contract
+inventory compiles. Reverting CP #455 restores the previous accepted source
+pin and embedded copies without granting or withdrawing live credentials;
+none are provisioned by this change.
