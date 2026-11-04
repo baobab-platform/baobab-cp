@@ -30,6 +30,24 @@ as inert **source-review data**.
 
 ## Exact proposed identity ceiling
 
+### 4 November reconciliation
+
+The inert workload file now comes from consolidated Shared #430 commit
+`1dc7a7eba0c197159473864c5cd8bea7637e4a8c`, superseding the three
+overlapping #420/#421/#422 proposals for source review. Its exact SHA-256
+and proposal provenance are recorded in `internal/contracts/candidates/n02/source.json`.
+The directory name is retained for existing review links; it now contains
+the single N02/N04/N07 candidate. Go tests bind its original bytes and
+deny activity, all proposed scopes, delegation and environment admission
+for the N02 reader, N04 reader and both N07 TMS clients. The browser client
+remains outside the workload registry.
+
+This updates review data only. Both accepted lock references and every
+embedded runtime contract remain unchanged. Shared #430 is unmerged;
+controlled runtime admission and genuine issuer/CP/native readbacks remain
+BLOCKED until accepted-source adoption is available. No ACTIVE status,
+Principal, AdministrativeGrant, buyer mandate or booking right is created.
+
 - `baobab-dev-zuribeans-cp-principal-validator`: separately owned by
   ZuriBeans, development only, `PROVISIONED`, CP audience only,
   `identity:principal:resolve` as a declaration, delegated human subject

@@ -749,6 +749,23 @@ workloads:
     rotation_owner: baobab-platform/baobab-subscriptions
     status: ACTIVE
 
+  # IAM-N04: bounded, synthetic development read-only CP runtime binding
+  # observer. This client gets no context:validate, role, tenant, provider
+  # support, certificate, migration or lifecycle mutation. CP additionally
+  # requires an ACTIVE Principal, identity-runtime:read issued scope, and a
+  # separately approved security.identity-runtime.view AdministrativeGrant.
+  # It is an issuer/CP *registration ceiling*, not a provisioned credential.
+  baobab-dev-iam-runtime-reader:
+    repository: baobab-platform/baobab-iam
+    owner: baobab-platform/baobab-iam
+    runtime: IAM-N04 disposable developer CP runtime binding source reader
+    environment: development
+    allowed_audiences: [baobab-control-plane]
+    allowed_scopes: [identity-runtime:read]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-iam
+    status: PROVISIONED
+
   # DEV-14/15 leased, headless onboarding clients. No product/protected activation.
   baobab-dev-pulse-onboarding:
     repository: baobab-platform/infrastructure
@@ -847,3 +864,29 @@ workloads:
     credential_type: client_credentials
     rotation_owner: baobab-platform/zuribeans
     status: ACTIVE
+
+  # IAM-N07 / DEV-08: INERT future TMS native development clients.
+  # PROVISIONED entries are denied by CP until independently evidenced
+  # Hydra issuance + CP current validation + native TMS security tests.
+  # They are distinct from Thamani's human BFF and cannot book cargo.
+  baobab-dev-tms-subject:
+    repository: baobab-platform/baobab-tms
+    owner: baobab-platform/baobab-tms
+    runtime: DEV-08 source-candidate TMS workload operation subject
+    environment: development
+    allowed_audiences: [baobab-control-plane, baobab-tms]
+    allowed_scopes: [context:resolve, legal-actor:assess, tms:booking:submit]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-tms
+    status: PROVISIONED
+  baobab-dev-tms-validator:
+    repository: baobab-platform/baobab-tms
+    owner: baobab-platform/baobab-tms
+    runtime: DEV-08 independent TMS subject context validator
+    environment: development
+    allowed_audiences: [baobab-control-plane]
+    allowed_scopes: [context:validate]
+    validates_audiences: [baobab-tms]
+    credential_type: client_credentials
+    rotation_owner: baobab-platform/baobab-tms
+    status: PROVISIONED
