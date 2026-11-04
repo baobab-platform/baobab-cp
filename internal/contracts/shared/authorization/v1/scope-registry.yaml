@@ -927,7 +927,7 @@ scopes:
       presents the human's IAM access token, audience-bound to its own
       resource, as subject evidence; the Control Plane verifies it itself and
       resolves the exact (issuer, subject). Creates nothing and grants no
-      tenant, membership, role, market or purchasing authority. Allocated only to the named DEV-07 development validator; no protected allocation.
+      tenant, membership, role, market or purchasing authority. The DEV-07 named validator remains the existing active development allocation; IAM-N02 adds only a PROVISIONED, separately registered ZuriBeans-owned development CP validator candidate. No live N02 issuance, CP permission, protected allocation or approval follows from this ceiling.
     audience: ["baobab-control-plane"]
     allowed_actors: ["workload"]
     grants_authority: false
@@ -1024,8 +1024,23 @@ scopes:
     allowed_actors: ["workload"]
     grants_authority: false
 
+  # IAM-N07 / DEV-08: inert TMS subject transport admission. It cannot
+  # authorize a booking without current CP context, legal mandate, exact
+  # native capability binding, idempotency and provider-side commitment.
+  # No production or protected client may use this development candidate.
+  - name: "tms:booking:submit"
+    description: >-
+      Development-only subject admission for the independently reviewed TMS
+      resource server. An ACTIVE registered workload and actual TMS-native
+      per-operation CP mandate/binding/revision and carrier/provider fence
+      remain separate. No vendor user, BFF browser or client claim grants
+      booking, dispatch, payment or cross-tenant authority.
+    audience: ["baobab-tms"]
+    allowed_actors: ["workload"]
+    grants_authority: false
+
   - name: "identity-runtime:read"
-    description: "Read secret-free current native/workload runtime evidence at an explicitly authorised organisation and estate. CP additionally requires security.identity-runtime.view and current canonical caller authority. Distinct from federation-authority:read and identity-runtime:observe; grants no activation, issuance, membership or configuration authority. Allocated to no workload."
+    description: "Read secret-free current native/workload runtime evidence at an explicitly authorised organisation and estate. CP additionally requires security.identity-runtime.view and current canonical caller authority. Distinct from federation-authority:read and identity-runtime:observe; grants no activation, issuance, membership or configuration authority. Proposed for a single PROVISIONED development IAM runtime reader; no issued credential, ACTIVE client, CP grant, or protected staging/production allocation."
     audience: ["baobab-control-plane"]
     allowed_actors: ["workload"]
     grants_authority: false
