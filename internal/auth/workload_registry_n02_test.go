@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
+	"bytes"
 	"testing"
 )
 
@@ -24,7 +26,7 @@ func TestReconciledCandidateMatchesReviewedSharedBytes(t *testing.T) {
 	if err := json.Unmarshal(raw, &source); err != nil {
 		t.Fatal(err)
 	}
-	if source.SHA != "1dc7a7eba0c197159473864c5cd8bea7637e4a8c" ||
+	if source.SHA != "7f547ccdd759208355ef9224d2177929f4bf224e" ||
 		!source.SourceReviewOnly || source.RuntimeAuthority {
 		t.Fatal("unreviewed or authorizing candidate provenance")
 	}
@@ -34,14 +36,26 @@ func TestReconciledCandidateMatchesReviewedSharedBytes(t *testing.T) {
 	}
 	digest := sha256.Sum256(registry)
 	if hex.EncodeToString(digest[:]) != source.Digest {
-		t.Fatal("candidate bytes differ from reviewed Shared #430")
+		t.Fatal("candidate bytes differ from accepted Shared #430")
+	}
+	// A candidate remains read-only review material. Accepted runtime bytes must
+	// be independently copied from the merged Shared main commit, never from
+	// a private PR branch or a runtime-client registration operation.
+	accepted, err := os.ReadFile(filepath.Join("..", "contracts", "shared", "identity", "v1", "workload-registry.yaml"))
+	if err != nil { t.Fatal(err) }
+	if !bytes.Equal(registry, accepted) { t.Fatal("accepted CP workload bytes drift from independently reviewed candidate") }
+	lock, err := os.ReadFile(filepath.Join("..", "..", "contracts.lock.yaml"))
+	if err != nil { t.Fatal(err) }
+	if !strings.Contains(string(lock), "source_commit: "+source.SHA+"\n") ||
+		!strings.Contains(string(lock), "  commit: "+source.SHA+"\n") {
+		t.Fatal("both CP contract lock fields must pin the accepted Shared main commit")
 	}
 }
 
 // IAM-N02 is a DEVELOPMENT-ONLY candidate projection of the reviewed Shared
 // workload entry. Registration is not activation, issuer credentials, CP
 // Principal creation or purchasing authority. The default CP source pin
-// remains independently review-gated while consolidated Shared #430 is a draft.
+// remains independently review-gated while merged Shared #430 is accepted source, not runtime admission.
 func TestN02ProposedEstatePrincipalReaderCannotCreateAuthority(t *testing.T) {
 	path := filepath.Join("..", "contracts", "candidates", "n02", "identity", "v1", "workload-registry.yaml")
 	registry, err := LoadWorkloadRegistryFile(path)
@@ -83,10 +97,9 @@ func TestN02ProposedEstatePrincipalReaderCannotCreateAuthority(t *testing.T) {
 }
 
 func TestN02PinnedCandidateCannotActivatePrincipalReader(t *testing.T) {
-	// N02 is an inert candidate: Shared #421 is not merged into
-	// Shared main, so CP's accepted contract lock/embedded registry must
-	// stay unchanged. A signed workload token is not a CP grant or Principal.
-	// Candidate data may never activate runtime source authority.
+	// N02/N04/N07 declarations are now included in accepted Shared main, but
+	// their PROVISIONED status must never grant runtime workload admission.
+	// A signed workload token is not itself a CP Principal or business grant.
 	accepted := filepath.Join("..", "contracts", "shared", "identity", "v1", "workload-registry.yaml")
 	runtime, err := LoadWorkloadRegistryFile(accepted)
 	if err != nil {
@@ -100,8 +113,17 @@ func TestN02PinnedCandidateCannotActivatePrincipalReader(t *testing.T) {
 		"baobab-dev-tms-validator",
 	} {
 		if runtime.IsActive(name) || runtime.AllowsScope(name, PrincipalResolveScope) ||
-			len(runtime.SubjectPrincipalAudiences(name)) != 0 {
-			t.Fatalf("draft N02 client %s leaked into accepted CP runtime", name)
+			len(runtime.SubjectPrincipalAudiences(name)) != 0 ||
+			runtime.AllowsEnvironment(name, "development") ||
+			runtime.AllowsEnvironment(name, "staging") ||
+			runtime.AllowsEnvironment(name, "production") {
+			t.Fatalf("PROVISIONED Shared identity %s gained CP runtime admission", name)
+		}
+		for _, scope := range []string{"identity-runtime:read", "context:resolve",
+			ContextValidateScope, "legal-actor:assess", "tms:booking:submit"} {
+			if runtime.AllowsScope(name, scope) {
+				t.Fatalf("PROVISIONED Shared identity %s gained %s", name, scope)
+			}
 		}
 	}
 }
