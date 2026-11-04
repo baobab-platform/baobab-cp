@@ -22,12 +22,13 @@ func TestReconciledCandidateMatchesReviewedSharedBytes(t *testing.T) {
 		Digest           string `json:"sha256"`
 		SourceReviewOnly bool   `json:"source_review_only"`
 		RuntimeAuthority bool   `json:"runtime_authority"`
+		AcceptedSharedMain bool `json:"accepted_shared_main"`
 	}
 	if err := json.Unmarshal(raw, &source); err != nil {
 		t.Fatal(err)
 	}
 	if source.SHA != "7f547ccdd759208355ef9224d2177929f4bf224e" ||
-		!source.SourceReviewOnly || source.RuntimeAuthority {
+		!source.SourceReviewOnly || source.RuntimeAuthority || !source.AcceptedSharedMain {
 		t.Fatal("unreviewed or authorizing candidate provenance")
 	}
 	registry, err := os.ReadFile(filepath.Join(root, "identity", "v1", "workload-registry.yaml"))
@@ -42,8 +43,12 @@ func TestReconciledCandidateMatchesReviewedSharedBytes(t *testing.T) {
 	// be independently copied from the merged Shared main commit, never from
 	// a private PR branch or a runtime-client registration operation.
 	accepted, err := os.ReadFile(filepath.Join("..", "contracts", "shared", "identity", "v1", "workload-registry.yaml"))
-	if err != nil { t.Fatal(err) }
-	if !bytes.Equal(registry, accepted) { t.Fatal("accepted CP workload bytes drift from independently reviewed candidate") }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(registry, accepted) {
+		t.Fatal("accepted CP workload bytes drift from independently reviewed candidate")
+	}
 	lock, err := os.ReadFile(filepath.Join("..", "..", "contracts.lock.yaml"))
 	if err != nil { t.Fatal(err) }
 	if !strings.Contains(string(lock), "source_commit: "+source.SHA+"\n") ||
