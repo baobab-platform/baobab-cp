@@ -18,11 +18,11 @@ func TestReconciledCandidateMatchesReviewedSharedBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	var source struct {
-		SHA              string `json:"source_sha"`
-		Digest           string `json:"sha256"`
-		SourceReviewOnly bool   `json:"source_review_only"`
-		RuntimeAuthority bool   `json:"runtime_authority"`
-		AcceptedSharedMain bool `json:"accepted_shared_main"`
+		SHA                string `json:"source_sha"`
+		Digest             string `json:"sha256"`
+		SourceReviewOnly   bool   `json:"source_review_only"`
+		RuntimeAuthority   bool   `json:"runtime_authority"`
+		AcceptedSharedMain bool   `json:"accepted_shared_main"`
 	}
 	if err := json.Unmarshal(raw, &source); err != nil {
 		t.Fatal(err)
@@ -50,7 +50,9 @@ func TestReconciledCandidateMatchesReviewedSharedBytes(t *testing.T) {
 		t.Fatal("accepted CP workload bytes drift from independently reviewed candidate")
 	}
 	lock, err := os.ReadFile(filepath.Join("..", "..", "contracts.lock.yaml"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(lock), "source_commit: "+source.SHA+"\n") ||
 		!strings.Contains(string(lock), "  commit: "+source.SHA+"\n") {
 		t.Fatal("both CP contract lock fields must pin the accepted Shared main commit")
@@ -59,8 +61,8 @@ func TestReconciledCandidateMatchesReviewedSharedBytes(t *testing.T) {
 
 // IAM-N02 is a DEVELOPMENT-ONLY candidate projection of the reviewed Shared
 // workload entry. Registration is not activation, issuer credentials, CP
-// Principal creation or purchasing authority. The default CP source pin
-// remains independently review-gated while merged Shared #430 is accepted source, not runtime admission.
+// Principal creation or purchasing authority. Shared #430 is an accepted
+// contract source, but its new development identities are not runtime-authorized.
 func TestN02ProposedEstatePrincipalReaderCannotCreateAuthority(t *testing.T) {
 	path := filepath.Join("..", "contracts", "candidates", "n02", "identity", "v1", "workload-registry.yaml")
 	registry, err := LoadWorkloadRegistryFile(path)
