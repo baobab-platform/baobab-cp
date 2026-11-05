@@ -52,16 +52,23 @@ describe("CP Console static performance budgets", () => {
       image: DEFAULT_LIMITS.largestPublicImage + 1,
     });
     try {
+      for (let index = 0; index < 3; index += 1) {
+        await writeFile(
+          join(root, ".next", "static", "chunks", "shared-" + index + ".js"),
+          Buffer.alloc(DEFAULT_LIMITS.largestClientChunk, 1),
+        );
+      }
       const result = spawnSync(process.execPath, [scriptPath], { cwd: root, encoding: "utf8" });
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.match(result.stderr, /Frontend asset budget exceeded/);
       const report = JSON.parse(await readFile(join(root, "reports", "static-budget.json"), "utf8"));
       assert.deepEqual(report.oversized.map((item) => item.metric), [
+        "allClientJavaScript",
         "largestClientChunk",
         "allCss",
         "largestPublicImage",
       ]);
-      assert.equal(report.measured.allClientJavaScript, DEFAULT_LIMITS.largestClientChunk + 1);
+      assert.ok(report.measured.allClientJavaScript > DEFAULT_LIMITS.allClientJavaScript);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
