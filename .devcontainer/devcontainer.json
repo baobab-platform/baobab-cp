@@ -46,7 +46,7 @@
     "onAutoForward": "silent"
   },
   "updateContentCommand": "node --test scripts/codespaces/*.node.mjs",
-  "postCreateCommand": "test \"$(node --version)\" = v26.13.0 && npm install --global --no-audit --no-fund corepack@0.36.0 && corepack enable && test \"$(corepack --version)\" = 0.36.0 && test \"$(pnpm --version)\" = 12.16.1 && node scripts/codespaces/bootstrap.mjs && baobab-verify --contract && go version && go mod download",
+  "postCreateCommand": "test \"$(node --version)\" = v26.13.0 && (test \"$(corepack --version 2>/dev/null)\" = 0.36.0 || npm install --global --no-audit --no-fund corepack@0.36.0) && corepack enable && test \"$(corepack --version)\" = 0.36.0 && test \"$(pnpm --version)\" = 12.16.1 && node scripts/codespaces/bootstrap.mjs && baobab-verify --contract && go version && go mod download",
   "postStartCommand": "node scripts/codespaces/private-npm.mjs",
   "waitFor": "postCreateCommand",
   "customizations": {
