@@ -196,34 +196,6 @@ func TestSellerOperatingBindingLifecycleAndDecisionHistory(t *testing.T) {
 	if b, err := db.GetSellerOperatingBinding(ctx, v1.BindingID, 1); err != nil || b.Status != "SUPERSEDED" {
 		t.Fatalf("predecessor not superseded: %+v %v", b, err)
 	}
-	// Suspend, reinstate with a fresh activation, then revoke: terminal.
-	if b, err := stepV2(operator, "SUSPEND", "ACTIVE"); err != nil || b.Status != "SUSPENDED" {
-		t.Fatalf("suspend: %+v %v", b, err)
-	}
-	reinstated, err := stepV2(operator, "ACTIVATE", "SUSPENDED")
-	if err != nil || reinstated.Status != "ACTIVE" || reinstated.ActivationID == activeV2.ActivationID {
-		t.Fatalf("reinstatement must be a fresh activation: %+v %v", reinstated, err)
-	}
-	if b, err := stepV2(operator, "REVOKE", "ACTIVE"); err != nil || b.Status != "REVOKED" {
-		t.Fatalf("revoke: %+v %v", b, err)
-	}
-	if _, err := stepV2(operator, "ACTIVATE", "REVOKED"); !errors.Is(err, ErrSellerBindingConflict) {
-		t.Fatalf("a revoked binding was resurrected: %v", err)
-	}
-	for _, sql := range []string{
-		`UPDATE registry.trade_native_configuration_attestation SET market='KE' WHERE attestation_id=$1::uuid`,
-		`DELETE FROM registry.seller_operating_binding_transition WHERE binding_id=(SELECT binding_id FROM registry.trade_native_configuration_attestation a JOIN registry.seller_operating_binding b USING (attestation_id) WHERE a.attestation_id=$1::uuid LIMIT 1)`,
-	} {
-		if _, err := db.pool.Exec(ctx, sql, first.AttestationID); err == nil {
-			t.Fatalf("history was rewritten: %s", sql)
-		}
-	}
-	var events int
-	if err := db.pool.QueryRow(ctx, `SELECT count(*) FROM messaging.outbox
-		WHERE aggregate_type='seller-operating-binding' AND aggregate_id LIKE $1`, v1.BindingID+"/%").Scan(&events); err != nil || events < 8 {
-		t.Fatalf("lifecycle events not written to the outbox: %d %v", events, err)
-	}
-
 	// Decision history: immutable, AUTHORIZED complete, reserved classes never authorised.
 	now := time.Now().UTC()
 	until := now.Add(30 * time.Second)
@@ -305,6 +277,42 @@ func TestSellerOperatingBindingLifecycleAndDecisionHistory(t *testing.T) {
 	mustExec(`UPDATE registry.trade_price_issuer_mandate SET revoked_at=now() WHERE market_id=$1`, marketID)
 	if _, _, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, priceRequest); !errors.Is(err, ErrTradePriceIssuerDenied) {
 		t.Fatalf("revoked price package accepted: %v", err)
+	}
+
+	// Price decisions require an ACTIVE seller binding. Exercise their
+	// positive issuance/redeem first, then revoke the binding below.
+	// Suspend, reinstate with a fresh activation, then revoke: terminal.
+	if b, err := stepV2(operator, "SUSPEND", "ACTIVE"); err != nil || b.Status != "SUSPENDED" {
+		t.Fatalf("suspend: %+v %v", b, err)
+	}
+	reinstated, err := stepV2(operator, "ACTIVATE", "SUSPENDED")
+	if err != nil || reinstated.Status != "ACTIVE" || reinstated.ActivationID == activeV2.ActivationID {
+		t.Fatalf("reinstatement must be a fresh activation: %+v %v", reinstated, err)
+	}
+	if b, err := stepV2(operator, "REVOKE", "ACTIVE"); err != nil || b.Status != "REVOKED" {
+		t.Fatalf("revoke: %+v %v", b, err)
+	}
+	if _, err := stepV2(operator, "ACTIVATE", "REVOKED"); !errors.Is(err, ErrSellerBindingConflict) {
+		t.Fatalf("a revoked binding was resurrected: %v", err)
+	}
+	for _, sql := range []string{
+		`UPDATE registry.trade_native_configuration_attestation SET market='KE' WHERE attestation_id=$1::uuid`,
+		`DELETE FROM registry.seller_operating_binding_transition WHERE binding_id=(SELECT binding_id FROM registry.trade_native_configuration_attestation a JOIN registry.seller_operating_binding b USING (attestation_id) WHERE a.attestation_id=$1::uuid LIMIT 1)`,
+	} {
+		if _, err := db.pool.Exec(ctx, sql, first.AttestationID); err == nil {
+			t.Fatalf("history was rewritten: %s", sql)
+		}
+	}
+	var events int
+	if err := db.pool.QueryRow(ctx, `SELECT count(*) FROM messaging.outbox
+		WHERE aggregate_type='seller-operating-binding' AND aggregate_id LIKE $1`, v1.BindingID+"/%").Scan(&events); err != nil || events < 8 {
+		t.Fatalf("lifecycle events not written to the outbox: %d %v", events, err)
+	}
+
+	// A previously issued decision may not be revived by binding status
+	// changes. The existing mandate is already revoked above and must stay denied.
+	if _, _, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, priceRequest); !errors.Is(err, ErrTradePriceIssuerDenied) {
+		t.Fatalf("revoked seller binding redeemed a historical price decision: %v", err)
 	}
 
 	// --- Trade-A TA-02 discovery: candidates, no overlapping in-force scopes, recorded resolutions.
