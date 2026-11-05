@@ -23,6 +23,9 @@ func otlpTarget() string {
  if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/v1/traces" { return "" }
  env := os.Getenv("BAOBAB_ENVIRONMENT")
  if env == "" { env = "development" }
+ // This experimental source bridge is development-only; protected profiles
+ // require reviewed SDK/batching and distinct authorization before enabling.
+ if env != "development" && env != "test" && env != "integration" { return "" }
  if u.Scheme != "https" && !(u.Scheme == "http" && (env == "development" || env == "test" || env == "integration")) { return "" }
  return u.String()
 }
