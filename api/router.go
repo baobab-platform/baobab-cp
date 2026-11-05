@@ -219,8 +219,8 @@ type Dependencies struct {
 	CurrentInternalAuthorityClientID string
 	// ADR-SHARED-044: current canonical ProductSubscription workload read.
 	// Deny-only commercial preflight is not permission to bill or pay.
-	CurrentSubscriptionAuthorityEnabled bool
-	CurrentSubscriptionAuthorityReader repository.CurrentProductSubscriptionReader
+	CurrentSubscriptionAuthorityEnabled  bool
+	CurrentSubscriptionAuthorityReader   repository.CurrentProductSubscriptionReader
 	CurrentSubscriptionAuthorityClientID string
 	// Metrics is served on GET /metrics to workloads holding metrics:read.
 	// Nil serves nothing.
@@ -1039,6 +1039,11 @@ func New(dependencies Dependencies) http.Handler {
 				identities: dependencies.Identities, store: dependencies.TradeOrderAuthority, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeOrderAuthorityScope)).
 				Post("/internal/trade/v1/order-authority/resolve", resolver.resolve)
+			if store, ok := dependencies.TradeOrderAuthority.(tradePriceIssuerStore); ok &&
+				(dependencies.Environment == "development" || dependencies.Environment == "integration") {
+				r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeOrderAuthorityScope)).
+					Post("/internal/trade/v1/price-issuer/resolve", resolver.resolvePriceIssuer(store))
+			}
 			bindings := sellerOperatingBindingHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
 				identities: dependencies.Identities, store: dependencies.SellerOperatingBindings, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeSellerBindingAttestScope)).
@@ -1168,8 +1173,8 @@ func New(dependencies Dependencies) http.Handler {
 		peoRoutesPermittedIn(dependencies.Environment) {
 		h := subscriptionCurrentHandler{reader: dependencies.CurrentSubscriptionAuthorityReader,
 			organisations: dependencies.Classifications.Orgs,
-			registry: dependencies.WorkloadRegistry,
-			clientID: dependencies.CurrentSubscriptionAuthorityClientID}
+			registry:      dependencies.WorkloadRegistry,
+			clientID:      dependencies.CurrentSubscriptionAuthorityClientID}
 		r.With(a.authorize(a.workloadVerifier, "workload", "subscription:current-workload-read")).
 			Get("/internal/subscriptions/v1/tenants/{tenantID}/product-subscriptions/{subscriptionID}/current", h.read)
 		r.With(a.authorize(a.workloadVerifier, "workload", "subscription:commercial-authority")).
