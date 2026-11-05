@@ -268,6 +268,45 @@ func TestSellerOperatingBindingLifecycleAndDecisionHistory(t *testing.T) {
 		t.Fatal("a historical decision was rewritten")
 	}
 
+	// The issuer is an independently approved provider. A seller order
+	// decision alone cannot create or redeem a price decision.
+	marketID := "mkt_" + suffix
+	mustExec(`UPDATE tenants SET observed_state='active' WHERE tenant_id=$1`, tenant)
+	mustExec(`INSERT INTO market.registry (market_id,canonical_key,owner_tenant_id,configuration,status,created_at,created_by,activated_at,activated_by)
+		VALUES ($1,$1,$2,'{}','ACTIVE',now(),$3,now(),$4)`, marketID, tenant, maker, checker)
+	priceExpiry := time.Now().UTC().Add(2 * time.Minute)
+	priceRequest := TradePriceIssuerRequest{
+		TenantID: tenant, CartID: "cart_native_probe", MarketID: marketID, SellerLegalEntityID: entity,
+		Currency: "UGX", IssuerID: "issuer_dev07", PolicyReference: "policy:issuer-dev07",
+		SourceDigest: strings.Repeat("1", 64), SignerKeyFingerprint: strings.Repeat("2", 64), EvidenceExpiresAt: &priceExpiry,
+	}
+	if _, _, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, priceRequest); !errors.Is(err, ErrTradePriceIssuerDenied) {
+		t.Fatalf("unapproved issuer decision: %v", err)
+	}
+	mustExec(`INSERT INTO registry.trade_price_issuer_mandate
+		(workload_client_id,issuer_id,signer_key_fingerprint,binding_id,binding_version,market_id,policy_reference,
+		 evidence_reference,proposed_by,approved_by,effective_from,effective_to)
+		VALUES ($1,$2,$3,$4::uuid,2,$5,$6,'component:issuer-approval',$7::uuid,$8::uuid,now()-interval '1 minute',now()+interval '10 minutes')`,
+		authorized.ClientID, priceRequest.IssuerID, priceRequest.SignerKeyFingerprint, v1.BindingID, marketID, priceRequest.PolicyReference, maker, checker)
+	priceID, priceUntil, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, priceRequest)
+	if err != nil || !domain.IsUUID(priceID) || priceUntil.After(priceExpiry) {
+		t.Fatalf("issue price decision: %q %v", priceID, err)
+	}
+	priceRequest.EvidenceExpiresAt = nil
+	priceRequest.DecisionID = priceID
+	if found, until, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, priceRequest); err != nil || found != priceID || until.After(time.Now().Add(30*time.Second)) {
+		t.Fatalf("redeem live price decision: %q %v", found, err)
+	}
+	changed := priceRequest
+	changed.SourceDigest = strings.Repeat("3", 64)
+	if _, _, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, changed); !errors.Is(err, ErrTradePriceIssuerDenied) {
+		t.Fatalf("changed price package accepted: %v", err)
+	}
+	mustExec(`UPDATE registry.trade_price_issuer_mandate SET revoked_at=now() WHERE market_id=$1`, marketID)
+	if _, _, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, priceRequest); !errors.Is(err, ErrTradePriceIssuerDenied) {
+		t.Fatalf("revoked price package accepted: %v", err)
+	}
+
 	// --- Trade-A TA-02 discovery: candidates, no overlapping in-force scopes, recorded resolutions.
 	reference := "trade:seller-config/" + suffix
 	governed := func(digest string) (SellerOperatingBinding, func(actor, transition, expected string) (SellerOperatingBinding, error)) {
