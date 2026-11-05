@@ -12,7 +12,7 @@ import (
  "net/http"
  "net/url"
  "os"
- "strings"
+ "strconv"
  "time"
 )
 
@@ -52,28 +52,12 @@ func otlpSpan(ctx context.Context, begin time.Time, name string) {
     "traceId":otlpId(span.TraceID),"spanId":otlpId(span.SpanID),
     "parentSpanId":otlpId(span.ParentSpanID),
     "name":name,"kind":kind,"attributes":attributes,
-    "startTimeUnixNano":begin.UnixNano(),
-    "endTimeUnixNano":time.Now().UnixNano(),
+    "startTimeUnixNano":strconv.FormatInt(begin.UnixNano(), 10),
+    "endTimeUnixNano":strconv.FormatInt(time.Now().UnixNano(), 10),
    }},
   }},
  }}}
- // OTLP JSON requires uint64 nanotimes as JSON decimal strings, not float64.
  body, err := json.Marshal(data)
- if err != nil { return }
- body = bytes.ReplaceAll(body, []byte("\"startTimeUnixNano\":"+int64Text(begin.UnixNano())),
-  []byte("\"startTimeUnixNano\":\""+int64Text(begin.UnixNano())+"\""))
- end := time.Now().UnixNano()
- // endTimeUnixNano is represented as a string in the actual export payload;
- // never fabricate another span or alter its business source.
- // Replace the numeric field found in this one bounded object.
- var message map[string]any
- if json.Unmarshal(body, &message) != nil { return }
- resource := message["resourceSpans"].([]any)[0].(map[string]any)
- scopes := resource["scopeSpans"].([]any)[0].(map[string]any)
- emitted := scopes["spans"].([]any)[0].(map[string]any)
- emitted["startTimeUnixNano"] = int64Text(begin.UnixNano())
- emitted["endTimeUnixNano"] = int64Text(end)
- body, err = json.Marshal(message)
  if err != nil { return }
  reqCtx, cancel := context.WithTimeout(context.Background(), time.Second)
  defer cancel()
@@ -83,8 +67,4 @@ func otlpSpan(ctx context.Context, begin time.Time, name string) {
  client := &http.Client{Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
  res, err := client.Do(req)
  if err == nil { _ = res.Body.Close() }
-}
-func int64Text(n int64) string {
- // strconv.FormatInt preserves exact uint64 JSON representation.
- return strings.TrimSpace(formatInt(n))
 }
