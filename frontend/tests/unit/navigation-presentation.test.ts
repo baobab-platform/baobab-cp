@@ -8,6 +8,7 @@ describe("Console route presentation catalogue", () => {
     const routes = consoleRoutes.filter((route) => route.href !== "/workspace");
     expect(Object.keys(routePresentation).sort()).toEqual(routes.map((route) => route.href).sort());
     for (const route of routes) {
+      if (route.href === "/workspace") continue;
       const presentation = routePresentation[route.href];
       expect(presentation.icon).toBeDefined();
       expect(presentation.action.trim().length).toBeGreaterThan(0);
