@@ -274,10 +274,6 @@ func TestSellerOperatingBindingLifecycleAndDecisionHistory(t *testing.T) {
 	if _, _, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, changed); !errors.Is(err, ErrTradePriceIssuerDenied) {
 		t.Fatalf("changed price package accepted: %v", err)
 	}
-	mustExec(`UPDATE registry.trade_price_issuer_mandate SET revoked_at=now() WHERE market_id=$1`, marketID)
-	if _, _, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, priceRequest); !errors.Is(err, ErrTradePriceIssuerDenied) {
-		t.Fatalf("revoked price package accepted: %v", err)
-	}
 
 	// Price decisions require an ACTIVE seller binding. Exercise their
 	// positive issuance/redeem first, then revoke the binding below.
@@ -309,10 +305,15 @@ func TestSellerOperatingBindingLifecycleAndDecisionHistory(t *testing.T) {
 		t.Fatalf("lifecycle events not written to the outbox: %d %v", events, err)
 	}
 
-	// A previously issued decision may not be revived by binding status
-	// changes. The existing mandate is already revoked above and must stay denied.
+	// Isolate seller-binding revocation from mandate revocation: the mandate
+	// remains approved here, so denial must follow from the revoked binding.
 	if _, _, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, priceRequest); !errors.Is(err, ErrTradePriceIssuerDenied) {
-		t.Fatalf("revoked seller binding redeemed a historical price decision: %v", err)
+		t.Fatalf("revoked seller binding redeemed a historical price decision with an active mandate: %v", err)
+	}
+	// Independently verify that a revoked issuer mandate also refuses replay.
+	mustExec(`UPDATE registry.trade_price_issuer_mandate SET revoked_at=now() WHERE market_id=$1`, marketID)
+	if _, _, err := db.ResolveTradePriceIssuer(ctx, authorized.ClientID, priceRequest); !errors.Is(err, ErrTradePriceIssuerDenied) {
+		t.Fatalf("revoked issuer mandate redeemed a historical price decision: %v", err)
 	}
 
 	// --- Trade-A TA-02 discovery: candidates, no overlapping in-force scopes, recorded resolutions.
