@@ -1,5 +1,6 @@
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const DEFAULT_LIMITS = Object.freeze({
   allClientJavaScript: 800 * 1024,
@@ -90,7 +91,7 @@ async function main() {
   console.log("Static asset budgets passed; evidence: " + relative(root, reportPath));
 }
 
-if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).href) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : "Static performance budget failed");
     process.exitCode = 1;
