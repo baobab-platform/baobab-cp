@@ -46,4 +46,14 @@ describe("ContextSwitcher nested-route selection", () => {
     const select = screen.getByLabelText("Current governed resource context") as HTMLSelectElement;
     expect(select.value).toBe("/workspace/tenants/tn_abc");
   });
+
+  it("clears a revoked context when the refreshed server snapshot removes its option", () => {
+    navigation.pathname = "/workspace/organisations/org_123/records";
+    const { rerender } = render(<ContextSwitcher options={options} verified />);
+    const select = screen.getByLabelText("Current governed resource context") as HTMLSelectElement;
+    expect(select.value).toBe("/workspace/organisations/org_123");
+
+    rerender(<ContextSwitcher options={options.filter((option) => option.id !== "org_123")} verified />);
+    expect(select.value).toBe("");
+  });
 });
