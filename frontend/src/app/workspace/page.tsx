@@ -1,14 +1,21 @@
 "use client";
 import Link from "next/link";
 import { useWorkspaceAuthority } from "@/features/console/authority-context";
-import { visibleConsoleRoutes } from "@/features/console/navigation-model";
+import { visibleConsoleRoutes, type ConsoleRoute } from "@/features/console/navigation-model";
 import { Activity, ArrowRight, CheckCircle2, FilePenLine, Info, ShieldCheck, Building2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
-const routePresentation = {
+type RoutePresentation = {
+  icon: typeof FilePenLine;
+  action: string;
+  detail: string;
+};
+
+/** Exhaustive metadata for every non-overview route in the route catalogue. */
+export const routePresentation = {
   "/workspace/apply": {
     icon: FilePenLine,
     action: "Open my application",
@@ -29,15 +36,23 @@ const routePresentation = {
     action: "Inspect operations",
     detail: "Authoritative readback",
   },
-} as const;
+} satisfies Record<Exclude<ConsoleRoute["href"], "/workspace">, RoutePresentation>;
+
+type NonOverviewRoute = ConsoleRoute & {
+  href: Exclude<ConsoleRoute["href"], "/workspace">;
+};
+
+function isNonOverviewRoute(route: ConsoleRoute): route is NonOverviewRoute {
+  return route.href !== "/workspace";
+}
 
 export default function WorkspaceIndex() {
   const authority = useWorkspaceAuthority();
   const workspaces = visibleConsoleRoutes(authority)
-    .filter((route) => route.href !== "/workspace")
+    .filter(isNonOverviewRoute)
     .map((route) => ({
       ...route,
-      ...routePresentation[route.href as keyof typeof routePresentation],
+      ...routePresentation[route.href],
     }));
 
   return (
