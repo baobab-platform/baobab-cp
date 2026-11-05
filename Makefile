@@ -58,7 +58,7 @@ dev-env-infra:
 # Corepack 0.36 and pnpm 12.16.1 are pinned; the workspace root is here.
 CONSOLE := pnpm --filter @baobab-platform/cp-console
 frontend-install:
-	npm install --global --no-audit --no-fund corepack@0.36.0 && corepack enable && pnpm install --frozen-lockfile
+	npm install --global --no-audit --no-fund corepack@0.36.0 && corepack enable && test "$(corepack --version)" = 0.36.0 && test "$(pnpm --version)" = 12.16.1 && pnpm install --frozen-lockfile
 frontend-dev:
 	$(CONSOLE) dev
 frontend-build:
