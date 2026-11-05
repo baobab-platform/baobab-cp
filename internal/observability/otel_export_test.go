@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -65,6 +66,26 @@ func TestExportedActualServerAndIssuerSpanLineage(t *testing.T) {
 	if len(reports) != 2 {
 		t.Fatalf("want 2 independently exportable OTLP spans, got %d", len(reports))
 	}
+	// Validate the wire JSON against OTLP's exact hex ID representation,
+	// not merely the mocked Collector's assumption that both IDs match.
+	for _, received := range reports {
+		for _, item := range []struct {
+			value string
+			bytes int
+		}{{received.Trace, 16}, {received.Span, 8}} {
+			decoded, err := hex.DecodeString(item.value)
+			if err != nil || len(decoded) != item.bytes || hex.EncodeToString(decoded) != item.value {
+				t.Fatalf("OTLP JSON ID must be lowercase hex of %d bytes, got %q", item.bytes, item.value)
+			}
+		}
+	}
+	parent, err := hex.DecodeString(reports[0].Parent)
+	if err != nil || len(parent) != 8 {
+		t.Fatalf("OTLP client parent id must be exact 8-byte hex: %q", reports[0].Parent)
+	}
+	if reports[1].Parent != "" {
+		t.Fatalf("root CP span must have no parent, got %q", reports[1].Parent)
+	}
 	if reports[0].Service != "baobab-cp" ||
 		reports[0].Name != "baobab.cp.iam.introspect" ||
 		reports[1].Name != "baobab.cp.http" ||
@@ -74,5 +95,35 @@ func TestExportedActualServerAndIssuerSpanLineage(t *testing.T) {
 	}
 	if strings.Contains(reports[0].Service+reports[1].Name, "private") {
 		t.Fatal("private data in exported attributes")
+	}
+}
+
+func TestOTLPExplicitEnvironmentAndInvalidIDsFailClosed(t *testing.T) {
+	// The endpoint alone must not activate a development-only exporter in
+	// an unset, sandbox, staging, production or unknown deployment.
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://127.0.0.1:4318/v1/traces")
+	for _, env := range []string{"", "sandbox", "staging", "production", "PRODUCTION", "other"} {
+		t.Setenv("BAOBAB_ENVIRONMENT", env)
+		if endpoint := otlpTarget(); endpoint != "" {
+			t.Fatalf("environment %q unexpectedly enabled exporter %q", env, endpoint)
+		}
+	}
+	for _, env := range []string{"development", "test", "integration"} {
+		t.Setenv("BAOBAB_ENVIRONMENT", env)
+		if endpoint := otlpTarget(); endpoint == "" {
+			t.Fatalf("explicit nonprotected environment %q must permit opt-in", env)
+		}
+	}
+	for _, item := range []struct {
+		value string
+		bytes int
+	}{{"", 8}, {"zzzzzzzzzzzzzzzz", 8}, {"fedcba987654321", 8},
+		{"ABCDEF0123456789", 8}, {"0123456789abcdef", 16}} {
+		if encoded := otlpId(item.value, item.bytes); encoded != "" {
+			t.Fatalf("invalid OTLP id %q was exported: %q", item.value, encoded)
+		}
+	}
+	if id := otlpId("0123456789abcdef", 8); id != "0123456789abcdef" {
+		t.Fatalf("OTLP ID changed wire representation: %q", id)
 	}
 }
