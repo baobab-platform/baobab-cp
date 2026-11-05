@@ -4,8 +4,12 @@
 FROM node:26.13.0-trixie-slim@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39 AS build
 WORKDIR /workspace
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN corepack enable
+# Node 26 no longer bundles Corepack: install the reviewed exact version.
+RUN npm install --global --no-audit --no-fund corepack@0.36.0 && \
+    corepack enable && test "$(corepack --version)" = "0.36.0"
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+RUN test "$(node --version)" = "v26.13.0" && \
+    test "$(pnpm --version)" = "12.16.1"
 COPY frontend/package.json frontend/
 RUN --mount=type=secret,id=npm_token,required=true \
     --mount=type=tmpfs,target=/tmp/bxs-npm-auth \
@@ -14,7 +18,8 @@ RUN --mount=type=secret,id=npm_token,required=true \
 COPY frontend frontend
 RUN pnpm --filter @baobab-platform/cp-console build
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:b8cec4b2f2126ff7bd034ec9ac207ffb3272667dfdc48376e3b035d3270549ba
+# Provisional: require an independently resolved Node26 runtime digest before merge.
+FROM gcr.io/distroless/nodejs26-debian13:nonroot
 ARG VERSION=0.0.0-dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.source="https://github.com/baobab-platform/baobab-cp" \
