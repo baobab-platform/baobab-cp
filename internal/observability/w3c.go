@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 type key struct{}
@@ -109,7 +111,12 @@ func Inject(ctx context.Context, req *http.Request) error {
 // Server instruments actual HTTP requests, including rejected requests.
 func Server(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := Begin(r.Context(), r.Header.Get("traceparent"))
+		ctx, span := serverSpan(r)
+		if span != nil {
+			wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			defer func() { endHTTPSpan(span, wrapped.Status()) }()
+			w = wrapped
+		}
 		if v, ok := Current(ctx); ok {
 			w.Header().Set("traceparent", v.Traceparent())
 		}
