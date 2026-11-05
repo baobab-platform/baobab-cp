@@ -35,7 +35,7 @@ test("registry errors redacted",()=>{
 });
 test("refuse tokenless external package or nonmatching runtime before install",()=>{
   const manifests=[manifest,frontend];let calls=0;
-  const options={manifests,runtime:"26.13.0",run:()=>{calls++;return {status:0,stdout:"11.24.0"};},log:()=>{},error:()=>{}};
+  const options={manifests,runtime:"26.13.0",run:()=>{calls++;return {status:0,stdout:"12.16.1"};},log:()=>{},error:()=>{}};
   const prev=process.env.GITHUB_TOKEN,secret=process.env.BAOBAB_PACKAGES_READ_TOKEN;
   delete process.env.GITHUB_TOKEN;delete process.env.BAOBAB_PACKAGES_READ_TOKEN;
   try{assert.equal(bootstrap(options),2);assert.equal(calls,0);assert.equal(bootstrap({...options,runtime:"22.10.0"}),2);assert.equal(bootstrap({...options,runtime:"24.21.0"}),2);}finally{
