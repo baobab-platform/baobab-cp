@@ -39,6 +39,8 @@ func (s *Store) ResolveTradePriceIssuer(ctx context.Context, caller string, req 
 		JOIN market.registry m ON m.market_id=a.market_id AND m.owner_tenant_id=b.tenant_id AND m.status='ACTIVE'
 		JOIN tenants t ON t.tenant_id=b.tenant_id AND t.observed_state='active'
 		WHERE a.workload_client_id=$1 AND b.tenant_id=$2 AND a.market_id=$3 AND b.responsible_legal_entity_id=$4
+		  AND (m.configuration->>'default_country'=b.market::text OR (m.configuration->'countries') ? b.market::text)
+		  AND (m.configuration->>'default_currency'=$5 OR (m.configuration->'allowed_currencies') ? $5)
 		  AND $5=ANY(b.currency_scope) AND a.issuer_id=$6 AND a.policy_reference=$7 AND a.signer_key_fingerprint=$8
 		  AND a.revoked_at IS NULL AND a.effective_from<=statement_timestamp() AND a.effective_to>statement_timestamp()
 		  AND b.status='ACTIVE' AND b.effective_from<=statement_timestamp() AND (b.effective_to IS NULL OR b.effective_to>statement_timestamp())

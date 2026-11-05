@@ -273,7 +273,7 @@ func TestSellerOperatingBindingLifecycleAndDecisionHistory(t *testing.T) {
 	marketID := "mkt_" + suffix
 	mustExec(`UPDATE tenants SET observed_state='active' WHERE tenant_id=$1`, tenant)
 	mustExec(`INSERT INTO market.registry (market_id,canonical_key,owner_tenant_id,configuration,status,created_at,created_by,activated_at,activated_by)
-		VALUES ($1,$1,$2,'{}','ACTIVE',now(),$3,now(),$4)`, marketID, tenant, maker, checker)
+		VALUES ($1,$1,$2,'{"default_country":"UG","default_currency":"UGX"}','ACTIVE',now(),$3,now(),$4)`, marketID, tenant, maker, checker)
 	priceExpiry := time.Now().UTC().Add(2 * time.Minute)
 	priceRequest := TradePriceIssuerRequest{
 		TenantID: tenant, CartID: "cart_native_probe", MarketID: marketID, SellerLegalEntityID: entity,
