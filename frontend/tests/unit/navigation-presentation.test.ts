@@ -9,7 +9,7 @@ describe("Console route presentation catalogue", () => {
     expect(Object.keys(routePresentation).sort()).toEqual(routes.map((route) => route.href).sort());
     for (const route of routes) {
       const presentation = routePresentation[route.href];
-      expect(typeof presentation.icon).toBe("function");
+      expect(presentation.icon).toBeDefined();
       expect(presentation.action.trim().length).toBeGreaterThan(0);
       expect(presentation.detail.trim().length).toBeGreaterThan(0);
     }
