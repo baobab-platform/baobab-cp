@@ -54,11 +54,11 @@ dev-env-infra:
 	@set -a; . $(INFRA_ENV); set +a; \
 	echo "DATABASE_URL=postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@localhost:$${POSTGRES_PORT:-5432}/$${POSTGRES_DB}?sslmode=disable"; \
 	echo "RABBITMQ_URL=amqp://$${RABBITMQ_DEFAULT_USER}:$${RABBITMQ_DEFAULT_PASS}@localhost:$${RABBITMQ_AMQP_PORT:-5672}/$${RABBITMQ_DEFAULT_VHOST:-nabhold}"
-# CP Console (frontend/, ADR-BCP-019 section 88). Requires Node 24 with corepack;
+# CP Console (frontend/, ADR-BCP-019 section 88). Requires Node 26.13+;
 # the pnpm workspace root is this directory.
 CONSOLE := pnpm --filter @baobab-platform/cp-console
 frontend-install:
-	corepack enable && pnpm install --frozen-lockfile
+	npm install --global --no-audit --no-fund corepack@0.36.0 && corepack enable && pnpm install --frozen-lockfile
 frontend-dev:
 	$(CONSOLE) dev
 frontend-build:
