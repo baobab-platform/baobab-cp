@@ -44,10 +44,10 @@ func otlpId(value string, bytes int) string {
 		return ""
 	}
 	decoded, err := hex.DecodeString(value)
-	if err != nil || len(decoded) != bytes {
+	if err != nil || len(decoded) != bytes || value != hex.EncodeToString(decoded) {
 		return ""
 	}
-	return hex.EncodeToString(decoded)
+	return value
 }
 
 // ExportSpan reports an actual request or issuer call through the Collector.
