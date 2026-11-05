@@ -20,7 +20,7 @@ jobs:
     secrets:
       SHARED_READ_TOKEN: ${{ secrets.SHARED_READ_TOKEN }}
     with:
-      foundation_ref: "756892fbdbcf0eb89bf62f720c372bad53748dea"
+      foundation_ref: "7f547ccdd759208355ef9224d2177929f4bf224e"
       # Private repository without GHAS: portable Trivy and native audits run.
       # GitHub dependency-graph review is unavailable (ADR-0020).
       dependency_review_enabled: false
