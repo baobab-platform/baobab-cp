@@ -18,8 +18,8 @@ RUN --mount=type=secret,id=npm_token,required=true \
 COPY frontend frontend
 RUN pnpm --filter @baobab-platform/cp-console build
 
-# Provisional: require an independently resolved Node26 runtime digest before merge.
-FROM gcr.io/distroless/nodejs26-debian13:nonroot
+# Exact published Node 26 distroless candidate; revalidate pull/signature in CI before merge.
+FROM gcr.io/distroless/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8
 ARG VERSION=0.0.0-dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.source="https://github.com/baobab-platform/baobab-cp" \
