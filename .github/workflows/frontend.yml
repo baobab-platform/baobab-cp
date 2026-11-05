@@ -54,6 +54,16 @@ jobs:
       - run: pnpm --filter @baobab-platform/cp-console lint
       - run: pnpm --filter @baobab-platform/cp-console test
       - run: pnpm --filter @baobab-platform/cp-console build
+      - name: Enforce emitted-asset performance budgets
+        run: pnpm --filter @baobab-platform/cp-console perf:budget
+      - name: Retain static performance budget evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cp-console-static-performance-budget
+          path: frontend/reports/static-budget.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Audit dependencies
         run: pnpm audit --audit-level high
       - name: Build the container image
