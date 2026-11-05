@@ -50,7 +50,7 @@ export async function createBudgetReport(root = process.cwd(), limits = DEFAULT_
   }
 
   const images = await measure(
-    (await filesBelow(join(root, "public"))).filter((path) => /\\.(?:avif|jpe?g|png|webp)$/i.test(path)),
+    (await filesBelow(join(root, "public"))).filter((path) => /\.(?:avif|jpe?g|png|webp)$/i.test(path)),
     root,
   );
   const largestChunk = largest(js);
@@ -77,7 +77,7 @@ async function main() {
   const reportDirectory = join(root, "reports");
   await mkdir(reportDirectory, { recursive: true });
   const reportPath = join(reportDirectory, "static-budget.json");
-  await writeFile(reportPath, JSON.stringify(report, null, 2) + "\\n");
+  await writeFile(reportPath, JSON.stringify(report, null, 2) + "\n");
 
   for (const [metric, actual] of Object.entries(report.measured)) {
     const maximum = report.limits[metric];
