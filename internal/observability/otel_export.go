@@ -33,7 +33,7 @@ func otlpId(value string) string {
  return base64.StdEncoding.EncodeToString(b)
 }
 
-func otlpSpan(ctx context.Context, begin time.Time, name string) {
+func ExportSpan(ctx context.Context, begin time.Time, name string) {
  endpoint := otlpTarget()
  span, ok := Current(ctx)
  if endpoint == "" || !ok || span.Flags != "01" { return }
