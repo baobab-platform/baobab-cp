@@ -71,9 +71,9 @@ export async function createBudgetReport(root = process.cwd(), limits = DEFAULT_
   };
 }
 
-async function main() {
-  const root = process.cwd();
-  const report = await createBudgetReport(root);
+/** Write evidence before failing, so CI can retain an actionable over-budget report. */
+export async function runBudgetCheck(root = process.cwd(), limits = DEFAULT_LIMITS) {
+  const report = await createBudgetReport(root, limits);
   const reportDirectory = join(root, "reports");
   await mkdir(reportDirectory, { recursive: true });
   const reportPath = join(reportDirectory, "static-budget.json");
@@ -89,10 +89,11 @@ async function main() {
     ).join(", "));
   }
   console.log("Static asset budgets passed; evidence: " + relative(root, reportPath));
+  return report;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  main().catch((error) => {
+  runBudgetCheck().catch((error) => {
     console.error(error instanceof Error ? error.message : "Static performance budget failed");
     process.exitCode = 1;
   });
