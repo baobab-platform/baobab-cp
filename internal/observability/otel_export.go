@@ -6,7 +6,6 @@ package observability
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -25,10 +24,9 @@ func otlpTarget() string {
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/v1/traces" {
 		return ""
 	}
+	// Unset/unknown is protected, as in internal/config.Config.Production.
+	// A configured OTLP URL is NEVER an implicit development opt-in.
 	env := os.Getenv("BAOBAB_ENVIRONMENT")
-	if env == "" {
-		env = "development"
-	}
 	// Protected traffic must use separately reviewed batched exporter sources.
 	if env != "development" && env != "test" && env != "integration" {
 		return ""
@@ -39,12 +37,17 @@ func otlpTarget() string {
 	return u.String()
 }
 
-func otlpId(value string) string {
-	b, err := hex.DecodeString(value)
-	if err != nil {
+// OTLP/HTTP JSON special-cases traceId/spanId/parentSpanId as lowercase
+// hexadecimal, unlike generic protobuf bytes fields. Invalid IDs are omitted.
+func otlpId(value string, bytes int) string {
+	if len(value) != bytes*2 {
 		return ""
 	}
-	return base64.StdEncoding.EncodeToString(b)
+	decoded, err := hex.DecodeString(value)
+	if err != nil || len(decoded) != bytes {
+		return ""
+	}
+	return hex.EncodeToString(decoded)
 }
 
 // ExportSpan reports an actual request or issuer call through the Collector.
@@ -57,6 +60,12 @@ func ExportSpan(ctx context.Context, begin time.Time, name string) {
 		return
 	}
 	if name != "baobab.cp.http" && name != "baobab.cp.iam.introspect" {
+		return
+	}
+	// Never emit malformed/non-W3C ids if context is changed by another
+	// component; absence of a parent is allowed for a root server span only.
+	if otlpId(span.TraceID, 16) == "" || otlpId(span.SpanID, 8) == "" ||
+		(span.ParentSpanID != "" && otlpId(span.ParentSpanID, 8) == "") {
 		return
 	}
 	kind := 2
@@ -83,9 +92,9 @@ func ExportSpan(ctx context.Context, begin time.Time, name string) {
 						"scope": map[string]any{"name": "baobab.cp.http", "version": "dev11"},
 						"spans": []any{
 							map[string]any{
-								"traceId":           otlpId(span.TraceID),
-								"spanId":            otlpId(span.SpanID),
-								"parentSpanId":      otlpId(span.ParentSpanID),
+								"traceId":           otlpId(span.TraceID, 16),
+								"spanId":            otlpId(span.SpanID, 8),
+								"parentSpanId":      otlpId(span.ParentSpanID, 8),
 								"name":              name,
 								"kind":              kind,
 								"attributes":        attributes,
