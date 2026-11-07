@@ -28,9 +28,15 @@ on:
     branches: [main]
     paths:
       - ".github/dependabot.yml"
+      - ".github/workflows/enforce-dependabot-config.yml"
+      - "scripts/tests/test_dependency_maintenance.py"
+      - "docs/security/dependency-maintenance.md"
   pull_request:
     paths:
       - ".github/dependabot.yml"
+      - ".github/workflows/enforce-dependabot-config.yml"
+      - "scripts/tests/test_dependency_maintenance.py"
+      - "docs/security/dependency-maintenance.md"
   workflow_dispatch:
 
 permissions:
@@ -45,3 +51,28 @@ jobs:
     # `git ls-remote --tags https://github.com/baobab-platform/shared.git v1.0.0`
     # on 2026-08-25.
     uses: baobab-platform/shared/.github/workflows/enforce-dependabot-config.yml@31de2bc3dcd56128c019c640dc7e12c10ae9ca69 # v2.3.0
+    with:
+      required-ecosystems: "github-actions,gomod,npm,docker,docker-compose"
+      # BA-SEC-DEP-001 strict policy-level is only available on Shared #429.
+      # Retain this immutable, accepted Shared v2.3.0 baseline; migrate to
+      # reviewed/released strict validator only after Shared #429 is merged.
+
+offline-policy-regression:
+    name: BA-SEC-DEP-001 source and negative fixtures
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the exact PR source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Bootstrap isolated pinned YAML test runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/ba-sec-dep"
+          "$RUNNER_TEMP/ba-sec-dep/bin/python" -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Exercise real manifests, grouped routine updates and negative cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/ba-sec-dep/bin/python" -B -m unittest discover -s scripts/tests -p 'test_dependency_maintenance.py' -v

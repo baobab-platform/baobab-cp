@@ -4,3 +4,5 @@
 /.baobab/ @baobab-platform/platform-engineering
 /Dockerfile @baobab-platform/platform-engineering @baobab-platform/security
 /SECURITY.md @baobab-platform/security
+/docs/security/dependency-maintenance.md @baobab-platform/platform-engineering @baobab-platform/security
+/scripts/tests/test_dependency_maintenance.py @baobab-platform/platform-engineering @baobab-platform/security
