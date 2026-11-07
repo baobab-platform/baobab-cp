@@ -28,9 +28,15 @@ on:
     branches: [main]
     paths:
       - ".github/dependabot.yml"
+      - ".github/workflows/enforce-dependabot-config.yml"
+      - "scripts/tests/test_dependency_maintenance.py"
+      - "docs/security/dependency-maintenance.md"
   pull_request:
     paths:
       - ".github/dependabot.yml"
+      - ".github/workflows/enforce-dependabot-config.yml"
+      - "scripts/tests/test_dependency_maintenance.py"
+      - "docs/security/dependency-maintenance.md"
   workflow_dispatch:
 
 permissions:
@@ -51,3 +57,22 @@ jobs:
       # Retain this immutable, accepted Shared v2.3.0 baseline; migrate to
       # reviewed/released strict validator only after Shared #429 is merged.
 
+offline-policy-regression:
+    name: BA-SEC-DEP-001 source and negative fixtures
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the exact PR source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Bootstrap isolated pinned YAML test runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/ba-sec-dep"
+          "$RUNNER_TEMP/ba-sec-dep/bin/python" -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Exercise real manifests, grouped routine updates and negative cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/ba-sec-dep/bin/python" -B -m unittest scripts.tests.test_dependency_maintenance -v
