@@ -108,8 +108,10 @@ class DependencyPolicyRegression(unittest.TestCase):
     def test_existing_shared_caller_keeps_immutable_approved_pin_and_all_ecosystems(self):
         content = CALLER.read_text(encoding="utf-8")
         self.assertIn("@31de2bc3dcd56128c019c640dc7e12c10ae9ca69", content)
-        eco = ",".join(sorted({key[0] for key in EXPECTED}))
-        self.assertIn(f'required-ecosystems: "{eco}"', content)
+        import re
+        match = re.search(r'required-ecosystems:\s*"([^"]+)"', content)
+        self.assertIsNotNone(match)
+        self.assertEqual({key[0] for key in EXPECTED}, set(match.group(1).split(",")))
         self.assertNotIn('policy-level: "strict"', content)
 
     def test_missing_required_go_module_is_refused(self):
