@@ -96,6 +96,8 @@ func (i *HTTPIntrospector) Introspect(ctx context.Context, token string) (Intros
 		return Introspection{}, ErrIntrospectionUnavailable
 	}
 	_ = observability.Inject(callCtx, req)
+	started := time.Now()
+	defer observability.ExportSpan(callCtx, started, "baobab.cp.iam.introspect")
 	req.SetBasicAuth(url.QueryEscape(i.ClientID), url.QueryEscape(i.ClientSecret))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")

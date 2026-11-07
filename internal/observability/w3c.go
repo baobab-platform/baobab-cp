@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type key struct{}
@@ -109,7 +110,9 @@ func Inject(ctx context.Context, req *http.Request) error {
 // Server instruments actual HTTP requests, including rejected requests.
 func Server(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
 		ctx := Begin(r.Context(), r.Header.Get("traceparent"))
+		defer ExportSpan(ctx, start, "baobab.cp.http")
 		if v, ok := Current(ctx); ok {
 			w.Header().Set("traceparent", v.Traceparent())
 		}
