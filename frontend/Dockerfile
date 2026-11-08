@@ -14,7 +14,7 @@ RUN --mount=type=secret,id=npm_token,required=true \
 COPY frontend frontend
 RUN pnpm --filter @baobab-platform/cp-console build
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:b8cec4b2f2126ff7bd034ec9ac207ffb3272667dfdc48376e3b035d3270549ba
 ARG VERSION=0.0.0-dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.source="https://github.com/baobab-platform/baobab-cp" \
