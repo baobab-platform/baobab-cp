@@ -120,11 +120,17 @@ func (h peopleSelectionHandler) resolve(w http.ResponseWriter, r *http.Request) 
     // of a revoked/cutover selection. Consequential adapter operations must
     // still recheck current authority immediately before side effects.
     again, err := h.store.ReadPeopleChoice(r.Context(), trusted.TenantID, trusted.LegalEntityID, trusted.Jurisdiction, req.CapabilityKey, now)
-    if err != nil || again != selected {
+    if err != nil || !peoplebinding.SameChoice(again, selected) {
         problem(w, r, http.StatusForbidden, "PEOPLE_PROVIDER_CHANGED", "Provider choice changed during resolution", false)
         return
     }
-    decision, err := peoplebinding.Build(trusted, selected, resolution, now)
+    decision, err := peoplebinding.Build(trusted, selected, peoplebinding.Resolution{
+        ResolutionID: resolution.ResolutionID, ContextID: resolution.ContextID,
+        TenantID: resolution.TenantID, CapabilityKey: resolution.CapabilityKey,
+        Decision: resolution.Decision, BindingID: resolution.BindingID,
+        ProviderID: resolution.ProviderID, ContractVersion: resolution.ContractVersion,
+        ExpiresAt: resolution.ExpiresAt,
+    }, now)
     if err != nil {
         problem(w, r, http.StatusForbidden, "PEOPLE_PROVIDER_NOT_QUALIFIED", "Provider choice does not match current CP authority", false)
         return

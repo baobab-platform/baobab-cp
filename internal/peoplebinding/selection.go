@@ -8,7 +8,6 @@ import (
     "time"
 
     "github.com/baobab-platform/baobab-cp/internal/domain"
-    "github.com/baobab-platform/baobab-cp/internal/repository"
 )
 
 var ErrDenied = errors.New("People provider selection denied")
@@ -35,6 +34,32 @@ type Choice struct {
     EffectiveUntil *time.Time
     CertificationKey string
     CertificationUntil *time.Time
+}
+
+// Resolution is the persisted, current CP capability-resolver decision,
+// copied at the API boundary so the domain layer does not import repository.
+type Resolution struct {
+    ResolutionID, ContextID, TenantID, CapabilityKey string
+    Decision, BindingID, ProviderID string
+    ContractVersion int
+    ExpiresAt *time.Time
+}
+
+// SameChoice compares the actual signed authority tuple, not pointer
+// identities of times returned by separate PostgreSQL readbacks.
+func SameChoice(a, b Choice) bool {
+    if a.TenantID != b.TenantID || a.LegalEmployerID != b.LegalEmployerID ||
+        a.Jurisdiction != b.Jurisdiction || a.CapabilityKey != b.CapabilityKey ||
+        a.BindingID != b.BindingID || a.ProviderID != b.ProviderID ||
+        a.BindingRevision != b.BindingRevision || a.SourceOfRecord != b.SourceOfRecord ||
+        a.CertificationKey != b.CertificationKey || !a.EffectiveFrom.Equal(b.EffectiveFrom) {
+        return false
+    }
+    equal := func(x, y *time.Time) bool {
+        if x == nil || y == nil { return x == nil && y == nil }
+        return x.Equal(*y)
+    }
+    return equal(a.EffectiveUntil,b.EffectiveUntil) && equal(a.CertificationUntil,b.CertificationUntil)
 }
 
 // Selection is the canonical contracts/people/v1/domain.schema.json readback.
@@ -65,7 +90,7 @@ type Decision struct {
 // Build authorises a current CP provider choice only if the genuine persisted
 // capability resolution names exactly the same binding and provider. It does
 // not invent fallback/defaults, and truncates the lease to 30 seconds.
-func Build(trusted domain.Context, choice Choice, record repository.CapabilityResolutionRecord, now time.Time) (Decision, error) {
+func Build(trusted domain.Context, choice Choice, record Resolution, now time.Time) (Decision, error) {
     deny := func() (Decision, error) { return Decision{}, ErrDenied }
     now = now.UTC()
     if !Supported(choice.CapabilityKey) || !country.MatchString(trusted.Jurisdiction) ||
@@ -74,7 +99,7 @@ func Build(trusted domain.Context, choice Choice, record repository.CapabilityRe
         trusted.TenantID != choice.TenantID || trusted.LegalEntityID != choice.LegalEmployerID ||
         trusted.Jurisdiction != choice.Jurisdiction || choice.SourceOfRecord != "NATIVE" && choice.SourceOfRecord != "EXTERNAL" ||
         choice.BindingRevision < 1 || choice.BindingID == "" || choice.ProviderID == "" ||
-        choice.CertificationKey == "" || !now.Before(now.Add(30*time.Second)) ||
+        choice.CertificationKey == "" ||
         now.Before(choice.EffectiveFrom) || choice.EffectiveUntil != nil && !now.Before(*choice.EffectiveUntil) ||
         choice.CertificationUntil != nil && !now.Before(*choice.CertificationUntil) ||
         record.Decision != "RESOLVED" || record.ContextID != trusted.ID ||

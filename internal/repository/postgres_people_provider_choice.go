@@ -5,7 +5,6 @@ import (
     "errors"
     "time"
 
-    "github.com/jackc/pgx/v5"
     "github.com/baobab-platform/baobab-cp/internal/peoplebinding"
 )
 
@@ -72,4 +71,3 @@ var _ interface {
     ReadPeopleChoice(context.Context, string, string, string, string, time.Time) (peoplebinding.Choice, error)
 } = (*PostgresRepository)(nil)
 
-var _ = pgx.ErrNoRows
