@@ -62,7 +62,7 @@ func SameChoice(a, b Choice) bool {
     return equal(a.EffectiveUntil,b.EffectiveUntil) && equal(a.CertificationUntil,b.CertificationUntil)
 }
 
-// Selection is the canonical contracts/people/v1/domain.schema.json readback.
+// Selection is the canonical ADR-SHARED-045 People v1 readback.
 type Selection struct {
     TenantID string `json:"tenant_id"`
     LegalEmployerID string `json:"legal_employer_id"`
