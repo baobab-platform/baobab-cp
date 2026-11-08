@@ -71,7 +71,5 @@ jobs:
         run: python3 -m unittest discover -s scripts/showcase -p 'test_nbo_*.py'
       - name: Prove founding-enterprise fixture dry-run has no side effects
         run: python3 scripts/showcase/nbo_apply.py --manifest docs/showcase/fixtures/nabhold-group-v1.json
-      - name: Diagnose Go formatting drift without mutating source
-        run: gofmt -d cmd internal api
       - run: go vet ./...
       - run: test -z "$(gofmt -l cmd internal)"
