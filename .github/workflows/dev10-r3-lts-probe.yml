@@ -1,0 +1,89 @@
+# DEV10-R3: disposable CI compatibility probe, not published image / Codespaces evidence.
+# The committed Node24/pnpm11 lock is preserved. Candidate lock regeneration is
+# confined to this job checkout; adoption requires separate reviewed owner PR.
+name: DEV10 R3 Node26 pnpm12 Playwright Compatibility
+on:
+  pull_request:
+    paths: [".github/workflows/dev10-r3-lts-probe.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+jobs:
+  candidate:
+    name: Node26 pnpm12 CP Console and Go qualification
+    runs-on: ubuntu-26.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.13.0"
+      - name: Install official checksum-verified native pnpm12 and exact Corepack
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = v26.13.0
+          npm install --global corepack@0.36.0
+          test "$(corepack --version)" = 0.36.0
+          native_dir="$RUNNER_TEMP/dev10-native-pnpm"
+          mkdir -p "$native_dir/bin" "$native_dir/unpack"
+          curl -fsSL --retry 3 -o "$native_dir/pnpm.tar.gz"             "https://github.com/pnpm/pnpm/releases/download/v12.16.1/pnpm-linux-x64.tar.gz"
+          printf '%s  %s\n'             "565ff81174a14f6f7bd5d84c1b17e51031a80230d370a1fe24be5d16bd02a825"             "$native_dir/pnpm.tar.gz" | sha256sum -c -
+          tar -xzf "$native_dir/pnpm.tar.gz" -C "$native_dir/unpack"
+          bin="$(find "$native_dir/unpack" -type f \( -name pnpm -o -name pnpm-linux-x64 \) -print -quit)"
+          test -n "$bin" && test -f "$bin"
+          install -m 0755 "$bin" "$native_dir/bin/pnpm"
+          (cd "$RUNNER_TEMP"; test "$("$native_dir/bin/pnpm" --version)" = 12.16.1)
+          echo "$native_dir/bin" >> "$GITHUB_PATH"
+          echo COREPACK_ENABLE_NETWORK=0 >> "$GITHUB_ENV"
+          echo COREPACK_DEFAULT_TO_LATEST=0 >> "$GITHUB_ENV"
+          echo COREPACK_ENABLE_DOWNLOAD_PROMPT=0 >> "$GITHUB_ENV"
+      - name: Stage candidate manifests in disposable checkout (not committed)
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          for(const path of ['package.json','frontend/package.json']){
+            if(!fs.existsSync(path))continue;
+            const p=JSON.parse(fs.readFileSync(path,'utf8'));
+            if(path==='package.json')p.packageManager='pnpm@12.16.1';
+            if(p.engines)p.engines.node='>=26.13.0 <27';
+            if(p.devDependencies?.['@playwright/test'])p.devDependencies['@playwright/test']='1.64.1';
+            if(p.devDependencies?.playwright)p.devDependencies.playwright='1.64.1';
+            fs.writeFileSync(path,JSON.stringify(p,null,2)+'\n');
+          }
+          NODE
+      - name: Configure private BXS scope with Actions identity (not Codespaces user)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/codespaces/private-npm.mjs
+      - name: Regenerate candidate lock then prove frozen reinstallation
+        # Credentials are not in the workspace or the file: this variable
+        # satisfies the literal user-level npmrc expression only in this step.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(pnpm --version)" = 12.16.1
+          pnpm install --lockfile-only --ignore-scripts
+          pnpm install --frozen-lockfile
+      - name: Owner source unit, lint, type and production build
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --dir frontend run lint
+          pnpm --dir frontend run typecheck
+          pnpm --dir frontend run test
+          pnpm --dir frontend run build
+      - name: Validate Go 1.27 current native module as a separate engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v go
+          go version
+          go mod verify
+          go test ./...

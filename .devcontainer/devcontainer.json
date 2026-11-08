@@ -45,7 +45,7 @@
   "updateContentCommand": "node --test scripts/codespaces/*.node.mjs",
   "postCreateCommand": "node scripts/codespaces/bootstrap.mjs && baobab-verify --contract && go version && go mod download",
   "postStartCommand": "node scripts/codespaces/private-npm.mjs",
-  "waitFor": "updateContentCommand",
+  "waitFor": "postCreateCommand",
   "customizations": {
     "codespaces": {
       "repositories": {
