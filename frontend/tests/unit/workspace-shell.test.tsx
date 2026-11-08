@@ -17,9 +17,37 @@ describe("secure Console presentation foundation", () => {
     for (const href of ["/workspace/apply", "/workspace/review", "/workspace/operations"]) {
       expect(container.querySelector('a[href="' + href + '"]')).not.toBeNull();
     }
-    expect(container.textContent).toContain("Every action is authorised again by the Control Plane");
+    expect(container.textContent).toContain("every action is authorised again by the Control Plane");
     expect(container.textContent).toContain("does not report live status");
     await expectAccessible(container);
+  });
+
+  it("shows Organisations only when the exact organisation-view grant is present", () => {
+    const { container, rerender } = render(
+      <WorkspaceAuthorityProvider value={{ state: "available", permissions: ["application.review", "operation.view"] }}>
+        <WorkspaceIndex />
+      </WorkspaceAuthorityProvider>,
+    );
+    expect(container.querySelector('a[href="/workspace/organisations"]')).toBeNull();
+    rerender(
+      <WorkspaceAuthorityProvider value={{ state: "available", permissions: ["organisation.view"] }}>
+        <WorkspaceIndex />
+      </WorkspaceAuthorityProvider>,
+    );
+    expect(container.querySelector('a[href="/workspace/organisations"]')).not.toBeNull();
+  });
+
+  it("fails closed for administrative routes when authority is unavailable", () => {
+    const { container } = render(
+      <WorkspaceAuthorityProvider value={{ state: "unavailable", permissions: [] }}>
+        <WorkspaceIndex />
+      </WorkspaceAuthorityProvider>,
+    );
+    expect(screen.getByRole("status").textContent).toContain("temporarily unavailable");
+    for (const href of ["/workspace/organisations", "/workspace/review", "/workspace/operations"]) {
+      expect(container.querySelector('a[href="' + href + '"]')).toBeNull();
+    }
+    expect(container.querySelector('a[href="/workspace/apply"]')).not.toBeNull();
   });
 
   it("marks current route and clearly labels restricted access", async () => {

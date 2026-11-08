@@ -1,35 +1,60 @@
 "use client";
 import Link from "next/link";
 import { useWorkspaceAuthority } from "@/features/console/authority-context";
-import { visibleConsoleRoutes } from "@/features/console/navigation-model";
-import { Activity, ArrowRight, CheckCircle2, FilePenLine, Info, ShieldCheck } from "lucide-react";
+import { visibleConsoleRoutes, type ConsoleRoute } from "@/features/console/navigation-model";
+import { Activity, ArrowRight, CheckCircle2, FilePenLine, Info, ShieldCheck, Building2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
-const workspaces = [
-  {
-    href: "/workspace/apply", title: "Business application", icon: FilePenLine,
-    description: "Describe your operating business, choose its markets and services, save a draft or submit an owned application.",
-    action: "Open my application", detail: "Applicant",
+type RoutePresentation = {
+  icon: typeof FilePenLine;
+  action: string;
+  detail: string;
+};
+
+/** Exhaustive metadata for every non-overview route in the route catalogue. */
+export const routePresentation = {
+  "/workspace/apply": {
+    icon: FilePenLine,
+    action: "Open my application",
+    detail: "Applicant",
   },
-  {
-    href: "/workspace/review", title: "Independent governance", icon: ShieldCheck,
-    description: "Review submitted applications, record distinct decisions and make separately authorised onboarding requests.",
-    action: "Open review workspace", detail: "Restricted authority",
+  "/workspace/organisations": {
+    icon: Building2,
+    action: "Browse organisations",
+    detail: "Exact-scope access",
   },
-  {
-    href: "/workspace/operations", title: "Provisioning & readiness", icon: Activity,
-    description: "Read authoritative operation, plan and readiness records without confusing approval with active service.",
-    action: "Inspect an operation", detail: "Authoritative readback",
+  "/workspace/review": {
+    icon: ShieldCheck,
+    action: "Open review workspace",
+    detail: "Restricted authority",
   },
-];
+  "/workspace/operations": {
+    icon: Activity,
+    action: "Inspect operations",
+    detail: "Authoritative readback",
+  },
+} satisfies Record<Exclude<ConsoleRoute["href"], "/workspace">, RoutePresentation>;
+
+type NonOverviewRoute = ConsoleRoute & {
+  href: Exclude<ConsoleRoute["href"], "/workspace">;
+};
+
+function isNonOverviewRoute(route: ConsoleRoute): route is NonOverviewRoute {
+  return route.href !== "/workspace";
+}
 
 export default function WorkspaceIndex() {
   const authority = useWorkspaceAuthority();
-  const available = new Set(visibleConsoleRoutes(authority).map((route) => route.href));
-  const shownWorkspaces = workspaces.filter((item) => available.has(item.href as "/workspace/apply" | "/workspace/review" | "/workspace/operations"));
+  const workspaces = visibleConsoleRoutes(authority)
+    .filter(isNonOverviewRoute)
+    .map((route) => ({
+      ...route,
+      ...routePresentation[route.href],
+    }));
+
   return (
     <section aria-labelledby="workspace-title" className="space-y-8">
       <div className="rounded-2xl bg-brand-forest p-6 text-white sm:p-9">
@@ -48,7 +73,7 @@ export default function WorkspaceIndex() {
         <p className="text-xs font-bold uppercase tracking-wider text-primary">Explore your workspace</p>
         <h2 className="text-2xl font-bold tracking-tight text-foreground">Choose the work you need to do.</h2>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Only workspaces supported by your current effective grants are displayed. Every action is authorised again by the Control Plane.
+          This overview and the workspace navigation share one route catalogue. Visible links reflect current effective grants; every action is authorised again by the Control Plane.
         </p>
       </div>
 
@@ -57,8 +82,8 @@ export default function WorkspaceIndex() {
           Administrative access information is temporarily unavailable. Your own application remains accessible; privileged workspaces are hidden until their permissions can be confirmed.
         </p>
       ) : null}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {shownWorkspaces.map(({ href, title, icon: Icon, description, action, detail }) => (
+      <div className="grid gap-4 lg:grid-cols-2">
+        {workspaces.map(({ href, label, description, icon: Icon, action, detail }) => (
           <Card key={href} className="h-full justify-between border-border shadow-sm transition-shadow hover:shadow-md">
             <CardHeader>
               <div className="mb-4 flex items-center justify-between gap-3">
@@ -67,7 +92,7 @@ export default function WorkspaceIndex() {
                 </span>
                 <Badge variant="neutral">{detail}</Badge>
               </div>
-              <CardTitle>{title}</CardTitle>
+              <CardTitle>{label}</CardTitle>
               <CardDescription>{description}</CardDescription>
             </CardHeader>
             <CardContent className="sr-only">Access is controlled by IAM and Control Plane governance.</CardContent>

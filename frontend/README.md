@@ -141,7 +141,7 @@ See [the complete operation/state and security map](../docs/development/cx05-mai
 ## CI
 
 `.github/workflows/frontend.yml` runs only when `frontend/` or the workspace files change. It installs from the
-lockfile, then typechecks, lints, tests, builds, audits dependencies and builds the image.
+lockfile, then typechecks, lints, tests, builds, enforces emitted JavaScript/CSS/image budgets, audits dependencies and builds the image. The static budget report is retained as a CI artifact.
 
 ## Additional UI foundation (PR #353)
 
