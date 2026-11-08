@@ -31,7 +31,7 @@ func (r *PostgresRepository) ReadPeopleChoice(ctx context.Context, tenant, legal
               AND s.tenant_id = choice.tenant_id AND s.legal_entity_id = choice.legal_employer_id
               AND s.jurisdiction = choice.jurisdiction
           JOIN capability.capability cap ON cap.capability_id = cb.capability_id
-              AND cap.code = choice.capability_key AND cap.lifecycle = 'ACTIVE'
+              AND cap.code = choice.capability_key AND cap.status = 'ACTIVE'
           JOIN capability.capability_provider p ON p.provider_id = choice.provider_id
               AND p.status = 'ACTIVE'
           JOIN capability.provider_capability_support pcs ON pcs.provider_id = p.provider_id
