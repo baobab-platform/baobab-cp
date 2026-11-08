@@ -137,8 +137,8 @@ type Dependencies struct {
 	DocumentaryRestrictionClientIDs []string
 	// ADR-SHARED-045: zero-default People provider choice. Requires an exact
 	// workload-scope and client allowlist, and may not run in protected stages.
-	PeopleProviderSelectionEnabled bool
-	PeopleProviderSelections peopleChoiceReader
+	PeopleProviderSelectionEnabled   bool
+	PeopleProviderSelections         peopleChoiceReader
 	PeopleProviderSelectionClientIDs []string
 	// P0-04B ERP (ADR-SHARED-034): per-operation posting-authority
 	// resolution. Default off, nonproduction only, explicit client allowlist.
@@ -224,8 +224,8 @@ type Dependencies struct {
 	CurrentInternalAuthorityClientID string
 	// ADR-SHARED-044: current canonical ProductSubscription workload read.
 	// Deny-only commercial preflight is not permission to bill or pay.
-	CurrentSubscriptionAuthorityEnabled bool
-	CurrentSubscriptionAuthorityReader repository.CurrentProductSubscriptionReader
+	CurrentSubscriptionAuthorityEnabled  bool
+	CurrentSubscriptionAuthorityReader   repository.CurrentProductSubscriptionReader
 	CurrentSubscriptionAuthorityClientID string
 	// Metrics is served on GET /metrics to workloads holding metrics:read.
 	// Nil serves nothing.
@@ -927,7 +927,9 @@ func New(dependencies Dependencies) http.Handler {
 		dependencies.WorkloadRegistry != nil && peoRoutesPermittedIn(dependencies.Environment) {
 		allow := make(map[string]bool)
 		for _, id := range dependencies.PeopleProviderSelectionClientIDs {
-			if id = strings.TrimSpace(id); id != "" { allow[id] = true }
+			if id = strings.TrimSpace(id); id != "" {
+				allow[id] = true
+			}
 		}
 		if len(allow) > 0 {
 			h := peopleSelectionHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
@@ -1190,8 +1192,8 @@ func New(dependencies Dependencies) http.Handler {
 		peoRoutesPermittedIn(dependencies.Environment) {
 		h := subscriptionCurrentHandler{reader: dependencies.CurrentSubscriptionAuthorityReader,
 			organisations: dependencies.Classifications.Orgs,
-			registry: dependencies.WorkloadRegistry,
-			clientID: dependencies.CurrentSubscriptionAuthorityClientID}
+			registry:      dependencies.WorkloadRegistry,
+			clientID:      dependencies.CurrentSubscriptionAuthorityClientID}
 		r.With(a.authorize(a.workloadVerifier, "workload", "subscription:current-workload-read")).
 			Get("/internal/subscriptions/v1/tenants/{tenantID}/product-subscriptions/{subscriptionID}/current", h.read)
 		r.With(a.authorize(a.workloadVerifier, "workload", "subscription:commercial-authority")).

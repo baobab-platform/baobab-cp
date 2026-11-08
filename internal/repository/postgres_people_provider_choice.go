@@ -1,11 +1,11 @@
 package repository
 
 import (
-    "context"
-    "errors"
-    "time"
+	"context"
+	"errors"
+	"time"
 
-    "github.com/baobab-platform/baobab-cp/internal/peoplebinding"
+	"github.com/baobab-platform/baobab-cp/internal/peoplebinding"
 )
 
 // NOTE: adapter ownership belongs to the tenant-selected provider. This read
@@ -14,8 +14,10 @@ import (
 var ErrPeopleChoiceUnavailable = errors.New("qualified People choice unavailable")
 
 func (r *PostgresRepository) ReadPeopleChoice(ctx context.Context, tenant, legalEmployer, jurisdiction, key string, at time.Time) (peoplebinding.Choice, error) {
-    if r == nil || r.pool == nil { return peoplebinding.Choice{}, ErrPeopleChoiceUnavailable }
-    rows, err := r.pool.Query(ctx, `
+	if r == nil || r.pool == nil {
+		return peoplebinding.Choice{}, ErrPeopleChoiceUnavailable
+	}
+	rows, err := r.pool.Query(ctx, `
         SELECT choice.tenant_id, choice.legal_employer_id, choice.jurisdiction, choice.capability_key,
                choice.binding_id::text, choice.provider_id::text, choice.binding_revision,
                choice.source_of_record, choice.effective_from, choice.effective_until,
@@ -48,26 +50,31 @@ func (r *PostgresRepository) ReadPeopleChoice(ctx context.Context, tenant, legal
            AND choice.status = 'ACTIVE' AND choice.effective_from <= $5
            AND (choice.effective_until IS NULL OR $5 < choice.effective_until)
          LIMIT 2`, tenant, legalEmployer, jurisdiction, key, at.UTC())
-    if err != nil { return peoplebinding.Choice{}, err }
-    defer rows.Close()
-    var out peoplebinding.Choice
-    count := 0
-    for rows.Next() {
-        count++
-        if err := rows.Scan(&out.TenantID, &out.LegalEmployerID, &out.Jurisdiction, &out.CapabilityKey,
-            &out.BindingID, &out.ProviderID, &out.BindingRevision, &out.SourceOfRecord,
-            &out.EffectiveFrom, &out.EffectiveUntil, &out.CertificationKey, &out.CertificationUntil); err != nil {
-            return peoplebinding.Choice{}, err
-        }
-    }
-    if err := rows.Err(); err != nil { return peoplebinding.Choice{}, err }
-    if count != 1 { return peoplebinding.Choice{}, ErrPeopleChoiceUnavailable }
-    return out, nil
+	if err != nil {
+		return peoplebinding.Choice{}, err
+	}
+	defer rows.Close()
+	var out peoplebinding.Choice
+	count := 0
+	for rows.Next() {
+		count++
+		if err := rows.Scan(&out.TenantID, &out.LegalEmployerID, &out.Jurisdiction, &out.CapabilityKey,
+			&out.BindingID, &out.ProviderID, &out.BindingRevision, &out.SourceOfRecord,
+			&out.EffectiveFrom, &out.EffectiveUntil, &out.CertificationKey, &out.CertificationUntil); err != nil {
+			return peoplebinding.Choice{}, err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return peoplebinding.Choice{}, err
+	}
+	if count != 1 {
+		return peoplebinding.Choice{}, ErrPeopleChoiceUnavailable
+	}
+	return out, nil
 }
 
 // The interface requires a real DB query. A closed schema or user-supplied
 // JSON selection cannot substitute for it.
 var _ interface {
-    ReadPeopleChoice(context.Context, string, string, string, string, time.Time) (peoplebinding.Choice, error)
+	ReadPeopleChoice(context.Context, string, string, string, string, time.Time) (peoplebinding.Choice, error)
 } = (*PostgresRepository)(nil)
-
