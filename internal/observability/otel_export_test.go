@@ -19,7 +19,7 @@ func TestExportedActualServerAndIssuerSpanLineage(t *testing.T) {
 		Span    string
 		Trace   string
 	}
-	reports := make([]observation, 0)
+	reports := make(chan observation, 2)
 	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" || r.URL.Path != "/v1/traces" {
 			t.Error("unexpected OTLP endpoint")
@@ -36,13 +36,13 @@ func TestExportedActualServerAndIssuerSpanLineage(t *testing.T) {
 		attrs := data["resource"].(map[string]any)["attributes"].([]any)
 		service := attrs[0].(map[string]any)["value"].(map[string]any)["stringValue"].(string)
 		item := data["scopeSpans"].([]any)[0].(map[string]any)["spans"].([]any)[0].(map[string]any)
-		reports = append(reports, observation{
+		reports <- observation{
 			Service: service,
 			Name:    item["name"].(string),
 			Parent:  item["parentSpanId"].(string),
 			Span:    item["spanId"].(string),
 			Trace:   item["traceId"].(string),
-		})
+		}
 	}))
 	defer collector.Close()
 
@@ -63,12 +63,20 @@ func TestExportedActualServerAndIssuerSpanLineage(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer very-private")
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
-	if len(reports) != 2 {
-		t.Fatalf("want 2 independently exportable OTLP spans, got %d", len(reports))
+	// Export completion is asynchronous: collect the real receiver's two
+	// requests rather than inspecting an unsynchronised server goroutine.
+	received := make([]observation, 0, 2)
+	for len(received) < 2 {
+		select {
+		case item := <-reports:
+			received = append(received, item)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("want 2 independently exportable OTLP spans, got %d", len(received))
+		}
 	}
 	// Validate the wire JSON against OTLP's exact hex ID representation,
 	// not merely the mocked Collector's assumption that both IDs match.
-	for _, received := range reports {
+	for _, received := range received {
 		for _, item := range []struct {
 			value string
 			bytes int
@@ -79,21 +87,21 @@ func TestExportedActualServerAndIssuerSpanLineage(t *testing.T) {
 			}
 		}
 	}
-	parent, err := hex.DecodeString(reports[0].Parent)
+	parent, err := hex.DecodeString(received[0].Parent)
 	if err != nil || len(parent) != 8 {
-		t.Fatalf("OTLP client parent id must be exact 8-byte hex: %q", reports[0].Parent)
+		t.Fatalf("OTLP client parent id must be exact 8-byte hex: %q", received[0].Parent)
 	}
-	if reports[1].Parent != "" {
-		t.Fatalf("root CP span must have no parent, got %q", reports[1].Parent)
+	if received[1].Parent != "" {
+		t.Fatalf("root CP span must have no parent, got %q", received[1].Parent)
 	}
-	if reports[0].Service != "baobab-cp" ||
-		reports[0].Name != "baobab.cp.iam.introspect" ||
-		reports[1].Name != "baobab.cp.http" ||
-		reports[0].Trace != reports[1].Trace ||
-		reports[0].Parent != reports[1].Span {
+	if received[0].Service != "baobab-cp" ||
+		received[0].Name != "baobab.cp.iam.introspect" ||
+		received[1].Name != "baobab.cp.http" ||
+		received[0].Trace != received[1].Trace ||
+		received[0].Parent != received[1].Span {
 		t.Fatal("actual exported CP client/server genealogy invalid")
 	}
-	if strings.Contains(reports[0].Service+reports[1].Name, "private") {
+	if strings.Contains(received[0].Service+received[1].Name, "private") {
 		t.Fatal("private data in exported attributes")
 	}
 }
@@ -125,5 +133,33 @@ func TestOTLPExplicitEnvironmentAndInvalidIDsFailClosed(t *testing.T) {
 	}
 	if id := otlpId("0123456789abcdef", 8); id != "0123456789abcdef" {
 		t.Fatalf("OTLP ID changed wire representation: %q", id)
+	}
+}
+
+// TestCollectorFailureDoesNotDelayAuthorization exercises the real server
+// middleware against a Collector that stalls beyond request completion.
+// The trace is deliberately sampled. No connector failure may add latency to
+// the CP request or change its status.
+func TestCollectorFailureDoesNotDelayAuthorization(t *testing.T) {
+	stalled := make(chan struct{})
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-stalled
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer collector.Close()
+	defer close(stalled)
+	t.Setenv("BAOBAB_ENVIRONMENT", "test")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", collector.URL+"/v1/traces")
+	handler := Server(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	start := time.Now()
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/protected", nil))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("collector changed authority result: %d", w.Code)
+	}
+	if duration := time.Since(start); duration > 200*time.Millisecond {
+		t.Fatalf("collector blocked authorization for %v", duration)
 	}
 }
