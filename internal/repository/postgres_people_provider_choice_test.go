@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/baobab-platform/baobab-cp/internal/domain"
-
 	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -165,15 +164,15 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 	one(&scopeID, "INSERT INTO capability.capability_scope (tenant_id,legal_entity_id,jurisdiction,environment) VALUES ($1,$2,'ZA','development') RETURNING scope_id::text", tenant, employer)
 	exec("INSERT INTO capability.provider_capability_support (provider_id,capability_id,contract_versions,status) VALUES ($1::uuid,$2::uuid,ARRAY[1],'ACTIVE')", providerID, capabilityID)
 	one(&bindingID, "INSERT INTO capability.capability_binding (capability_id,engine_instance_id,scope_id,provider_id,binding_mode,status,contract_version,effective_from,version) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,'PRIMARY','ACTIVE','1',now()-interval '1 hour',1) RETURNING id::text", capabilityID, instanceID, scopeID, providerID)
-	one(&releaseID, String.raw`INSERT INTO topology.engine_release
+	one(&releaseID, `INSERT INTO topology.engine_release
 		(engine_release_id,engine_id,release_version,source_revision,declaration_digest,content_digest,status,recorded_by,recorded_at,reason,status_changed_by,status_changed_at,status_reason)
 		VALUES (gen_random_uuid(),$1::uuid,'1.0.0',repeat('a',40),'sha256:'||repeat('b',64),'sha256:'||repeat('c',64),'APPROVED','pg17-test',now(),'Development fixture.','pg17-reviewer',now(),'Approved for isolated test.')
 		RETURNING engine_release_id::text`, engineID)
-	one(&certID, String.raw`INSERT INTO capability.provider_capability_certification
+	one(&certID, `INSERT INTO capability.provider_capability_certification
 		(certification_id,provider_id,capability_id,contract_version,engine_release_id,qualification_profile,evidence,request_digest,status,certified_by,certified_at,reason)
 		VALUES (gen_random_uuid(),$1::uuid,$2::uuid,1,$3::uuid,'people-pg17-fixture','[{"fixture":"pg17"}]'::jsonb,'sha256:'||repeat('d',64),'CERTIFIED','pg17-reviewer',now(),'Development source qualification.')
 		RETURNING certification_id::text`, providerID, capabilityID, releaseID)
-	exec(String.raw`INSERT INTO capability.people_provider_choice
+	exec(`INSERT INTO capability.people_provider_choice
 		(tenant_id,legal_employer_id,jurisdiction,capability_key,binding_id,provider_id,binding_revision,certification_id,source_of_record,status,effective_from,proposed_by,approved_by,approved_at,choice_evidence_ref)
 		VALUES ($1,$2,'ZA',$3,$4::uuid,$5::uuid,1,$6::uuid,'EXTERNAL','ACTIVE',now()-interval '1 hour',gen_random_uuid(),gen_random_uuid(),now(),'qualified-pg17-development')`,
 		tenant, employer, capabilityKey, bindingID, providerID, certID)
@@ -198,7 +197,7 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 	}
 	// DB-level exclusion, not the handler, enforces one ACTIVE primary
 	// provider per exact employer and overlapping effective period.
-	if _, err := admin.Exec(ctx, String.raw`INSERT INTO capability.people_provider_choice
+	if _, err := admin.Exec(ctx, `INSERT INTO capability.people_provider_choice
 		(tenant_id,legal_employer_id,jurisdiction,capability_key,binding_id,provider_id,binding_revision,certification_id,source_of_record,status,effective_from,proposed_by,approved_by,approved_at,choice_evidence_ref)
 		SELECT tenant_id,legal_employer_id,jurisdiction,capability_key,binding_id,provider_id,binding_revision,certification_id,source_of_record,status,effective_from,proposed_by,approved_by,approved_at,choice_evidence_ref
 		FROM capability.people_provider_choice WHERE tenant_id=$1`, tenant); err == nil {
