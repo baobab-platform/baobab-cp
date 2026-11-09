@@ -20,8 +20,8 @@ CREATE TABLE capability.people_provider_choice (
     effective_from timestamptz NOT NULL,
     effective_until timestamptz,
     effective_period tstzrange GENERATED ALWAYS AS (tstzrange(effective_from, effective_until, '[)')) STORED,
-    proposed_by uuid NOT NULL,
-    approved_by uuid,
+    proposed_by uuid NOT NULL REFERENCES identity.principal(principal_id),
+    approved_by uuid REFERENCES identity.principal(principal_id),
     approved_at timestamptz,
     choice_evidence_ref text NOT NULL CHECK (length(choice_evidence_ref) BETWEEN 6 AND 160),
     version bigint NOT NULL DEFAULT 1 CHECK (version > 0),
@@ -39,3 +39,29 @@ ALTER TABLE capability.people_provider_choice ADD CONSTRAINT people_choice_one_a
  EXCLUDE USING gist (tenant_id WITH =, legal_employer_id WITH =, jurisdiction WITH =,
      capability_key WITH =, effective_period WITH &&)
  WHERE (status = 'ACTIVE');
+
+-- A fabricated UUID or a workload Principal must never be evidence of an
+-- independent human maker/checker approval. This is a DB backstop, not a
+-- substitute for the future IAM/CP governed activation executor.
+CREATE FUNCTION capability.people_provider_choice_human_approval_guard()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.status = 'ACTIVE' AND (
+        NOT EXISTS (
+            SELECT 1 FROM identity.principal p
+            WHERE p.principal_id = NEW.proposed_by
+              AND p.actor_type = 'human' AND p.status = 'ACTIVE'
+        ) OR NOT EXISTS (
+            SELECT 1 FROM identity.principal p
+            WHERE p.principal_id = NEW.approved_by
+              AND p.actor_type = 'human' AND p.status = 'ACTIVE'
+        )
+    ) THEN
+        RAISE EXCEPTION 'active People choice requires two current human principals'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER people_provider_choice_human_approval
+    BEFORE INSERT OR UPDATE ON capability.people_provider_choice
+    FOR EACH ROW EXECUTE FUNCTION capability.people_provider_choice_human_approval_guard();
