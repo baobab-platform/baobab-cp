@@ -35,7 +35,7 @@ func (r *PostgresRepository) ReadPeopleChoice(ctx context.Context, tenant, legal
           JOIN capability.capability_provider p ON p.provider_id = choice.provider_id
               AND p.status = 'ACTIVE'
           JOIN topology.engine_instance ei ON ei.engine_instance_id = cb.engine_instance_id
-              AND ei.engine_id = p.engine_id AND ei.status = 'active'
+              AND ei.engine_id = p.engine_id AND ei.status = 'ACTIVE'
           JOIN capability.provider_capability_support pcs ON pcs.provider_id = p.provider_id
               AND pcs.capability_id = cap.capability_id AND pcs.status = 'ACTIVE'
               AND 1 = ANY(pcs.contract_versions) AND pcs.effective_from <= $5

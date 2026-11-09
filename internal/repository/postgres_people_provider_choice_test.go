@@ -156,7 +156,7 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 		}
 	}
 	one(&engineID, "INSERT INTO topology.engine (code,name) VALUES ($1,'People PG17 fixture') RETURNING engine_id::text", engine)
-	one(&instanceID, "INSERT INTO topology.engine_instance (engine_id,region,environment,status) VALUES ($1::uuid,'af-south-1','development','active') RETURNING engine_instance_id::text", engineID)
+	one(&instanceID, "INSERT INTO topology.engine_instance (engine_id,region,environment,status) VALUES ($1::uuid,'af-south-1','development','ACTIVE') RETURNING engine_instance_id::text", engineID)
 	one(&providerID, "INSERT INTO capability.capability_provider (provider_key,name,provider_type,engine_id,status) VALUES ($1,'External People fixture','EXTERNAL_SERVICE',$2::uuid,'ACTIVE') RETURNING provider_id::text", providerKey, engineID)
 	tag, err := admin.Exec(ctx, "INSERT INTO capability.capability (code,name,status) VALUES ($1,'People payroll read','ACTIVE') ON CONFLICT (code) DO NOTHING", capabilityKey)
 	if err != nil { t.Fatal(err) }
@@ -209,11 +209,11 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 	}
 	// Provider/instance lineage is current authority: an inactive instance
 	// must not be rescued by an otherwise CERTIFIED and APPROVED release.
-	exec("UPDATE topology.engine_instance SET status='inactive' WHERE engine_instance_id=$1::uuid", instanceID)
+	exec("UPDATE topology.engine_instance SET status='DRAINING' WHERE engine_instance_id=$1::uuid", instanceID)
 	if _, err := repo.ReadPeopleChoice(ctx, tenant, employer, "ZA", capabilityKey, time.Now().UTC()); !errors.Is(err, ErrPeopleChoiceUnavailable) {
 		t.Fatalf("inactive provider engine instance must deny: %v", err)
 	}
-	exec("UPDATE topology.engine_instance SET status='active' WHERE engine_instance_id=$1::uuid", instanceID)
+	exec("UPDATE topology.engine_instance SET status='ACTIVE' WHERE engine_instance_id=$1::uuid", instanceID)
 	// Certification revocation makes the previously valid choice instantly
 	// ineligible even when the decision row and PRIMARY binding stay ACTIVE.
 	exec("UPDATE capability.provider_capability_certification SET status='REVOKED',revoked_by='pg17-reviewer',revoked_at=now(),revocation_reason='Fixture revocation.' WHERE certification_id=$1::uuid", certID)
