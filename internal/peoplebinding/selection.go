@@ -28,8 +28,8 @@ func Supported(key string) bool {
 type Choice struct {
 	// ChoiceID and ChoiceVersion fence a revoked/replaced or revised decision,
 	// even when the selected provider, binding and dates remain identical.
-	ChoiceID, CertificationID string
-	ChoiceVersion int64
+	ChoiceID, CertificationID                              string
+	ChoiceVersion                                          int64
 	TenantID, LegalEmployerID, Jurisdiction, CapabilityKey string
 	BindingID, ProviderID                                  string // raw postgres UUIDs
 	BindingRevision                                        int64
