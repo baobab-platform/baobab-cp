@@ -64,7 +64,7 @@ var (
 	otlpOnce  sync.Once
 	otlpQueue chan otlpBatch
 	otlpHTTP  = &http.Client{
-		Timeout: time.Second,
+		Timeout:       time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 )
