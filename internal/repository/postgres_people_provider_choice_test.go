@@ -60,8 +60,6 @@ func TestPeopleProviderChoiceDefaultDenialPG17(t *testing.T) {
 	}
 }
 
-
-
 // TestPeopleProviderChoiceApprovedExternalAndRevocationPG17 validates a
 // deliberately created development-only, maker/checker-approved EXTERNAL
 // provider against actual PostgreSQL 17 FKs, native ACTIVE PRIMARY binding,
@@ -169,10 +167,10 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 		t.Fatalf("real committed PG17 provider choice did not join exactly: %+v %v", current, err)
 	}
 	for name, tuple := range map[string][4]string{
-		"foreign tenant": { "tn_foreign", employer, "ZA", capabilityKey },
-		"foreign employer": { tenant, "OTHER-EMPLOYER", "ZA", capabilityKey },
-		"foreign jurisdiction": { tenant, employer, "UG", capabilityKey },
-		"foreign capability": { tenant, employer, "ZA", "workforce.employment.read" },
+		"foreign tenant":       {"tn_foreign", employer, "ZA", capabilityKey},
+		"foreign employer":     {tenant, "OTHER-EMPLOYER", "ZA", capabilityKey},
+		"foreign jurisdiction": {tenant, employer, "UG", capabilityKey},
+		"foreign capability":   {tenant, employer, "ZA", "workforce.employment.read"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, e := repo.ReadPeopleChoice(ctx, tuple[0], tuple[1], tuple[2], tuple[3], time.Now().UTC())
