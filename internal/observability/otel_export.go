@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -48,6 +49,54 @@ func otlpId(value string, bytes int) string {
 		return ""
 	}
 	return value
+}
+
+// A bounded, single-worker exporter keeps diagnostic Collector latency out of
+// request completion and issuer introspection. Under backpressure telemetry is
+// dropped, never identity or business authority. No unbounded goroutines or
+// per-request transports are created.
+type otlpBatch struct {
+	endpoint string
+	body     []byte
+}
+
+var (
+	otlpOnce  sync.Once
+	otlpQueue chan otlpBatch
+	otlpHTTP  = &http.Client{
+		Timeout: time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+)
+
+func enqueueOTLP(item otlpBatch) {
+	otlpOnce.Do(func() {
+		otlpQueue = make(chan otlpBatch, 128)
+		go func() {
+			for item := range otlpQueue {
+				sendOTLP(item)
+			}
+		}()
+	})
+	select {
+	case otlpQueue <- item:
+	default:
+		// Telemetry saturation cannot block or change the HTTP response.
+	}
+}
+
+func sendOTLP(item otlpBatch) {
+	reqCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, item.endpoint, bytes.NewReader(item.body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := otlpHTTP.Do(req)
+	if err == nil {
+		_ = res.Body.Close()
+	}
 }
 
 // ExportSpan reports an actual request or issuer call through the Collector.
@@ -111,19 +160,5 @@ func ExportSpan(ctx context.Context, begin time.Time, name string) {
 	if err != nil {
 		return
 	}
-	reqCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{
-		Timeout:       time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	res, err := client.Do(req)
-	if err == nil {
-		_ = res.Body.Close()
-	}
+	enqueueOTLP(otlpBatch{endpoint: endpoint, body: body})
 }
