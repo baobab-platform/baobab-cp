@@ -18,7 +18,8 @@ func (r *PostgresRepository) ReadPeopleChoice(ctx context.Context, tenant, legal
 		return peoplebinding.Choice{}, ErrPeopleChoiceUnavailable
 	}
 	rows, err := r.pool.Query(ctx, `
-        SELECT choice.tenant_id, choice.legal_employer_id, choice.jurisdiction, choice.capability_key,
+        SELECT choice.choice_id::text, choice.version, choice.certification_id::text,
+               choice.tenant_id, choice.legal_employer_id, choice.jurisdiction, choice.capability_key,
                choice.binding_id::text, choice.provider_id::text, choice.binding_revision,
                choice.source_of_record, choice.effective_from, choice.effective_until,
                cert.certification_key, cert.valid_until
@@ -64,7 +65,8 @@ func (r *PostgresRepository) ReadPeopleChoice(ctx context.Context, tenant, legal
 	count := 0
 	for rows.Next() {
 		count++
-		if err := rows.Scan(&out.TenantID, &out.LegalEmployerID, &out.Jurisdiction, &out.CapabilityKey,
+		if err := rows.Scan(&out.ChoiceID, &out.ChoiceVersion, &out.CertificationID,
+			&out.TenantID, &out.LegalEmployerID, &out.Jurisdiction, &out.CapabilityKey,
 			&out.BindingID, &out.ProviderID, &out.BindingRevision, &out.SourceOfRecord,
 			&out.EffectiveFrom, &out.EffectiveUntil, &out.CertificationKey, &out.CertificationUntil); err != nil {
 			return peoplebinding.Choice{}, err
