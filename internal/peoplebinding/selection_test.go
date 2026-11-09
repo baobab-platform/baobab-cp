@@ -2,6 +2,7 @@ package peoplebinding
 
 import (
 	"errors"
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
 	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"testing"
 	"time"
@@ -23,6 +24,12 @@ func TestProviderSelectionScopeFences(t *testing.T) {
 	if err != nil || valid.Selection.SourceOfRecord != "EXTERNAL" || valid.Selection.LegalEmployerID != "TEST-EMPLOYER" ||
 		valid.Selection.ExpiresAt.Sub(now) > 30*time.Second || !valid.PortabilityEnabled {
 		t.Fatalf("expected qualified exact selection: %+v %v", valid, err)
+	}
+	// Schema validation is against the immutable, embedded accepted Shared
+	// #436 People contract, not a hand-authored mirror in this test.
+	selectionSchema := contracts.MustSchema("people/v1/provider-selection.schema.json")
+	if err := contracts.ValidateValue(selectionSchema, valid); err != nil {
+		t.Fatalf("CP positive choice violates accepted People v1: %v", err)
 	}
 	tests := map[string]func(*domain.Context, *Choice, *Resolution){
 		"tenant":          func(c *domain.Context, _ *Choice, _ *Resolution) { c.TenantID = "tn_other" },

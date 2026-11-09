@@ -7,6 +7,7 @@ import { ArrowUpRight, LockKeyhole, Network } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SESSION_COOKIE, createAuthStore, currentSession, readAuthSettings } from "@/server/auth/runtime";
 import { WorkspaceNavigation } from "./WorkspaceNavigation";
+import { AuthorityRefresh } from "./AuthorityRefresh";
 import { CommandPalette } from "./CommandPalette";
 import { ContextSwitcher } from "./ContextSwitcher";
 import { scopedContextCandidates } from "@/server/console/scoped-context";
@@ -39,6 +40,7 @@ export default async function WorkspaceLayout({ children }: { children: ReactNod
 
   return (
     <main id="main" className="min-h-screen bg-background text-foreground">
+      <AuthorityRefresh />
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex min-h-20 max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-3 lg:px-10">
           <Link href="/workspace" className="flex items-center gap-3 no-underline" aria-label="Baobab Control Plane Console overview">
