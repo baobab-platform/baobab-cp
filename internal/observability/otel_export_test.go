@@ -163,3 +163,16 @@ func TestCollectorFailureDoesNotDelayAuthorization(t *testing.T) {
 		t.Fatalf("collector blocked authorization for %v", duration)
 	}
 }
+
+// W3C sampled is a bit, and a valid upstream 0x03 flags value must not
+// disappear from the exported BFF -> IAM -> CP lineage.
+func TestSampledTraceFlagsPreserveW3CBitfield(t *testing.T) {
+	for flags, want := range map[string]bool{
+		"00": false, "01": true, "02": false, "03": true,
+		"ff": true, "fe": false, "zz": false, "": false,
+	} {
+		if got := sampledTraceFlags(flags); got != want {
+			t.Errorf("trace-flags %q sampled=%t, want %t", flags, got, want)
+		}
+	}
+}
