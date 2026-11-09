@@ -12,3 +12,10 @@ export function contextHref(option: ConsoleContextOption): string {
     ? "/workspace/organisations/" + encodeURIComponent(option.id)
     : "/workspace/tenants/" + encodeURIComponent(option.id);
 }
+
+/** Keep the selected scope visible throughout its nested detail routes. */
+export function isContextPathActive(option: ConsoleContextOption, pathname: string): boolean {
+  const href = contextHref(option);
+  const current = pathname.replace(/\/$/, "") || "/";
+  return current === href || current.startsWith(href + "/");
+}
