@@ -26,6 +26,10 @@ func Supported(key string) bool {
 // Choice is a CP persisted, independently reviewed tenant/employer/function
 // decision. It is NEVER constructed from browser/provider-supplied fields.
 type Choice struct {
+	// ChoiceID and ChoiceVersion fence a revoked/replaced or revised decision,
+	// even when the selected provider, binding and dates remain identical.
+	ChoiceID, CertificationID string
+	ChoiceVersion int64
 	TenantID, LegalEmployerID, Jurisdiction, CapabilityKey string
 	BindingID, ProviderID                                  string // raw postgres UUIDs
 	BindingRevision                                        int64
@@ -48,7 +52,10 @@ type Resolution struct {
 // SameChoice compares the actual signed authority tuple, not pointer
 // identities of times returned by separate PostgreSQL readbacks.
 func SameChoice(a, b Choice) bool {
-	if a.TenantID != b.TenantID || a.LegalEmployerID != b.LegalEmployerID ||
+	if a.ChoiceID == "" || b.ChoiceID == "" || a.ChoiceID != b.ChoiceID ||
+		a.ChoiceVersion < 1 || a.ChoiceVersion != b.ChoiceVersion ||
+		a.CertificationID == "" || a.CertificationID != b.CertificationID ||
+		a.TenantID != b.TenantID || a.LegalEmployerID != b.LegalEmployerID ||
 		a.Jurisdiction != b.Jurisdiction || a.CapabilityKey != b.CapabilityKey ||
 		a.BindingID != b.BindingID || a.ProviderID != b.ProviderID ||
 		a.BindingRevision != b.BindingRevision || a.SourceOfRecord != b.SourceOfRecord ||
