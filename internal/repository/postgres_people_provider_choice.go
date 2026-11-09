@@ -34,6 +34,8 @@ func (r *PostgresRepository) ReadPeopleChoice(ctx context.Context, tenant, legal
               AND cap.code = choice.capability_key AND cap.status = 'ACTIVE'
           JOIN capability.capability_provider p ON p.provider_id = choice.provider_id
               AND p.status = 'ACTIVE'
+          JOIN topology.engine_instance ei ON ei.engine_instance_id = cb.engine_instance_id
+              AND ei.engine_id = p.engine_id AND ei.status = 'active'
           JOIN capability.provider_capability_support pcs ON pcs.provider_id = p.provider_id
               AND pcs.capability_id = cap.capability_id AND pcs.status = 'ACTIVE'
               AND 1 = ANY(pcs.contract_versions) AND pcs.effective_from <= $5
@@ -44,7 +46,11 @@ func (r *PostgresRepository) ReadPeopleChoice(ctx context.Context, tenant, legal
               AND cert.contract_version = 1 AND cert.status = 'CERTIFIED'
               AND (cert.valid_until IS NULL OR $5 < cert.valid_until)
           JOIN topology.engine_release rel ON rel.engine_release_id = cert.engine_release_id
-              AND rel.status = 'APPROVED'
+              AND rel.status = 'APPROVED' AND rel.engine_id = p.engine_id
+          JOIN topology.engine_release_provider_support ers
+              ON ers.engine_release_id = rel.engine_release_id
+              AND ers.provider_key = p.provider_key AND ers.capability_key = cap.code
+              AND 1 = ANY(ers.contract_versions)
          WHERE choice.tenant_id = $1 AND choice.legal_employer_id = $2
            AND choice.jurisdiction = $3 AND choice.capability_key = $4
            AND choice.status = 'ACTIVE' AND choice.effective_from <= $5
