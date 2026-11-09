@@ -62,8 +62,8 @@ func TestEmbeddedCatalogue(t *testing.T) {
 		"customer.buyer-application.manage": {"buyer-organisation/v1/capabilities.yaml", "baobab-trade", "customer"},
 		"identity.workload-token.issue":     {"identity/v1/capabilities.yaml", "baobab-iam", "identity"},
 		"content.entry.resolve":             {"content/v1/capabilities.yaml", "baobab-cms", "content"},
-		"payroll.run.read":                {"people/v1/capabilities.yaml", "baobab-erp", "payroll"},
-		"workforce.employment.read":       {"people/v1/capabilities.yaml", "baobab-erp", "workforce"},
+		"payroll.run.read":                  {"people/v1/capabilities.yaml", "baobab-erp", "payroll"},
+		"workforce.employment.read":         {"people/v1/capabilities.yaml", "baobab-erp", "workforce"},
 	} {
 		c := byKey[key]
 		if c.Source != want.source || c.Owner != want.owner || c.Capability.DomainKey != want.domain {
