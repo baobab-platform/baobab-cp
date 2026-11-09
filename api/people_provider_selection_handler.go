@@ -17,7 +17,7 @@ import (
 
 const peopleProviderReadScope = "people:provider:read"
 
- // The general PEO route allowlist includes sandbox/staging. People BYOP
+// The general PEO route allowlist includes sandbox/staging. People BYOP
  // selection is explicitly a development-only gate until issuer, adapter,
  // statutory pack and cross-provider cutover acceptance is complete.
 func peopleProviderSelectionPermittedIn(environment string) bool {
