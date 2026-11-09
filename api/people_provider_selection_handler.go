@@ -17,6 +17,18 @@ import (
 
 const peopleProviderReadScope = "people:provider:read"
 
+ // The general PEO route allowlist includes sandbox/staging. People BYOP
+ // selection is explicitly a development-only gate until issuer, adapter,
+ // statutory pack and cross-provider cutover acceptance is complete.
+func peopleProviderSelectionPermittedIn(environment string) bool {
+	switch environment {
+	case "development", "test", "integration":
+		return true
+	default:
+		return false
+	}
+}
+
 var peopleCorrelationID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type peopleChoiceReader interface {
