@@ -102,10 +102,17 @@ func sendOTLP(item otlpBatch) {
 // ExportSpan reports an actual request or issuer call through the Collector.
 // The owning caller creates the span and records its genuine service duration.
 // Collector failures do not change an IAM/CP decision.
+// W3C trace-flags is a bit-field, not an enum. 0x03 and 0x01 are
+// both sampled; additional bits must not sever exported lineage.
+func sampledTraceFlags(value string) bool {
+	flags, err := strconv.ParseUint(value, 16, 8)
+	return err == nil && flags&1 != 0
+}
+
 func ExportSpan(ctx context.Context, begin time.Time, name string) {
 	endpoint := otlpTarget()
 	span, ok := Current(ctx)
-	if endpoint == "" || !ok || span.Flags != "01" {
+	if endpoint == "" || !ok || !sampledTraceFlags(span.Flags) {
 		return
 	}
 	if name != "baobab.cp.http" && name != "baobab.cp.iam.introspect" {
