@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	neturl "net/url"
 	"os"
 	"strings"
 	"testing"
@@ -67,11 +68,37 @@ func TestPeopleProviderChoiceDefaultDenialPG17(t *testing.T) {
 // scope, support, approved EngineRelease and certification. These are fixture
 // facts, not an IAM-issued workload, live ERP adapter or payroll acceptance.
 func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
+	sourceDB := os.Getenv("TEST_DATABASE_URL")
+	if sourceDB == "" {
 		t.Skip("requires real PostgreSQL 17 TEST_DATABASE_URL")
 	}
 	ctx := context.Background()
+	// The authoritative Shared People v1 capabilities remain DRAFT. This
+	// test intentionally never alters them in the shared CI database: use
+	// a separate, disposable PostgreSQL 17 database to prove the exact
+	// hypothetical ACTIVE lifecycle without manufacturing runtime proof.
+	root, err := pgxpool.New(ctx, sourceDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(root.Close)
+	suffix := strings.ReplaceAll(domain.NewUUIDv7(), "-", "")[20:]
+	dbName := "baobab_people_test_" + suffix
+	if _, err := root.Exec(ctx, "CREATE DATABASE "+dbName); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, e := root.Exec(context.Background(), "DROP DATABASE "+dbName+" WITH (FORCE)"); e != nil {
+			t.Errorf("disposable PG17 database cleanup: %v", e)
+		}
+	})
+	databaseURI, err := neturl.Parse(sourceDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	databaseURI.Path = "/" + dbName
+	databaseURI.RawPath = ""
+	url := databaseURI.String()
 	store, err := postgres.Open(ctx, url)
 	if err != nil {
 		t.Fatal(err)
@@ -91,58 +118,14 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 	}
 	t.Cleanup(repo.Close)
 
-	suffix := strings.ReplaceAll(domain.NewUUIDv7(), "-", "")[20:]
 	engine := "baobab-people-test-" + suffix
 	providerKey := engine + ".external"
 	tenant := "tn_people" + suffix
 	employer := "TEST-PEOPLE-" + strings.ToUpper(suffix)
 	const capabilityKey = "payroll.run.read"
-	// These IDs belong only to this fixture; independently read the exact
-	// rows after each transition, not a value returned by the INSERT alone.
+	// These IDs are independently read from the disposable database,
+	// never asserted to be production IAM/CP/ERP qualifications.
 	var engineID, instanceID, providerID, capabilityID, scopeID, bindingID, releaseID, certID string
-	ownsCapability := false
-	t.Cleanup(func() {
-		tx, e := admin.Begin(ctx)
-		if e != nil {
-			t.Errorf("fixture cleanup begin: %v", e)
-			return
-		}
-		defer tx.Rollback(ctx) //nolint:errcheck // cleanup
-		if _, e = tx.Exec(ctx, "SET LOCAL session_replication_role = replica"); e != nil {
-			t.Errorf("fixture cleanup needs ephemeral PG17 superuser: %v", e)
-			return
-		}
-		for _, q := range []struct {
-			sql string
-			arg string
-		}{
-			{"DELETE FROM capability.people_provider_choice WHERE tenant_id=$1", tenant},
-			{"DELETE FROM capability.provider_capability_certification WHERE certification_id=$1::uuid", certID},
-			{"DELETE FROM topology.engine_release_provider_support WHERE engine_release_id=$1::uuid", releaseID},
-			{"DELETE FROM capability.capability_binding WHERE id=$1::uuid", bindingID},
-			{"DELETE FROM capability.provider_capability_support WHERE provider_id=$1::uuid", providerID},
-			{"DELETE FROM capability.capability_scope WHERE scope_id=$1::uuid", scopeID},
-			{"DELETE FROM capability.capability_provider WHERE provider_id=$1::uuid", providerID},
-			{"DELETE FROM topology.engine_instance WHERE engine_instance_id=$1::uuid", instanceID},
-			{"DELETE FROM topology.engine_release WHERE engine_release_id=$1::uuid", releaseID},
-			{"DELETE FROM topology.engine WHERE engine_id=$1::uuid", engineID},
-		} {
-			if q.arg == "" { continue }
-			if _, e = tx.Exec(ctx, q.sql, q.arg); e != nil {
-				t.Errorf("fixture cleanup query: %v", e)
-				return
-			}
-		}
-		if ownsCapability {
-			if _, e = tx.Exec(ctx, "DELETE FROM capability.capability WHERE capability_id=$1::uuid", capabilityID); e != nil {
-				t.Errorf("fixture cleanup capability: %v", e)
-				return
-			}
-		}
-		if e = tx.Commit(ctx); e != nil {
-			t.Errorf("fixture cleanup commit: %v", e)
-		}
-	})
 	one := func(dest *string, sql string, args ...any) {
 		t.Helper()
 		if e := admin.QueryRow(ctx, sql, args...).Scan(dest); e != nil {
@@ -158,9 +141,8 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 	one(&engineID, "INSERT INTO topology.engine (code,name) VALUES ($1,'People PG17 fixture') RETURNING engine_id::text", engine)
 	one(&instanceID, "INSERT INTO topology.engine_instance (engine_id,region,environment,status) VALUES ($1::uuid,'af-south-1','development','ACTIVE') RETURNING engine_instance_id::text", engineID)
 	one(&providerID, "INSERT INTO capability.capability_provider (provider_key,name,provider_type,engine_id,status) VALUES ($1,'External People fixture','EXTERNAL_SERVICE',$2::uuid,'ACTIVE') RETURNING provider_id::text", providerKey, engineID)
-	tag, err := admin.Exec(ctx, "INSERT INTO capability.capability (code,name,status) VALUES ($1,'People payroll read','ACTIVE') ON CONFLICT (code) DO NOTHING", capabilityKey)
-	if err != nil { t.Fatal(err) }
-	ownsCapability = tag.RowsAffected() == 1
+	// Isolated synthetic maturity: real Shared People v1 remains DRAFT.
+	exec("INSERT INTO capability.capability (code,name,status) VALUES ($1,'People payroll read','ACTIVE')", capabilityKey)
 	one(&capabilityID, "SELECT capability_id::text FROM capability.capability WHERE code=$1 AND status='ACTIVE'", capabilityKey)
 	one(&scopeID, "INSERT INTO capability.capability_scope (tenant_id,legal_entity_id,jurisdiction,environment) VALUES ($1,$2,'ZA','development') RETURNING scope_id::text", tenant, employer)
 	exec("INSERT INTO capability.provider_capability_support (provider_id,capability_id,contract_versions,status) VALUES ($1::uuid,$2::uuid,ARRAY[1],'ACTIVE')", providerID, capabilityID)
@@ -207,6 +189,13 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 		FROM capability.people_provider_choice WHERE tenant_id=$1`, tenant); err == nil {
 		t.Fatal("overlapping ACTIVE employer provider was accepted")
 	}
+	// Canonical People DRAFT lifecycle is never eligible even with a
+	// complete choice/binding/release/certification in this isolated fixture.
+	exec("UPDATE capability.capability SET status='DRAFT' WHERE capability_id=$1::uuid", capabilityID)
+	if _, err := repo.ReadPeopleChoice(ctx, tenant, employer, "ZA", capabilityKey, time.Now().UTC()); !errors.Is(err, ErrPeopleChoiceUnavailable) {
+		t.Fatalf("DRAFT People capability must deny: %v", err)
+	}
+	exec("UPDATE capability.capability SET status='ACTIVE' WHERE capability_id=$1::uuid", capabilityID)
 	// Provider/instance lineage is current authority: an inactive instance
 	// must not be rescued by an otherwise CERTIFIED and APPROVED release.
 	exec("UPDATE topology.engine_instance SET status='DRAINING' WHERE engine_instance_id=$1::uuid", instanceID)
