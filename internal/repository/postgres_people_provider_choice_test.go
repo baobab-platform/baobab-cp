@@ -156,10 +156,30 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 		(certification_id,provider_id,capability_id,contract_version,engine_release_id,qualification_profile,evidence,request_digest,status,certified_by,certified_at,reason)
 		VALUES (gen_random_uuid(),$1::uuid,$2::uuid,1,$3::uuid,'people-pg17-fixture','[{"fixture":"pg17"}]'::jsonb,'sha256:'||repeat('d',64),'CERTIFIED','pg17-reviewer',now(),'Development source qualification.')
 		RETURNING certification_id::text`, providerID, capabilityID, releaseID)
-	exec(`INSERT INTO capability.people_provider_choice
+	// Maker/checker are actual current CP human Principals, not arbitrary UUIDs.
+	// Separate invalid attempts prove the database refuses fabricated approval.
+	var makerID, checkerID, workloadID string
+	one(&makerID, "INSERT INTO identity.principal(actor_type,status) VALUES ('human','ACTIVE') RETURNING principal_id::text")
+	one(&checkerID, "INSERT INTO identity.principal(actor_type,status) VALUES ('human','ACTIVE') RETURNING principal_id::text")
+	one(&workloadID, "INSERT INTO identity.principal(actor_type,status) VALUES ('workload','ACTIVE') RETURNING principal_id::text")
+	choiceInsert := `INSERT INTO capability.people_provider_choice
 		(tenant_id,legal_employer_id,jurisdiction,capability_key,binding_id,provider_id,binding_revision,certification_id,source_of_record,status,effective_from,proposed_by,approved_by,approved_at,choice_evidence_ref)
-		VALUES ($1,$2,'ZA',$3,$4::uuid,$5::uuid,1,$6::uuid,'EXTERNAL','ACTIVE',now()-interval '1 hour',gen_random_uuid(),gen_random_uuid(),now(),'qualified-pg17-development')`,
-		tenant, employer, capabilityKey, bindingID, providerID, certID)
+		VALUES ($1,$2,'ZA',$3,$4::uuid,$5::uuid,1,$6::uuid,'EXTERNAL','ACTIVE',now()-interval '1 hour',$7::uuid,$8::uuid,now(),'qualified-pg17-development')`
+	for label, actors := range map[string][2]string{
+		"fabricated maker UUID": {domain.NewUUIDv7(), checkerID},
+		"fabricated checker UUID": {makerID, domain.NewUUIDv7()},
+		"workload checker": {makerID, workloadID},
+		"workload maker": {workloadID, checkerID},
+		"self approval": {makerID, makerID},
+	} {
+		t.Run(label, func(t *testing.T) {
+			if _, e := admin.Exec(ctx, choiceInsert, tenant, employer, capabilityKey, bindingID, providerID, certID,
+				actors[0], actors[1]); e == nil {
+				t.Fatal("unqualified or forged maker/checker activated a provider")
+			}
+		})
+	}
+	exec(choiceInsert, tenant, employer, capabilityKey, bindingID, providerID, certID, makerID, checkerID)
 
 	current, err := repo.ReadPeopleChoice(ctx, tenant, employer, "ZA", capabilityKey, time.Now().UTC())
 	if err != nil || current.SourceOfRecord != "EXTERNAL" || current.BindingID != bindingID ||
