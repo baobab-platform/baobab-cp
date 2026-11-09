@@ -924,7 +924,7 @@ func New(dependencies Dependencies) http.Handler {
 	// resolution; always gated off for protected environments.
 	if dependencies.PeopleProviderSelectionEnabled && dependencies.PeopleProviderSelections != nil &&
 		dependencies.Contexts != nil && dependencies.Identities != nil &&
-		dependencies.WorkloadRegistry != nil && peoRoutesPermittedIn(dependencies.Environment) {
+		dependencies.WorkloadRegistry != nil && peopleProviderSelectionPermittedIn(dependencies.Environment) {
 		allow := make(map[string]bool)
 		for _, id := range dependencies.PeopleProviderSelectionClientIDs {
 			if id = strings.TrimSpace(id); id != "" {
