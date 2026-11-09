@@ -26,3 +26,17 @@ func TestPeopleSelectionRequestRejectsForgedAuthorityAndDuplicates(t *testing.T)
 		})
 	}
 }
+
+func TestPeopleProviderSelectionNeverMountsInProtectedEnvironments(t *testing.T) {
+	for env, allowed := range map[string]bool{
+		"development": true, "test": true, "integration": true,
+		"sandbox": false, "staging": false, "production": false,
+		"": false, "PRODUCTION": false, "unknown": false,
+	} {
+		t.Run(env, func(t *testing.T) {
+			if got := peopleProviderSelectionPermittedIn(env); got != allowed {
+				t.Fatalf("People provider route environment %q allowed=%v, want %v", env, got, allowed)
+			}
+		})
+	}
+}
