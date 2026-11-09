@@ -116,15 +116,16 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 			sql string
 			arg string
 		}{
-			{ "DELETE FROM capability.people_provider_choice WHERE tenant_id=$1", tenant },
-			{ "DELETE FROM capability.provider_capability_certification WHERE certification_id=$1::uuid", certID },
-			{ "DELETE FROM capability.capability_binding WHERE id=$1::uuid", bindingID },
-			{ "DELETE FROM capability.provider_capability_support WHERE provider_id=$1::uuid", providerID },
-			{ "DELETE FROM capability.capability_scope WHERE scope_id=$1::uuid", scopeID },
-			{ "DELETE FROM capability.capability_provider WHERE provider_id=$1::uuid", providerID },
-			{ "DELETE FROM topology.engine_instance WHERE engine_instance_id=$1::uuid", instanceID },
-			{ "DELETE FROM topology.engine_release WHERE engine_release_id=$1::uuid", releaseID },
-			{ "DELETE FROM topology.engine WHERE engine_id=$1::uuid", engineID },
+			{"DELETE FROM capability.people_provider_choice WHERE tenant_id=$1", tenant},
+			{"DELETE FROM capability.provider_capability_certification WHERE certification_id=$1::uuid", certID},
+			{"DELETE FROM topology.engine_release_provider_support WHERE engine_release_id=$1::uuid", releaseID},
+			{"DELETE FROM capability.capability_binding WHERE id=$1::uuid", bindingID},
+			{"DELETE FROM capability.provider_capability_support WHERE provider_id=$1::uuid", providerID},
+			{"DELETE FROM capability.capability_scope WHERE scope_id=$1::uuid", scopeID},
+			{"DELETE FROM capability.capability_provider WHERE provider_id=$1::uuid", providerID},
+			{"DELETE FROM topology.engine_instance WHERE engine_instance_id=$1::uuid", instanceID},
+			{"DELETE FROM topology.engine_release WHERE engine_release_id=$1::uuid", releaseID},
+			{"DELETE FROM topology.engine WHERE engine_id=$1::uuid", engineID},
 		} {
 			if q.arg == "" { continue }
 			if _, e = tx.Exec(ctx, q.sql, q.arg); e != nil {
@@ -168,6 +169,9 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 		(engine_release_id,engine_id,release_version,source_revision,declaration_digest,content_digest,status,recorded_by,recorded_at,reason,status_changed_by,status_changed_at,status_reason)
 		VALUES (gen_random_uuid(),$1::uuid,'1.0.0',repeat('a',40),'sha256:'||repeat('b',64),'sha256:'||repeat('c',64),'APPROVED','pg17-test',now(),'Development fixture.','pg17-reviewer',now(),'Approved for isolated test.')
 		RETURNING engine_release_id::text`, engineID)
+	// An APPROVED release without the exact immutable provider/capability/
+	// contract-major support entry must never qualify an external provider.
+	exec("INSERT INTO topology.engine_release_provider_support (engine_release_id,ordinal,provider_key,capability_key,contract_versions) VALUES ($1::uuid,0,$2,$3,ARRAY[1])", releaseID, providerKey, capabilityKey)
 	one(&certID, `INSERT INTO capability.provider_capability_certification
 		(certification_id,provider_id,capability_id,contract_version,engine_release_id,qualification_profile,evidence,request_digest,status,certified_by,certified_at,reason)
 		VALUES (gen_random_uuid(),$1::uuid,$2::uuid,1,$3::uuid,'people-pg17-fixture','[{"fixture":"pg17"}]'::jsonb,'sha256:'||repeat('d',64),'CERTIFIED','pg17-reviewer',now(),'Development source qualification.')
@@ -203,6 +207,13 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 		FROM capability.people_provider_choice WHERE tenant_id=$1`, tenant); err == nil {
 		t.Fatal("overlapping ACTIVE employer provider was accepted")
 	}
+	// Provider/instance lineage is current authority: an inactive instance
+	// must not be rescued by an otherwise CERTIFIED and APPROVED release.
+	exec("UPDATE topology.engine_instance SET status='inactive' WHERE engine_instance_id=$1::uuid", instanceID)
+	if _, err := repo.ReadPeopleChoice(ctx, tenant, employer, "ZA", capabilityKey, time.Now().UTC()); !errors.Is(err, ErrPeopleChoiceUnavailable) {
+		t.Fatalf("inactive provider engine instance must deny: %v", err)
+	}
+	exec("UPDATE topology.engine_instance SET status='active' WHERE engine_instance_id=$1::uuid", instanceID)
 	// Certification revocation makes the previously valid choice instantly
 	// ineligible even when the decision row and PRIMARY binding stay ACTIVE.
 	exec("UPDATE capability.provider_capability_certification SET status='REVOKED',revoked_by='pg17-reviewer',revoked_at=now(),revocation_reason='Fixture revocation.' WHERE certification_id=$1::uuid", certID)
