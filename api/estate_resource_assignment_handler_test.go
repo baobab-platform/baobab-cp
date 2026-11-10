@@ -186,9 +186,9 @@ func (f *assignmentFixture) currentIntrospector() auth.Introspector {
 }
 
 type assignmentChangingIssuer struct {
-	first auth.Introspection
-	calls int
-	failAfterFirst bool
+	first            auth.Introspection
+	calls            int
+	failAfterFirst   bool
 	outageAfterFirst bool
 }
 
