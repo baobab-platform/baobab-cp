@@ -24,11 +24,11 @@ import (
 const (
 	assignmentID       = "4b3a2c1d-0e9f-4a8b-9c7d-6e5f4a3b2c1d"
 	nativeAssignmentID = "bbbbbbbb-4a5b-4c6d-8e9f-0a1b2c3d4e5f"
-	assignmentServer = "synthetic-server-checkout"
-	assignmentRef    = "trade/native-seller-configuration/synthetic-01"
-	assignmentDigest = "5d41402abc4b2a76b9719d911017c5925d41402abc4b2a76b9719d911017c592"
-	assignmentMarket = "market_synthetic"
-	assignmentCaller = "synthetic-trade-workload"
+	assignmentServer   = "synthetic-server-checkout"
+	assignmentRef      = "trade/native-seller-configuration/synthetic-01"
+	assignmentDigest   = "5d41402abc4b2a76b9719d911017c5925d41402abc4b2a76b9719d911017c592"
+	assignmentMarket   = "market_synthetic"
+	assignmentCaller   = "synthetic-trade-workload"
 )
 
 type assignmentRegistry struct {
