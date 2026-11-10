@@ -240,7 +240,8 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 		// allocation is currently held for every real registered workload.
 		registered, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
 		if !ok || !h.api.workloadRegistry.IsActive(server.ClientID) ||
-			!registered.AllowsScope(server.ClientID, nativeCommitmentSubmitScope) {
+			!registered.AllowsScope(server.ClientID, nativeCommitmentSubmitScope) ||
+			registered.AllowsScope(server.ClientID, bffHandoffScope) {
 			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload is not currently registered for native commitments")
 			return
 		}
@@ -297,7 +298,8 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 	if req.Scope == "WORKLOAD" {
 		registered, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
 		if !ok || !h.api.workloadRegistry.IsActive(verifiedServer.ClientID) ||
-			!registered.AllowsScope(verifiedServer.ClientID, nativeCommitmentSubmitScope) {
+			!registered.AllowsScope(verifiedServer.ClientID, nativeCommitmentSubmitScope) ||
+			registered.AllowsScope(verifiedServer.ClientID, bffHandoffScope) {
 			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload registration was withdrawn during resolution")
 			return
 		}
