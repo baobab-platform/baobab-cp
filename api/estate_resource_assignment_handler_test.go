@@ -22,7 +22,8 @@ import (
 // token. This proves CP's boundary, not connected IAM acceptance or a
 // registered assignment.
 const (
-	assignmentID     = "4b3a2c1d-0e9f-4a8b-9c7d-6e5f4a3b2c1d"
+	assignmentID       = "4b3a2c1d-0e9f-4a8b-9c7d-6e5f4a3b2c1d"
+	nativeAssignmentID = "bbbbbbbb-4a5b-4c6d-8e9f-0a1b2c3d4e5f"
 	assignmentServer = "synthetic-server-checkout"
 	assignmentRef    = "trade/native-seller-configuration/synthetic-01"
 	assignmentDigest = "5d41402abc4b2a76b9719d911017c5925d41402abc4b2a76b9719d911017c592"
@@ -58,6 +59,8 @@ type assignmentStore struct {
 	failRec     bool
 	records     []postgres.EstateResourceAssignmentResolution
 	asked       []string
+	readback    *postgres.EstateResourceAssignment
+	readbackErr error
 }
 
 func (s *assignmentStore) ProposeEstateResourceAssignment(context.Context, string, basestore.RequestMetadata, string,
@@ -71,8 +74,19 @@ func (s *assignmentStore) TransitionEstateResourceAssignment(_ context.Context, 
 	a.Revision = t.ExpectedRevision + 1
 	return a, nil
 }
-func (s *assignmentStore) EstateResourceAssignment(context.Context, string) (postgres.EstateResourceAssignment, error) {
-	return activeAssignment(nil), nil
+func (s *assignmentStore) EstateResourceAssignment(_ context.Context, id string) (postgres.EstateResourceAssignment, error) {
+	if s.readbackErr != nil {
+		return postgres.EstateResourceAssignment{}, s.readbackErr
+	}
+	if s.readback != nil {
+		return *s.readback, nil
+	}
+	for _, a := range s.assignments {
+		if a.AssignmentID == id {
+			return a, nil
+		}
+	}
+	return postgres.EstateResourceAssignment{}, postgres.ErrAssignmentNotFound
 }
 func (s *assignmentStore) EstateResourceAssignmentCandidates(_ context.Context, scope, subject, estate string) (
 	[]postgres.EstateResourceAssignment, error) {
@@ -113,7 +127,7 @@ func activeAssignment(change func(*postgres.EstateResourceAssignment)) postgres.
 
 func nativeAssignment(change func(*postgres.EstateResourceAssignment)) postgres.EstateResourceAssignment {
 	return activeAssignment(func(a *postgres.EstateResourceAssignment) {
-		a.Scope, a.WorkloadClientID = "NATIVE_RESOURCE", ""
+		a.AssignmentID, a.Scope, a.WorkloadClientID = nativeAssignmentID, "NATIVE_RESOURCE", ""
 		a.NativeConfigurationReference, a.NativeConfigurationDigest = assignmentRef, assignmentDigest
 		a.NativeResource = &postgres.NativeRef{Reference: assignmentRef, Digest: assignmentDigest}
 		if change != nil {
@@ -359,6 +373,39 @@ func TestEstateResourceAssignmentRefusesUnverifiedSubjects(t *testing.T) {
 				t.Fatalf("status = %d code = %q, want %d %s: %s", res.Code, problemCode(t, res), tc.status, tc.code, res.Body.String())
 			}
 		})
+	}
+}
+
+func TestEstateResourceAssignmentRejectsLateAssignmentRevocationOrRevisionDrift(t *testing.T) {
+	for name, change := range map[string]func(*postgres.EstateResourceAssignment){
+		"revoked": func(a *postgres.EstateResourceAssignment) { a.Status = "REVOKED"; a.Revision++ },
+		"suspended": func(a *postgres.EstateResourceAssignment) { a.Status = "SUSPENDED"; a.Revision++ },
+		"revised": func(a *postgres.EstateResourceAssignment) { a.Revision++ },
+		"foreign estate": func(a *postgres.EstateResourceAssignment) { a.DigitalEstateID = "estate_other" },
+		"substituted client": func(a *postgres.EstateResourceAssignment) { a.WorkloadClientID = "another-server-app" },
+		"expired": func(a *postgres.EstateResourceAssignment) {
+			end := time.Now().Add(-time.Second)
+			a.EffectiveUntil = &end
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newAssignmentFixture()
+			latest := activeAssignment(change)
+			f.store.readback = &latest
+			res := f.post(t, workloadBody(nil))
+			if res.Code != http.StatusForbidden || problemCode(t, res) != "ASSIGNMENT_NOT_ACTIVE" {
+				t.Fatalf("late assignment change produced authorization: %d %s", res.Code, res.Body.String())
+			}
+			if len(f.store.records) == 0 || f.store.records[len(f.store.records)-1].Outcome == "ATTESTED" {
+				t.Fatal("stale assignment was recorded as an attestation")
+			}
+		})
+	}
+	f := newAssignmentFixture()
+	f.store.readbackErr = errors.New("DB temporarily unavailable")
+	res := f.post(t, workloadBody(nil))
+	if res.Code != http.StatusServiceUnavailable || problemCode(t, res) != "RESOLUTION_UNAVAILABLE" {
+		t.Fatalf("late database outage produced authorization: %d %s", res.Code, res.Body.String())
 	}
 }
 
