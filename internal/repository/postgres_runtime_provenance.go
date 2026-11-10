@@ -36,7 +36,7 @@ func (r *PostgresRepository) BindingProviderCurrent(ctx context.Context, b resol
  JOIN capability.provider_capability_support s ON s.provider_id=p.provider_id
  JOIN capability.capability c ON c.capability_id=s.capability_id
  WHERE p.provider_id::text=$1 AND p.status='ACTIVE' AND s.status='ACTIVE'
- AND i.engine_instance_id::text=$2 AND c.code=$3 AND $4::integer=ANY(s.contract_versions)
+ AND i.engine_instance_id::text=$2 AND c.code=$3 AND c.status='ACTIVE' AND $4::integer=ANY(s.contract_versions)
  AND s.effective_from <= $5 AND (s.effective_to IS NULL OR s.effective_to > $5))`, b.ProviderID, b.EngineInstanceID, b.CapabilityKey, b.ContractVersion, at).Scan(&current)
 	return current, err
 }
