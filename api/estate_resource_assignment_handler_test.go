@@ -30,11 +30,25 @@ const (
 	assignmentCaller = "synthetic-trade-workload"
 )
 
-type assignmentRegistry struct{ allowed bool }
+type assignmentRegistry struct {
+	allowed bool
+	subjectActive bool
+	submitAllowed bool
+}
 
-func (r assignmentRegistry) IsActive(string) bool { return r.allowed }
+func (r assignmentRegistry) IsActive(clientID string) bool {
+	switch clientID {
+	case assignmentCaller:
+		return r.allowed
+	case assignmentServer:
+		return r.subjectActive
+	}
+	return false
+}
+
 func (r assignmentRegistry) AllowsScope(clientID, scope string) bool {
-	return r.allowed && clientID == assignmentCaller && scope == estateAssignmentResolveScope
+	return r.allowed && clientID == assignmentCaller && scope == estateAssignmentResolveScope ||
+		r.submitAllowed && clientID == assignmentServer && scope == nativeCommitmentSubmitScope
 }
 
 type assignmentStore struct {
@@ -122,7 +136,7 @@ func newAssignmentFixture() *assignmentFixture {
 	exp := time.Now().Add(5 * time.Minute).UTC()
 	return &assignmentFixture{
 		store:       &assignmentStore{assignments: []postgres.EstateResourceAssignment{activeAssignment(nil), nativeAssignment(nil)}, attested: true},
-		environment: "staging", enabled: true, registry: assignmentRegistry{allowed: true},
+		environment: "staging", enabled: true, registry: assignmentRegistry{allowed: true, subjectActive: true, submitAllowed: true},
 		caller: auth.Principal{Issuer: resolveIssuer, Subject: assignmentCaller, ActorType: "workload", ClientID: assignmentCaller,
 			TokenID: "workload-token", Scopes: map[string]struct{}{estateAssignmentResolveScope: {}}},
 		subjects: &resolveSubjects{verifier: fakeVerifier{principal: auth.Principal{Issuer: resolveIssuer, Subject: assignmentServer,
@@ -263,6 +277,34 @@ func TestEstateResourceAssignmentRefusesUnverifiedSubjects(t *testing.T) {
 		"revoked evidence": {func(f *assignmentFixture) { f.introspector.result.Active = false }, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
 		"introspection for another client": {func(f *assignmentFixture) { f.introspector.result.ClientID = "synthetic-other" }, nil,
 			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"server workload not ACTIVE in Shared": {func(f *assignmentFixture) { f.registry.subjectActive = false }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"server submit scope not allocated in Shared": {func(f *assignmentFixture) { f.registry.submitAllowed = false }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"publishable-key client ID": {func(f *assignmentFixture) { f.server(func(p *auth.Principal) { p.ClientID = "pk_synthetic" }) }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"server mixes BFF and native commitment scopes": {func(f *assignmentFixture) {
+			f.server(func(p *auth.Principal) { p.Scopes[bffHandoffScope] = struct{}{} })
+		}, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection omits issuer": {func(f *assignmentFixture) { f.introspector.result.Issuer = "" }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection substitutes issuer": {func(f *assignmentFixture) { f.introspector.result.Issuer = "https://other.invalid" }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection omits audience": {func(f *assignmentFixture) { f.introspector.result.Audience = nil }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection adds other audience": {func(f *assignmentFixture) {
+			f.introspector.result.Audience = append(f.introspector.result.Audience, "baobab-erp")
+		}, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection omits allocated scope": {func(f *assignmentFixture) { f.introspector.result.Scopes = nil }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection mixes BFF scope": {func(f *assignmentFixture) {
+			f.introspector.result.Scopes[bffHandoffScope] = struct{}{}
+		}, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection omits expiry": {func(f *assignmentFixture) { f.introspector.result.ExpiresAt = time.Time{} }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection substitutes expiry": {func(f *assignmentFixture) {
+			f.introspector.result.ExpiresAt = f.introspector.result.ExpiresAt.Add(time.Second)
+		}, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
 		"introspection outage":         {func(f *assignmentFixture) { f.introspector.err = errors.New("down") }, nil, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE"},
 		"issuer outage":                {func(f *assignmentFixture) { f.subjects.err = errors.New("down") }, nil, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE"},
 		"native configuration drifted": {func(f *assignmentFixture) { f.store.attested = false }, nativeBody(nil), http.StatusForbidden, "NATIVE_RESOURCE_NOT_ATTESTED"},
