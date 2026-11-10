@@ -1,0 +1,33 @@
+# ADR-ERP-024 / ADR-SHARED-017. DRAFT vocabulary, not provider support.
+# WMS/3PL operational custody is distinct from ERP financial inventory,
+# Trade reservation, TMS movement and CP/IAM legal-actor/warehouse grants.
+schema:
+  name: baobab-capability-definitions
+  version: "1.0"
+capabilities:
+  - capability_key: inventory.custody.read
+    name: Read governed operational inventory custody
+    description: Provider-neutral current and as-of warehouse custody observations for a verified warehouse/operator/owner scope; not accounting stock or available-to-promise.
+    domain: inventory
+    owner: baobab-erp
+    lifecycle: DRAFT
+    maturity: EXPERIMENTAL
+    contracts:
+      - major: 1
+        request_schema: custody-read-request.schema.json
+        response_schema: custody-read-response.schema.json
+        error_schema: ../../errors/v1/problem-details.schema.json
+    data_classification: RESTRICTED
+  - capability_key: inventory.warehouse-operation.manage
+    name: Record governed WMS warehouse operation
+    description: Provider-neutral immutable warehouse observations under CP/IAM warehouse/operator/inventory-owner scope, without native ERP financial posting.
+    domain: inventory
+    owner: baobab-erp
+    lifecycle: DRAFT
+    maturity: EXPERIMENTAL
+    contracts:
+      - major: 1
+        request_schema: warehouse-operation-manage-request.schema.json
+        response_schema: warehouse-operation-manage-response.schema.json
+        error_schema: ../../errors/v1/problem-details.schema.json
+    data_classification: RESTRICTED

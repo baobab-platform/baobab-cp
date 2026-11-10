@@ -74,7 +74,13 @@ capabilities:
   - capability_key: finance.statement.read
     owner: baobab-erp
     source: ../../finance/v1/capabilities.yaml
+  - capability_key: identity.authentication.assurance
+    owner: baobab-iam
+    source: ../../identity/v1/capabilities.yaml
   - capability_key: identity.authentication.perform
+    owner: baobab-iam
+    source: ../../identity/v1/capabilities.yaml
+  - capability_key: identity.federation.enterprise
     owner: baobab-iam
     source: ../../identity/v1/capabilities.yaml
   - capability_key: identity.workload-token.issue
@@ -89,6 +95,12 @@ capabilities:
   - capability_key: inventory.availability.query
     owner: baobab-erp
     source: ../../erp/v1/capabilities.yaml
+  - capability_key: inventory.custody.read
+    owner: baobab-erp
+    source: ../../wms/v1/capabilities.yaml
+  - capability_key: inventory.warehouse-operation.manage
+    owner: baobab-erp
+    source: ../../wms/v1/capabilities.yaml
   - capability_key: payment.intent.cancel
     owner: baobab-payments
     source: ../../payments/v1/capabilities.yaml
@@ -104,6 +116,12 @@ capabilities:
   - capability_key: payment.refund.create
     owner: baobab-payments
     source: ../../payments/v1/capabilities.yaml
+  - capability_key: payroll.evidence.attest
+    owner: baobab-erp
+    source: ../../people/v1/capabilities.yaml
+  - capability_key: payroll.run.read
+    owner: baobab-erp
+    source: ../../people/v1/capabilities.yaml
   - capability_key: regulations.decision.evaluate
     owner: baobab-regulations
     source: ../../regulations/v1/capabilities.yaml
@@ -113,3 +131,9 @@ capabilities:
   - capability_key: regulations.requirement.resolve
     owner: baobab-regulations
     source: ../../regulations/v1/capabilities.yaml
+  - capability_key: workforce.employment.manage
+    owner: baobab-erp
+    source: ../../people/v1/capabilities.yaml
+  - capability_key: workforce.employment.read
+    owner: baobab-erp
+    source: ../../people/v1/capabilities.yaml
