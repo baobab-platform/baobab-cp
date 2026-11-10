@@ -202,8 +202,9 @@ func providerActivationChecks(ctx context.Context, tx pgx.Tx, providerUUID strin
 	// the catalogued capability defines.
 	var supports int
 	var incompatible []string
+	var inactive []string
 	rows, err := tx.Query(ctx, `
-		SELECT c.code, pcs.contract_versions <@ COALESCE(c.contract_versions, '{}'::integer[])
+		SELECT c.code, pcs.contract_versions <@ COALESCE(c.contract_versions, '{}'::integer[]), c.status
 		FROM capability.provider_capability_support pcs JOIN capability.capability c ON c.capability_id = pcs.capability_id
 		WHERE pcs.provider_id = $1::uuid ORDER BY c.code`, providerUUID)
 	if err != nil {
@@ -212,11 +213,15 @@ func providerActivationChecks(ctx context.Context, tx pgx.Tx, providerUUID strin
 	for rows.Next() {
 		var code string
 		var compatible bool
-		if err := rows.Scan(&code, &compatible); err != nil {
+		var lifecycle string
+		if err := rows.Scan(&code, &compatible, &lifecycle); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		supports++
+		if lifecycle != "ACTIVE" {
+			inactive = append(inactive, code)
+		}
 		if !compatible {
 			incompatible = append(incompatible, code)
 		}
@@ -227,6 +232,11 @@ func providerActivationChecks(ctx context.Context, tx pgx.Tx, providerUUID strin
 	}
 	if supports == 0 {
 		failures[checkCapabilitySupport] = fmt.Sprintf("Provider %s has no implemented capability support.", providerKey)
+	} else if len(inactive) > 0 {
+		// A canonical DRAFT definition is not an executable capability, even
+		// when a provider claims IMPLEMENTED support or a release is approved.
+		// Reject the entire provider activation until *each* key is admitted.
+		failures[checkCapabilitySupport] = fmt.Sprintf("Provider %s supports non-ACTIVE canonical capabilities: %s.", providerKey, strings.Join(inactive, ", "))
 	}
 	if len(incompatible) > 0 {
 		failures[checkContractCompatible] = fmt.Sprintf("Provider %s supports contract majors its capability does not define for %s.",
