@@ -126,6 +126,7 @@ type assignmentFixture struct {
 	store        *assignmentStore
 	subjects     *resolveSubjects
 	introspector *resolveIntrospector
+	override     auth.Introspector
 	caller       auth.Principal
 	registry     assignmentRegistry
 	environment  string
@@ -177,12 +178,44 @@ func nativeBody(change map[string]any) map[string]any {
 	return body
 }
 
+func (f *assignmentFixture) currentIntrospector() auth.Introspector {
+	if f.override != nil {
+		return f.override
+	}
+	return f.introspector
+}
+
+type assignmentChangingIssuer struct {
+	first auth.Introspection
+	calls int
+	failAfterFirst bool
+	outageAfterFirst bool
+}
+
+func (r *assignmentChangingIssuer) Introspect(_ context.Context, token string) (auth.Introspection, error) {
+	r.calls++
+	if token != resolveToken {
+		return auth.Introspection{}, errors.New("unexpected original bearer")
+	}
+	if r.calls > 1 {
+		if r.outageAfterFirst {
+			return auth.Introspection{}, errors.New("issuer down after first proof")
+		}
+		if r.failAfterFirst {
+			out := r.first
+			out.Active = false
+			return out, nil
+		}
+	}
+	return r.first, nil
+}
+
 func (f *assignmentFixture) post(t *testing.T, body map[string]any) *httptest.ResponseRecorder {
 	t.Helper()
 	handler := New(Dependencies{Store: &fakeStore{}, Environment: f.environment,
 		WorkloadVerifier: fakeVerifier{principal: f.caller}, WorkloadRegistry: f.registry,
 		EstateResourceAssignmentEnabled: f.enabled, EstateResourceAssignments: f.store,
-		BuyerSubjects: f.subjects, BuyerSubjectIntrospector: f.introspector})
+		BuyerSubjects: f.subjects, BuyerSubjectIntrospector: f.currentIntrospector()})
 	raw, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/internal/estate/v1/resource-assignments/resolve", bytes.NewReader(raw))
 	req.Header.Set("Authorization", "Bearer workload-token")
@@ -218,7 +251,7 @@ func TestEstateResourceAssignmentAttestsAVerifiedServerApplication(t *testing.T)
 	if out.ExpiresAt.Sub(out.IssuedAt) > assignmentAttestationTTL {
 		t.Fatalf("lifetime %s exceeds the contract", out.ExpiresAt.Sub(out.IssuedAt))
 	}
-	if f.introspector.calls != 1 || f.subjects.audience != buyerSubjectAudience {
+	if f.introspector.calls != 2 || f.subjects.audience != buyerSubjectAudience {
 		t.Fatalf("evidence was not verified and introspected for the Trade audience")
 	}
 	if len(f.store.records) != 1 || f.store.records[0].Outcome != "ATTESTED" || f.store.records[0].AttestationID != out.AttestationID ||
@@ -324,6 +357,33 @@ func TestEstateResourceAssignmentRefusesUnverifiedSubjects(t *testing.T) {
 			res := f.post(t, body)
 			if res.Code != tc.status || problemCode(t, res) != tc.code {
 				t.Fatalf("status = %d code = %q, want %d %s: %s", res.Code, problemCode(t, res), tc.status, tc.code, res.Body.String())
+			}
+		})
+	}
+}
+
+func TestEstateResourceAssignmentRejectsRevokedOrUnavailableIssuerAfterStorageRead(t *testing.T) {
+	for name, outage := range map[string]bool{"revoked": false, "issuer-unavailable": true} {
+		t.Run(name, func(t *testing.T) {
+			f := newAssignmentFixture()
+			s := &assignmentChangingIssuer{first: f.introspector.result, failAfterFirst: !outage, outageAfterFirst: outage}
+			f.override = s
+			res := f.post(t, workloadBody(nil))
+			wantCode := "WORKLOAD_EVIDENCE_INVALID"
+			wantStatus := http.StatusForbidden
+			if outage {
+				wantCode, wantStatus = "RESOLUTION_UNAVAILABLE", http.StatusServiceUnavailable
+			}
+			if res.Code != wantStatus || problemCode(t, res) != wantCode {
+				t.Fatalf("post-resolution issuer withdrawal admitted: %d %s", res.Code, res.Body.String())
+			}
+			if s.calls != 2 {
+				t.Fatalf("expected issuer read immediately before attestation, reads=%d", s.calls)
+			}
+			for _, record := range f.store.records {
+				if record.Outcome == "ATTESTED" {
+					t.Fatal("revoked or unavailable issuer produced an attestation")
+				}
 			}
 		})
 	}
