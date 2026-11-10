@@ -38,45 +38,8 @@ const (
 )
 
 // Shared control-plane/v1 estate-resource-assignment workloadClientId grammar.
-// A publishable key is not an application principal, even when submitted in
-// a syntactically valid, issuer-signed JWT.
-var nativeCommitmentWorkloadClientID = regexp.MustCompile(`^[a-z][a-z0-9-]{2,62}// ADR-SHARED-042 section 14, Decision 9 (CP ADR-BCP-031; Shared control-plane/v1
-// estate-resource-assignment.openapi.yaml): governed estate resource
-// assignments. Humans propose, approve (four-eyes), suspend, reinstate and
-// revoke them; a registered Trade workload resolves a short-lived attestation
-// that one non-BFF native commitment operation has governed Digital Estate
-// provenance. CP verifies the subject itself: a WORKLOAD's own IAM token
-// (verified and introspected), or a NATIVE_RESOURCE against the caller's own
-// Trade-0 attestation. A Medusa key, sales channel or asserted estate is never
-// provenance, and the attestation authorises nothing beyond it.
-package api
-
-import (
-	"context"
-	"encoding/json"
-	"errors"
-	"log/slog"
-	"net/http"
-	"regexp"
-	"slices"
-	"time"
-
-	"github.com/baobab-platform/baobab-cp/internal/auth"
-	"github.com/baobab-platform/baobab-cp/internal/contracts"
-	"github.com/baobab-platform/baobab-cp/internal/domain"
-	basestore "github.com/baobab-platform/baobab-cp/internal/store"
-	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
-	"github.com/go-chi/chi/v5"
-)
-
-const (
-	estateAssignmentResolveScope = "estate:resource-assignment:resolve"
-	estateAssignmentWriteScope   = "estate:resource-assignment:write"
-	estateAssignmentApproveScope = "estate:resource-assignment:approve"
-	// The server application's own credential for submitting native
-	// commitments to Trade; identity, never authority.
-	nativeCommitmentSubmitScope = "trade:native-commitment:submit"
-	)
+// Medusa publishable keys never qualify as server application principals.
+var nativeCommitmentWorkloadClientID = regexp.MustCompile(`^[a-z][a-z0-9-]{2,62}$`)
 
 var (
 	assignmentResolveSchema     = contracts.MustSchema("control-plane/v1/estate-resource-assignment.schema.json#/$defs/EstateResourceAssignmentResolveRequest")
@@ -206,10 +169,8 @@ func selectAssignment(candidates []postgres.EstateResourceAssignment, req assign
 	return candidates[0], "ATTESTED", 1
 }
 
-// Introspection is a current, original-token issuer readback, not a source of
-// missing identity claims. Every security-critical field must agree with the
-// independently verified signed token. Optional RFC 7662 members are not
-// acceptable for this consequential native commitment provenance decision.
+// Introspection must independently agree with the originally signed workload
+// token; omitted optional RFC 7662 members never prove identity continuity.
 func nativeCommitmentCurrent(server auth.Principal, current auth.Introspection, now time.Time) bool {
 	return current.Active && current.ClientID == server.ClientID && current.Subject == server.Subject &&
 		current.Issuer == server.Issuer && len(current.Audience) == 1 && current.Audience[0] == buyerSubjectAudience &&
@@ -275,10 +236,8 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 			return
 		}
 		record.SubjectReference = server.ClientID
-		// A cryptographically valid workload token is NOT canonical registration:
-		// the subject must independently be ACTIVE and allocated the exact
-		// non-authorising native-commitment scope in current Shared. This scope
-		// is currently allocated to nobody, so real requests remain denied.
+		// Signed issuer claims do not grant Shared registry membership. This
+		// allocation is currently held for every real registered workload.
 		registered, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
 		if !ok || !h.api.workloadRegistry.IsActive(server.ClientID) ||
 			!registered.AllowsScope(server.ClientID, nativeCommitmentSubmitScope) {
@@ -333,9 +292,8 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Re-read original bearer status and the separately governed Shared
-	// allocation after storage resolution. A revocation or scope withdrawal
-	// during the lookup must not produce a fresh positive attestation.
+	// An issuer revocation or Shared scope withdrawal while querying the
+	// assignment store must veto the final positive attestation.
 	if req.Scope == "WORKLOAD" {
 		registered, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
 		if !ok || !h.api.workloadRegistry.IsActive(verifiedServer.ClientID) ||
