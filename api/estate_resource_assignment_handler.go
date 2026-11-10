@@ -312,6 +312,27 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 		}
 	}
 	now = h.now().UTC()
+	// The assignment is mutable through governed approval/suspension/revocation.
+	// Read the exact row again after the issuer round trip so an intervening
+	// withdrawal or revision does not publish a stale positive attestation.
+	latestAssignment, err := h.store.EstateResourceAssignment(r.Context(), assignment.AssignmentID)
+	if err != nil {
+		h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "the assignment's current state is unavailable")
+		return
+	}
+	_, currentOutcome, _ := selectAssignment([]postgres.EstateResourceAssignment{latestAssignment}, req, now)
+	if currentOutcome != "ATTESTED" || latestAssignment.AssignmentID != assignment.AssignmentID ||
+		latestAssignment.Scope != assignment.Scope || latestAssignment.Revision != assignment.Revision ||
+		latestAssignment.DigitalEstateID != assignment.DigitalEstateID ||
+		latestAssignment.TenantID != assignment.TenantID ||
+		latestAssignment.WorkloadClientID != assignment.WorkloadClientID ||
+		latestAssignment.NativeConfigurationReference != assignment.NativeConfigurationReference ||
+		latestAssignment.NativeConfigurationDigest != assignment.NativeConfigurationDigest ||
+		(req.Scope == "WORKLOAD" && latestAssignment.WorkloadClientID != subject) ||
+		(req.Scope == "NATIVE_RESOURCE" && latestAssignment.NativeConfigurationReference != subject) {
+		refuse("ASSIGNMENT_NOT_ACTIVE", "assignment state or binding changed during resolution")
+		return
+	}
 	issued := now.Truncate(time.Second)
 	expires := now.Add(assignmentAttestationTTL)
 	if assignment.EffectiveUntil != nil && assignment.EffectiveUntil.Before(expires) {
