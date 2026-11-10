@@ -15,6 +15,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
 	"time"
 
@@ -35,6 +36,47 @@ const (
 	nativeCommitmentSubmitScope = "trade:native-commitment:submit"
 	assignmentAttestationTTL    = 60 * time.Second
 )
+
+// Shared control-plane/v1 estate-resource-assignment workloadClientId grammar.
+// A publishable key is not an application principal, even when submitted in
+// a syntactically valid, issuer-signed JWT.
+var nativeCommitmentWorkloadClientID = regexp.MustCompile(`^[a-z][a-z0-9-]{2,62}// ADR-SHARED-042 section 14, Decision 9 (CP ADR-BCP-031; Shared control-plane/v1
+// estate-resource-assignment.openapi.yaml): governed estate resource
+// assignments. Humans propose, approve (four-eyes), suspend, reinstate and
+// revoke them; a registered Trade workload resolves a short-lived attestation
+// that one non-BFF native commitment operation has governed Digital Estate
+// provenance. CP verifies the subject itself: a WORKLOAD's own IAM token
+// (verified and introspected), or a NATIVE_RESOURCE against the caller's own
+// Trade-0 attestation. A Medusa key, sales channel or asserted estate is never
+// provenance, and the attestation authorises nothing beyond it.
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"regexp"
+	"slices"
+	"time"
+
+	"github.com/baobab-platform/baobab-cp/internal/auth"
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
+	basestore "github.com/baobab-platform/baobab-cp/internal/store"
+	"github.com/baobab-platform/baobab-cp/internal/store/postgres"
+	"github.com/go-chi/chi/v5"
+)
+
+const (
+	estateAssignmentResolveScope = "estate:resource-assignment:resolve"
+	estateAssignmentWriteScope   = "estate:resource-assignment:write"
+	estateAssignmentApproveScope = "estate:resource-assignment:approve"
+	// The server application's own credential for submitting native
+	// commitments to Trade; identity, never authority.
+	nativeCommitmentSubmitScope = "trade:native-commitment:submit"
+	)
 
 var (
 	assignmentResolveSchema     = contracts.MustSchema("control-plane/v1/estate-resource-assignment.schema.json#/$defs/EstateResourceAssignmentResolveRequest")
@@ -215,21 +257,31 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 		}
 		server, err := verifier.Verify(r.Context(), req.WorkloadEvidence)
 		if err != nil || server.ActorType != "workload" || server.Issuer == "" || server.TokenID == "" ||
-			server.ClientID == "" || !server.HasScope(nativeCommitmentSubmitScope) || !server.ExpiresAt.After(now) {
+			server.ClientID == "" || !nativeCommitmentWorkloadClientID.MatchString(server.ClientID) ||
+			!server.HasScope(nativeCommitmentSubmitScope) || server.HasScope(bffHandoffScope) || !server.ExpiresAt.After(now) {
 			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload evidence could not be verified")
 			return
 		}
 		record.SubjectReference = server.ClientID
+		// A cryptographically valid workload token is NOT canonical registration:
+		// the subject must independently be ACTIVE and allocated the exact
+		// non-authorising native-commitment scope in current Shared. This scope
+		// is currently allocated to nobody, so real requests remain denied.
+		registered, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
+		if !ok || !h.api.workloadRegistry.IsActive(server.ClientID) ||
+			!registered.AllowsScope(server.ClientID, nativeCommitmentSubmitScope) {
+			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload is not currently registered for native commitments")
+			return
+		}
 		current, err := h.introspector.Introspect(r.Context(), req.WorkloadEvidence)
 		if err != nil {
 			h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "the workload evidence's current status is unavailable")
 			return
 		}
 		if !current.Active || current.ClientID != server.ClientID || current.Subject != server.Subject ||
-			(current.Issuer != "" && current.Issuer != server.Issuer) ||
-			(len(current.Audience) > 0 && !slices.Contains(current.Audience, buyerSubjectAudience)) ||
-			(len(current.Scopes) > 0 && !hasScopeEntry(current.Scopes, nativeCommitmentSubmitScope)) ||
-			(!current.ExpiresAt.IsZero() && !current.ExpiresAt.After(now)) {
+			current.Issuer != server.Issuer || len(current.Audience) != 1 || current.Audience[0] != buyerSubjectAudience ||
+			!hasScopeEntry(current.Scopes, nativeCommitmentSubmitScope) || hasScopeEntry(current.Scopes, bffHandoffScope) ||
+			!current.ExpiresAt.Equal(server.ExpiresAt) || !current.ExpiresAt.After(now) {
 			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload evidence is not current")
 			return
 		}
