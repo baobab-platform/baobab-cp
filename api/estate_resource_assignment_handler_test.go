@@ -31,7 +31,7 @@ const (
 )
 
 type assignmentRegistry struct {
-	allowed bool
+	allowed       bool
 	subjectActive bool
 	submitAllowed bool
 }
@@ -246,6 +246,7 @@ func TestEstateResourceAssignmentNeverAttestsOutlivedEvidence(t *testing.T) {
 	f := newAssignmentFixture()
 	soon := time.Now().Add(20 * time.Second).UTC()
 	f.server(func(p *auth.Principal) { p.ExpiresAt = soon })
+	f.introspector.result.ExpiresAt = soon
 	out := attestationOf(t, f.post(t, workloadBody(nil)))
 	if out.ExpiresAt.After(soon) {
 		t.Fatalf("attestation %s outlives the server evidence %s", out.ExpiresAt, soon)
