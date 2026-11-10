@@ -206,6 +206,17 @@ func selectAssignment(candidates []postgres.EstateResourceAssignment, req assign
 	return candidates[0], "ATTESTED", 1
 }
 
+// Introspection is a current, original-token issuer readback, not a source of
+// missing identity claims. Every security-critical field must agree with the
+// independently verified signed token. Optional RFC 7662 members are not
+// acceptable for this consequential native commitment provenance decision.
+func nativeCommitmentCurrent(server auth.Principal, current auth.Introspection, now time.Time) bool {
+	return current.Active && current.ClientID == server.ClientID && current.Subject == server.Subject &&
+		current.Issuer == server.Issuer && len(current.Audience) == 1 && current.Audience[0] == buyerSubjectAudience &&
+		hasScopeEntry(current.Scopes, nativeCommitmentSubmitScope) && !hasScopeEntry(current.Scopes, bffHandoffScope) &&
+		current.ExpiresAt.Equal(server.ExpiresAt) && current.ExpiresAt.After(now)
+}
+
 func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Pragma", "no-cache")
@@ -243,6 +254,7 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 
 	// The subject, verified by CP itself.
 	var subject string
+	var verifiedServer auth.Principal
 	evidenceExpiry := time.Time{}
 	if req.Scope == "WORKLOAD" {
 		record.SubjectReference = "workload-evidence"
@@ -278,17 +290,12 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 			h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "the workload evidence's current status is unavailable")
 			return
 		}
-		if !current.Active || current.ClientID != server.ClientID || current.Subject != server.Subject ||
-			current.Issuer != server.Issuer || len(current.Audience) != 1 || current.Audience[0] != buyerSubjectAudience ||
-			!hasScopeEntry(current.Scopes, nativeCommitmentSubmitScope) || hasScopeEntry(current.Scopes, bffHandoffScope) ||
-			!current.ExpiresAt.Equal(server.ExpiresAt) || !current.ExpiresAt.After(now) {
+		if !nativeCommitmentCurrent(server, current, h.now().UTC()) {
 			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload evidence is not current")
 			return
 		}
 		subject, evidenceExpiry = server.ClientID, server.ExpiresAt
-		if !current.ExpiresAt.IsZero() && current.ExpiresAt.Before(evidenceExpiry) {
-			evidenceExpiry = current.ExpiresAt
-		}
+		verifiedServer = server
 	} else {
 		record.SubjectReference = req.NativeResource.Reference
 		attested, err := h.store.NativeConfigurationAttested(r.Context(), p.ClientID, req.EngineInstanceID,
@@ -326,6 +333,27 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Re-read original bearer status and the separately governed Shared
+	// allocation after storage resolution. A revocation or scope withdrawal
+	// during the lookup must not produce a fresh positive attestation.
+	if req.Scope == "WORKLOAD" {
+		registered, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
+		if !ok || !h.api.workloadRegistry.IsActive(verifiedServer.ClientID) ||
+			!registered.AllowsScope(verifiedServer.ClientID, nativeCommitmentSubmitScope) {
+			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload registration was withdrawn during resolution")
+			return
+		}
+		latest, err := h.introspector.Introspect(r.Context(), req.WorkloadEvidence)
+		if err != nil {
+			h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "current issuer status is unavailable")
+			return
+		}
+		if !nativeCommitmentCurrent(verifiedServer, latest, h.now().UTC()) {
+			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload credential is no longer current")
+			return
+		}
+	}
+	now = h.now().UTC()
 	issued := now.Truncate(time.Second)
 	expires := now.Add(assignmentAttestationTTL)
 	if assignment.EffectiveUntil != nil && assignment.EffectiveUntil.Before(expires) {
