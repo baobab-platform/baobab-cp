@@ -35,6 +35,7 @@ type assignmentRegistry struct {
 	allowed       bool
 	subjectActive bool
 	submitAllowed bool
+	bffAllowed    bool
 }
 
 func (r assignmentRegistry) IsActive(clientID string) bool {
@@ -49,7 +50,8 @@ func (r assignmentRegistry) IsActive(clientID string) bool {
 
 func (r assignmentRegistry) AllowsScope(clientID, scope string) bool {
 	return r.allowed && clientID == assignmentCaller && scope == estateAssignmentResolveScope ||
-		r.submitAllowed && clientID == assignmentServer && scope == nativeCommitmentSubmitScope
+		r.submitAllowed && clientID == assignmentServer && scope == nativeCommitmentSubmitScope ||
+		r.bffAllowed && clientID == assignmentServer && scope == bffHandoffScope
 }
 
 type assignmentStore struct {
@@ -328,6 +330,8 @@ func TestEstateResourceAssignmentRefusesUnverifiedSubjects(t *testing.T) {
 		"server workload not ACTIVE in Shared": {func(f *assignmentFixture) { f.registry.subjectActive = false }, nil,
 			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
 		"server submit scope not allocated in Shared": {func(f *assignmentFixture) { f.registry.submitAllowed = false }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"server simultaneously registered as estate BFF": {func(f *assignmentFixture) { f.registry.bffAllowed = true }, nil,
 			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
 		"publishable-key client ID": {func(f *assignmentFixture) { f.server(func(p *auth.Principal) { p.ClientID = "pk_synthetic" }) }, nil,
 			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
