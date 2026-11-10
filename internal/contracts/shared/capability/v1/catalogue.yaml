@@ -62,6 +62,21 @@ capabilities:
   - capability_key: customer.buyer-membership.manage
     owner: baobab-trade
     source: ../../buyer-organisation/v1/capabilities.yaml
+  - capability_key: finance.bank-reconciliation.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.budget.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.cash-position.read
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.consolidation.run
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.expense.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
   - capability_key: finance.journal.manage
     owner: baobab-erp
     source: ../../finance/v1/capabilities.yaml
@@ -71,6 +86,18 @@ capabilities:
   - capability_key: finance.order-consequence.process
     owner: baobab-erp
     source: ../../erp/v1/capabilities.yaml
+  - capability_key: finance.payable.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.project-cost.read
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.receivable.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.reporting-export.create
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
   - capability_key: finance.statement.read
     owner: baobab-erp
     source: ../../finance/v1/capabilities.yaml

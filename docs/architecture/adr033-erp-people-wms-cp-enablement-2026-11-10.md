@@ -3,7 +3,7 @@
 
 ## Registered is not enabled
 
-CP pins Shared `1004d39056569bd7e4516dd53a913dfeae72f050` and projects **33** canonical capability definitions through the existing `capabilitycatalogue.SyncEmbedded`. F1, People and WMS form nine additional ERP-owned DRAFT catalogue entries. No extra CP-local definitions, simulated instances, tenant entitlements, grants, bindings or operational routes are created by the projection. Finance F2/F3 remain absent from Shared's canonical catalogue.
+CP pins Shared `584d7f3cd8426ffd3d1dc9f068f0b444dc74346e` and projects **42** canonical capability definitions through the existing `capabilitycatalogue.SyncEmbedded`. F1, People and WMS form nine additional ERP-owned DRAFT catalogue entries. No extra CP-local definitions, simulated instances, tenant entitlements, grants, bindings or operational routes are created by the projection. Finance F2/F3 are also canonical DRAFT after merged Shared #453, without implemented support, grants or binding.
 
 ## Required operational pathway
 
@@ -16,7 +16,7 @@ CP pins Shared `1004d39056569bd7e4516dd53a913dfeae72f050` and projects **33** ca
 ## Qualification holds
 
 - F1: Finance F1-P01–P11 against native iDempiere/PostgreSQL, balanced journal, SoD, closed period, reversal, crash/replay, accountant sign-off and no unauthorized money movement.
-- F2/F3: no canonical keys yet; first create independent schemas and source-typed subscription receivables, then provider implementation.
+- F2/F3: nine canonical DRAFT keys now exist under Shared #453; separate native implementation, Finance policy, integration evidence and provider activation remain required.
 - People: BYOP legal employer/provider choice; workforce, statutory golden vectors, recipient safety and revocation; no payroll GL or payment release inferred.
 - WMS: BYOP operator/depositor/service-customer separation, inventory ownership/custody, 3PL SLA, effective market rules, WMS-00–WMS-12, and separate native ERP material accounting/Trade reservation/TMS custody authority.
 

@@ -36,8 +36,11 @@ func TestEmbeddedCatalogue(t *testing.T) {
 	}
 	want := "billing.subscription.manage,billing.usage.record,commerce.cart.manage," +
 		"commercial.quotation.manage,commercial.rfq.manage,content.entry.resolve," +
-		"customer.buyer-application.manage,customer.buyer-membership.manage,finance.journal.manage," +
-		"finance.ledger.read,finance.order-consequence.process,finance.statement.read," +
+		"customer.buyer-application.manage,customer.buyer-membership.manage," +
+		"finance.bank-reconciliation.manage,finance.budget.manage,finance.cash-position.read," +
+		"finance.consolidation.run,finance.expense.manage,finance.journal.manage,finance.ledger.read," +
+		"finance.order-consequence.process,finance.payable.manage,finance.project-cost.read," +
+		"finance.receivable.manage,finance.reporting-export.create,finance.statement.read," +
 		"identity.authentication.assurance,identity.authentication.perform," +
 		"identity.federation.enterprise,identity.workload-token.issue,intelligence.evidence.search," +
 		"intelligence.research-mission.manage,inventory.availability.query,inventory.custody.read," +
@@ -77,7 +80,10 @@ func TestEmbeddedCatalogue(t *testing.T) {
 	for _, key := range []string{
 		"finance.journal.manage", "finance.ledger.read", "finance.statement.read",
 		"payroll.evidence.attest", "payroll.run.read", "workforce.employment.manage",
-		"workforce.employment.read", "inventory.custody.read", "inventory.warehouse-operation.manage",
+		"workforce.employment.read", "finance.payable.manage", "finance.receivable.manage", "finance.bank-reconciliation.manage",
+		"finance.cash-position.read", "finance.expense.manage", "finance.budget.manage",
+		"finance.reporting-export.create", "finance.project-cost.read", "finance.consolidation.run",
+		"inventory.custody.read", "inventory.warehouse-operation.manage",
 	} {
 		c, ok := byKey[key]
 		if !ok || c.Capability.Lifecycle != "DRAFT" || c.Owner != "baobab-erp" {
@@ -164,7 +170,7 @@ func TestSyncEmbeddedCatalogue(t *testing.T) {
 		t.Fatal(err)
 	}
 	report, err := SyncEmbedded(ctx, repo)
-	if err != nil || len(report.Unchanged) != 33 || len(report.Created)+len(report.Updated) != 0 {
+	if err != nil || len(report.Unchanged) != 42 || len(report.Created)+len(report.Updated) != 0 {
 		t.Fatalf("second sync: %+v %v", report, err)
 	}
 	admin, err := pgxpool.New(ctx, url)
