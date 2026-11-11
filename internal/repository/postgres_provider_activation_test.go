@@ -110,6 +110,26 @@ func TestProviderActivationChangeset(t *testing.T) {
 	if status != "DRAFT" || canonical != domain.ProviderID(providerUUID) || !domain.ValidProviderID(canonical) {
 		t.Fatalf("registered provider: %s %s (uuid %s)", status, canonical, providerUUID)
 	}
+	// ADR-SHARED-033/045 and ERP-024: an unqualified canonical DRAFT
+	// capability cannot activate even if a provider registered support for
+	// its contract. Test the actual PostgreSQL planning read, not a mock.
+	exec(`UPDATE capability.capability SET status='DRAFT' WHERE code=$1`, capabilityKey)
+	activationTx, err := admin.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	activationBlockers, err := providerActivationChecks(ctx, activationTx, providerUUID, time.Now().UTC())
+	if rollbackErr := activationTx.Rollback(ctx); rollbackErr != nil {
+		t.Fatal(rollbackErr)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if message := activationBlockers[checkCapabilitySupport]; !strings.Contains(message, capabilityKey) {
+		t.Fatalf("DRAFT support must block provider activation, got %+v", activationBlockers)
+	}
+	exec(`UPDATE capability.capability SET status='ACTIVE' WHERE code=$1`, capabilityKey)
+
 	exec(`INSERT INTO capability.capability_provider(provider_key, name, provider_type, engine_id, status)
 		VALUES ($1, $1, 'BAOBAB_ENGINE', $2::uuid, 'DRAFT')`, engine+".other", engineID)
 	staging := domain.NewUUIDv7()

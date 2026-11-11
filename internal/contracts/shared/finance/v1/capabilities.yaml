@@ -41,3 +41,120 @@ capabilities:
     response_schema: statement-read-response.schema.json
     error_schema: ../../errors/v1/problem-details.schema.json
   data_classification: RESTRICTED
+- capability_key: finance.payable.manage
+  name: Manage governed payables
+  description: ADR-SHARED-033 F2. Supplier bills, credit notes, due dates, approvals and payment preparation; payment execution is forbidden. DRAFT only; provider qualification and CP grant are separate.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: payable-manage-request.schema.json
+    response_schema: payable-manage-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.receivable.manage
+  name: Manage governed receivables
+  description: ADR-SHARED-033 F2. Typed Trade/Subscriptions receivables, allocations, credits and write-offs without recomputing invoice price or requiring Trade orders. DRAFT only; provider qualification and CP grant are separate.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: receivable-manage-request.schema.json
+    response_schema: receivable-manage-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.bank-reconciliation.manage
+  name: Manage bank reconciliation
+  description: ADR-SHARED-033 F2. Statement import, matching and exception custody; settlement is never invented by ERP. DRAFT only; provider qualification and CP grant are separate.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: bank-reconciliation-manage-request.schema.json
+    response_schema: bank-reconciliation-manage-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.cash-position.read
+  name: Read reconciled cash position
+  description: ADR-SHARED-033 F2. Explicit-as-of cash and bank balance with reconciliation freshness; not payment intent totals. DRAFT only; provider qualification and CP grant are separate.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: cash-position-read-request.schema.json
+    response_schema: cash-position-read-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.expense.manage
+  name: Manage employee expense claims
+  description: ADR-SHARED-033 F2. Claims, receipts, approvals and accounting liabilities; excludes payroll personal data and payment execution. DRAFT only; provider qualification and CP grant are separate.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: expense-manage-request.schema.json
+    response_schema: expense-manage-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.budget.manage
+  name: Manage governed budgets
+  description: ADR-SHARED-033 F2. Drafts, maker/checker approvals and bounded commitments; a request does not mint a spend grant. DRAFT only; provider qualification and CP grant are separate.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: budget-manage-request.schema.json
+    response_schema: budget-manage-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.reporting-export.create
+  name: Create immutable reporting export
+  description: ADR-SHARED-033 F3. As-of reporting artifact with lineage and reconciled book provenance; no direct ERP view scraping. DRAFT only; provider qualification and CP grant are separate.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: reporting-export-create-request.schema.json
+    response_schema: reporting-export-create-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.project-cost.read
+  name: Read project costs
+  description: ADR-SHARED-033 F3. Costs by project and accounting period with explicit expensed/capitalised/policy-pending flags; no implicit capitalization. DRAFT only; provider qualification and CP grant are separate.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: project-cost-read-request.schema.json
+    response_schema: project-cost-read-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: finance.consolidation.run
+  name: Run governed group consolidation
+  description: ADR-SHARED-033 F3. Finance-approved ownership, elimination and FX model, separate from internal-trade; never self-authorizes group access. DRAFT only; provider qualification and CP grant are separate.
+  domain: finance
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: consolidation-run-request.schema.json
+    response_schema: consolidation-run-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
