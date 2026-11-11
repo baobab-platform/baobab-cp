@@ -22,7 +22,7 @@ function NavigationItems() {
   return (
     <ul className="grid gap-1">
       {routes.map(({ href, label, description }) => {
-        const active = pathname === href;
+        const active = pathname === href || (href !== "/workspace" && pathname.startsWith(`${href}/`));
         const Icon = icons[href];
         return (
           <li key={href}>

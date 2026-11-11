@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { Building2, ChevronDown, Globe2, Layers3 } from "lucide-react";
 
-import { contextHref, type ConsoleContextOption } from "@/features/console/context-model";
+import { contextHref, isContextPathActive, type ConsoleContextOption } from "@/features/console/context-model";
 
 /** A navigation switch, not a tenant context bearer or a persisted authority
  * selector. Destination independently rechecks grants and CP resource reads.
@@ -11,7 +11,7 @@ import { contextHref, type ConsoleContextOption } from "@/features/console/conte
 export function ContextSwitcher({ options, verified }: { options: readonly ConsoleContextOption[]; verified: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
-  const active = options.find((option) => contextHref(option) === pathname);
+  const active = options.find((option) => isContextPathActive(option, pathname));
   return (
     <div className="flex min-w-0 items-center gap-2">
       <span className="hidden text-xs font-semibold text-muted-foreground lg:inline">Context</span>
@@ -24,7 +24,7 @@ export function ContextSwitcher({ options, verified }: { options: readonly Conso
             if (next) router.push(contextHref(next));
           }}
           disabled={!verified || options.length === 0}
-          className="h-11 max-w-52 min-w-36 appearance-none truncate rounded-lg border border-border bg-card pr-9 pl-9 text-xs font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-focus sm:max-w-64">
+          className="h-11 max-w-52 min-w-36 appearance-none truncate rounded-lg border border-border bg-card pr-9 pl-9 text-xs font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-focus">
           <option value="">{verified ? "Select context" : "Context unavailable"}</option>
           {options.map((option) => (
             <option value={contextHref(option)} key={option.kind + ":" + option.id}>
