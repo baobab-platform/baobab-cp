@@ -2,10 +2,11 @@ package peoplebinding
 
 import (
 	"errors"
-	"github.com/baobab-platform/baobab-cp/internal/contracts"
-	"github.com/baobab-platform/baobab-cp/internal/domain"
 	"testing"
 	"time"
+
+	"github.com/baobab-platform/baobab-cp/internal/contracts"
+	"github.com/baobab-platform/baobab-cp/internal/domain"
 )
 
 func TestProviderSelectionScopeFences(t *testing.T) {
