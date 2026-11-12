@@ -128,6 +128,12 @@ JOIN topology.engine_release_provider_support release_support
 	AND 1=ANY(release_support.contract_versions)
 JOIN identity.principal proposer ON proposer.principal_id=$8::uuid
 	AND proposer.actor_type='human' AND proposer.status='ACTIVE'
+JOIN identity.workforce_membership proposer_membership
+	ON proposer_membership.principal_id=proposer.principal_id
+	AND proposer_membership.tenant_id=scope.tenant_id
+	AND proposer_membership.legal_entity_id=scope.legal_entity_id
+	AND proposer_membership.status='ACTIVE'
+	AND 'cp:tenant-admin'=ANY(proposer_membership.roles)
 WHERE cb.id=$5::uuid AND scope.tenant_id=$1
 	AND scope.legal_entity_id=$2 AND scope.jurisdiction=$3
 	AND cap.code=$4 AND cap.status='ACTIVE'
@@ -199,6 +205,18 @@ SELECT EXISTS (
 SELECT 1 FROM identity.principal reviewer
 JOIN identity.principal maker ON maker.principal_id=$2::uuid
 JOIN capability.people_provider_choice choice ON choice.choice_id=$1::uuid
+JOIN identity.workforce_membership reviewer_membership
+	ON reviewer_membership.principal_id=reviewer.principal_id
+	AND reviewer_membership.tenant_id=choice.tenant_id
+	AND reviewer_membership.legal_entity_id=choice.legal_employer_id
+	AND reviewer_membership.status='ACTIVE'
+	AND 'cp:tenant-admin'=ANY(reviewer_membership.roles)
+JOIN identity.workforce_membership maker_membership
+	ON maker_membership.principal_id=maker.principal_id
+	AND maker_membership.tenant_id=choice.tenant_id
+	AND maker_membership.legal_entity_id=choice.legal_employer_id
+	AND maker_membership.status='ACTIVE'
+	AND 'cp:tenant-admin'=ANY(maker_membership.roles)
 JOIN capability.capability_binding cb ON cb.id=choice.binding_id
 JOIN capability.capability_scope s ON s.scope_id=cb.scope_id
 JOIN capability.capability cap ON cap.capability_id=cb.capability_id
