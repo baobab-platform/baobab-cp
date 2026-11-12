@@ -104,7 +104,7 @@ func Build(trusted domain.Context, choice Choice, record Resolution, now time.Ti
 	now = now.UTC()
 	if !Supported(choice.CapabilityKey) || !country.MatchString(trusted.Jurisdiction) ||
 		trusted.TenantID == "" || trusted.LegalEntityID == "" ||
-		trusted.AuthorityPurpose != "" && trusted.AuthorityPurpose != domain.ContextPurposeRuntime ||
+		trusted.AuthorityPurpose != domain.ContextPurposeRuntime ||
 		trusted.TenantID != choice.TenantID || trusted.LegalEntityID != choice.LegalEmployerID ||
 		trusted.Jurisdiction != choice.Jurisdiction || choice.SourceOfRecord != "NATIVE" && choice.SourceOfRecord != "EXTERNAL" ||
 		choice.BindingRevision < 1 || choice.BindingID == "" || choice.ProviderID == "" ||
