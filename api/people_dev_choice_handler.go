@@ -145,6 +145,46 @@ func (h peopleDevChoiceHandler) approve(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, record)
 }
 
+// revoke is a separate, consequential development-only denial transition.
+// The repository revalidates the current exact employer membership and
+// refuses maker self-revocation, stale versions and repeated revocations.
+func (h peopleDevChoiceHandler) revoke(w http.ResponseWriter, r *http.Request) {
+	checker, _, ok := resolveActor(w, r, h.identities, false)
+	if !ok {
+		return
+	}
+	choiceID := strings.TrimSpace(chi.URLParam(r, "choiceID"))
+	if len(choiceID) != 36 {
+		problem(w, r, http.StatusBadRequest, "PEOPLE_DEV_CHOICE_INVALID", "Exact choice UUID required", false)
+		return
+	}
+	raw, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	var version struct {
+		ExpectedVersion int64 `json:"expected_version"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if dec.Decode(&version) != nil || version.ExpectedVersion < 1 {
+		problem(w, r, http.StatusBadRequest, "PEOPLE_DEV_CHOICE_INVALID", "Expected current version required", false)
+		return
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		problem(w, r, http.StatusBadRequest, "PEOPLE_DEV_CHOICE_INVALID", "Unexpected revocation fields", false)
+		return
+	}
+	record, err := h.repo.RevokePeopleDevChoice(r.Context(), choiceID, version.ExpectedVersion, checker, h.clock())
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("ETag", entityTag(record.ChoiceVersion))
+	writeJSON(w, http.StatusOK, record)
+}
+
 func (h peopleDevChoiceHandler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, repository.ErrPeopleDevChoiceConflict) {
 		problem(w, r, http.StatusConflict, "PEOPLE_DEV_CHOICE_CONFLICT", "Choice already decided or version changed", false)
