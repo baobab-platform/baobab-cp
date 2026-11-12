@@ -464,9 +464,16 @@ func (s ContextResolutionService) resolveMarket(ctx context.Context, trusted *do
 	default:
 		return nil
 	}
+	// A selected, ACTIVE country participation is authoritative for the
+	// country's top-level legal jurisdiction. Do not infer any provincial,
+	// sectoral, treaty or cross-border jurisdiction from this country-level
+	// evidence. In particular, a caller-supplied country unsupported by the
+	// tenant is refused above, not copied into an otherwise unverified
+	// Jurisdiction. People BYOP requires this independently persisted field.
 	trusted.CountryCode, trusted.MarketID, trusted.CurrencyCode = chosen.CountryCode, chosen.RegistryMarketID, chosen.CurrencyCode
+	trusted.Jurisdiction = chosen.CountryCode
 	source := domain.ContextSource{Source: "baobab-cp:tenant-market-participation", TrustLevel: domain.TrustSystem, Evidence: chosen.RegistryMarketID}
-	for _, field := range []string{"country_code", "market_id", "currency_code"} {
+	for _, field := range []string{"country_code", "jurisdiction", "market_id", "currency_code"} {
 		trusted.Provenance[field] = source
 	}
 	return nil
