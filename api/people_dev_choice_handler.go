@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -158,4 +157,3 @@ func (h peopleDevChoiceHandler) fail(w http.ResponseWriter, r *http.Request, err
 	problem(w, r, http.StatusServiceUnavailable, "PEOPLE_DEV_CHOICE_UNAVAILABLE", "Development People governance unavailable", true)
 }
 
-var _ = strconv.FormatInt // used by other gated API handlers, keep compile parity
