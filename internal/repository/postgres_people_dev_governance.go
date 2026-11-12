@@ -114,7 +114,9 @@ JOIN capability.provider_capability_certification cert
 	AND cert.contract_version=1 AND cert.certification_id=$6::uuid
 	AND cert.status='CERTIFIED'
 	AND (cert.valid_until IS NULL OR $7 < cert.valid_until)
-	AND cert.qualification_profile = 'PEOPLE-EXTERNAL-DEV-v1'
+	AND cert.qualification_profile = 'people/external-dev-v1'
+	AND cert.evidence @> '[{"type":"SECURITY_REVIEW"}]'::jsonb
+	AND cert.evidence @> '[{"type":"INTEGRATION_TEST"}]'::jsonb
 JOIN topology.engine_release release ON release.engine_release_id=cert.engine_release_id
 	AND release.engine_id=provider.engine_id AND release.status='APPROVED'
 JOIN topology.engine_release_provider_support release_support
@@ -197,7 +199,9 @@ JOIN capability.capability_grant cg ON cg.scope_id=cb.scope_id AND cg.capability
 JOIN capability.provider_capability_certification cert ON cert.certification_id=choice.certification_id
 	AND cert.provider_id=provider.provider_id AND cert.capability_id=cap.capability_id
 	AND cert.contract_version=1 AND cert.status='CERTIFIED'
-	AND cert.qualification_profile='PEOPLE-EXTERNAL-DEV-v1'
+	AND cert.qualification_profile='people/external-dev-v1'
+	AND cert.evidence @> '[{"type":"SECURITY_REVIEW"}]'::jsonb
+	AND cert.evidence @> '[{"type":"INTEGRATION_TEST"}]'::jsonb
 	AND (cert.valid_until IS NULL OR $3 < cert.valid_until)
 JOIN topology.engine_release release ON release.engine_release_id=cert.engine_release_id
 	AND release.engine_id=provider.engine_id AND release.status='APPROVED'
