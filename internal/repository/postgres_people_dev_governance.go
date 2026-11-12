@@ -33,17 +33,17 @@ type PeopleDevChoiceRequest struct {
 }
 
 type PeopleDevChoiceRecord struct {
-	ChoiceID         string `json:"choice_id"`
-	TenantID         string `json:"tenant_id"`
-	LegalEmployerID  string `json:"legal_employer_id"`
-	Jurisdiction     string `json:"jurisdiction"`
-	CapabilityKey    string `json:"capability_key"`
-	BindingID        string `json:"binding_id"`
-	ProviderID       string `json:"provider_id"`
-	CertificationID  string `json:"certification_id"`
-	BindingRevision  int64  `json:"binding_revision"`
-	ChoiceVersion    int64  `json:"version"`
-	Status           string `json:"status"`
+	ChoiceID        string `json:"choice_id"`
+	TenantID        string `json:"tenant_id"`
+	LegalEmployerID string `json:"legal_employer_id"`
+	Jurisdiction    string `json:"jurisdiction"`
+	CapabilityKey   string `json:"capability_key"`
+	BindingID       string `json:"binding_id"`
+	ProviderID      string `json:"provider_id"`
+	CertificationID string `json:"certification_id"`
+	BindingRevision int64  `json:"binding_revision"`
+	ChoiceVersion   int64  `json:"version"`
+	Status          string `json:"status"`
 }
 
 func (r PeopleDevChoiceRequest) Validate(now time.Time) error {
@@ -85,7 +85,9 @@ func (r *PostgresRepository) ProposePeopleDevChoice(ctx context.Context, req Peo
 		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
 	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil { return PeopleDevChoiceRecord{}, err }
+	if err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	// Read ACTIVE human identity plus real, matching primary binding, grant,
 	// provider support, release and current independent EA-09 qualification.
@@ -137,8 +139,12 @@ LIMIT 2`,
 		req.TenantID, req.LegalEmployerID, req.Jurisdiction, req.CapabilityKey,
 		req.BindingID, req.CertificationID, now.UTC(), proposedBy,
 	).Scan(&bindingID, &providerID, &certID, &revision)
-	if errors.Is(err, pgx.ErrNoRows) { return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied }
-	if err != nil { return PeopleDevChoiceRecord{}, fmt.Errorf("People qualification lookup: %w", err) }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
+	}
+	if err != nil {
+		return PeopleDevChoiceRecord{}, fmt.Errorf("People qualification lookup: %w", err)
+	}
 	row := tx.QueryRow(ctx, `
 INSERT INTO capability.people_provider_choice
 (tenant_id, legal_employer_id, jurisdiction, capability_key, binding_id, provider_id,
@@ -149,8 +155,12 @@ RETURNING `+peopleDevChoiceColumns,
 		req.TenantID, req.LegalEmployerID, req.Jurisdiction, req.CapabilityKey,
 		bindingID, providerID, revision, certID, req.EffectiveFrom.UTC(), proposedBy, req.EvidenceRef)
 	record, err := peopleDevChoiceScan(row)
-	if err != nil { return PeopleDevChoiceRecord{}, fmt.Errorf("People proposal insert: %w", err) }
-	if err := tx.Commit(ctx); err != nil { return PeopleDevChoiceRecord{}, err }
+	if err != nil {
+		return PeopleDevChoiceRecord{}, fmt.Errorf("People proposal insert: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
 	return record, nil
 }
 
@@ -159,7 +169,9 @@ func (r *PostgresRepository) ApprovePeopleDevChoice(ctx context.Context, choiceI
 		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
 	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil { return PeopleDevChoiceRecord{}, err }
+	if err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	// Row lock serialises conflicting decisions. Current reviewer identity,
 	// certificate, binding and release must all survive to commit. The actual
@@ -172,8 +184,12 @@ FROM capability.people_provider_choice WHERE choice_id=$1::uuid FOR UPDATE`, cho
 		Scan(&candidate.ChoiceID, &candidate.TenantID, &candidate.LegalEmployerID, &candidate.Jurisdiction,
 			&candidate.CapabilityKey, &candidate.BindingID, &candidate.ProviderID, &candidate.CertificationID,
 			&candidate.BindingRevision, &candidate.ChoiceVersion, &candidate.Status, &maker)
-	if errors.Is(err, pgx.ErrNoRows) { return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied }
-	if err != nil { return PeopleDevChoiceRecord{}, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
+	}
+	if err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
 	if candidate.Status != "DRAFT" || candidate.ChoiceVersion != expectedVersion || maker == checker {
 		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceConflict
 	}
@@ -220,15 +236,23 @@ WHERE reviewer.principal_id=$4::uuid AND reviewer.status='ACTIVE' AND reviewer.a
 	AND provider.provider_type='EXTERNAL_SERVICE'
 	AND ei.environment IN ('development','integration')
 )`, choiceID, maker, now.UTC(), checker).Scan(&allowed)
-	if err != nil { return PeopleDevChoiceRecord{}, err }
-	if !allowed { return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied }
+	if err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
+	if !allowed {
+		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
+	}
 	record, err := peopleDevChoiceScan(tx.QueryRow(ctx, `
 UPDATE capability.people_provider_choice
 SET status='ACTIVE', approved_by=$2::uuid, approved_at=$3,
 	updated_at=$3, version=version+1
 WHERE choice_id=$1::uuid AND status='DRAFT' AND version=$4
 RETURNING `+peopleDevChoiceColumns, choiceID, checker, now.UTC(), expectedVersion))
-	if err != nil { return PeopleDevChoiceRecord{}, fmt.Errorf("People approval update: %w", err) }
-	if err := tx.Commit(ctx); err != nil { return PeopleDevChoiceRecord{}, err }
+	if err != nil {
+		return PeopleDevChoiceRecord{}, fmt.Errorf("People approval update: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
 	return record, nil
 }
