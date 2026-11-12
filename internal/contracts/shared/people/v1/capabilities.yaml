@@ -1,0 +1,56 @@
+schema:
+  name: baobab-capability-definitions
+  version: '1.0'
+capabilities:
+- capability_key: payroll.evidence.attest
+  name: Verify signed payroll evidence
+  description: Provider-neutral and employer-scoped; does not imply implementation, certification or provider activation.
+  domain: payroll
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: payroll-evidence-attest-request.schema.json
+    response_schema: payroll-evidence-attest-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: payroll.run.read
+  name: Read governed payroll run status
+  description: Provider-neutral and employer-scoped; does not imply implementation, certification or provider activation.
+  domain: payroll
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: payroll-run-read-request.schema.json
+    response_schema: payroll-run-read-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: workforce.employment.manage
+  name: Propose immutable employment version
+  description: Provider-neutral and employer-scoped; does not imply implementation, certification or provider activation.
+  domain: workforce
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: employment-manage-request.schema.json
+    response_schema: employment-manage-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED
+- capability_key: workforce.employment.read
+  name: Read governed employment version metadata
+  description: Provider-neutral and employer-scoped; does not imply implementation, certification or provider activation.
+  domain: workforce
+  owner: baobab-erp
+  lifecycle: DRAFT
+  maturity: EXPERIMENTAL
+  contracts:
+  - major: 1
+    request_schema: employment-read-request.schema.json
+    response_schema: employment-read-response.schema.json
+    error_schema: ../../errors/v1/problem-details.schema.json
+  data_classification: RESTRICTED

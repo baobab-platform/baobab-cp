@@ -15,6 +15,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
 	"time"
 
@@ -35,6 +36,10 @@ const (
 	nativeCommitmentSubmitScope = "trade:native-commitment:submit"
 	assignmentAttestationTTL    = 60 * time.Second
 )
+
+// Shared control-plane/v1 estate-resource-assignment workloadClientId grammar.
+// Medusa publishable keys never qualify as server application principals.
+var nativeCommitmentWorkloadClientID = regexp.MustCompile(`^[a-z][a-z0-9-]{2,62}$`)
 
 var (
 	assignmentResolveSchema     = contracts.MustSchema("control-plane/v1/estate-resource-assignment.schema.json#/$defs/EstateResourceAssignmentResolveRequest")
@@ -164,6 +169,15 @@ func selectAssignment(candidates []postgres.EstateResourceAssignment, req assign
 	return candidates[0], "ATTESTED", 1
 }
 
+// Introspection must independently agree with the originally signed workload
+// token; omitted optional RFC 7662 members never prove identity continuity.
+func nativeCommitmentCurrent(server auth.Principal, current auth.Introspection, now time.Time) bool {
+	return current.Active && current.ClientID == server.ClientID && current.Subject == server.Subject &&
+		current.Issuer == server.Issuer && len(current.Audience) == 1 && current.Audience[0] == buyerSubjectAudience &&
+		hasScopeEntry(current.Scopes, nativeCommitmentSubmitScope) && !hasScopeEntry(current.Scopes, bffHandoffScope) &&
+		current.ExpiresAt.Equal(server.ExpiresAt) && current.ExpiresAt.After(now)
+}
+
 func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Pragma", "no-cache")
@@ -201,6 +215,7 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 
 	// The subject, verified by CP itself.
 	var subject string
+	var verifiedServer auth.Principal
 	evidenceExpiry := time.Time{}
 	if req.Scope == "WORKLOAD" {
 		record.SubjectReference = "workload-evidence"
@@ -215,28 +230,32 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 		}
 		server, err := verifier.Verify(r.Context(), req.WorkloadEvidence)
 		if err != nil || server.ActorType != "workload" || server.Issuer == "" || server.TokenID == "" ||
-			server.ClientID == "" || !server.HasScope(nativeCommitmentSubmitScope) || !server.ExpiresAt.After(now) {
+			server.ClientID == "" || !nativeCommitmentWorkloadClientID.MatchString(server.ClientID) ||
+			!server.HasScope(nativeCommitmentSubmitScope) || server.HasScope(bffHandoffScope) || !server.ExpiresAt.After(now) {
 			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload evidence could not be verified")
 			return
 		}
 		record.SubjectReference = server.ClientID
+		// Signed issuer claims do not grant Shared registry membership. This
+		// allocation is currently held for every real registered workload.
+		registered, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
+		if !ok || !h.api.workloadRegistry.IsActive(server.ClientID) ||
+			!registered.AllowsScope(server.ClientID, nativeCommitmentSubmitScope) ||
+			registered.AllowsScope(server.ClientID, bffHandoffScope) {
+			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload is not currently registered for native commitments")
+			return
+		}
 		current, err := h.introspector.Introspect(r.Context(), req.WorkloadEvidence)
 		if err != nil {
 			h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "the workload evidence's current status is unavailable")
 			return
 		}
-		if !current.Active || current.ClientID != server.ClientID || current.Subject != server.Subject ||
-			(current.Issuer != "" && current.Issuer != server.Issuer) ||
-			(len(current.Audience) > 0 && !slices.Contains(current.Audience, buyerSubjectAudience)) ||
-			(len(current.Scopes) > 0 && !hasScopeEntry(current.Scopes, nativeCommitmentSubmitScope)) ||
-			(!current.ExpiresAt.IsZero() && !current.ExpiresAt.After(now)) {
+		if !nativeCommitmentCurrent(server, current, h.now().UTC()) {
 			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload evidence is not current")
 			return
 		}
 		subject, evidenceExpiry = server.ClientID, server.ExpiresAt
-		if !current.ExpiresAt.IsZero() && current.ExpiresAt.Before(evidenceExpiry) {
-			evidenceExpiry = current.ExpiresAt
-		}
+		verifiedServer = server
 	} else {
 		record.SubjectReference = req.NativeResource.Reference
 		attested, err := h.store.NativeConfigurationAttested(r.Context(), p.ClientID, req.EngineInstanceID,
@@ -274,6 +293,48 @@ func (h estateResourceAssignmentHandler) resolve(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// An issuer revocation or Shared scope withdrawal while querying the
+	// assignment store must veto the final positive attestation.
+	if req.Scope == "WORKLOAD" {
+		registered, ok := h.api.workloadRegistry.(auth.WorkloadScopeRegistry)
+		if !ok || !h.api.workloadRegistry.IsActive(verifiedServer.ClientID) ||
+			!registered.AllowsScope(verifiedServer.ClientID, nativeCommitmentSubmitScope) ||
+			registered.AllowsScope(verifiedServer.ClientID, bffHandoffScope) {
+			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload registration was withdrawn during resolution")
+			return
+		}
+		latest, err := h.introspector.Introspect(r.Context(), req.WorkloadEvidence)
+		if err != nil {
+			h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "current issuer status is unavailable")
+			return
+		}
+		if !nativeCommitmentCurrent(verifiedServer, latest, h.now().UTC()) {
+			refuse("WORKLOAD_EVIDENCE_INVALID", "the workload credential is no longer current")
+			return
+		}
+	}
+	now = h.now().UTC()
+	// The assignment is mutable through governed approval/suspension/revocation.
+	// Read the exact row again after the issuer round trip so an intervening
+	// withdrawal or revision does not publish a stale positive attestation.
+	latestAssignment, err := h.store.EstateResourceAssignment(r.Context(), assignment.AssignmentID)
+	if err != nil {
+		h.deny(w, r, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE", "the assignment's current state is unavailable")
+		return
+	}
+	_, currentOutcome, _ := selectAssignment([]postgres.EstateResourceAssignment{latestAssignment}, req, now)
+	if currentOutcome != "ATTESTED" || latestAssignment.AssignmentID != assignment.AssignmentID ||
+		latestAssignment.Scope != assignment.Scope || latestAssignment.Revision != assignment.Revision ||
+		latestAssignment.DigitalEstateID != assignment.DigitalEstateID ||
+		latestAssignment.TenantID != assignment.TenantID ||
+		latestAssignment.WorkloadClientID != assignment.WorkloadClientID ||
+		latestAssignment.NativeConfigurationReference != assignment.NativeConfigurationReference ||
+		latestAssignment.NativeConfigurationDigest != assignment.NativeConfigurationDigest ||
+		(req.Scope == "WORKLOAD" && latestAssignment.WorkloadClientID != subject) ||
+		(req.Scope == "NATIVE_RESOURCE" && latestAssignment.NativeConfigurationReference != subject) {
+		refuse("ASSIGNMENT_NOT_ACTIVE", "assignment state or binding changed during resolution")
+		return
+	}
 	issued := now.Truncate(time.Second)
 	expires := now.Add(assignmentAttestationTTL)
 	if assignment.EffectiveUntil != nil && assignment.EffectiveUntil.Before(expires) {

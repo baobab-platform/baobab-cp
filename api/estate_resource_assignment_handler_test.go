@@ -22,19 +22,36 @@ import (
 // token. This proves CP's boundary, not connected IAM acceptance or a
 // registered assignment.
 const (
-	assignmentID     = "4b3a2c1d-0e9f-4a8b-9c7d-6e5f4a3b2c1d"
-	assignmentServer = "synthetic-server-checkout"
-	assignmentRef    = "trade/native-seller-configuration/synthetic-01"
-	assignmentDigest = "5d41402abc4b2a76b9719d911017c5925d41402abc4b2a76b9719d911017c592"
-	assignmentMarket = "market_synthetic"
-	assignmentCaller = "synthetic-trade-workload"
+	assignmentID       = "4b3a2c1d-0e9f-4a8b-9c7d-6e5f4a3b2c1d"
+	nativeAssignmentID = "bbbbbbbb-4a5b-4c6d-8e9f-0a1b2c3d4e5f"
+	assignmentServer   = "synthetic-server-checkout"
+	assignmentRef      = "trade/native-seller-configuration/synthetic-01"
+	assignmentDigest   = "5d41402abc4b2a76b9719d911017c5925d41402abc4b2a76b9719d911017c592"
+	assignmentMarket   = "market_synthetic"
+	assignmentCaller   = "synthetic-trade-workload"
 )
 
-type assignmentRegistry struct{ allowed bool }
+type assignmentRegistry struct {
+	allowed       bool
+	subjectActive bool
+	submitAllowed bool
+	bffAllowed    bool
+}
 
-func (r assignmentRegistry) IsActive(string) bool { return r.allowed }
+func (r assignmentRegistry) IsActive(clientID string) bool {
+	switch clientID {
+	case assignmentCaller:
+		return r.allowed
+	case assignmentServer:
+		return r.subjectActive
+	}
+	return false
+}
+
 func (r assignmentRegistry) AllowsScope(clientID, scope string) bool {
-	return r.allowed && clientID == assignmentCaller && scope == estateAssignmentResolveScope
+	return r.allowed && clientID == assignmentCaller && scope == estateAssignmentResolveScope ||
+		r.submitAllowed && clientID == assignmentServer && scope == nativeCommitmentSubmitScope ||
+		r.bffAllowed && clientID == assignmentServer && scope == bffHandoffScope
 }
 
 type assignmentStore struct {
@@ -44,6 +61,8 @@ type assignmentStore struct {
 	failRec     bool
 	records     []postgres.EstateResourceAssignmentResolution
 	asked       []string
+	readback    *postgres.EstateResourceAssignment
+	readbackErr error
 }
 
 func (s *assignmentStore) ProposeEstateResourceAssignment(context.Context, string, basestore.RequestMetadata, string,
@@ -57,8 +76,19 @@ func (s *assignmentStore) TransitionEstateResourceAssignment(_ context.Context, 
 	a.Revision = t.ExpectedRevision + 1
 	return a, nil
 }
-func (s *assignmentStore) EstateResourceAssignment(context.Context, string) (postgres.EstateResourceAssignment, error) {
-	return activeAssignment(nil), nil
+func (s *assignmentStore) EstateResourceAssignment(_ context.Context, id string) (postgres.EstateResourceAssignment, error) {
+	if s.readbackErr != nil {
+		return postgres.EstateResourceAssignment{}, s.readbackErr
+	}
+	if s.readback != nil {
+		return *s.readback, nil
+	}
+	for _, a := range s.assignments {
+		if a.AssignmentID == id {
+			return a, nil
+		}
+	}
+	return postgres.EstateResourceAssignment{}, postgres.ErrAssignmentNotFound
 }
 func (s *assignmentStore) EstateResourceAssignmentCandidates(_ context.Context, scope, subject, estate string) (
 	[]postgres.EstateResourceAssignment, error) {
@@ -99,7 +129,7 @@ func activeAssignment(change func(*postgres.EstateResourceAssignment)) postgres.
 
 func nativeAssignment(change func(*postgres.EstateResourceAssignment)) postgres.EstateResourceAssignment {
 	return activeAssignment(func(a *postgres.EstateResourceAssignment) {
-		a.Scope, a.WorkloadClientID = "NATIVE_RESOURCE", ""
+		a.AssignmentID, a.Scope, a.WorkloadClientID = nativeAssignmentID, "NATIVE_RESOURCE", ""
 		a.NativeConfigurationReference, a.NativeConfigurationDigest = assignmentRef, assignmentDigest
 		a.NativeResource = &postgres.NativeRef{Reference: assignmentRef, Digest: assignmentDigest}
 		if change != nil {
@@ -112,6 +142,7 @@ type assignmentFixture struct {
 	store        *assignmentStore
 	subjects     *resolveSubjects
 	introspector *resolveIntrospector
+	override     auth.Introspector
 	caller       auth.Principal
 	registry     assignmentRegistry
 	environment  string
@@ -122,7 +153,7 @@ func newAssignmentFixture() *assignmentFixture {
 	exp := time.Now().Add(5 * time.Minute).UTC()
 	return &assignmentFixture{
 		store:       &assignmentStore{assignments: []postgres.EstateResourceAssignment{activeAssignment(nil), nativeAssignment(nil)}, attested: true},
-		environment: "staging", enabled: true, registry: assignmentRegistry{allowed: true},
+		environment: "staging", enabled: true, registry: assignmentRegistry{allowed: true, subjectActive: true, submitAllowed: true},
 		caller: auth.Principal{Issuer: resolveIssuer, Subject: assignmentCaller, ActorType: "workload", ClientID: assignmentCaller,
 			TokenID: "workload-token", Scopes: map[string]struct{}{estateAssignmentResolveScope: {}}},
 		subjects: &resolveSubjects{verifier: fakeVerifier{principal: auth.Principal{Issuer: resolveIssuer, Subject: assignmentServer,
@@ -163,12 +194,44 @@ func nativeBody(change map[string]any) map[string]any {
 	return body
 }
 
+func (f *assignmentFixture) currentIntrospector() auth.Introspector {
+	if f.override != nil {
+		return f.override
+	}
+	return f.introspector
+}
+
+type assignmentChangingIssuer struct {
+	first            auth.Introspection
+	calls            int
+	failAfterFirst   bool
+	outageAfterFirst bool
+}
+
+func (r *assignmentChangingIssuer) Introspect(_ context.Context, token string) (auth.Introspection, error) {
+	r.calls++
+	if token != resolveToken {
+		return auth.Introspection{}, errors.New("unexpected original bearer")
+	}
+	if r.calls > 1 {
+		if r.outageAfterFirst {
+			return auth.Introspection{}, errors.New("issuer down after first proof")
+		}
+		if r.failAfterFirst {
+			out := r.first
+			out.Active = false
+			return out, nil
+		}
+	}
+	return r.first, nil
+}
+
 func (f *assignmentFixture) post(t *testing.T, body map[string]any) *httptest.ResponseRecorder {
 	t.Helper()
 	handler := New(Dependencies{Store: &fakeStore{}, Environment: f.environment,
 		WorkloadVerifier: fakeVerifier{principal: f.caller}, WorkloadRegistry: f.registry,
 		EstateResourceAssignmentEnabled: f.enabled, EstateResourceAssignments: f.store,
-		BuyerSubjects: f.subjects, BuyerSubjectIntrospector: f.introspector})
+		BuyerSubjects: f.subjects, BuyerSubjectIntrospector: f.currentIntrospector()})
 	raw, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/internal/estate/v1/resource-assignments/resolve", bytes.NewReader(raw))
 	req.Header.Set("Authorization", "Bearer workload-token")
@@ -204,7 +267,7 @@ func TestEstateResourceAssignmentAttestsAVerifiedServerApplication(t *testing.T)
 	if out.ExpiresAt.Sub(out.IssuedAt) > assignmentAttestationTTL {
 		t.Fatalf("lifetime %s exceeds the contract", out.ExpiresAt.Sub(out.IssuedAt))
 	}
-	if f.introspector.calls != 1 || f.subjects.audience != buyerSubjectAudience {
+	if f.introspector.calls != 2 || f.subjects.audience != buyerSubjectAudience {
 		t.Fatalf("evidence was not verified and introspected for the Trade audience")
 	}
 	if len(f.store.records) != 1 || f.store.records[0].Outcome != "ATTESTED" || f.store.records[0].AttestationID != out.AttestationID ||
@@ -232,6 +295,7 @@ func TestEstateResourceAssignmentNeverAttestsOutlivedEvidence(t *testing.T) {
 	f := newAssignmentFixture()
 	soon := time.Now().Add(20 * time.Second).UTC()
 	f.server(func(p *auth.Principal) { p.ExpiresAt = soon })
+	f.introspector.result.ExpiresAt = soon
 	out := attestationOf(t, f.post(t, workloadBody(nil)))
 	if out.ExpiresAt.After(soon) {
 		t.Fatalf("attestation %s outlives the server evidence %s", out.ExpiresAt, soon)
@@ -263,6 +327,36 @@ func TestEstateResourceAssignmentRefusesUnverifiedSubjects(t *testing.T) {
 		"revoked evidence": {func(f *assignmentFixture) { f.introspector.result.Active = false }, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
 		"introspection for another client": {func(f *assignmentFixture) { f.introspector.result.ClientID = "synthetic-other" }, nil,
 			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"server workload not ACTIVE in Shared": {func(f *assignmentFixture) { f.registry.subjectActive = false }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"server submit scope not allocated in Shared": {func(f *assignmentFixture) { f.registry.submitAllowed = false }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"server simultaneously registered as estate BFF": {func(f *assignmentFixture) { f.registry.bffAllowed = true }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"publishable-key client ID": {func(f *assignmentFixture) { f.server(func(p *auth.Principal) { p.ClientID = "pk_synthetic" }) }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"server mixes BFF and native commitment scopes": {func(f *assignmentFixture) {
+			f.server(func(p *auth.Principal) { p.Scopes[bffHandoffScope] = struct{}{} })
+		}, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection omits issuer": {func(f *assignmentFixture) { f.introspector.result.Issuer = "" }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection substitutes issuer": {func(f *assignmentFixture) { f.introspector.result.Issuer = "https://other.invalid" }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection omits audience": {func(f *assignmentFixture) { f.introspector.result.Audience = nil }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection adds other audience": {func(f *assignmentFixture) {
+			f.introspector.result.Audience = append(f.introspector.result.Audience, "baobab-erp")
+		}, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection omits allocated scope": {func(f *assignmentFixture) { f.introspector.result.Scopes = nil }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection mixes BFF scope": {func(f *assignmentFixture) {
+			f.introspector.result.Scopes[bffHandoffScope] = struct{}{}
+		}, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection omits expiry": {func(f *assignmentFixture) { f.introspector.result.ExpiresAt = time.Time{} }, nil,
+			http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
+		"introspection substitutes expiry": {func(f *assignmentFixture) {
+			f.introspector.result.ExpiresAt = f.introspector.result.ExpiresAt.Add(time.Second)
+		}, nil, http.StatusForbidden, "WORKLOAD_EVIDENCE_INVALID"},
 		"introspection outage":         {func(f *assignmentFixture) { f.introspector.err = errors.New("down") }, nil, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE"},
 		"issuer outage":                {func(f *assignmentFixture) { f.subjects.err = errors.New("down") }, nil, http.StatusServiceUnavailable, "RESOLUTION_UNAVAILABLE"},
 		"native configuration drifted": {func(f *assignmentFixture) { f.store.attested = false }, nativeBody(nil), http.StatusForbidden, "NATIVE_RESOURCE_NOT_ATTESTED"},
@@ -281,6 +375,66 @@ func TestEstateResourceAssignmentRefusesUnverifiedSubjects(t *testing.T) {
 			res := f.post(t, body)
 			if res.Code != tc.status || problemCode(t, res) != tc.code {
 				t.Fatalf("status = %d code = %q, want %d %s: %s", res.Code, problemCode(t, res), tc.status, tc.code, res.Body.String())
+			}
+		})
+	}
+}
+
+func TestEstateResourceAssignmentRejectsLateAssignmentRevocationOrRevisionDrift(t *testing.T) {
+	for name, change := range map[string]func(*postgres.EstateResourceAssignment){
+		"revoked": func(a *postgres.EstateResourceAssignment) { a.Status = "REVOKED"; a.Revision++ },
+		"suspended": func(a *postgres.EstateResourceAssignment) { a.Status = "SUSPENDED"; a.Revision++ },
+		"revised": func(a *postgres.EstateResourceAssignment) { a.Revision++ },
+		"foreign estate": func(a *postgres.EstateResourceAssignment) { a.DigitalEstateID = "estate_other" },
+		"substituted client": func(a *postgres.EstateResourceAssignment) { a.WorkloadClientID = "another-server-app" },
+		"expired": func(a *postgres.EstateResourceAssignment) {
+			end := time.Now().Add(-time.Second)
+			a.EffectiveUntil = &end
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newAssignmentFixture()
+			latest := activeAssignment(change)
+			f.store.readback = &latest
+			res := f.post(t, workloadBody(nil))
+			if res.Code != http.StatusForbidden || problemCode(t, res) != "ASSIGNMENT_NOT_ACTIVE" {
+				t.Fatalf("late assignment change produced authorization: %d %s", res.Code, res.Body.String())
+			}
+			if len(f.store.records) == 0 || f.store.records[len(f.store.records)-1].Outcome == "ATTESTED" {
+				t.Fatal("stale assignment was recorded as an attestation")
+			}
+		})
+	}
+	f := newAssignmentFixture()
+	f.store.readbackErr = errors.New("DB temporarily unavailable")
+	res := f.post(t, workloadBody(nil))
+	if res.Code != http.StatusServiceUnavailable || problemCode(t, res) != "RESOLUTION_UNAVAILABLE" {
+		t.Fatalf("late database outage produced authorization: %d %s", res.Code, res.Body.String())
+	}
+}
+
+func TestEstateResourceAssignmentRejectsRevokedOrUnavailableIssuerAfterStorageRead(t *testing.T) {
+	for name, outage := range map[string]bool{"revoked": false, "issuer-unavailable": true} {
+		t.Run(name, func(t *testing.T) {
+			f := newAssignmentFixture()
+			s := &assignmentChangingIssuer{first: f.introspector.result, failAfterFirst: !outage, outageAfterFirst: outage}
+			f.override = s
+			res := f.post(t, workloadBody(nil))
+			wantCode := "WORKLOAD_EVIDENCE_INVALID"
+			wantStatus := http.StatusForbidden
+			if outage {
+				wantCode, wantStatus = "RESOLUTION_UNAVAILABLE", http.StatusServiceUnavailable
+			}
+			if res.Code != wantStatus || problemCode(t, res) != wantCode {
+				t.Fatalf("post-resolution issuer withdrawal admitted: %d %s", res.Code, res.Body.String())
+			}
+			if s.calls != 2 {
+				t.Fatalf("expected issuer read immediately before attestation, reads=%d", s.calls)
+			}
+			for _, record := range f.store.records {
+				if record.Outcome == "ATTESTED" {
+					t.Fatal("revoked or unavailable issuer produced an attestation")
+				}
 			}
 		})
 	}

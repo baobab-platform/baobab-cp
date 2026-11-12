@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
+	"regexp"
 	"testing"
 )
 
@@ -53,9 +53,12 @@ func TestReconciledCandidateMatchesReviewedSharedBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(lock), "source_commit: "+source.SHA+"\n") ||
-		!strings.Contains(string(lock), "  commit: "+source.SHA+"\n") {
-		t.Fatal("both CP contract lock fields must pin the accepted Shared main commit")
+	// The N02 candidate SHA is immutable review provenance, but the current
+	// Shared consumer pin must advance independently. The Foundation checks
+	// both bytes and source ancestry for this separately authenticated pin.
+	fields := regexp.MustCompile(`(?m)^  (?:source_commit|commit): ([0-9a-f]{40})$`).FindAllStringSubmatch(string(lock), -1)
+	if len(fields) != 2 || fields[0][1] != fields[1][1] {
+		t.Fatal("both CP contract lock fields must pin the same immutable Shared commit")
 	}
 }
 
