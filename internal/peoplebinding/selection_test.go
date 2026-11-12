@@ -12,7 +12,7 @@ import (
 func TestProviderSelectionScopeFences(t *testing.T) {
 	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 	const uuid = "12345678-1234-1234-1234-123456789012"
-	ctx := domain.Context{ID: "ctx_test", TenantID: "tn_test", LegalEntityID: "TEST-EMPLOYER", Jurisdiction: "ZA"}
+	ctx := domain.Context{ID: "ctx_test", TenantID: "tn_test", LegalEntityID: "TEST-EMPLOYER", Jurisdiction: "ZA", AuthorityPurpose: domain.ContextPurposeRuntime}
 	choice := Choice{TenantID: "tn_test", LegalEmployerID: "TEST-EMPLOYER", Jurisdiction: "ZA",
 		CapabilityKey: "payroll.run.read", BindingID: uuid, ProviderID: uuid, BindingRevision: 1,
 		SourceOfRecord: "EXTERNAL", EffectiveFrom: now.Add(-time.Hour), CertificationKey: "cert_test"}
@@ -59,6 +59,7 @@ func TestProviderSelectionScopeFences(t *testing.T) {
 			past := now.Add(-time.Second)
 			c.CertificationUntil = &past
 		},
+		"missing-runtime-purpose": func(c *domain.Context, _ *Choice, _ *Resolution) { c.AuthorityPurpose = "" },
 		"provisioning-context": func(c *domain.Context, _ *Choice, _ *Resolution) {
 			c.AuthorityPurpose = domain.ContextPurposeTenantProvisioning
 		},
