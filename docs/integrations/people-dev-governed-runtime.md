@@ -16,6 +16,7 @@ ERP #156 adds one read-only external Frappe HR adapter. It uses current CP selec
 
 - POST /v1/admin/people/provider-choices — requires current human changeset:write; creates DRAFT.
 - POST /v1/admin/people/provider-choices/{choiceID}/approve — requires a *different* current human changeset:approve and exact expected_version; rechecks authority, then activates only when all native gates pass.
+- POST /v1/admin/people/provider-choices/{choiceID}/revoke — requires a current exact-employer `cp:tenant-admin` human distinct from the original maker and exact `expected_version`; atomically transitions ACTIVE → REVOKED. A replay or stale version fails, and the original choice remains auditable. CP reads refuse REVOKED immediately, independently of bearer expiry.
 
 ## Guardrails
 
