@@ -18,48 +18,8 @@ var (
 var peopleEmployerPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$`)
 var peopleTenantPattern = regexp.MustCompile(`^tn_[a-z0-9]+$`)
 var peopleJurisdictionPattern = regexp.MustCompile(`^[A-Z]{2}$`)
-var peopleEvidencePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{5,159}package repository
-
-import (
-	"context"
-	"errors"
-	"fmt"
-	"regexp"
-	"time"
-
-	"github.com/jackc/pgx/v5"
-)
-
-var (
-	ErrPeopleDevChoiceDenied   = errors.New("People development choice denied")
-	ErrPeopleDevChoiceConflict = errors.New("People development choice conflict")
-)
-
-var peopleEmployerPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$`)
-var peopleTenantPattern = regexp.MustCompile(`^tn_[a-z0-9]+$`)
-var peopleJurisdictionPattern = regexp.MustCompile(`^[A-Z]{2}$`)
-)
-var peopleUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}package repository
-
-import (
-	"context"
-	"errors"
-	"fmt"
-	"regexp"
-	"time"
-
-	"github.com/jackc/pgx/v5"
-)
-
-var (
-	ErrPeopleDevChoiceDenied   = errors.New("People development choice denied")
-	ErrPeopleDevChoiceConflict = errors.New("People development choice conflict")
-)
-
-var peopleEmployerPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$`)
-var peopleTenantPattern = regexp.MustCompile(`^tn_[a-z0-9]+$`)
-var peopleJurisdictionPattern = regexp.MustCompile(`^[A-Z]{2}$`)
-)
+var peopleEvidencePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{5,159}$`)
+var peopleUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type PeopleDevChoiceRequest struct {
 	TenantID        string    `json:"tenant_id"`
@@ -124,7 +84,7 @@ func (r *PostgresRepository) ProposePeopleDevChoice(ctx context.Context, req Peo
 	if r == nil || r.pool == nil || req.Validate(now) != nil || proposedBy == "" {
 		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
 	}
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil { return PeopleDevChoiceRecord{}, err }
 	defer tx.Rollback(ctx) //nolint:errcheck
 	// Read ACTIVE human identity plus real, matching primary binding, grant,
@@ -196,7 +156,7 @@ func (r *PostgresRepository) ApprovePeopleDevChoice(ctx context.Context, choiceI
 	if r == nil || r.pool == nil || expectedVersion < 1 || checker == "" {
 		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
 	}
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil { return PeopleDevChoiceRecord{}, err }
 	defer tx.Rollback(ctx) //nolint:errcheck
 	// Row lock serialises conflicting decisions. Current reviewer identity,
