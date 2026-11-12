@@ -166,11 +166,11 @@ func TestPeopleProviderChoiceApprovedExternalAndRevocationPG17(t *testing.T) {
 		(tenant_id,legal_employer_id,jurisdiction,capability_key,binding_id,provider_id,binding_revision,certification_id,source_of_record,status,effective_from,proposed_by,approved_by,approved_at,choice_evidence_ref)
 		VALUES ($1,$2,'ZA',$3,$4::uuid,$5::uuid,1,$6::uuid,'EXTERNAL','ACTIVE',now()-interval '1 hour',$7::uuid,$8::uuid,now(),'qualified-pg17-development')`
 	for label, actors := range map[string][2]string{
-		"fabricated maker UUID": {domain.NewUUIDv7(), checkerID},
+		"fabricated maker UUID":   {domain.NewUUIDv7(), checkerID},
 		"fabricated checker UUID": {makerID, domain.NewUUIDv7()},
-		"workload checker": {makerID, workloadID},
-		"workload maker": {workloadID, checkerID},
-		"self approval": {makerID, makerID},
+		"workload checker":        {makerID, workloadID},
+		"workload maker":          {workloadID, checkerID},
+		"self approval":           {makerID, makerID},
 	} {
 		t.Run(label, func(t *testing.T) {
 			if _, e := admin.Exec(ctx, choiceInsert, tenant, employer, capabilityKey, bindingID, providerID, certID,
