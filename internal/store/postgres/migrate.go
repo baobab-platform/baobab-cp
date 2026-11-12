@@ -170,6 +170,7 @@ var canonicalMigrationNames = []string{
 	"000133_development_bootstrap_run.sql",
 	"000134_development_mandate_scenarios.sql",
 	"000135_development_buyer_identity.sql",
+	"000136_people_provider_choice.sql",
 }
 
 func LoadMigrations() ([]Migration, error) {

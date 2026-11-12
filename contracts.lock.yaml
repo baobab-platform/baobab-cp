@@ -139,6 +139,8 @@ contracts:
   - contracts/erp/v1/capabilities.yaml
   - contracts/finance/v1/capabilities.yaml
   - contracts/people/v1/capabilities.yaml
+  - contracts/people/v1/domain.schema.json
+  - contracts/people/v1/provider-selection.schema.json
   - contracts/wms/v1/capabilities.yaml
   - contracts/erp/v1/domain.schema.json
   # Finance baseline reference and resolution (erp/v1 1.3.0): the Control Plane refers to the baseline, ERP owns it.
