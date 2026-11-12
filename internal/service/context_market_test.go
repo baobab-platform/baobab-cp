@@ -59,8 +59,21 @@ func TestContextResolutionFillsMarketFromParticipation(t *testing.T) {
 			if got != tc.want {
 				t.Fatalf("market = %+v, want %+v", got, tc.want)
 			}
-			if tc.want.CountryCode != "" && resolved.Provenance["market_id"].Evidence != tc.want.RegistryMarketID {
-				t.Fatalf("market provenance = %+v", resolved.Provenance["market_id"])
+			// Real People selection redeems the persisted Context from CP.
+			// Both jurisdiction and country must follow the tenant's
+			// attested participation; unknown/empty countries grant none.
+			if resolved.Jurisdiction != tc.want.CountryCode {
+				t.Fatalf("unattested country-level jurisdiction %q, want %q", resolved.Jurisdiction, tc.want.CountryCode)
+			}
+			if tc.want.CountryCode != "" && (resolved.Provenance["market_id"].Evidence != tc.want.RegistryMarketID ||
+				resolved.Provenance["jurisdiction"].Evidence != tc.want.RegistryMarketID ||
+				resolved.Provenance["jurisdiction"].TrustLevel != domain.TrustSystem) {
+				t.Fatalf("market/jurisdiction provenance invalid: %+v", resolved.Provenance)
+			}
+			if tc.want.CountryCode == "" {
+				if _, ok := resolved.Provenance["jurisdiction"]; ok {
+					t.Fatal("missing market participation invented jurisdiction authority")
+				}
 			}
 		})
 	}
