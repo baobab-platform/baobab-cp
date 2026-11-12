@@ -51,6 +51,16 @@ func TestPeopleDevGovernanceNoSyntheticCertificationPG17(t *testing.T) {
 	if !errors.Is(err, ErrPeopleDevChoiceDenied) {
 		t.Fatalf("unknown choice approved: %v", err)
 	}
+	// A fabricated choice or a revoked/non-member checker cannot produce
+	// a successful revocation, even if the caller holds a global admin token.
+	_, err = repo.RevokePeopleDevChoice(ctx, domain.NewUUIDv7(), 1, domain.NewUUIDv7(), time.Now().UTC())
+	if !errors.Is(err, ErrPeopleDevChoiceDenied) {
+		t.Fatalf("unknown choice revoked: %v", err)
+	}
+	_, err = repo.RevokePeopleDevChoice(ctx, "not-a-uuid", 1, domain.NewUUIDv7(), time.Now().UTC())
+	if !errors.Is(err, ErrPeopleDevChoiceDenied) {
+		t.Fatalf("malformed revocation admitted: %v", err)
+	}
 	var total int
 	if err = repo.pool.QueryRow(ctx, "SELECT count(*) FROM capability.people_provider_choice WHERE tenant_id=$1", tenant).Scan(&total); err != nil {
 		t.Fatal(err)
