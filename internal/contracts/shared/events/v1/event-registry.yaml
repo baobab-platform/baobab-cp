@@ -488,9 +488,6 @@ events:
     asyncapi: contracts/payments/v1/asyncapi.yaml
     producer: baobab-payments
     lifecycle: ACTIVE
-  - type: com.baobab-platform.payroll.evidence.receipt-verified.v1
-    asyncapi: contracts/people/v1/asyncapi.yaml
-    lifecycle: PROPOSED
   - type: com.baobab-platform.procurement.procurement-request.approved.v1
     asyncapi: contracts/procurement/v1/asyncapi.yaml
     lifecycle: PROPOSED
@@ -613,9 +610,6 @@ events:
     asyncapi: contracts/shipment/v1/asyncapi.yaml
     producer: baobab-trade
     lifecycle: ACTIVE
-  - type: com.baobab-platform.workforce.employment.proposal-recorded.v1
-    asyncapi: contracts/people/v1/asyncapi.yaml
-    lifecycle: PROPOSED
   - type: com.baobab-platform.workload.revoked.v1
     asyncapi: contracts/identity-events/v1/asyncapi.yaml
     producer: baobab-iam

@@ -53,20 +53,9 @@ func TestReconciledCandidateMatchesReviewedSharedBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The N02 candidate is immutable historical #430 evidence. A later
-	// accepted mainline contract pin must not mutate that retained candidate.
-	const acceptedPeopleSource = "162f90831ea9b99076391ddca3681b906fa28364"
-	if !strings.Contains(string(lock), "source_commit: "+acceptedPeopleSource+"\n") ||
-		!strings.Contains(string(lock), "  commit: "+acceptedPeopleSource+"\n") {
-		t.Fatal("both CP lock fields must pin accepted Shared #436 after People source adoption")
-	}
-	scope, err := os.ReadFile(filepath.Join("..", "contracts", "shared", "authorization", "v1", "scope-registry.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Count(string(scope), "  - name: \"people:provider:read\"") != 1 ||
-		!strings.Contains(string(scope), "    grants_authority: false") {
-		t.Fatal("the exact accepted non-authorising People scope is missing or duplicated")
+	if !strings.Contains(string(lock), "source_commit: "+source.SHA+"\n") ||
+		!strings.Contains(string(lock), "  commit: "+source.SHA+"\n") {
+		t.Fatal("both CP contract lock fields must pin the accepted Shared main commit")
 	}
 }
 

@@ -16,23 +16,6 @@ schema:
   name: baobab-capability-definitions
   version: '1.0'
 capabilities:
-# The following two additional keys have provider-neutral contracts only.
-# Publication does NOT certify an IAM adapter or activate a CP binding.
-- capability_key: identity.authentication.assurance
-  name: Evaluate current authentication assurance
-  description: Server-owned evaluation of current authentication evidence against a reviewed operation policy. A3 requires actual RP-bound user-verified passkey proof, A4 separately verified privileged context and hardware binding. An assurance result grants no CP or domain authority.
-  domain: identity
-  owner: baobab-iam
-  lifecycle: ACTIVE
-  maturity: EXPERIMENTAL
-  contracts:
-  - major: 1
-    request_schema: assurance-evaluation.schema.json#/$defs/AssuranceEvaluationRequest
-    response_schema: assurance-evaluation.schema.json#/$defs/AssuranceEvaluationResult
-    error_schema: ../../errors/v1/problem-details.schema.json
-  data_classification: RESTRICTED
-  metadata:
-    owner: "IAM authentication evidence only; CP and domain business authorization separate"
 - capability_key: identity.authentication.perform
   name: Perform human authentication
   description: Interactive authentication of a human user (browser or native app) through Authorization Code with PKCE, producing an access token and ID token per the ADR-0006 profile. Names no realm or provider construct; assurance is requested as OIDC acr values.
@@ -49,21 +32,6 @@ capabilities:
   metadata:
     profile: "ADR-0006 Authorization Code + PKCE"
     assurance: "OIDC acr values; AssuranceRequirement and AuthenticationAssurance (identity/v1)"
-- capability_key: identity.federation.enterprise
-  name: Begin enterprise federation challenge
-  description: Initiate a reviewed trust-bound SAML 2.0 or OIDC browser federation challenge. Provider only returns an opaque event and browser challenge. Canonical identity, organisation membership, entitlements and business permissions are never created by the federation adapter.
-  domain: identity
-  owner: baobab-iam
-  lifecycle: ACTIVE
-  maturity: EXPERIMENTAL
-  contracts:
-  - major: 1
-    request_schema: enterprise-federation-start.schema.json#/$defs/EnterpriseFederationStartRequest
-    response_schema: enterprise-federation-start.schema.json#/$defs/EnterpriseFederationChallenge
-    error_schema: ../../errors/v1/problem-details.schema.json
-  data_classification: RESTRICTED
-  metadata:
-    initial_implementation: "Keycloak enterprise OIDC/SAML federation only; never native credentials or workload tokens"
 - capability_key: identity.workload-token.issue
   name: Issue workload access token
   description: Obtain a short-lived Baobab workload access token for a registered workload, audience and scopes, carrying workload claims per the ADR-0006 and ADR-0007 profiles. The credential mechanism (federated platform token via RFC 7523 JWT bearer, private_key_jwt, or IdP client credential) follows the workload's registered credential_type and stays behind the provider boundary.

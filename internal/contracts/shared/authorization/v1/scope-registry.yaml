@@ -49,18 +49,6 @@ scopes:
     audience: ["baobab-control-plane"]
     allowed_actors: ["workload"]
 
-  - name: "people:provider:read"
-    description: >-
-      Allows an explicitly registered and authorised People integration
-      workload to read the CP-issued currently selected provider for its
-      own redeemed tenant context, exact legal employer, jurisdiction and
-      one accepted People capability. This is not an employee-data read,
-      employer role, vendor choice, filing, approval, accounting or payment
-      permission. No workload is granted it by registration alone.
-    audience: ["baobab-control-plane"]
-    allowed_actors: ["workload"]
-    grants_authority: false
-
   - name: "erp-assignment:read"
     description: "Allows an authorised ERP workload to read the Control Plane ERP assignment projection of one approved tenant provisioning and legal entity. It grants no authority: Control Plane additionally requires the token's tenant_id to equal the path tenant and the provisioning and legal entity to belong to it. It is not tenant:read (the administrative plan read), erp:read (the ERP data-plane reads) or erp:provision. Defined here; granted to no workload client."
     audience: ["baobab-control-plane"]
