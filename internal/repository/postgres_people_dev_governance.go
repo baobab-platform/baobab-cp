@@ -64,6 +64,7 @@ func (r PeopleDevChoiceRequest) Validate(now time.Time) error {
 type PeopleDevChoiceRepository interface {
 	ProposePeopleDevChoice(context.Context, PeopleDevChoiceRequest, string, time.Time) (PeopleDevChoiceRecord, error)
 	ApprovePeopleDevChoice(context.Context, string, int64, string, time.Time) (PeopleDevChoiceRecord, error)
+	RevokePeopleDevChoice(context.Context, string, int64, string, time.Time) (PeopleDevChoiceRecord, error)
 }
 
 var _ PeopleDevChoiceRepository = (*PostgresRepository)(nil)
@@ -268,6 +269,72 @@ WHERE choice_id=$1::uuid AND status='DRAFT' AND version=$4
 RETURNING `+peopleDevChoiceColumns, choiceID, checker, now.UTC(), expectedVersion))
 	if err != nil {
 		return PeopleDevChoiceRecord{}, fmt.Errorf("People approval update: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
+	return record, nil
+}
+
+// RevokePeopleDevChoice invalidates a development-only choice immediately,
+// without modifying the underlying independent provider certificate or
+// changing the canonical capability. A current, employer-bound checker must
+// be distinct from the original maker. CAS and the row lock make retries
+// observable as conflicts; the original choice remains auditable.
+func (r *PostgresRepository) RevokePeopleDevChoice(ctx context.Context, choiceID string, expectedVersion int64, checker string, now time.Time) (PeopleDevChoiceRecord, error) {
+	if r == nil || r.pool == nil || expectedVersion < 1 ||
+		!peopleUUIDPattern.MatchString(choiceID) || !peopleUUIDPattern.MatchString(checker) {
+		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	var candidate PeopleDevChoiceRecord
+	var maker string
+	err = tx.QueryRow(ctx, `
+SELECT `+peopleDevChoiceColumns+`, proposed_by::text
+FROM capability.people_provider_choice WHERE choice_id=$1::uuid FOR UPDATE`, choiceID).
+		Scan(&candidate.ChoiceID, &candidate.TenantID, &candidate.LegalEmployerID, &candidate.Jurisdiction,
+			&candidate.CapabilityKey, &candidate.BindingID, &candidate.ProviderID, &candidate.CertificationID,
+			&candidate.BindingRevision, &candidate.ChoiceVersion, &candidate.Status, &maker)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
+	}
+	if err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
+	if candidate.Status != "ACTIVE" || candidate.ChoiceVersion != expectedVersion || checker == maker {
+		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceConflict
+	}
+	// The revoker cannot be a sibling-tenant administrator, a disabled
+	// membership or an unbound global role. No certificate self-assertion.
+	var authorised bool
+	err = tx.QueryRow(ctx, `
+SELECT EXISTS (
+	SELECT 1 FROM identity.principal p
+	JOIN identity.workforce_membership wm ON wm.principal_id=p.principal_id
+		AND wm.tenant_id=$2 AND wm.legal_entity_id=$3
+		AND wm.status='ACTIVE' AND 'cp:tenant-admin'=ANY(wm.roles)
+	WHERE p.principal_id=$1::uuid AND p.actor_type='human' AND p.status='ACTIVE'
+)`, checker, candidate.TenantID, candidate.LegalEmployerID).Scan(&authorised)
+	if err != nil {
+		return PeopleDevChoiceRecord{}, err
+	}
+	if !authorised {
+		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceDenied
+	}
+	record, err := peopleDevChoiceScan(tx.QueryRow(ctx, `
+UPDATE capability.people_provider_choice
+SET status='REVOKED', version=version+1, updated_at=$3
+WHERE choice_id=$1::uuid AND status='ACTIVE' AND version=$2
+RETURNING `+peopleDevChoiceColumns, choiceID, expectedVersion, now.UTC()))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PeopleDevChoiceRecord{}, ErrPeopleDevChoiceConflict
+	}
+	if err != nil {
+		return PeopleDevChoiceRecord{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return PeopleDevChoiceRecord{}, err
