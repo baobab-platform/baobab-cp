@@ -932,6 +932,8 @@ func New(dependencies Dependencies) http.Handler {
 			Post("/v1/admin/people/provider-choices", choices.propose)
 		r.With(a.authorize(a.adminVerifier, "human", "changeset:approve"), a.requireAdminRole(nil, true)).
 			Post("/v1/admin/people/provider-choices/{choiceID}/approve", choices.approve)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:approve"), a.requireAdminRole(nil, true)).
+			Post("/v1/admin/people/provider-choices/{choiceID}/revoke", choices.revoke)
 	}
 	// ADR-SHARED-045: read-only tenant-selected workforce/payroll provider
 	// resolution; always gated off for protected environments.
