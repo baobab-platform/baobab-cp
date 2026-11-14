@@ -1,0 +1,44 @@
+name: DEV-11 Go module reconciliation
+on:
+  push:
+    branches:
+      - feat/dev07-live-price-issuer-authority
+    paths:
+      - .github/workflows/dev11-go-mod-reconciliation.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  tidy:
+    if: github.ref == 'refs/heads/feat/dev07-live-price-issuer-authority'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Confirm declared toolchain and regenerate canonical manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version
+          test "$(go env GOVERSION)" = "go1.27.0"
+          go mod tidy
+          go mod verify
+          git diff --check
+          git diff -- go.mod go.sum
+      - name: Commit regenerated manifests only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- go.mod go.sum; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add go.mod go.sum
+            git commit -m 'fix(DEV-11): regenerate Go 1.27 module graph after main reconciliation'
+            git push origin HEAD:feat/dev07-live-price-issuer-authority
+          fi
