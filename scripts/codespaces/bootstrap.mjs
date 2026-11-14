@@ -32,8 +32,8 @@ const exec=(bin,args,timeout=60000)=>spawnSync(bin,args,{cwd:root,env:{...proces
 export function bootstrap({run=exec, manifests=null, runtime=process.versions.node,log=console.log,error=console.error}={}){
   try{
     const rootManifest=JSON.parse(readFileSync(join(root,"package.json"),"utf8"));
-    if(rootManifest.packageManager!=="pnpm@11.24.0")throw Error("required pnpm 11.24.0 lock");
-    if(!/^24\.(?:19|2\d|[3-9]\d)\./.test(runtime))throw Error("Node 24.19+ runtime required");
+    if(rootManifest.packageManager!=="pnpm@12.16.1")throw Error("required pnpm 12.16.1 lock");
+    if(!/^26\.(?:1[3-9]|[2-9]\d)\.\d+$/.test(runtime))throw Error("Node 26.13+ runtime required");
     let source=manifests;
     if(source===null){
       source=[rootManifest];
@@ -47,7 +47,7 @@ export function bootstrap({run=exec, manifests=null, runtime=process.versions.no
     const a=run(process.execPath,[join(root,"scripts/codespaces/private-npm.mjs")]);
     if(a.error || a.status!==0)throw Error("private npm user-level configuration denied");
     const v=run("pnpm",["--version"]);
-    if(v.error || v.status!==0 || v.stdout?.trim()!=="11.24.0")throw Error("incorrect pnpm toolchain");
+    if(v.error || v.status!==0 || v.stdout?.trim()!=="12.16.1")throw Error("incorrect pnpm toolchain");
     for(const [name,version] of packages){
       const probe=run("pnpm",["view",name+"@"+version,"version","--registry","https://npm.pkg.github.com"]);
       if(probe.error || probe.status!==0 || probe.stdout?.trim().replace(/^"|"$/g,"")!==version){

@@ -147,7 +147,7 @@ See the [Console overview](docs/frontend/index.md), [dated FE-00 rebaseline](doc
 | Migrations | In-repository SQL migration runner |
 | Identity | OIDC-verified admin/workload identities; IAM is the identity authority |
 | Events | Event ingress/outbox and provider integrations as bounded runtime facilities; verify deployment and delivery readiness separately |
-| Console | Next.js 16, React 19, strict TypeScript, Node 24, pnpm |
+| Console | Next.js 16, React 19, strict TypeScript, Node 26.13, pnpm 12.16 |
 | CI | GitHub Actions for Go and Console, plus Shared contract enforcement |
 | Infrastructure | Containers and separate deployment topology in `baobab-platform/infrastructure` |
 
@@ -178,7 +178,7 @@ If you need the sibling Infrastructure Compose topology rather than this reposit
 
 ## Get started — CP Console
 
-Use Node.js 24 and Corepack. Run commands from the **repository root** because it owns the pnpm workspace.
+Use Node.js 26.13.0 with Corepack 0.36.0 and pnpm 12.16.1. Corepack is no longer bundled by Node; `make frontend-install` installs its exact reviewed version. Run commands from the **repository root** because it owns the pnpm workspace.
 
 ```bash
 make frontend-install

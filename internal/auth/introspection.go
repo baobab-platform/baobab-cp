@@ -90,7 +90,9 @@ func (i *HTTPIntrospector) Introspect(ctx context.Context, token string) (Intros
 	form := url.Values{"token": {token}, "token_type_hint": {"access_token"}}
 	// Child span follows the actual HTTPS introspection call; trace context is
 	// diagnostics, never a substitute for the issuer's active-token decision.
-	callCtx := observability.Child(ctx)
+	callCtx, endSpan := observability.StartIntrospection(ctx)
+	status := 0
+	defer func() { endSpan(status) }()
 	req, err := http.NewRequestWithContext(callCtx, http.MethodPost, i.Endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return Introspection{}, ErrIntrospectionUnavailable
@@ -103,6 +105,7 @@ func (i *HTTPIntrospector) Introspect(ctx context.Context, token string) (Intros
 	if err != nil {
 		return Introspection{}, ErrIntrospectionUnavailable
 	}
+	status = res.StatusCode
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK || !strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") {
 		return Introspection{}, ErrIntrospectionUnavailable

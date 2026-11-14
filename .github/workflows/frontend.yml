@@ -42,8 +42,15 @@ jobs:
           node-version-file: frontend/.node-version
           registry-url: https://npm.pkg.github.com
           scope: '@baobab-platform'
-      - name: Enable the pinned pnpm
-        run: corepack enable
+      - name: Bootstrap pinned Node 26, Corepack 0.36, pnpm 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v26.13.0"
+          npm install --global --no-audit --no-fund corepack@0.36.0
+          test "$(corepack --version)" = "0.36.0"
+          corepack enable
+          test "$(pnpm --version)" = "12.16.1"
       - name: Install published BXS packages from trusted GitHub registry
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

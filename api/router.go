@@ -923,8 +923,6 @@ func New(dependencies Dependencies) http.Handler {
 				Post("/internal/documentary/v1/restrictions/assess", h.assess)
 		}
 	}
-	// Closed, disabled-by-default administrative development choice lifecycle.
-	// No staging or production route, even if a deployment sets the flag.
 	if dependencies.PeopleDevChoiceMutationEnabled && dependencies.PeopleDevChoices != nil &&
 		dependencies.Identities != nil && peopleDevChoicePermitted(dependencies.Environment) {
 		choices := peopleDevChoiceHandler{repo: dependencies.PeopleDevChoices, identities: a.identities}
@@ -1078,6 +1076,11 @@ func New(dependencies Dependencies) http.Handler {
 				identities: dependencies.Identities, store: dependencies.TradeOrderAuthority, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeOrderAuthorityScope)).
 				Post("/internal/trade/v1/order-authority/resolve", resolver.resolve)
+			if store, ok := dependencies.TradeOrderAuthority.(tradePriceIssuerStore); ok &&
+				(dependencies.Environment == "development" || dependencies.Environment == "integration") {
+				r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeOrderAuthorityScope)).
+					Post("/internal/trade/v1/price-issuer/resolve", resolver.resolvePriceIssuer(store))
+			}
 			bindings := sellerOperatingBindingHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
 				identities: dependencies.Identities, store: dependencies.SellerOperatingBindings, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeSellerBindingAttestScope)).

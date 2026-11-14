@@ -47,7 +47,9 @@ reduced-motion behaviour, semantic heading hierarchy and noindex until launch.
 From the **repository root**:
 
 ```sh
+npm install --global --no-audit --no-fund corepack@0.36.0
 corepack enable
+test "$(pnpm --version)" = 12.16.1
 pnpm install --frozen-lockfile
 pnpm --filter @baobab-platform/cp-console typecheck
 pnpm --filter @baobab-platform/cp-console lint
