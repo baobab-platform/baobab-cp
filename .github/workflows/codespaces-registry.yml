@@ -2,7 +2,7 @@ name: Codespaces Registry and Image Contract
 on:
   push:
     branches: [main]
-    paths: [.devcontainer/**, scripts/codespaces/**, .github/workflows/codespaces-registry.yml]
+    paths: [.devcontainer/**, .baobab/environment.yaml, scripts/codespaces/**, .github/workflows/codespaces-registry.yml]
   pull_request:
   workflow_dispatch:
 permissions:
