@@ -11,7 +11,7 @@
 | Package manager | **pnpm 12.16.1** | Root `packageManager`, env + project documents in `pnpm-lock.yaml`, frozen install |
 | Bootstrap | **Corepack 0.36.0** | Explicit install: Node 26 does not bundle Corepack; strict version assertions in Docker and CI |
 | Node API types | **@types/node 26.6.5** | Frontend manifest + lockfile + TypeScript typecheck |
-| Dev Container | Node **26.13.0** feature, existing **baobab-dev:1.4.4** image pending v1.5.0 | Source checks do not prove live Codespaces/registry compatibility |
+| Dev Container | Node **26.13.0** feature, signed **baobab-dev:1.5.1** GA immutable image (source-pinned) | Source checks do not prove live Codespaces/registry compatibility |
 | Go authority runtime | Go **1.27**, PostgreSQL **17** | Unchanged Go/domain contracts; native PostgreSQL-backed tests remain required |
 
 pnpm 12 has a **two-document** lockfile: the first independently pins the package-manager/platform-binary integrity and the second retains the complete project dependency graph. Our source regression refuses an absent manager document or a truncated project document. **A scanner that only reads the first document is not credible**; retain `pnpm audit` in the frontend CI alongside Shared native security checks. No CI job may quietly skip a failed private BXS registry read.
@@ -25,14 +25,14 @@ pnpm 12 has a **two-document** lockfile: the first independently pins the packag
 5. Go CI, race/PG17 integration, TMS authority preflight and Foundation/security checks remain intact. No Dev Container or frontend upgrade grants a CP IAM authority, activates a tenant/engine, or admits production.
 6. Resolve all latest-head CI failures and re-run after the final accepted dependency image/pin update. Existing green checks from Node 24 do not certify the Node 26 migration.
 
-## Migration to baobab-dev:v1.5.0
+## Migration to baobab-dev:v1.5.1 — published GA; consumer proof still required
 
-When **v1.5.0 has been published** as an independently available multi-arch GHCR image:
+The signed **v1.5.1 GA** image was published after RC2 qualification; publication and signature evidence are recorded in Shared's DEV-10 register. The development image is now pinned to `ghcr.io/baobab-platform/baobab-dev:1.5.1@sha256:faf9022ef06288767651a0ec1071d5199bc2b645f2cf7ada50477774dd297eed`. This source-level pin does not prove a hosted Codespace consumer:
 
 - Inspect its immutable manifest digest and provenance; verify the published toolchain actually exposes **Node 26.13.0, Corepack 0.36.0 and pnpm 12.16.1** to the non-root Codespaces user.
-- Replace `.devcontainer/devcontainer.json`'s **v1.4.4 digest** with the verified **v1.5.0 digest**, removing redundant Node/bootstrap features only if the image itself qualifies. Amend the image contract tests and CI GHCR check together.
+- Verify the exact selected immutable digest and its signing/provenance independently; image pin, Codespaces tests, and GHCR workflow must agree. Retain the explicit Node 26 feature and Corepack bootstrap until hosted proof confirms effective precedence and installed tool versions.
 - Run a disposable GitHub Codespace and confirm read-only access to the *published* BXS packages with no credentials in tracked files, prebuilds or logs, then delete the test resource.
-- Keep this PR **HELD** until real connected development proof succeeds. Do not turn a source unit fixture or successful builder image into protected staging/production acceptance.
+- Keep DEV-10/DEV-14 connected acceptance **HELD** until real hosted development proof succeeds; source CI alone does not discharge that gate. Do not turn a source unit fixture or successful builder image into protected staging/production acceptance.
 
 ## Repeatable checks
 
