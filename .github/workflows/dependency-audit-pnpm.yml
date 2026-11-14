@@ -1,0 +1,65 @@
+# BA-SEC-DEP-001 — compensating, advisory-driven inspection for CP Console.
+# GitHub's dependency graph currently cannot parse pnpm 12's two-document
+# pinning lockfile, therefore Dependabot Alerts/security PRs can be unavailable
+# even though version updates work. A green native audit does NOT prove the
+# GitHub dependency graph or security update route works.
+# Keep the existing frontend PR + Foundation scan; run fresh daily surveillance.
+name: CP Console daily dependency vulnerability audit
+
+on:
+  schedule:
+    - cron: "21 4 * * *" # 06:21 Africa/Johannesburg
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout current default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up locked Node runtime and GitHub Packages access
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: frontend/.node-version
+          registry-url: https://npm.pkg.github.com
+          scope: '@baobab-platform'
+      - name: Install pinned Corepack and pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global --no-audit --no-fund corepack@0.36.0
+          corepack enable
+          test "$(node --version)" = "v26.13.0"
+          test "$(corepack --version)" = "0.36.0"
+          test "$(pnpm --version)" = "12.16.1"
+      - name: Report GitHub pnpm 12 dependency-graph limitation
+        shell: python3 {0}
+        run: |
+          from pathlib import Path
+          import os
+          lock = Path("pnpm-lock.yaml")
+          if not lock.is_file():
+              raise SystemExit("MISSING_LOCKFILE: cannot audit dependencies")
+          boundaries = [line for line in lock.read_text(encoding="utf-8").splitlines() if line.strip() == "---"]
+          number = len(boundaries) if boundaries else 1
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## BA-SEC-DEP-001 — CP Console daily dependency audit\n\n")
+              summary.write(f"Lockfile YAML document starts: {number}\n\n")
+              if number > 1:
+                  summary.write("**GitHub dependency graph/Dependabot Alerts: UNKNOWN — pnpm 12 multi-document lockfile.**\n\n")
+                  summary.write("This native audit supplements, but does not replace, GitHub security updates.\n")
+              else:
+                  summary.write("Native audit enabled. GitHub security feature status still needs independent verification.\n")
+      - name: Install exact dependency tree from trusted registry
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm install --frozen-lockfile
+      - name: Fail on HIGH/CRITICAL npm advisory findings or scanner error
+        run: pnpm audit --audit-level high

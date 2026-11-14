@@ -1,6 +1,6 @@
 {
   "name": "Baobab Control Plane — governed development",
-  "image": "ghcr.io/baobab-platform/baobab-dev:1.4.4@sha256:9603f0e7402aa85771e904db1c20f2ecc02f705131b266cb4ec3d1c24ea58ae4",
+  "image": "ghcr.io/baobab-platform/baobab-dev:1.5.1@sha256:faf9022ef06288767651a0ec1071d5199bc2b645f2cf7ada50477774dd297eed",
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "init": true,
@@ -15,6 +15,9 @@
     "NEXT_TELEMETRY_DISABLED": "1"
   },
   "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "26.13.0"
+    },
     "ghcr.io/devcontainers/features/go:1": {
       "version": "1.27"
     },
@@ -43,7 +46,7 @@
     "onAutoForward": "silent"
   },
   "updateContentCommand": "node --test scripts/codespaces/*.node.mjs",
-  "postCreateCommand": "node scripts/codespaces/bootstrap.mjs && baobab-verify --contract && go version && go mod download",
+  "postCreateCommand": "test \"$(node --version)\" = v26.13.0 && (test \"$(corepack --version 2>/dev/null)\" = 0.36.0 || npm install --global --no-audit --no-fund corepack@0.36.0) && corepack enable && test \"$(corepack --version)\" = 0.36.0 && test \"$(pnpm --version)\" = 12.16.1 && node scripts/codespaces/bootstrap.mjs && baobab-verify --contract && go version && go mod download",
   "postStartCommand": "node scripts/codespaces/private-npm.mjs",
   "waitFor": "postCreateCommand",
   "customizations": {
