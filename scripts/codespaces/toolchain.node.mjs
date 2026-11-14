@@ -13,7 +13,7 @@ test("DEV-10 exact Node 26.13 and pnpm 12 manifest identity",()=>{
   assert.equal(base.packageManager,"pnpm@12.16.1");
   assert.equal(base.engines.node,">=26.13.0 <27");
   assert.equal(frontend.engines.node,base.engines.node);
-  assert.equal(frontend.devDependencies["@types/node"],"26.6.5");
+  assert.equal(frontend.devDependencies["@types/node"],"26.6.6");
   assert.equal(text("frontend/.node-version").trim(),"26.13.0");
 });
 
@@ -28,7 +28,7 @@ test("pnpm 12 env and project locks are independently present and non-empty",()=
   assert.match(manager,/resolution: \{integrity: sha512-[A-Za-z0-9+/]+={0,2}\}/);
   assert.match(project,/^lockfileVersion: '9\.0'/);
   assert.match(project,/^  frontend:\n/m);
-  assert.match(project,/@types\/node@26\.6\.5/);
+  assert.match(project,/@types\/node@26\.6\.6/);
   assert.match(project,/undici-types@8\.9\.0/);
   assert.match(project,/@baobab-platform\/experience-ui/);
 });
