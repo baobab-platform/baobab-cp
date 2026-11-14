@@ -25,7 +25,7 @@ pass a BuildKit secret consumed from temporary memory-backed npm config;
 no token passes via Docker ARG, copied app file, or runtime image ENV.
 
 CI must prove the exact lock, shared-primitive unit/axe tests, React
-19.3 Base UI compatibility, Node 24, frontend and Go tests,
+19.3 Base UI compatibility, Node 26.13.0 with Corepack 0.36.0/pnpm 12.16.1, frontend and Go tests,
 image/SBOM/container checks, and Shared Foundation gates before merge.
 
 Thamani remains a separate estate with an independent React/branding

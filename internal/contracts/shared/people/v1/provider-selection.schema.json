@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/people/v1/provider-selection.schema.json",
+  "title": "CP-authoritative provider selection readback",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "selection",
+    "decision_ref",
+    "revision",
+    "status",
+    "portability_enabled"
+  ],
+  "properties": {
+    "selection": {
+      "$ref": "domain.schema.json#/$defs/selection"
+    },
+    "decision_ref": {
+      "$ref": "domain.schema.json#/$defs/opaqueRef"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "enum": [
+        "PROPOSED",
+        "APPROVED",
+        "ACTIVE",
+        "SUSPENDED",
+        "REVOKED",
+        "RETIRED"
+      ]
+    },
+    "portability_enabled": {
+      "const": true
+    },
+    "previous_binding_id": {
+      "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityBindingId"
+    },
+    "cutover_evidence_ref": {
+      "$ref": "domain.schema.json#/$defs/opaqueRef"
+    }
+  },
+  "description": "CP-issued readback only; presence of ACTIVE in a schema is never runtime provider qualification or activation."
+}

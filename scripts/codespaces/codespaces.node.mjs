@@ -8,8 +8,8 @@ const root=resolve(fileURLToPath(new URL("../..",import.meta.url)));
 const config=JSON.parse(readFileSync(resolve(root,".devcontainer/devcontainer.json"),"utf8"));
 const manifest=JSON.parse(readFileSync(resolve(root,"package.json"),"utf8"));
 const frontend=JSON.parse(readFileSync(resolve(root,"frontend/package.json"),"utf8"));
-test("private image pinned to publisher v1.4.4 digest and prebuild contains no registry auth",()=>{
-  assert.match(config.image,/^ghcr\.io\/baobab-platform\/baobab-dev:1\.4\.4(?:-frontend)?@sha256:[a-f0-9]{64}$/);
+test("private image pinned to publisher v1.5.1 GA digest and prebuild contains no registry auth",()=>{
+  assert.match(config.image,/^ghcr\.io\/baobab-platform\/baobab-dev:1\.5\.1@sha256:[a-f0-9]{64}$/);
   assert.equal(config.remoteUser,"vscode");assert.equal(config.waitFor,"postCreateCommand");
   assert.match(config.updateContentCommand,/node --test/);
   assert.doesNotMatch(config.updateContentCommand,/install|private-npm|bootstrap/);
@@ -35,10 +35,10 @@ test("registry errors redacted",()=>{
 });
 test("refuse tokenless external package or nonmatching runtime before install",()=>{
   const manifests=[manifest,frontend];let calls=0;
-  const options={manifests,runtime:"24.21.0",run:()=>{calls++;return {status:0,stdout:"11.24.0"};},log:()=>{},error:()=>{}};
+  const options={manifests,runtime:"26.13.0",run:()=>{calls++;return {status:0,stdout:"12.16.1"};},log:()=>{},error:()=>{}};
   const prev=process.env.GITHUB_TOKEN,secret=process.env.BAOBAB_PACKAGES_READ_TOKEN;
   delete process.env.GITHUB_TOKEN;delete process.env.BAOBAB_PACKAGES_READ_TOKEN;
-  try{assert.equal(bootstrap(options),2);assert.equal(calls,0);assert.equal(bootstrap({...options,runtime:"22.10.0"}),2);}finally{
+  try{assert.equal(bootstrap(options),2);assert.equal(calls,0);assert.equal(bootstrap({...options,runtime:"22.10.0"}),2);assert.equal(bootstrap({...options,runtime:"24.21.0"}),2);}finally{
     if(prev===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=prev;
     if(secret===undefined)delete process.env.BAOBAB_PACKAGES_READ_TOKEN;else process.env.BAOBAB_PACKAGES_READ_TOKEN=secret;
   }

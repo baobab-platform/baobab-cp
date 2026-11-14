@@ -62,6 +62,21 @@ capabilities:
   - capability_key: customer.buyer-membership.manage
     owner: baobab-trade
     source: ../../buyer-organisation/v1/capabilities.yaml
+  - capability_key: finance.bank-reconciliation.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.budget.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.cash-position.read
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.consolidation.run
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.expense.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
   - capability_key: finance.journal.manage
     owner: baobab-erp
     source: ../../finance/v1/capabilities.yaml
@@ -71,10 +86,28 @@ capabilities:
   - capability_key: finance.order-consequence.process
     owner: baobab-erp
     source: ../../erp/v1/capabilities.yaml
+  - capability_key: finance.payable.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.project-cost.read
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.receivable.manage
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
+  - capability_key: finance.reporting-export.create
+    owner: baobab-erp
+    source: ../../finance/v1/capabilities.yaml
   - capability_key: finance.statement.read
     owner: baobab-erp
     source: ../../finance/v1/capabilities.yaml
+  - capability_key: identity.authentication.assurance
+    owner: baobab-iam
+    source: ../../identity/v1/capabilities.yaml
   - capability_key: identity.authentication.perform
+    owner: baobab-iam
+    source: ../../identity/v1/capabilities.yaml
+  - capability_key: identity.federation.enterprise
     owner: baobab-iam
     source: ../../identity/v1/capabilities.yaml
   - capability_key: identity.workload-token.issue
@@ -89,6 +122,12 @@ capabilities:
   - capability_key: inventory.availability.query
     owner: baobab-erp
     source: ../../erp/v1/capabilities.yaml
+  - capability_key: inventory.custody.read
+    owner: baobab-erp
+    source: ../../wms/v1/capabilities.yaml
+  - capability_key: inventory.warehouse-operation.manage
+    owner: baobab-erp
+    source: ../../wms/v1/capabilities.yaml
   - capability_key: payment.intent.cancel
     owner: baobab-payments
     source: ../../payments/v1/capabilities.yaml
@@ -104,6 +143,12 @@ capabilities:
   - capability_key: payment.refund.create
     owner: baobab-payments
     source: ../../payments/v1/capabilities.yaml
+  - capability_key: payroll.evidence.attest
+    owner: baobab-erp
+    source: ../../people/v1/capabilities.yaml
+  - capability_key: payroll.run.read
+    owner: baobab-erp
+    source: ../../people/v1/capabilities.yaml
   - capability_key: regulations.decision.evaluate
     owner: baobab-regulations
     source: ../../regulations/v1/capabilities.yaml
@@ -113,3 +158,9 @@ capabilities:
   - capability_key: regulations.requirement.resolve
     owner: baobab-regulations
     source: ../../regulations/v1/capabilities.yaml
+  - capability_key: workforce.employment.manage
+    owner: baobab-erp
+    source: ../../people/v1/capabilities.yaml
+  - capability_key: workforce.employment.read
+    owner: baobab-erp
+    source: ../../people/v1/capabilities.yaml

@@ -2,7 +2,7 @@ name: Codespaces Registry and Image Contract
 on:
   push:
     branches: [main]
-    paths: [.devcontainer/**, scripts/codespaces/**, .github/workflows/codespaces-registry.yml]
+    paths: [.devcontainer/**, .baobab/environment.yaml, scripts/codespaces/**, .github/workflows/codespaces-registry.yml]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -15,16 +15,32 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24.21.0"
+          node-version-file: frontend/.node-version
+      - name: Verify Node 26 / Corepack 0.36 / pnpm 12 tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = v26.13.0
+          npm install --global --no-audit --no-fund corepack@0.36.0
+          test "$(corepack --version)" = 0.36.0
+          corepack enable
+          test "$(pnpm --version)" = 12.16.1
       - run: node --test scripts/codespaces/*.node.mjs
   ghcr:
     runs-on: ubuntu-26.04
     steps:
+      - name: Checkout exact PR source for image contract
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify separate Actions read-only GHCR entitlement
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           printf '%s' "$TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin >/dev/null
-      - name: Verify published multi-language image
-        run: docker buildx imagetools inspect ghcr.io/baobab-platform/baobab-dev:1.4.4@sha256:9603f0e7402aa85771e904db1c20f2ecc02f705131b266cb4ec3d1c24ea58ae4 >/dev/null
+      - name: Verify exact configured development image manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="$(python3 -c 'import json; print(json.load(open(".devcontainer/devcontainer.json"))["image"])')"
+          test "$IMAGE" = "ghcr.io/baobab-platform/baobab-dev:1.5.1@sha256:faf9022ef06288767651a0ec1071d5199bc2b645f2cf7ada50477774dd297eed"
+          docker buildx imagetools inspect "$IMAGE" >/dev/null

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.baobab-platform.com/people/v1/domain.schema.json",
+  "title": "People provider-neutral semantics",
+  "$defs": {
+    "opaqueRef": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{2,159}$"
+    },
+    "legalEmployer": {
+      "$ref": "../../control-plane/v1/domain.schema.json#/$defs/legalEntityId"
+    },
+    "tenant": {
+      "$ref": "../../control-plane/v1/domain.schema.json#/$defs/tenantId"
+    },
+    "jurisdiction": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_id",
+        "legal_employer_id",
+        "capability_key",
+        "binding_id",
+        "provider_id",
+        "binding_revision",
+        "jurisdiction",
+        "source_of_record",
+        "effective_from",
+        "verified_at",
+        "expires_at",
+        "qualification_receipt_ref"
+      ],
+      "properties": {
+        "tenant_id": {
+          "$ref": "domain.schema.json#/$defs/tenant"
+        },
+        "legal_employer_id": {
+          "$ref": "domain.schema.json#/$defs/legalEmployer"
+        },
+        "capability_key": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityKey"
+        },
+        "binding_id": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityBindingId"
+        },
+        "provider_id": {
+          "$ref": "../../capability/v1/domain.schema.json#/$defs/capabilityProviderId"
+        },
+        "binding_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "jurisdiction": {
+          "$ref": "domain.schema.json#/$defs/jurisdiction"
+        },
+        "source_of_record": {
+          "enum": [
+            "NATIVE",
+            "EXTERNAL"
+          ]
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "verified_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "qualification_receipt_ref": {
+          "$ref": "domain.schema.json#/$defs/opaqueRef"
+        }
+      },
+      "description": "Trusted CP readback only. Never accepted from an end-user or provider-controlled request."
+    },
+    "dataState": {
+      "enum": [
+        "COMPLETE",
+        "PARTIAL",
+        "WITHHELD",
+        "UNAVAILABLE"
+      ]
+    }
+  }
+}

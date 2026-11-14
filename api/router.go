@@ -135,6 +135,11 @@ type Dependencies struct {
 	DocumentaryRestrictionEnabled   bool
 	DocumentaryRestriction          documentaryRestrictionReader
 	DocumentaryRestrictionClientIDs []string
+	// ADR-SHARED-045: zero-default People provider choice. Requires an exact
+	// workload-scope and client allowlist, and may not run in protected stages.
+	PeopleProviderSelectionEnabled   bool
+	PeopleProviderSelections         peopleChoiceReader
+	PeopleProviderSelectionClientIDs []string
 	// P0-04B ERP (ADR-SHARED-034): per-operation posting-authority
 	// resolution. Default off, nonproduction only, explicit client allowlist.
 	ErpPostingAuthorityEnabled   bool
@@ -913,6 +918,25 @@ func New(dependencies Dependencies) http.Handler {
 			}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", "documentary:restriction-assess")).
 				Post("/internal/documentary/v1/restrictions/assess", h.assess)
+		}
+	}
+	// ADR-SHARED-045: read-only tenant-selected workforce/payroll provider
+	// resolution; always gated off for protected environments.
+	if dependencies.PeopleProviderSelectionEnabled && dependencies.PeopleProviderSelections != nil &&
+		dependencies.Contexts != nil && dependencies.Identities != nil &&
+		dependencies.WorkloadRegistry != nil && peopleProviderSelectionPermittedIn(dependencies.Environment) {
+		allow := make(map[string]bool)
+		for _, id := range dependencies.PeopleProviderSelectionClientIDs {
+			if id = strings.TrimSpace(id); id != "" {
+				allow[id] = true
+			}
+		}
+		if len(allow) > 0 {
+			h := peopleSelectionHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
+				identities: dependencies.Identities, store: dependencies.PeopleProviderSelections,
+				resolution: capabilityResolution, clientIDs: allow}
+			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", peopleProviderReadScope)).
+				Post("/internal/people/v1/provider-selection/resolve", h.resolve)
 		}
 	}
 	// P0-04B ERP grants a CP legal-actor FACT for one ERP operation, never

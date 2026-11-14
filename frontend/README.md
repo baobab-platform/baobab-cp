@@ -22,10 +22,10 @@ readiness decision or inherited group administration is permitted.
 
 | Concern | Choice |
 |---|---|
-| Runtime | Node.js 24 LTS (`.node-version`) |
+| Runtime | Node.js 26 LTS (26.13.0) (`.node-version`) |
 | Framework | Next.js 16 (App Router, `output: "standalone"`), React 19 |
 | Language | TypeScript 5.9, strict, with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` |
-| Package manager | pnpm, pinned by the root `package.json` `packageManager` and enabled through corepack |
+| Package manager | pnpm, pinned by the root `package.json` `packageManager` and enabled through Corepack 0.36.0 (installed separately) |
 | Lint | ESLint 9 with `eslint-config-next` (TypeScript 7 and ESLint 10 wait on `typescript-eslint` and `eslint-plugin-react` support) |
 | Unit tests | Vitest, Testing Library, jsdom and axe-core |
 
@@ -108,19 +108,19 @@ the IAM session assurance evaluation.
 ## Develop
 
 ```sh
-make frontend-install   # corepack enable, then pnpm install --frozen-lockfile at the root
+make frontend-install   # install Corepack 0.36.0, then pnpm 12.16.1 install --frozen-lockfile at the root
 CONSOLE_ENVIRONMENT=development CP_API_BASE_URL=http://localhost:8080 make frontend-dev   # http://localhost:3000
 make frontend-typecheck frontend-lint frontend-test frontend-build
 make frontend-image     # docker build --file frontend/Dockerfile .
 ```
 
-The Dev Container installs Node 24 and forwards ports 8080 (Control Plane API) and 3000 (Console).
+The Dev Container installs Node 26 and forwards ports 8080 (Control Plane API) and 3000 (Console).
 
 ## Image
 
 `frontend/Dockerfile` builds from the repository root (its build context), and `Dockerfile.dockerignore` limits the
-context to the workspace manifests and this directory. It builds with the Node 24 image and runs on distroless
-`nodejs24-debian13` as a non-root user.
+context to the workspace manifests and this directory. It builds with the Node 26 image and runs on distroless
+`nodejs26-debian13` as a non-root user.
 Both base images are pinned by digest. `GET /healthz` reports liveness only, and the image's `HEALTHCHECK` calls it
 through `healthcheck.mjs`, because the runtime image has no shell.
 
