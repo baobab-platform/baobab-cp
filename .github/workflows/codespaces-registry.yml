@@ -35,5 +35,5 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin >/dev/null
-      - name: Verify published multi-language image
-        run: docker buildx imagetools inspect ghcr.io/baobab-platform/baobab-dev:1.4.4@sha256:9603f0e7402aa85771e904db1c20f2ecc02f705131b266cb4ec3d1c24ea58ae4 >/dev/null
+      - name: Verify published signed v1.5.1 GA multi-language image
+        run: docker buildx imagetools inspect ghcr.io/baobab-platform/baobab-dev:1.5.1@sha256:faf9022ef06288767651a0ec1071d5199bc2b645f2cf7ada50477774dd297eed >/dev/null
