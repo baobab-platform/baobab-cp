@@ -46,16 +46,16 @@ export function bootstrap({run=exec, manifests=null, runtime=process.versions.no
     if(packages.length && !(process.env.BAOBAB_PACKAGES_READ_TOKEN || process.env.GITHUB_TOKEN))throw Error("Codespaces token missing; use read-only BAOBAB_PACKAGES_READ_TOKEN or repository-approved GITHUB_TOKEN");
     const a=run(process.execPath,[join(root,"scripts/codespaces/private-npm.mjs")]);
     if(a.error || a.status!==0)throw Error("private npm user-level configuration denied");
-    const v=run("pnpm",["--version"]);
+    const v=run("corepack",["pnpm","--version"]);
     if(v.error || v.status!==0 || v.stdout?.trim()!=="12.16.1")throw Error("incorrect pnpm toolchain");
     for(const [name,version] of packages){
-      const probe=run("pnpm",["view",name+"@"+version,"version","--registry","https://npm.pkg.github.com"]);
+      const probe=run("corepack",["pnpm","view",name+"@"+version,"version","--registry","https://npm.pkg.github.com"]);
       if(probe.error || probe.status!==0 || probe.stdout?.trim().replace(/^"|"$/g,"")!==version){
         throw Error(name+"@"+version+" — "+failureHint(probe.stderr||probe.error?.code));
       }
       log("Private package read verified: "+name+"@"+version);
     }
-    const install=run("pnpm",["install","--frozen-lockfile"],15*60*1000);
+    const install=run("corepack",["pnpm","install","--frozen-lockfile"],15*60*1000);
     if(install.error || install.status!==0)throw Error("frozen dependency installation failed: "+failureHint(install.stderr));
     log("Pinned Codespaces dependencies installed successfully.");
     return 0;
