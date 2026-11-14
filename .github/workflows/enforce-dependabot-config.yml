@@ -53,9 +53,6 @@ jobs:
     uses: baobab-platform/shared/.github/workflows/enforce-dependabot-config.yml@31de2bc3dcd56128c019c640dc7e12c10ae9ca69 # v2.3.0
     with:
       required-ecosystems: "github-actions,gomod,npm,docker,docker-compose"
-      # BA-SEC-DEP-001 strict policy-level is only available on Shared #429.
-      # Retain this immutable, accepted Shared v2.3.0 baseline; migrate to
-      # reviewed/released strict validator only after Shared #429 is merged.
 
 offline-policy-regression:
     name: BA-SEC-DEP-001 source and negative fixtures
