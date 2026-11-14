@@ -46,6 +46,9 @@ test("native and Codespaces setups must pin rather than infer Corepack 0.36 and 
   const dc=JSON.parse(text(".devcontainer/devcontainer.json"));
   assert.equal(dc.features["ghcr.io/devcontainers/features/node:1"]?.version,"26.13.0");
   assert.match(dc.postCreateCommand,/corepack@0\.36\.0/);
+  assert.equal(dc.remoteUser,"vscode");
+  assert.equal(dc.containerEnv.COREPACK_HOME,"/home/vscode/.cache/baobab-corepack");
+  assert.match(dc.postCreateCommand,/mkdir -p "\$COREPACK_HOME"/);
   assert.match(dc.postCreateCommand,/pnpm --version/);
   assert.match(dc.postCreateCommand,/12\.16\.1/);
   assert.equal(dc.otherPortsAttributes.visibility,"private");
