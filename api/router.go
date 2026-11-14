@@ -1063,6 +1063,11 @@ func New(dependencies Dependencies) http.Handler {
 				identities: dependencies.Identities, store: dependencies.TradeOrderAuthority, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeOrderAuthorityScope)).
 				Post("/internal/trade/v1/order-authority/resolve", resolver.resolve)
+			if store, ok := dependencies.TradeOrderAuthority.(tradePriceIssuerStore); ok &&
+				(dependencies.Environment == "development" || dependencies.Environment == "integration") {
+				r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeOrderAuthorityScope)).
+					Post("/internal/trade/v1/price-issuer/resolve", resolver.resolvePriceIssuer(store))
+			}
 			bindings := sellerOperatingBindingHandler{api: a, contexts: runtimeOnly(dependencies.Contexts),
 				identities: dependencies.Identities, store: dependencies.SellerOperatingBindings, clientIDs: allow}
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", tradeSellerBindingAttestScope)).
