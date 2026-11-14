@@ -5,6 +5,8 @@ on:
       - feat/dev07-live-price-issuer-authority
     paths:
       - .github/workflows/dev11-go-mod-reconciliation.yml
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: write
@@ -14,10 +16,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: true
-      - uses: actions/setup-go@v6
+          ref: feat/dev07-live-price-issuer-authority
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
         with:
           go-version-file: go.mod
           cache: true
