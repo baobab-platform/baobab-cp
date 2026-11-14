@@ -34,10 +34,14 @@ func StartExporter(ctx context.Context, environment, endpoint string) (func(cont
 	if err != nil {
 		return nil, err
 	}
-	p := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter, sdktrace.WithMaxQueueSize(1024)),
+	p := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter, sdktrace.WithMaxQueueSize(1024), sdktrace.WithBatchTimeout(200*time.Millisecond)),
 		sdktrace.WithResource(resource.NewSchemaless(attribute.String("service.name", "baobab-cp"))))
 	provider.Store(p)
-	return p.Shutdown, nil
+	return func(shutdownCtx context.Context) error {
+		// Never let an old exporter shutdown clear a replacement provider.
+		provider.CompareAndSwap(p, nil)
+		return p.Shutdown(shutdownCtx)
+	}, nil
 }
 
 func spanContext(ctx context.Context, sc trace.SpanContext, parent trace.SpanID) context.Context {
@@ -73,7 +77,17 @@ func serverSpan(r *http.Request) (context.Context, trace.Span) {
 			name = "baobab.cp.market.read"
 		}
 	}
-	ctx := (propagation.TraceContext{}).Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+	// Reject unsupported W3C versions and zero IDs before handing context to the SDK.
+	// The local W3C parser is also used by the non-exporting fallback.
+	incoming := r.Header.Get("traceparent")
+	if _, valid := Parse(incoming); !valid {
+		incoming = ""
+	}
+	headers := r.Header.Clone()
+	if incoming == "" {
+		headers.Del("traceparent")
+	}
+	ctx := (propagation.TraceContext{}).Extract(r.Context(), propagation.HeaderCarrier(headers))
 	parent := trace.SpanContextFromContext(ctx)
 	ctx, span := p.Tracer("baobab.cp.http").Start(ctx, name, trace.WithSpanKind(trace.SpanKindServer))
 	return spanContext(ctx, span.SpanContext(), parent.SpanID()), span
