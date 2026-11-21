@@ -140,6 +140,9 @@ type Dependencies struct {
 	PeopleProviderSelectionEnabled   bool
 	PeopleProviderSelections         peopleChoiceReader
 	PeopleProviderSelectionClientIDs []string
+	// Development-only human maker/checker, never the read-only workload route.
+	PeopleDevChoiceMutationEnabled bool
+	PeopleDevChoices               repository.PeopleDevChoiceRepository
 	// P0-04B ERP (ADR-SHARED-034): per-operation posting-authority
 	// resolution. Default off, nonproduction only, explicit client allowlist.
 	ErpPostingAuthorityEnabled   bool
@@ -919,6 +922,16 @@ func New(dependencies Dependencies) http.Handler {
 			r.With(documentaryRestrictionNoStore, a.authorize(a.workloadVerifier, "workload", "documentary:restriction-assess")).
 				Post("/internal/documentary/v1/restrictions/assess", h.assess)
 		}
+	}
+	if dependencies.PeopleDevChoiceMutationEnabled && dependencies.PeopleDevChoices != nil &&
+		dependencies.Identities != nil && peopleDevChoicePermitted(dependencies.Environment) {
+		choices := peopleDevChoiceHandler{repo: dependencies.PeopleDevChoices, identities: a.identities}
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:write"), a.requireAdminRole(nil, true)).
+			Post("/v1/admin/people/provider-choices", choices.propose)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:approve"), a.requireAdminRole(nil, true)).
+			Post("/v1/admin/people/provider-choices/{choiceID}/approve", choices.approve)
+		r.With(a.authorize(a.adminVerifier, "human", "changeset:approve"), a.requireAdminRole(nil, true)).
+			Post("/v1/admin/people/provider-choices/{choiceID}/revoke", choices.revoke)
 	}
 	// ADR-SHARED-045: read-only tenant-selected workforce/payroll provider
 	// resolution; always gated off for protected environments.
