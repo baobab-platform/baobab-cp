@@ -7,7 +7,7 @@ application:
 environment:
   provider: baobab-dev
   profile: full
-  minimum_version: "1.5.1"
+  minimum_version: "1.4.4"
   contract_minimum_version: "1.0"
 compatibility_policy:
   strict_runtime_versions: true
@@ -19,4 +19,4 @@ validation:
     - development.docker
     - development.github_cli
 notes:
-  - Go 1.27 is layered by the Codespaces feature until baobab-dev publishes a native Go control-plane profile.
+  - The verified Codespaces base image is baobab-dev:1.4.4; Go 1.27 is layered by the Codespaces feature until baobab-dev publishes a native Go control-plane profile.
