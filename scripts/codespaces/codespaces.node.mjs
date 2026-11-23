@@ -11,9 +11,9 @@ const frontend=JSON.parse(readFileSync(resolve(root,"frontend/package.json"),"ut
 test("private Codespaces image pinned to established v1.4.4 tag and prebuild contains no registry auth",()=>{
   assert.equal(config.image,"ghcr.io/baobab-platform/baobab-dev:1.4.4");
   assert.equal(config.remoteUser,"vscode");assert.equal(config.waitFor,"postCreateCommand");
-  assert.match(config.updateContentCommand,/node --test/);
-  assert.doesNotMatch(config.updateContentCommand,/install|private-npm|bootstrap/);
-  assert.match(config.postCreateCommand,/bootstrap\.mjs/);
+  assert.equal(config.updateContentCommand,undefined);
+  assert.doesNotMatch(config.postCreateCommand,/install|private-npm|bootstrap|baobab-verify|mod download/);
+  assert.match(config.postCreateCommand,/node --version/);
   assert.equal(config.portsAttributes["3000"]?.visibility,"private");
   assert.equal(config.otherPortsAttributes.visibility,"private");
   assert.equal(config.containerEnv.GITHUB_TOKEN,undefined);
