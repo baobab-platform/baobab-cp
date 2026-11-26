@@ -57,7 +57,7 @@ In particular:
 - **Organisation, LegalEntity, CorporateGroup, PlatformAccount and Tenant are distinct.** A group relationship is not an access grant.
 - Admission approval, authorised onboarding, provisioning, readiness and activation are **distinct lifecycle decisions**.
 - A subscription or approved plan does not by itself prove a healthy provider, a deployed engine or an active tenant.
-- [ADR-BCP-026](docs/adr/ADR-BCP-026%20%E2%80%94%20Progressive%20Enterprise%20Onboarding%2C%20Founding-Group%20Exemption%20and%20Capability-Specific%20Evidence%20Governance.md) and [ADR-BCP-027](docs/adr/ADR-BCP-027%20%E2%80%94%20Organisation-First%20Tenancy%2C%20Operating%20Business%2C%20Trading%20Style%20and%20Legal-Actor%20Responsibility%20Model.md) set the *new* organisation-first/progressive-onboarding target. Their acceptance is not proof that every migration, authorisation and operational gate is complete.
+- [ADR-BCP-026](docs/adr/ADR-BCP-026%20-%20Progressive%20Enterprise%20Onboarding%2C%20Founding-Group%20Exemption%20and%20Capability-Specific%20Evidence%20Governance.md) and [ADR-BCP-027](docs/adr/ADR-BCP-027%20-%20Organisation-First%20Tenancy%2C%20Operating%20Business%2C%20Trading%20Style%20and%20Legal-Actor%20Responsibility%20Model.md) set the *new* organisation-first/progressive-onboarding target. Their acceptance is not proof that every migration, authorisation and operational gate is complete.
 - Engine-specific IDs, provider choices and grants are **derived from authorised intent**, never supplied as authoritative user preferences.
 
 ## ADR-BCP-026/027 completion programme
